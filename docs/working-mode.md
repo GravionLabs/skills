@@ -2,7 +2,7 @@
 
 The cost of an agent session is its context size, not the skills it loads. In a 30-day sample (AgentLens, 79 sessions) issue sessions averaged 365k tokens per request and skill text made up about 1 % of it; PR and release skills ran at 500k because they were started at the end of long sessions. This page is the operating procedure that keeps contexts small. The skills in this hub assume it.
 
-Everything here is interactive: you start a Claude Code, Copilot CLI or OpenCode session and name the skill or describe the task. Delivery of whole issues is `/deliver 42`, unattended `/deliver 42 --unattended` (see [The runner](runner.md)).
+Everything here is interactive: you start a Claude Code, Copilot CLI or OpenCode session and name the skill or describe the task. Delivery of whole issues is `/deliver 42`, unattended `/deliver 42 --unattended` (see [delivery](delivery.md)).
 
 ## 1. One issue per session
 

@@ -9,7 +9,12 @@ export default defineConfig({
     exclude: [...configDefaults.exclude, '**/.worktrees/**'],
     testTimeout: 30000,
     hookTimeout: 30000,
-    reporters: ['default', ['junit', { outputFile: 'test-results/junit.xml' }]],
+    // github-actions turns failures into annotations, readable without the log download.
+    reporters: [
+      'default',
+      ['junit', { outputFile: 'test-results/junit.xml' }],
+      ...(process.env['GITHUB_ACTIONS'] ? ['github-actions'] : []),
+    ],
     coverage: {
       provider: 'v8',
       reporter: ['cobertura', 'text'],
