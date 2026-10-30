@@ -6,6 +6,7 @@ How `implementation` behaves as the implementer role when a runner (such as `del
 
 - the PBI or Bug issue body (scope, Technical Notes, Invariants) with its acceptance criteria
 - the worktree: the working directory, already on the issue branch
+- the role: `implement` (default) or `fix` (a fix round with findings); `SKILL.md` `## Lessons` passes it to `Get-Lessons.ps1 -Role`
 
 Read the files the issue names, then follow `SKILL.md` and the `<lang>-implementation` skill from `detect-techstack`.
 
