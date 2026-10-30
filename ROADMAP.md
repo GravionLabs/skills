@@ -10,7 +10,7 @@ History: apm-hub 2.x and 3.x are in the [apm-hub roadmap](https://github.com/Gra
 | ----------------------------------------------- | --------------------------------------- | ------------------------------------------------------- |
 | #1 deliver issues through Claude Code workflows | open for Features #2, #3, #15           | `deliver` shipped with apm-hub 3.2.1 and in v1.0.0 here |
 | #2 deliver as a harness-neutral skill           | open: trials #4, #5, retro #6, tests #7 | the Claude Code trial (apm-hub#863) is done             |
-| #3 lessons contract                             | refined, no PBIs yet                    | planned with `planner` before delivery                  |
+| #3 lessons contract                             | open: PBIs #23–#28                      | planned with `planner` on 2026-10-30                    |
 | #15 herdr integration of deliver                | open: #16, #12, #13, #17                | not in 1.1.0                                            |
 | #18 finish the move from apm-hub                | open: #19, #20, #21                     | repository settings first, `deliver` needs the ruleset  |
 | #8 stack packages (Feature #9)                  | open: #10 (`needs-decision`), #11       | out of 1.1.0 until #10 is decided                       |
@@ -21,19 +21,24 @@ v1.0.0 is apm-hub 3.3.0 (released there as `v3.2.1`) plus its unreleased `releas
 
 ## 1.1.0 — learning path, trials and the end of the move
 
-Milestone 1.1.0. `release/next` is cut from `v1.0.1`. Order: repository settings (#19, the ruleset is the gate of `deliver`), the test PBI #7, the trigger evals #20, the trials #4 and #5, the lessons PBIs of #3 (planned with `planner`), the archive of apm-hub #21, the retro #6 if ten runs are reached, then the release #14.
+Milestone 1.1.0. `release/next` is cut from `v1.0.1`. Order: repository settings (#19, the ruleset is the gate of `deliver`), the test PBI #7, the trigger evals #20, the trials #4 and #5, the lessons PBIs #23–#28 of #3, the archive of apm-hub #21, the retro #6 if ten runs are reached, then the release #14.
 
-| Order | Issue | Title                                                                              | Size | Depends on / decision                                        |
-| ----- | ----- | ---------------------------------------------------------------------------------- | ---- | ------------------------------------------------------------ |
-| 1     | #19   | repository settings: ruleset on `release/next`, secrets, Pages, project, milestone | S    | owner                                                        |
-| 2     | #7    | pin the extension map of `Format-Changed.ps1` detection                            | S    | `needs-decision` label: answer or remove it before `deliver` |
-| 3     | #20   | port the skill trigger evals                                                       | M    | —                                                            |
-| 4     | #4    | trial `deliver` in OpenCode                                                        | S    | `opencode` CLI and a provider login                          |
-| 4     | #5    | trial `deliver` in Copilot CLI                                                     | S    | —                                                            |
-| 5     | #3    | lessons contract: split into PBIs with `planner`, then deliver them                | L    | scope and decisions in #3                                    |
-| 6     | #21   | archive GravionLabs/apm-hub with a successor notice                                | S    | #19                                                          |
-| 7     | #6    | retro over ten `deliver` runs; decides on `workflow.js`                            | S    | #4, #5; moves to 1.2.0 if ten runs are not reached           |
-| 8     | #14   | release v1.1.0 with the learning path                                              | S    | #3; owner approves the release PR                            |
+| Order | Issue | Title                                                                              | Size | Depends on / decision                              |
+| ----- | ----- | ---------------------------------------------------------------------------------- | ---- | -------------------------------------------------- |
+| 1     | #19   | repository settings: ruleset on `release/next`, secrets, Pages, project, milestone | S    | owner                                              |
+| 2     | #7    | pin the extension map of `Format-Changed.ps1` detection                            | S    | — (`needs-decision` removed: no open decision)     |
+| 3     | #20   | port the skill trigger evals                                                       | M    | —                                                  |
+| 4     | #4    | trial `deliver` in OpenCode                                                        | S    | `opencode` CLI and a provider login                |
+| 4     | #5    | trial `deliver` in Copilot CLI                                                     | S    | —                                                  |
+| 5     | #23   | lessons skill with contract and `Get-Lessons.ps1` loading                          | M    | —                                                  |
+| 5     | #26   | `skills-install` names the `!.agents/lessons/` gitignore exception                 | S    | —                                                  |
+| 5     | #24   | `Get-Lessons.ps1 -Check` validates lesson files                                    | S    | #23                                                |
+| 5     | #25   | `implementation`, `code-review` and `planner` read lessons                         | M    | #23                                                |
+| 5     | #27   | `retro` drafts lessons with status proposed                                        | M    | #24                                                |
+| 5     | #28   | `retro` proposes retiring ineffective lessons                                      | S    | #27                                                |
+| 6     | #21   | archive GravionLabs/apm-hub with a successor notice                                | S    | #19                                                |
+| 7     | #6    | retro over ten `deliver` runs; decides on `workflow.js`                            | S    | #4, #5; moves to 1.2.0 if ten runs are not reached |
+| 8     | #14   | release v1.1.0 with the learning path                                              | S    | #23–#28; owner approves the release PR             |
 
 Feature #3 closes with its last PBI. Features #2 and #18 close when their PBIs are done; Epic #1 stays open for #15.
 
