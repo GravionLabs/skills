@@ -55,8 +55,59 @@ describe('retro SKILL.md', () => {
     expect(text).toContain("without the user's approval");
   });
 
-  it('has draft PBIs name the skill file and the rule', () => {
-    expect(text).toMatch(/names the skill file[^\n]*the rule to change/);
+  it('has draft PBIs name the skill file under skills/<group>/<name>/ and the rule', () => {
+    expect(text).toMatch(
+      /names the skill file \(path under `skills\/<group>\/<name>\/`\)[^\n]*the rule to change/,
+    );
+    expect(text).not.toContain('packages/');
+  });
+
+  describe('lesson drafts', () => {
+    const ref = fs.readFileSync(
+      path.resolve(__dirname, '../../../skills/delivery/retro/references/lessons.md'),
+      'utf8',
+    );
+    const step = text.split('\n').find((l) => l.includes('**Draft lessons.**')) ?? '';
+
+    it('turns a repository-, language- or role-specific candidate into a proposed lesson draft', () => {
+      expect(step).toMatch(/repository-, language- or role-specific/);
+      expect(step).toContain('instead of or next to a draft PBI');
+      expect(step).toContain("`lessons` skill's `references/contract.md`");
+      expect(step).toContain('`status: proposed`');
+      expect(step).toMatch(/`evidence` from the candidate/);
+      expect(step).toContain('references/lessons.md');
+    });
+
+    it('checks the drafts with Get-Lessons.ps1 -Check and shows them as text', () => {
+      expect(step).toContain('`Get-Lessons.ps1 -Check`');
+      expect(step).toMatch(/show the drafts as text/);
+      expect(ref).toMatch(/Get-Lessons\.ps1 -Check/);
+      expect(ref).toMatch(/temporary folder outside any git repository/);
+    });
+
+    it('writes no lesson file and opens no PR without approval', () => {
+      expect(text).toMatch(/without the user's approval[^\n]*no PR[^\n]*no lesson file/);
+      expect(ref).toMatch(/only after that approval/);
+    });
+
+    it('puts approved drafts into .agents/lessons/ on a branch with a normal PR; approval is status: approved', () => {
+      expect(step).toMatch(
+        /After approval they go into `\.agents\/lessons\/` on a branch with a normal PR/,
+      );
+      expect(step).toMatch(/approval of a lesson is setting `status: approved` in that PR/);
+      expect(ref).toContain('github-pull-request');
+      expect(ref).toMatch(/never sets `approved` itself/);
+    });
+
+    it('drafts frontmatter with every key of the contract, status proposed and version 1', () => {
+      const fm = ref.match(/```markdown\n---\n([\s\S]*?)\n---/)?.[1] ?? '';
+      for (const key of ['id', 'scope', 'evidence', 'status', 'version', 'created']) {
+        expect(fm).toMatch(new RegExp(`^${key}: `, 'm'));
+      }
+      expect(fm).toMatch(/^status: proposed$/m);
+      expect(fm).toMatch(/^version: 1$/m);
+      expect(fm).not.toMatch(/approved/);
+    });
   });
 
   it('names no ledger artefact', () => {
