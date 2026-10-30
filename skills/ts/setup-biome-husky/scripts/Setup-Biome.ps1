@@ -27,6 +27,7 @@ if ($usePnpm) { pnpm add -D @packages } else { npm install --save-dev @packages 
 
 if ((Test-Path 'biome.json') -or (Test-Path 'biome.jsonc')) {
   Write-Host 'biome.json exists, kept.' -ForegroundColor Yellow
+  Write-Host 'Markdown and YAML need Biome >= 2.6. For Markdown add to biome.json: "markdown": { "parser": { "frontmatter": true }, "formatter": { "proseWrap": "preserve" } }' -ForegroundColor Yellow
 } else {
   Copy-Item (Join-Path $TemplatesDir 'biome.json.template') 'biome.json'
 }
@@ -38,7 +39,7 @@ Copy-Item (Join-Path $TemplatesDir '.husky/pre-commit') '.husky/pre-commit' -For
 $pkgPath = 'package.json'
 $pkg = Get-Content $pkgPath -Raw | ConvertFrom-Json -AsHashtable
 if (-not $pkg.ContainsKey('lint-staged')) {
-  $pkg['lint-staged'] = [ordered]@{ '*.{ts,tsx,js,mjs,cjs,json}' = @('biome check --write --no-errors-on-unmatched') }
+  $pkg['lint-staged'] = [ordered]@{ '*.{ts,tsx,js,mjs,cjs,json,md,yml,yaml}' = @('biome check --write --no-errors-on-unmatched') }
 }
 if (-not $pkg.ContainsKey('scripts')) { $pkg['scripts'] = [ordered]@{} }
 $scripts = [ordered]@{ 'format' = 'biome format --write .'; 'format:check' = 'biome check .'; 'lint' = 'biome lint .' }

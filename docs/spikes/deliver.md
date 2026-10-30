@@ -6,16 +6,16 @@ Issue: #823 (Feature #822, Epic #821). Date: 2026-10-28. Claude Code 2.1.312, Op
 
 Every Claude Code answer comes from a run of a probe workflow with two subagents: one loads the skill `detect-techstack`, one runs three shell commands (`git status --short | head -3`, `pnpm --version`, `f=$(mktemp) && rm "$f" && echo removed`). The probe skill was a `SKILL.md` plus `workflow.js` in a skill folder; it is removed again.
 
-| # | Question | Answer |
-|---|---|---|
-| 1 | Workflow subagents load skills reliably | **yes** |
-| 2 | Subagents run without prompts on the project allowlist alone | **yes**, if every command is on it |
-| 3 | `scriptPath` on a file inside an installed skill | **project: yes; `~/.claude/skills`: no** |
-| 4 | `claude -p "/deliver <nr>"` runs a workflow headless | **yes** |
-| 5 | Workflow subagents write metadata agentlens can read as the role | **partly**: label yes, other path |
-| 6 | OpenCode loads the apm-hub `SKILL.md` skills | **yes** |
-| 7 | OpenCode loads a plugin from npm and can deny a shell call | **yes by the docs; not run** |
-| 8 | OpenCode events for session started, idle, waiting | **yes** |
+| #   | Question                                                         | Answer                                   |
+| --- | ---------------------------------------------------------------- | ---------------------------------------- |
+| 1   | Workflow subagents load skills reliably                          | **yes**                                  |
+| 2   | Subagents run without prompts on the project allowlist alone     | **yes**, if every command is on it       |
+| 3   | `scriptPath` on a file inside an installed skill                 | **project: yes; `~/.claude/skills`: no** |
+| 4   | `claude -p "/deliver <nr>"` runs a workflow headless             | **yes**                                  |
+| 5   | Workflow subagents write metadata agentlens can read as the role | **partly**: label yes, other path        |
+| 6   | OpenCode loads the apm-hub `SKILL.md` skills                     | **yes**                                  |
+| 7   | OpenCode loads a plugin from npm and can deny a shell call       | **yes by the docs; not run**             |
+| 8   | OpenCode events for session started, idle, waiting               | **yes**                                  |
 
 ## 1. Skills in workflow subagents
 
@@ -63,7 +63,15 @@ Cost: $1.05 for this probe (2 trivial subagents), $0.68 for the run with one sub
 Workflow subagents write their transcripts to `<project>/<session>/subagents/workflows/<runId>/agent-<id>.jsonl` with a `.meta.json`:
 
 ```json
-{"agentType":"workflow-subagent","isBuiltIn":true,"description":"skill-probe","workflowPhase":"Probe","spawnDepth":1,"requestShape":"foreground","requestNonInteractive":false}
+{
+  "agentType": "workflow-subagent",
+  "isBuiltIn": true,
+  "description": "skill-probe",
+  "workflowPhase": "Probe",
+  "spawnDepth": 1,
+  "requestShape": "foreground",
+  "requestNonInteractive": false
+}
 ```
 
 - `agentType` is always `workflow-subagent`. The role is the `label` of the `agent()` call (`description`), and the phase is `workflowPhase`. `deliver` must therefore use stable labels per role (`implement #<nr>`, `gate #<nr>`, `review #<nr>`, `fix #<nr>`, `pr #<nr>`).

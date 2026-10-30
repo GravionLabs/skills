@@ -11,7 +11,7 @@ Always use conventional commit format.
 ## Types
 
 | Type       | When to use                              |
-|------------|------------------------------------------|
+| ---------- | ---------------------------------------- |
 | `feat`     | New feature or capability                |
 | `fix`      | Bug fix                                  |
 | `docs`     | Documentation only                       |
@@ -40,4 +40,4 @@ Examples: `[Bug] fix: x` → `fix/<nr>-x`, `[PBI] feat(github): y` → `feat/<nr
 
 ## Issue footer
 
-A commit for a Task sub-issue of a PBI ends with `Refs #<task>`, not `Closes`: PRs target `release/next` (or `release/x.y`), so `Closes` would not fire, and the release closes the open sub-issues of delivered PBIs. The PBI's PR carries `Closes #<pbi>`. A single-task PBI has no Task issue: the footer is `Refs #<pbi>`. Subject keeps `(#<pbi>)`; the footer is its own last line, matched by `git log -E --grep "^Refs #<task>$"` (details: `task-issues.md`).
+A commit for a PBI or Bug ends with `Refs #<nr>`, not `Closes`: PRs target `release/next` (or `release/x.y`), so `Closes` would not fire there; the PR carries `Closes #<nr>`. Subject keeps `(#<nr>)`; the footer is its own last line, matched by `git log -E --grep "^Refs #<nr>$"`.

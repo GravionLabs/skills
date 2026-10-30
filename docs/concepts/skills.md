@@ -24,11 +24,11 @@ Use the dotnet-create-solution skill to scaffold the project.
 
 Skills are authored once under `skills/<group>/<name>/` and installed (flat, by name) by `npx skills add` into each platform's directory:
 
-| Platform       | Project path              | Global path                    |
-| :------------- | :------------------------ | :----------------------------- |
-| Claude Code    | `.claude/skills/<name>/`  | `~/.claude/skills/<name>/`     |
-| OpenCode       | `.agents/skills/<name>/`  | `~/.config/opencode/skills/`   |
-| GitHub Copilot | `.agents/skills/<name>/`  | `~/.copilot/skills/`           |
+| Platform       | Project path             | Global path                  |
+| :------------- | :----------------------- | :--------------------------- |
+| Claude Code    | `.claude/skills/<name>/` | `~/.claude/skills/<name>/`   |
+| OpenCode       | `.agents/skills/<name>/` | `~/.config/opencode/skills/` |
+| GitHub Copilot | `.agents/skills/<name>/` | `~/.copilot/skills/`         |
 
 `.agents/skills/` holds the canonical copy; `.claude/skills/` links to it (copies on Windows). Commit both and `skills-lock.json` so a fresh clone has the skills immediately.
 
@@ -46,9 +46,11 @@ description: >
 One-line purpose. Paths to `scripts/` and `references/` are relative to this skill's directory.
 
 ## Steps
+
 ...
 
 ## Gotchas
+
 ...
 ```
 

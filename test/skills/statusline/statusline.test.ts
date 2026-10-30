@@ -153,6 +153,26 @@ describe('statusline.mjs', () => {
     expect(r.stdout).not.toContain('\x1b[90m');
   });
 
+  // ctx follows the window: yellow from min(50%, 250k) tokens, red from min(80%, 500k); without a size 50/80 %
+  it.each([
+    [1000000, 24, '32'],
+    [1000000, 25, '33'],
+    [1000000, 49, '33'],
+    [1000000, 50, '31'],
+    [undefined, 49, '32'],
+    [undefined, 50, '33'],
+    [undefined, 80, '31'],
+  ])('colours ctx in a %s window at %i% with code %s', (size, ctx, code) => {
+    const r = run(
+      STATUS,
+      JSON.stringify({
+        workspace: { current_dir: tmp },
+        context_window: { used_percentage: ctx, context_window_size: size },
+      }),
+    );
+    expect(r.stdout).toContain(`\x1b[${code}mctx:${ctx}%`);
+  });
+
   it('shows only the 7d limit when 5h is missing', () => {
     const out = strip(
       run(
@@ -232,18 +252,23 @@ describe('subagent-statusline.mjs', () => {
     expect(strip(b.content)).toBe('planner opus ctx:50% (100k/200k) · plan it');
   });
 
-  it('colours by percent of the window: <50% green, <80% yellow, else red', () => {
-    const cases: [number, string][] = [
-      [10000, '32'],
-      [99999, '32'],
-      [100000, '33'],
-      [159999, '33'],
-      [160000, '31'],
-      [250000, '31'],
+  it('colours by tokens: yellow from min(50%, 250k), red from min(80%, 500k)', () => {
+    const cases: [number, number, string][] = [
+      [10000, 200000, '32'],
+      [99999, 200000, '32'],
+      [100000, 200000, '33'],
+      [159999, 200000, '33'],
+      [160000, 200000, '31'],
+      [249999, 1000000, '32'],
+      [250000, 1000000, '33'],
+      [499999, 1000000, '33'],
+      [500000, 1000000, '31'],
     ];
-    const out = contents(cases.map(([n]) => task({ tokenCount: n, contextWindowSize: 200000 })));
+    const out = contents(
+      cases.map(([n, size]) => task({ tokenCount: n, contextWindowSize: size })),
+    );
     expect(out).toHaveLength(cases.length);
-    for (const [i, [, code]] of cases.entries()) expect(out[i]).toContain(`\x1b[${code}mctx:`);
+    for (const [i, [, , code]] of cases.entries()) expect(out[i]).toContain(`\x1b[${code}mctx:`);
   });
 
   it('formats tokens as k and M (999499 -> 999k, 999500 -> 1M, 1500000 -> 1.5M, a 1M window -> 1M)', () => {

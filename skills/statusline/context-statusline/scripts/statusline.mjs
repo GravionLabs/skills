@@ -10,6 +10,8 @@ const c = (code, s) => `\x1b[${code}m${s}\x1b[00m`;
 const pct = (v) => (typeof v === 'number' && Number.isFinite(v) ? Math.round(v) : null);
 const tok = (n) => (n >= 999500 ? `${Math.floor((n + 5e4) / 1e5) / 10}M`.replace('.0M', 'M') : `${Math.floor((n + 500) / 1000)}k`);
 const light = (p) => (p < 50 ? '32' : p < 80 ? '33' : '31'); // traffic light: green <50%, yellow <80%, red otherwise
+// ctx with a window size: yellow from min(50%, 250k) tokens, red from min(80%, 500k), so a 1M window warns at 25%/50%.
+const ctxLight = (used, size) => (used < Math.min(size / 2, 250000) ? '32' : used < Math.min(size * 0.8, 500000) ? '33' : '31');
 const num = (v) => (typeof v === 'number' && Number.isFinite(v) && v >= 0 ? v : null);
 // Tokens in the context: sum of current_usage input fields (matches the percentage), else derived from pct * size.
 function usedTokens(cw, ctx, size) {
@@ -38,8 +40,9 @@ function render(input) {
   const ctx = rawCtx === null ? null : Math.round(rawCtx);
   if (ctx !== null) {
     const size = num(input.context_window?.context_window_size);
-    const detail = size ? ` (${tok(usedTokens(input.context_window, rawCtx, size))}/${tok(size)})` : '';
-    out += ` ${c(light(ctx), `ctx:${ctx}%${detail}`)}`;
+    const used = size ? usedTokens(input.context_window, rawCtx, size) : 0;
+    const detail = size ? ` (${tok(used)}/${tok(size)})` : '';
+    out += ` ${c(size ? ctxLight(used, size) : light(ctx), `ctx:${ctx}%${detail}`)}`;
   }
 
   if (existsSync(dir)) {

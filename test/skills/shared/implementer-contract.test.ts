@@ -51,10 +51,11 @@ describe('runner-contract.md', () => {
   const ref = read('references/runner-contract.md');
 
   it('states the input, the commit rule and the two prohibitions', () => {
-    expect(ref).toMatch(/Task issue body/);
-    expect(ref).toMatch(/acceptance criteria of the parent PBI/);
+    expect(ref).toMatch(/PBI or Bug issue body/);
+    expect(ref).toMatch(/acceptance criteria/);
+    expect(ref).not.toMatch(/Task/);
     expect(ref).toMatch(/worktree/);
-    expect(ref).toContain('Refs #<task>');
+    expect(ref).toContain('Refs #<nr>');
     expect(ref).toMatch(/Never call `gh`/);
     expect(ref).toMatch(/Never push/);
   });

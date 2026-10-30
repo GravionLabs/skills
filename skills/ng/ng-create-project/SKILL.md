@@ -19,20 +19,22 @@ Scaffold a new Angular 21+ project with a production-ready baseline. Paths to `s
 
 1. Ask: project name, selector prefix (default `app`), type **app** or **workspace**, whether to skip Vitest or ESLint
 2. Run the scaffold script:
+
    ```powershell
    pwsh scripts/New-AngularProject.ps1 -ProjectName <Name> [-SelectorPrefix app] [-ProjectType app|workspace] [-SkipVitest] [-SkipEslint] [-OutputDirectory .]
    ```
+
    It runs `ng new --style scss --ssr false`, replaces `tsconfig.json` with the strict template, installs Vitest with the template config and patches the `test` scripts, then runs the code-quality setup.
 3. Verify: `ng build`, `npm test`, `ng serve` (http://localhost:4200)
 4. Next steps: components and signal stores via `ng-implementation` (`references/component.md`, `references/signal-store.md`)
 
 ## Templates
 
-| File | Purpose |
-|---|---|
-| `templates/tsconfig.json` | Strict Angular compiler options: `noImplicitOverride`, `strictTemplates`, `module: preserve`, `target: ES2022` |
-| `templates/vitest.config.ts` | jsdom environment, globals, setup file, `include: ['**/*.spec.ts']` |
-| `templates/vitest.setup.ts` | Empty setup file, extend as needed |
+| File                         | Purpose                                                                                                        |
+| ---------------------------- | -------------------------------------------------------------------------------------------------------------- |
+| `templates/tsconfig.json`    | Strict Angular compiler options: `noImplicitOverride`, `strictTemplates`, `module: preserve`, `target: ES2022` |
+| `templates/vitest.config.ts` | jsdom environment, globals, setup file, `include: ['**/*.spec.ts']`                                            |
+| `templates/vitest.setup.ts`  | Empty setup file, extend as needed                                                                             |
 
 ## Constraints
 

@@ -25,12 +25,12 @@ JSON on stdout: sizes, skills over the 100-line limit, `danglingCandidates` acro
 
 Read each large skill and its references. For every block ask: **could the model write this itself?**
 
-| Bucket | Test | Action |
-|---|---|---|
-| Keep | Repo convention, tool contract, schema, non-obvious gotcha, script or template | Leave; tighten wording |
-| Delete | Generic best practice, tool basics, flag tables, debugger commands | Delete; fold any repo-specific rule into the matching `<lang>-implementation` |
-| Move | Specs, long tables, examples > ~20 lines | `references/` or `assets/`, loaded conditionally |
-| Deduplicate | Same steps in several skills, repeated boilerplate | One skill owns it; others delegate |
+| Bucket      | Test                                                                           | Action                                                                        |
+| ----------- | ------------------------------------------------------------------------------ | ----------------------------------------------------------------------------- |
+| Keep        | Repo convention, tool contract, schema, non-obvious gotcha, script or template | Leave; tighten wording                                                        |
+| Delete      | Generic best practice, tool basics, flag tables, debugger commands             | Delete; fold any repo-specific rule into the matching `<lang>-implementation` |
+| Move        | Specs, long tables, examples > ~20 lines                                       | `references/` or `assets/`, loaded conditionally                              |
+| Deduplicate | Same steps in several skills, repeated boilerplate                             | One skill owns it; others delegate                                            |
 
 Also flag: contradictions between skills (tools, folders, naming), forbidden frontmatter keys (`compatibility`, `chronicle-hints`, `model`, `allowed-tools`: 🔴, remove or move to `metadata:`), `bash` fences, links that leave the package.
 

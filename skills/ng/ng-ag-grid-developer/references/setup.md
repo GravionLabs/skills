@@ -24,16 +24,16 @@ Without a key the grid works but shows a watermark and console warning.
 - Charts: `AllEnterpriseModule.with(AgChartsEnterpriseModule)` (from `ag-charts-enterprise`)
 - Check a module at runtime: `api.isModuleRegistered('SetFilterModule')`
 
-| Module | Feature |
-|---|---|
-| `RowGroupingModule` | Row grouping & aggregation |
-| `PivotModule` | Pivoting |
-| `ExcelExportModule` | Excel export |
-| `MasterDetailModule` | Master/Detail |
-| `SetFilterModule` / `MultiFilterModule` | Set / Multi filter |
-| `AdvancedFilterModule` | Advanced Filter bar |
-| `ColumnsToolPanelModule` / `FiltersToolPanelModule` | Side panels |
-| `ServerSideRowModelModule` | SSRM |
+| Module                                                       | Feature                                 |
+| ------------------------------------------------------------ | --------------------------------------- |
+| `RowGroupingModule`                                          | Row grouping & aggregation              |
+| `PivotModule`                                                | Pivoting                                |
+| `ExcelExportModule`                                          | Excel export                            |
+| `MasterDetailModule`                                         | Master/Detail                           |
+| `SetFilterModule` / `MultiFilterModule`                      | Set / Multi filter                      |
+| `AdvancedFilterModule`                                       | Advanced Filter bar                     |
+| `ColumnsToolPanelModule` / `FiltersToolPanelModule`          | Side panels                             |
+| `ServerSideRowModelModule`                                   | SSRM                                    |
 | `ClipboardModule`, `RangeSelectionModule`, `StatusBarModule` | Copy/paste, range selection, status bar |
 
 ## Per-grid modules

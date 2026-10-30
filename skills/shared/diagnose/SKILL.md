@@ -49,7 +49,7 @@ Run the loop, watch it go red. Confirm it shows the user's symptom (not a neighb
 
 ## Phase 3: Hypotheses
 
-Write 3-5 ranked hypotheses before testing any. Each states a prediction: "If X is the cause, changing Y makes the bug disappear / changing Z makes it worse." No prediction → discard or sharpen. Show the ranking to the user when one is present and do not block on it; without a user, write the ranking into the task report (return `NEEDS_CONTEXT` only when blocked).
+Write 3-5 ranked hypotheses before testing any. Each states a prediction: "If X is the cause, changing Y makes the bug disappear / changing Z makes it worse." No prediction → discard or sharpen. Show the ranking to the user when one is present and do not block on it; without a user, write the ranking into the final report (return `NEEDS_CONTEXT` only when blocked).
 
 ## Phase 4: Instrument
 

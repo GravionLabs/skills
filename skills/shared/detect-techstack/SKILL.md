@@ -36,17 +36,17 @@ On failure the script exits non-zero with the error on stderr. No stack detected
 
 If `pwsh` is not available → infer the stack from this table (search recursively, depth 5) and build the same JSON by hand:
 
-| Marker | Result |
-|---|---|
-| `angular.json` | framework `angular`, language `ts` |
-| `package.json` + `tsconfig.json` | language `ts`; `package.json` alone → `js` |
-| `pyproject.toml`, `requirements.txt`, `setup.py` | language `py` |
-| `*.csproj`, `*.sln`, `*.slnx` | language `dotnet`, package manager `dotnet` |
-| `Cargo.toml` | language `rust` (skills `rust-test`, `rust-implementation`) |
-| `go.mod` | language `go` (skills `go-test`, `go-implementation`), package manager `go` |
-| `react`, `next`, `vue`, `svelte` in `dependencies`/`devDependencies` of any `package.json` | framework of the same name (several possible; language and skills stay `ts`/`js`) |
-| `src-tauri/tauri.conf.json` or `.json5` | framework `tauri` (next to `rust` and usually `ts`) |
-| `packageManager` field in `package.json`, else lockfile (`pnpm-lock.yaml`, `yarn.lock`, `bun.lockb`, `package-lock.json`, `uv.lock`) | package manager |
+| Marker                                                                                                                               | Result                                                                            |
+| ------------------------------------------------------------------------------------------------------------------------------------ | --------------------------------------------------------------------------------- |
+| `angular.json`                                                                                                                       | framework `angular`, language `ts`                                                |
+| `package.json` + `tsconfig.json`                                                                                                     | language `ts`; `package.json` alone → `js`                                        |
+| `pyproject.toml`, `requirements.txt`, `setup.py`                                                                                     | language `py`                                                                     |
+| `*.csproj`, `*.sln`, `*.slnx`                                                                                                        | language `dotnet`, package manager `dotnet`                                       |
+| `Cargo.toml`                                                                                                                         | language `rust` (skills `rust-test`, `rust-implementation`)                       |
+| `go.mod`                                                                                                                             | language `go` (skills `go-test`, `go-implementation`), package manager `go`       |
+| `react`, `next`, `vue`, `svelte` in `dependencies`/`devDependencies` of any `package.json`                                           | framework of the same name (several possible; language and skills stay `ts`/`js`) |
+| `src-tauri/tauri.conf.json` or `.json5`                                                                                              | framework `tauri` (next to `rust` and usually `ts`)                               |
+| `packageManager` field in `package.json`, else lockfile (`pnpm-lock.yaml`, `yarn.lock`, `bun.lockb`, `package-lock.json`, `uv.lock`) | package manager                                                                   |
 
 ## Gotchas
 

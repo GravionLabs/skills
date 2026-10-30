@@ -15,4 +15,4 @@ Goal: improve the agent **environment**, not the code under review. Rank candida
 
 ## Metric reading
 
-- Fix rounds above 1 per PBI: review rules or task briefs were too thin (categories 2, 3).
+- Fix rounds above 1 per PBI: review rules or issue bodies were too thin (categories 2, 3).

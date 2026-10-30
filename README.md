@@ -37,11 +37,11 @@ Updates: `npx skills check` (exit 1 when one is available) and `npx skills updat
 
 ### Where things land
 
-| Platform       | Project                            | Global (`-g`)                |
-| :------------- | :--------------------------------- | :--------------------------- |
-| Claude Code    | `.claude/skills/<name>/`           | `~/.claude/skills/`          |
-| OpenCode       | `.agents/skills/<name>/`           | `~/.config/opencode/skills/` |
-| GitHub Copilot | `.agents/skills/<name>/`           | `~/.copilot/skills/`         |
+| Platform       | Project                  | Global (`-g`)                |
+| :------------- | :----------------------- | :--------------------------- |
+| Claude Code    | `.claude/skills/<name>/` | `~/.claude/skills/`          |
+| OpenCode       | `.agents/skills/<name>/` | `~/.config/opencode/skills/` |
+| GitHub Copilot | `.agents/skills/<name>/` | `~/.copilot/skills/`         |
 
 Commit `skills-lock.json`, `.agents/skills/` and `.claude/skills/` so a fresh clone has the skills. On Windows `skills-install` copies instead of linking (symlinks need Developer Mode).
 
@@ -54,12 +54,12 @@ A group is a folder `skills/<group>/` and a plugin in [`.claude-plugin/marketpla
 | `shared`        | `implementation`, `detect-techstack`, `diagnose`, `code-review`, `check-prerequisites`                                                                 |
 | `delivery`      | `deliver`, `planner`, `grill-me`, `retro`, `skills-install`                                                                                            |
 | `github`        | `github-issue`, `github-pull-request`, `github-release`                                                                                                |
-| `dotnet`        | `dotnet-implementation`, `dotnet-test`, `dotnet-create-solution`, `dotnet-mcp-server-generator`; `skills-install` adds `dotnet/skills` (dotnet plugin)  |
+| `dotnet`        | `dotnet-implementation`, `dotnet-test`, `dotnet-create-solution`, `dotnet-mcp-server-generator`; `skills-install` adds `dotnet/skills` (dotnet plugin) |
 | `ts`            | `ts-implementation`, `ts-test`, `ts-create-project`, `ts-mcp-server-generator`, `ts-pnpm-workflow`, `setup-biome-husky`, `setup-prettier-eslint-husky` |
 | `py`            | `py-implementation`, `py-test`, `py-create-project`                                                                                                    |
 | `rust`          | `rust-implementation`, `rust-test`                                                                                                                     |
 | `go`            | `go-implementation`, `go-test`                                                                                                                         |
-| `ng`            | `ng-implementation`, `ng-test`, `ng-create-project`, `ng-ag-grid-developer`; `skills-install` adds `angular/skills` (`angular-developer`)               |
+| `ng`            | `ng-implementation`, `ng-test`, `ng-create-project`, `ng-ag-grid-developer`; `skills-install` adds `angular/skills` (`angular-developer`)              |
 | `statusline`    | `context-statusline`: status line and subagent status line                                                                                             |
 | `skill-tooling` | `skill-write`, `skill-audit`, `skill-slim` (contributor tooling)                                                                                       |
 

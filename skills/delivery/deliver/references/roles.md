@@ -4,12 +4,12 @@ The skill gives its subagents `model` and `effort` of the roles `implement`, `re
 
 ## Defaults
 
-| Role | Model | Effort |
-|:--|:--|:--|
-| `select`, `create`, `gate`, `pr`, `ci` | haiku | low |
-| `review` | sonnet | medium |
-| `plan` | session model | session effort |
-| `implement`, `fix` | by tier of the PBI | by tier |
+| Role                                   | Model              | Effort         |
+| :------------------------------------- | :----------------- | :------------- |
+| `select`, `create`, `gate`, `pr`, `ci` | haiku              | low            |
+| `review`                               | sonnet             | medium         |
+| `plan`                                 | session model      | session effort |
+| `implement`, `fix`                     | by tier of the PBI | by tier        |
 
 Tier (`Tier:` line of the PBI body; else the size: S fast, M standard, L strong; else standard): `fast` haiku/low, `standard` sonnet/medium, `strong` opus/high.
 

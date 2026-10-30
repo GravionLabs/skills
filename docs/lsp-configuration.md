@@ -25,6 +25,7 @@ The repository includes a project-level LSP configuration file: **`.github/lsp.j
 This configuration defines LSP servers for the following languages:
 
 ### TypeScript / JavaScript
+
 ```json
 {
   "name": "typescript",
@@ -35,6 +36,7 @@ This configuration defines LSP servers for the following languages:
 ```
 
 ### Python
+
 ```json
 {
   "name": "python",
@@ -44,6 +46,7 @@ This configuration defines LSP servers for the following languages:
 ```
 
 ### Go
+
 ```json
 {
   "name": "go",
@@ -53,6 +56,7 @@ This configuration defines LSP servers for the following languages:
 ```
 
 ### C#
+
 ```json
 {
   "name": "csharp",
@@ -81,11 +85,13 @@ This repository's `.github/lsp.json` takes precedence, ensuring all contributors
 To enable LSP features, install the language servers for the languages you use:
 
 ### TypeScript / JavaScript
+
 ```bash
 npm install -g typescript-language-server typescript
 ```
 
 ### Python
+
 ```bash
 pip install python-lsp-server
 # or for Pyright:
@@ -93,11 +99,13 @@ pip install pyright
 ```
 
 ### Go
+
 ```bash
 go install github.com/golang/tools/gopls@latest
 ```
 
 ### C#
+
 Download from [OmniSharp releases](https://github.com/OmniSharp/omnisharp-roslyn/releases)
 
 ---

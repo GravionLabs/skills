@@ -62,6 +62,14 @@ describe.skipIf(!hasPwsh || process.platform === 'win32')('Remove-PbiWorktrees.p
     git(wt('f'), 'commit', '-q', '--allow-empty', '-m', 'own work'); // worktree-f has own commits
     git(repo, 'worktree', 'remove', wt('f'));
     git(repo, 'branch', 'worktree-g'); // orphan at the base: deleted
+    // the harness starts agent worktrees at the default branch: a commit of origin/main not on release/next
+    git(repo, 'switch', '-q', '--orphan', 'main');
+    git(repo, 'commit', '-q', '--allow-empty', '-m', 'main only');
+    git(repo, 'push', '-q', 'origin', 'main');
+    git(repo, 'branch', 'worktree-h'); // worktree gone, commit on origin/main: deleted
+    git(repo, 'switch', '-q', 'release/next');
+    git(repo, 'branch', '-q', '-D', 'main');
+    git(repo, 'fetch', '-q', 'origin');
   });
   afterAll(() => fs.rmSync(root, { recursive: true, force: true }));
 
@@ -86,9 +94,22 @@ describe.skipIf(!hasPwsh || process.platform === 'win32')('Remove-PbiWorktrees.p
         reason: 'uncommitted changes',
         command: `git worktree remove --force ${wt('d')}`,
       },
+      {
+        branch: 'worktree-f',
+        reason: 'commits not on any remote branch',
+        command: 'git branch -D worktree-f',
+      },
     ]);
     expect(r.json.branchesDeleted.sort()).toEqual(
-      ['feat/12-x', 'wip-12', 'worktree-a', 'worktree-b', 'worktree-c', 'worktree-g'].sort(),
+      [
+        'feat/12-x',
+        'wip-12',
+        'worktree-a',
+        'worktree-b',
+        'worktree-c',
+        'worktree-g',
+        'worktree-h',
+      ].sort(),
     );
     const left = branchesOf();
     for (const b of ['feat/99-other', 'worktree-d', 'worktree-e', 'worktree-f'])

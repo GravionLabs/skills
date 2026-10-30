@@ -10,9 +10,18 @@ describe('github-issue level-prefixed titles', () => {
   const section = skill.slice(skill.indexOf('## Issue Types'), skill.indexOf('## Routing'));
 
   it('lists every level prefix in the Issue Types table', () => {
-    for (const prefix of ['[Epic] ', '[Feature] ', '[PBI] ', '[Task] ', '[Bug] ']) {
+    for (const prefix of ['[Epic] ', '[Feature] ', '[PBI] ', '[Bug] ']) {
       expect(section).toContain(prefix);
     }
+  });
+
+  it('has no Task row and keeps [Task] read-only (#890)', () => {
+    const table = section.split('\n').filter((l) => l.startsWith('|'));
+    expect(table.some((l) => l.includes('`task`'))).toBe(false);
+    expect(table.some((l) => /Tasks/.test(l))).toBe(false);
+    expect(section).toMatch(
+      /`\[Task\]` issues .* read and closed together with their PBI, never created/,
+    );
   });
 
   it('drops the unprefixed conventions', () => {
@@ -31,7 +40,7 @@ describe('github-issue level-prefixed titles', () => {
     expect(cc).toContain('`[Bug] fix: x` → `fix/<nr>-x`');
   });
 
-  it('keeps PR titles without level prefix and task titles prefixed', () => {
+  it('keeps PR titles without level prefix', () => {
     expect(read('references/standalone-issue.md')).toContain('the skill owns title and footer');
     expect(
       readFileSync(
@@ -39,7 +48,6 @@ describe('github-issue level-prefixed titles', () => {
         'utf-8',
       ),
     ).toContain('`<type>: <description> (#<issue_number>)`');
-    expect(read('references/task-issues.md')).toContain('`[Task] <conventional title>`');
   });
 
   it('takes the PR title from the issue title word for word (#859)', () => {

@@ -36,5 +36,5 @@ Add only when needed, below `description`:
 license: MIT
 metadata:
   author: gravionlabs
-  version: "1.0.0"
+  version: '1.0.0'
 ```

@@ -35,10 +35,10 @@ describe('planner invariants section (#484)', () => {
     expect(step).toContain('references/invariants.md');
   });
 
-  it('placement is stated for pbi, task and the single plan item', () => {
-    expect(ref).toMatch(/`pbi`.*Definition of Done/);
-    expect(ref).toMatch(/`task`.*agent-ready/);
-    expect(ref).toMatch(/Single-task plan.*plan\.json/);
+  it('places the section in the PBI body only (#890)', () => {
+    const placement = ref.slice(ref.indexOf('## Placement'));
+    expect(placement).toMatch(/PBI body only.*Definition of Done/);
+    expect(placement).not.toMatch(/`task`|Task body|agent-ready/);
   });
 
   it('PBI template ends with Definition of Done, where invariants.md places the section before', () => {
@@ -50,15 +50,10 @@ describe('planner invariants section (#484)', () => {
     expect(headings[headings.length - 1]).toBe('## Definition of Done');
   });
 
-  it('task-issues.md template orders Implementation Notes, Invariants, agent-ready block', () => {
-    const t = read('github/github-issue/references/task-issues.md');
-    const notes = t.indexOf('## Implementation Notes');
-    const inv = t.indexOf('## Invariants');
-    const block = t.indexOf('<!-- agent-ready:start -->');
-    expect(notes).toBeGreaterThan(-1);
-    expect(inv).toBeGreaterThan(notes);
-    expect(block).toBeGreaterThan(inv);
-    expect(t).toMatch(/omit this heading when no invariant applies/);
+  it('has no Task issue template any more (#890)', () => {
+    expect(fs.existsSync(path.join(pk, 'github/github-issue/references/task-issues.md'))).toBe(
+      false,
+    );
   });
 
   it('plan-schema.md body row mentions the optional section', () => {

@@ -1,6 +1,6 @@
 ---
 name: github-issue
-description: 'GitHub issue conventions: types, [Level] titles, branches, commits, native sub-issues, Task issues. Use for any GitHub issue work.'
+description: 'GitHub issue conventions: types, [Level] titles, branches, commits, native sub-issues, plan-to-issue creation. Use for any GitHub issue work.'
 ---
 
 ## Overview
@@ -17,24 +17,23 @@ Conventions for the GitHub issue lifecycle. Detect the issue type, then follow t
 
 Issues follow this hierarchy (the repository's `.github/ISSUE_TEMPLATE/` holds the templates when present; this table is the definition):
 
-| Label     | Title (always `[<Level>] <summary>`)                  | Sub-issues    |
-| --------- | ----------------------------------------------------- | ------------- |
-| `epic`    | `[Epic] <outcome>`                                    | Features      |
-| `feature` | `[Feature] <capability>`                              | PBIs          |
-| `pbi`     | `[PBI] feat(scope): …`, `[PBI] refactor: …`           | Tasks (opt.)  |
-| `task`    | `[Task] chore: …`, `[Task] feat: …`                   | —             |
-| `bug`     | `[Bug] fix: <symptom>`                                | Tasks (opt.)  |
+| Label     | Title (always `[<Level>] <summary>`)        | Sub-issues |
+| --------- | ------------------------------------------- | ---------- |
+| `epic`    | `[Epic] <outcome>`                          | Features   |
+| `feature` | `[Feature] <capability>`                    | PBIs       |
+| `pbi`     | `[PBI] feat(scope): …`, `[PBI] refactor: …` | —          |
+| `bug`     | `[Bug] fix: <symptom>`                      | —          |
 
-Titles are always written with the bracket prefix. Legacy titles (`Epic: …`, `Feature: …`, `[EPIC] …`) are still recognized when reading, never written.
+Titles are always written with the bracket prefix. Legacy titles (`Epic: …`, `Feature: …`, `[EPIC] …`) are still recognized when reading, never written. `[Task]` issues (label `task`) of older plans are read and closed together with their PBI, never created (`references/sub-issues.md`, "Legacy Task issues").
 
 Parent/child links are **native GitHub sub-issues** — see `references/sub-issues.md` for how to
-read, create, move and verify them. Markdown checklists are not used. Task sub-issues of a PBI follow `references/task-issues.md` and never become separate branches or PRs.
+read, create, move and verify them. Markdown checklists are not used.
 
 ## Routing
 
 1. Read the issue(s): `gh issue view <nr> --json title,body,labels`
-2. Detect type from the `labels` field (`epic` / `feature` / `pbi` / `task` / `bug`)
-3. Follow `references/standalone-issue.md`; Task sub-issues of a PBI follow `references/task-issues.md`.
+2. Detect type from the `labels` field (`epic` / `feature` / `pbi` / `bug`; legacy `task`)
+3. Follow `references/standalone-issue.md`.
 4. A plan from `planner` (`plan.json`) → `references/create-from-plan.md`: create the issues, sub-issue and blocked-by links.
 
 ## Shared constraints (all workflows)

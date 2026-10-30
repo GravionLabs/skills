@@ -61,6 +61,18 @@ describe('deliver SKILL.md', () => {
     expect(body).toContain('`github-pull-request`');
   });
 
+  it('takes several numbers and a milestone, skips needs-refinement, reports per number', () => {
+    expect(body).toContain(
+      '`/deliver <nr> [<nr> …] [--milestone <name>] [--unattended] [--max <n>]`',
+    );
+    expect(body).toContain('gh issue list --milestone <name> --label pbi --state open');
+    expect(body).toContain('drop duplicates');
+    expect(body).toContain('ties keep the order of the arguments');
+    expect(body).toContain('#<nr> select: needs refinement, skipped');
+    expect(body).toContain('planner refine <nr>');
+    expect(body).toContain('per given number');
+  });
+
   it('works on the PBI branch without switching its own checkout', () => {
     expect(body).toContain('`branch: <branch>`');
     expect(body).toContain('`git switch -C <branch> origin/<branch>`');
@@ -117,10 +129,14 @@ describe('deliver SKILL.md', () => {
     it('reads the pane id once, sets the progress line per step and clears it at the end', () => {
       expect(herdr).toContain('`printenv HERDR_PANE_ID` once');
       expect(herdrCalls).toEqual([
-        'herdr pane report-metadata <pane> --source deliver --display-agent "deliver #12 review: 1 blocking"',
+        'herdr pane report-metadata <pane> --source deliver --display-agent "#12 review ✗1"',
         'herdr pane report-metadata <pane> --source deliver --clear-display-agent',
       ]);
       expect(herdr.indexOf('--clear-display-agent')).toBeGreaterThan(herdr.indexOf('## End'));
+    });
+
+    it('keeps the sidebar text short', () => {
+      expect(herdr).toContain('no `deliver` prefix, no transient states');
     });
 
     it('never expands a variable in a herdr call', () => {
@@ -133,7 +149,11 @@ describe('deliver SKILL.md', () => {
     const report = body.slice(body.indexOf('## Report'), body.indexOf('## Rules'));
 
     it('runs the cleanup script after the merge and reports what it left', () => {
-      expect(merge).toContain('`pwsh scripts/Remove-PbiWorktrees.ps1 -Pr <pr> -Issue <nr>`');
+      expect(merge).toContain(
+        '`pwsh <skill-dir>/scripts/Remove-PbiWorktrees.ps1 -Pr <pr> -Issue <nr>`',
+      );
+      expect(merge).toContain('`~/.claude/skills/deliver/`');
+      expect(merge).toContain('`.claude/skills/deliver/`');
       expect(fs.existsSync(path.join(skillDir, 'scripts/Remove-PbiWorktrees.ps1'))).toBe(true);
       expect(merge.indexOf('Remove-PbiWorktrees')).toBeGreaterThan(merge.indexOf('gh pr merge'));
       expect(report).toContain('Worktrees or branches the cleanup left, each with its command');

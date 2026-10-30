@@ -10,7 +10,7 @@ const lines = (rel: string): string[] => read(rel).split('\n');
 const namesAll = (line: string, keys: string[]): boolean =>
   keys.every((k) => line.includes(`\`${k}\``));
 
-describe('apm-tooling enforces the skill frontmatter convention', () => {
+describe('skill-tooling enforces the skill frontmatter convention', () => {
   it.each([
     [
       'skill-tooling/skill-write/references/skill-writing-rules.md',
@@ -58,7 +58,7 @@ describe('apm-tooling enforces the skill frontmatter convention', () => {
     );
   });
 
-  it('no apm-tooling skill references the stale skill-size-validator.ts', () => {
+  it('no skill-tooling skill references the stale skill-size-validator.ts', () => {
     for (const file of [
       'skill-tooling/skill-write/SKILL.md',
       'skill-tooling/skill-write/references/skill-writing-rules.md',

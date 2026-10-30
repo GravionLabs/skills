@@ -18,23 +18,23 @@ Bind on `<ag-grid-angular>`: `(cellValueChanged)`, `(selectionChanged)`, `(rowDa
 
 ## Refresh, selection, scrolling
 
-| Task | Call |
-|---|---|
-| Re-render cells / re-run valueGetters | `api.refreshCells({ rowNodes: [node], force: true })` |
-| Rebuild row DOM (sparingly) | `api.redrawRows({ rowNodes: [node] })` |
-| Selected rows / nodes (nodes for SSRM) | `api.getSelectedRows()` / `api.getSelectedNodes()` |
-| Select / clear | `api.selectAll()` / `api.deselectAll()` |
-| Scroll | `api.ensureIndexVisible(50, 'middle')`, `api.ensureColumnVisible('price')` |
-| Sort | `api.applyColumnState({ state: [{ colId: 'price', sort: 'desc' }], defaultState: { sort: null } })` |
+| Task                                   | Call                                                                                                |
+| -------------------------------------- | --------------------------------------------------------------------------------------------------- |
+| Re-render cells / re-run valueGetters  | `api.refreshCells({ rowNodes: [node], force: true })`                                               |
+| Rebuild row DOM (sparingly)            | `api.redrawRows({ rowNodes: [node] })`                                                              |
+| Selected rows / nodes (nodes for SSRM) | `api.getSelectedRows()` / `api.getSelectedNodes()`                                                  |
+| Select / clear                         | `api.selectAll()` / `api.deselectAll()`                                                             |
+| Scroll                                 | `api.ensureIndexVisible(50, 'middle')`, `api.ensureColumnVisible('price')`                          |
+| Sort                                   | `api.applyColumnState({ state: [{ colId: 'price', sort: 'desc' }], defaultState: { sort: null } })` |
 
 # Filtering
 
 ## Column filters (`ColDef.filter`)
 
-| Value | Edition |
-|---|---|
-| `'agTextColumnFilter'`, `'agNumberColumnFilter'`, `'agDateColumnFilter'` | Community |
-| `'agSetColumnFilter'`, `'agMultiColumnFilter'` | Enterprise (`SetFilterModule`, `MultiFilterModule`) |
+| Value                                                                    | Edition                                             |
+| ------------------------------------------------------------------------ | --------------------------------------------------- |
+| `'agTextColumnFilter'`, `'agNumberColumnFilter'`, `'agDateColumnFilter'` | Community                                           |
+| `'agSetColumnFilter'`, `'agMultiColumnFilter'`                           | Enterprise (`SetFilterModule`, `MultiFilterModule`) |
 
 `filterParams: { filterOptions: ['greaterThan', 'lessThan', 'inRange'], defaultOption: 'greaterThan' }`
 

@@ -1,21 +1,20 @@
 # Standalone Issue Workflow
 
-Full lifecycle for a single issue without sub-tasks: read → branch → implement → verify → PR.
+Full lifecycle for a single issue without child issues: read → branch → implement → verify → PR.
 
-Applies to: **Task**, **PBI** (no tasks), **Bug** (no tasks), **Feature** (no PBIs).
+Applies to: **PBI**, **Bug**, **Feature** (no PBIs). A legacy `[Task]` sub-issue is not worked alone: work its PBI (`sub-issues.md`, "Legacy Task issues").
 
 ## Phase 1 — Read + Branch
 
 1. Read issue: `gh issue view <nr> --json title,body,labels`
 2. Derive the branch name `<type>/<nr>-<slug>` per `conventional-commits.md` (type from the issue title after stripping the level prefix)
 3. Resolve the integration branch `<base>` once per `release-branches.md`: `pwsh <github-release dir>/scripts/Get-ReleaseState.ps1 -Mode base -Issue <nr>` (`release/next`, else a `release/<x.y>`; source `none` or a `warning`: cut one with `github-release` first). Create branch: `git fetch origin <base>; git checkout -b <branch> origin/<base>`
-4. Note the parent from the body's first line (`Parent Epic: #N` / `Parent Feature: #N` / `Parent PBI: #N`), if present. Closing this issue updates the parent's progress automatically via its native sub-issue link — there is nothing to tick afterwards.
+4. Note the parent from the body's first line (`Parent Epic: #N` / `Parent Feature: #N`), if present. Closing this issue updates the parent's progress automatically via its native sub-issue link — there is nothing to tick afterwards.
 
 ## Phase 2 — Implement
 
 5. Identify "done" from the issue's type-specific sections:
    - **PBI**: Acceptance Criteria + Definition of Done
-   - **Task**: Definition of Done (+ Implementation Notes)
    - **Bug**: Expected Behavior must be restored; Definition of Done requires a regression test
    - **Feature**: Definition of Done (scope)
 6. Explore: read the files the issue names and their direct neighbours before changing anything.

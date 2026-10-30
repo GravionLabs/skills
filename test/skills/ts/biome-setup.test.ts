@@ -16,6 +16,17 @@ describe('Biome setup (#556)', () => {
     });
   });
 
+  it('the template parses Markdown frontmatter and keeps prose; lint-staged covers md/yml/yaml (#905)', () => {
+    const cfg = JSON.parse(read(`${skill}/templates/biome.json.template`));
+    expect(cfg.markdown.parser.frontmatter).toBe(true);
+    expect(cfg.markdown.formatter.proseWrap).toBe('preserve');
+    expect(cfg.yaml?.formatter?.quoteStyle).toBeUndefined();
+    const s = read(`${skill}/scripts/Setup-Biome.ps1`);
+    expect(s).toContain('*.{ts,tsx,js,mjs,cjs,json,md,yml,yaml}');
+    expect(s).toContain('Biome >= 2.6');
+    expect(read(`${skill}/SKILL.md`)).not.toMatch(/add Prettier/);
+  });
+
   it('the setup script refuses Angular projects and keeps an existing biome.json', () => {
     const s = read(`${skill}/scripts/Setup-Biome.ps1`);
     expect(s).toContain("Test-Path 'angular.json'");

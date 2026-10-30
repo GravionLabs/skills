@@ -17,11 +17,11 @@ provideGlobalGridOptions({ defaultColDef: { filter: true }, rowSelection: { mode
 
 ## `domLayout`
 
-| Value | Behavior |
-|---|---|
-| `'normal'` (default) | Needs explicit CSS height (`style="height: 400px"`); scrolls internally |
-| `'autoHeight'` | Grows with data; **never for > 1 000 rows** (renders all rows, freezes the browser) |
-| `'print'` | All rows, no scrollbars; printing/PDF only |
+| Value                | Behavior                                                                            |
+| -------------------- | ----------------------------------------------------------------------------------- |
+| `'normal'` (default) | Needs explicit CSS height (`style="height: 400px"`); scrolls internally             |
+| `'autoHeight'`       | Grows with data; **never for > 1 000 rows** (renders all rows, freezes the browser) |
+| `'print'`            | All rows, no scrollbars; printing/PDF only                                          |
 
 ## Row height
 

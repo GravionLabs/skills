@@ -12,6 +12,7 @@ Generate a Model Context Protocol (MCP) server in C#: a console application usin
 
 1. Ask: project name, tools to expose (names, descriptions, input schemas), prompts to include
 2. Create the project:
+
    ```powershell
    dotnet new console -n <ProjectName>
    cd <ProjectName>

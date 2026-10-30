@@ -22,15 +22,15 @@ Parent Epic: #NNN
 
 **In scope**
 
-- 
+-
 
 **Out of scope**
 
-- 
+-
 
 <!-- Add PBI children via GitHub's native sub-issues panel — not a checklist.
      It keeps progress and completion % in sync automatically. -->
 
 ## Definition of Done
 
-- 
+-

@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 // Claude Code subagentStatusLine: one {"id","content"} JSON line per subagent task.
-// Row: <agentType> <model> ctx:<pct>% (<k>k/<size>k) · <label>; <50% green, <80% yellow, else red.
+// Row: <agentType> <model> ctx:<pct>% (<k>k/<size>k) · <label>; yellow from min(50%, 250k) tokens, red from min(80%, 500k).
 // Fields per task: tokenCount, contextWindowSize (Claude Code subagentStatusLine payload, https://code.claude.com/docs/en/statusline).
 // Only <k>k when contextWindowSize is missing or 0; 1,000,000 renders 1M. Invalid input: no output, exit 0.
 import { readFileSync } from 'node:fs';
@@ -21,7 +21,7 @@ function row(t) {
   let ctx;
   if (size > 0) {
     const pct = Math.floor((tokens * 100) / size);
-    const color = pct < 50 ? 32 : pct < 80 ? 33 : 31;
+    const color = tokens < Math.min(size / 2, 250000) ? 32 : tokens < Math.min(size * 0.8, 500000) ? 33 : 31;
     ctx = ` ${E}[${color}mctx:${pct}% (${k}/${tok(size)})${E}[0m`;
   } else {
     ctx = ` ${k}`;

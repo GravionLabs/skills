@@ -153,6 +153,23 @@ describe('plan.json schema', () => {
     expect(check(p)).toContain('schema');
   });
 
+  it('rejects level task (#890)', () => {
+    const p = clone();
+    p.level = 'task';
+    expect(check(p)).toContain('schema');
+  });
+
+  it('accepts a PBI split into sibling PBIs and an empty plan for a PBI that fits (#890)', () => {
+    const split = clone();
+    split.input_type = 'pbi';
+    split.parent_issue = 890;
+    split.items = [item('p1'), item('p2', ['p1'])];
+    split.questions = [];
+    expect(check(split)).toEqual([]);
+    const fits = { ...clone(), input_type: 'bug', items: [], questions: [] };
+    expect(check(fits)).toEqual([]);
+  });
+
   it('plan-schema.md names no file path and no publish step', () => {
     expect(doc).not.toMatch(/<state>|publish/i);
     expect(doc).not.toMatch(/plan\.json`? (is )?written/i);
@@ -185,10 +202,33 @@ describe('planner references', () => {
     const interactive = md.slice(md.indexOf('\n## Interactive'), md.indexOf('\n## Refine'));
     expect(interactive).toContain('`grill-me`');
     expect(interactive).toContain('create-from-plan.md');
-    expect(interactive).toMatch(/one cycle .* per PBI/);
+    expect(interactive).not.toMatch(/Task breakdown/);
     expect(md.slice(md.indexOf('\n## Refine'), md.indexOf('\n## Depth'))).toContain('`grill-me`');
     expect(md).toMatch(/\*\*Non-interactive\*\*.*no questions.*`questions\[\]` as data/);
     expect(fs.readdirSync(refs).filter((f) => /question/.test(f))).toEqual(['questions.md']);
+  });
+});
+
+describe('planner output level without Task issues (#890)', () => {
+  const md = fs.readFileSync(path.join(skillDir, 'SKILL.md'), 'utf-8');
+  const level = md.slice(md.indexOf('\n## Output level'), md.indexOf('\n## Steps'));
+  const row = level.split('\n').find((l) => l.startsWith('| PBI or bug'))!;
+
+  it('a PBI or Bug yields no tasks: refine, or a split into sibling PBIs when too big', () => {
+    expect(row).toContain('`refine <nr>`');
+    expect(row).toMatch(/size L or more than one session/);
+    expect(row).toMatch(/sibling PBIs under the same Feature/);
+    expect(row).not.toMatch(/\btasks?\b|\[Task\]/);
+  });
+
+  it('description only keeps internal steps without issues', () => {
+    expect(level).toMatch(/\| Description only \| internal steps .*no issues/);
+  });
+
+  it('never creates [Task] issues and has no Task breakdown', () => {
+    expect(level).toContain('No plan creates `[Task]` issues');
+    expect(md).not.toMatch(/Task breakdown|task-issues/);
+    expect(doc).not.toMatch(/`chore: …` for `task`|Task issue body/);
   });
 });
 
@@ -206,8 +246,9 @@ describe('planner without removed dependencies', () => {
     for (const t of ['fast', 'standard', 'strong']) expect(tiers).toContain(`\`${t}\``);
   });
 
-  it('has no instruction to close, edit or create an issue and reports merged tasks', () => {
+  it('has no instruction to close, edit or create an issue and reports merged children', () => {
     expect(md).not.toMatch(/gh issue (close|edit|create)|\bclose them\b/);
-    expect(md).toContain('already merged: #<task> (<sha>)');
+    expect(md).toContain('already merged: #<nr>');
+    expect(md).not.toContain('#<task>');
   });
 });

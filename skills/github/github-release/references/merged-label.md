@@ -1,6 +1,6 @@
 # The `merged` label
 
-`Closes #n` fires only on the default branch, so PBIs and Tasks merged into `release/*` stay open until the release. The label `merged` marks them.
+`Closes #n` fires only on the default branch, so PBIs and Bugs merged into `release/*` stay open until the release. The label `merged` marks them.
 
 ## Lifecycle
 

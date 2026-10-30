@@ -19,12 +19,15 @@ Scaffold a TypeScript/Node.js project with a production-ready baseline. Paths to
 
 1. **Ask first:** project name; project type **app** / **library** / **cli**; package manager npm or pnpm
 2. **Run the scaffold script:**
+
    ```powershell
    pwsh scripts/New-NodeProject.ps1 -ProjectName <Name> -ProjectType <app|library|cli> [-PackageManager npm]
    ```
+
    It creates the directory, copies the templates, patches `package.json`, installs dependencies and initializes git.
 3. **CI:** copy `templates/.github/workflows/ci.yml` into the project. It calls the `GravionLabs/ci` reusable Node workflow, which runs the `build` and `test` scripts; if the project publishes, confirm the `NPM_TOKEN` secret is configured.
 4. **Verify:**
+
    ```powershell
    npm run build   # tsc — no errors
    npm test        # vitest run — all tests pass
@@ -35,14 +38,14 @@ Parameters: `-ProjectName` (required), `-ProjectType` (app/library/cli), `-Packa
 
 ## Templates
 
-| File | Purpose |
-|---|---|
-| `package.json` | ESM baseline: `build`, `dev` (tsx watch), `start`, `test`, `test:ci` (coverage) scripts |
-| `tsconfig.json` | NodeNext module resolution, strict mode, sourceMap, declaration |
-| `src/index.ts` | Minimal entry point placeholder |
-| `vitest.config.ts` | Vitest with `globals: true`, v8 coverage with text + cobertura reporters |
-| `.github/workflows/ci.yml` | GitHub Actions CI via `GravionLabs/ci/.github/workflows/node.yml` |
-| `.gitignore` | Node.js standard ignores (dist/, node_modules/, .env) |
+| File                       | Purpose                                                                                 |
+| -------------------------- | --------------------------------------------------------------------------------------- |
+| `package.json`             | ESM baseline: `build`, `dev` (tsx watch), `start`, `test`, `test:ci` (coverage) scripts |
+| `tsconfig.json`            | NodeNext module resolution, strict mode, sourceMap, declaration                         |
+| `src/index.ts`             | Minimal entry point placeholder                                                         |
+| `vitest.config.ts`         | Vitest with `globals: true`, v8 coverage with text + cobertura reporters                |
+| `.github/workflows/ci.yml` | GitHub Actions CI via `GravionLabs/ci/.github/workflows/node.yml`                       |
+| `.gitignore`               | Node.js standard ignores (dist/, node_modules/, .env)                                   |
 
 ## Constraints
 

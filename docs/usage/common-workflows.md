@@ -63,7 +63,7 @@ One issue per session, see [Working mode](../working-mode.md).
    Implement issue #42.
    ```
 
-   `github-issue` reads the labels (`epic`, `feature`, `pbi`, `task`, `bug`), checks for sub-issues and follows the matching reference workflow. It creates the branch per the conventional-commit type, and `implementation` loads the stack skill and ships tests with every change. Bugs go through `diagnose`: a red feedback loop first, then the fix with a regression test.
+   `github-issue` reads the labels (`epic`, `feature`, `pbi`, `bug`), checks for sub-issues and follows the matching reference workflow. It creates the branch per the conventional-commit type, and `implementation` loads the stack skill and ships tests with every change. Bugs go through `diagnose`: a red feedback loop first, then the fix with a regression test.
 
 3. **Review the diff**
 
@@ -102,16 +102,16 @@ Run the build and the tests.
 /skills-install ng   # Angular only; brings angular/skills (angular-developer)
 ```
 
-| Goal                                  | Prompt                                                 | Skill                                              |
-| :------------------------------------ | :----------------------------------------------------- | :------------------------------------------------- |
-| Migrate from npm to pnpm              | "Switch this project to pnpm."                         | `ts-pnpm-workflow`                                 |
-| Pre-commit linting, plain TS (Biome)  | "Set up linting and formatting with pre-commit hooks." | `setup-biome-husky`                                |
+| Goal                                   | Prompt                                                 | Skill                                              |
+| :------------------------------------- | :----------------------------------------------------- | :------------------------------------------------- |
+| Migrate from npm to pnpm               | "Switch this project to pnpm."                         | `ts-pnpm-workflow`                                 |
+| Pre-commit linting, plain TS (Biome)   | "Set up linting and formatting with pre-commit hooks." | `setup-biome-husky`                                |
 | Pre-commit linting, Angular (Prettier) | "Set up linting and formatting with pre-commit hooks." | `setup-prettier-eslint-husky`                      |
-| New Angular workspace                 | "Create an Angular app named shop with Vitest."        | `ng-create-project`                                |
-| Standalone component                  | "Add a product-list component under features/catalog." | `ng-implementation` (`references/component.md`)    |
-| NgRx Signal Store                     | "Create a signal store for the cart."                  | `ng-implementation` (`references/signal-store.md`) |
-| AG Grid Enterprise                    | "Add a grid with row grouping and Excel export."       | `ng-ag-grid-developer`                             |
-| MCP server                            | "Generate an MCP server with a search tool."           | `ts-mcp-server-generator`                          |
+| New Angular workspace                  | "Create an Angular app named shop with Vitest."        | `ng-create-project`                                |
+| Standalone component                   | "Add a product-list component under features/catalog." | `ng-implementation` (`references/component.md`)    |
+| NgRx Signal Store                      | "Create a signal store for the cart."                  | `ng-implementation` (`references/signal-store.md`) |
+| AG Grid Enterprise                     | "Add a grid with row grouping and Excel export."       | `ng-ag-grid-developer`                             |
+| MCP server                             | "Generate an MCP server with a search tool."           | `ts-mcp-server-generator`                          |
 
 ---
 

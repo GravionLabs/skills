@@ -7,8 +7,12 @@
 
 ```typescript
 export class StatusCellRenderer implements ICellRendererAngularComp {
-  agInit(params: ICellRendererParams): void { /* read params.value, params.data */ }
-  refresh(params: ICellRendererParams): boolean { /* update state */ return true; } // false → grid recreates the component
+  agInit(params: ICellRendererParams): void {
+    /* read params.value, params.data */
+  }
+  refresh(params: ICellRendererParams): boolean {
+    /* update state */ return true;
+  } // false → grid recreates the component
 }
 // ColDef: { field: 'status', cellRenderer: StatusCellRenderer, cellRendererParams: { currency: 'EUR' } }
 ```
@@ -22,11 +26,11 @@ Provided renderers: `agGroupCellRenderer` (expand/collapse for groups and master
 
 `editable: true` or callback `editable: (p: EditableCallbackParams) => p.data.status === 'draft'`.
 
-| Editor | Value | Notes |
-|---|---|---|
-| Text (default) / Large text | `agTextCellEditor` / `agLargeTextCellEditor` | |
-| Select / Rich select | `agSelectCellEditor` / `agRichSelectCellEditor` | Rich select: Enterprise, `cellEditorParams: { values, searchType: 'fuzzy' }` |
-| Number / Date / Checkbox | `agNumberCellEditor` / `agDateCellEditor` / `agCheckboxCellEditor` | |
+| Editor                      | Value                                                              | Notes                                                                        |
+| --------------------------- | ------------------------------------------------------------------ | ---------------------------------------------------------------------------- |
+| Text (default) / Large text | `agTextCellEditor` / `agLargeTextCellEditor`                       |                                                                              |
+| Select / Rich select        | `agSelectCellEditor` / `agRichSelectCellEditor`                    | Rich select: Enterprise, `cellEditorParams: { values, searchType: 'fuzzy' }` |
+| Number / Date / Checkbox    | `agNumberCellEditor` / `agDateCellEditor` / `agCheckboxCellEditor` |                                                                              |
 
 Custom editor: implement `ICellEditorAngularComp` with `agInit(params: ICellEditorParams)`, `getValue()` (final value) and optional `isPopup()`; use as `cellEditor: MyEditor`. Per-row: `cellEditorSelector: p => ({ component: 'agRichSelectCellEditor', params: { values: p.data.options } })`.
 

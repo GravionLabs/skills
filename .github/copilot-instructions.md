@@ -13,11 +13,11 @@ GravionLabs/skills is a collection of agent **skills** installed with `npx skill
 
 ```yaml
 ---
-name: my-skill                 # kebab-case, matches the directory
+name: my-skill # kebab-case, matches the directory
 description: >
   What it does. Use this skill when … (specific triggers).
-license: MIT                   # optional
-metadata: { key: value }       # optional, free-form strings
+license: MIT # optional
+metadata: { key: value } # optional, free-form strings
 ---
 ```
 

@@ -18,12 +18,12 @@ Add the server block to the client's MCP config. If the file exists, merge: neve
 
 One table for every MCP server of this package (Angular CLI above, `ag-mcp` below).
 
-| Client | File | Root key |
-|---|---|---|
-| VS Code + Copilot | `.vscode/mcp.json` | `servers` (add `"type": "stdio"`) |
-| Claude Code | `.mcp.json` in project root | `mcpServers` |
-| Cursor | `.cursor/mcp.json` | `mcpServers` |
-| Gemini | `.gemini/settings.json` | `mcpServers` |
+| Client            | File                        | Root key                          |
+| ----------------- | --------------------------- | --------------------------------- |
+| VS Code + Copilot | `.vscode/mcp.json`          | `servers` (add `"type": "stdio"`) |
+| Claude Code       | `.mcp.json` in project root | `mcpServers`                      |
+| Cursor            | `.cursor/mcp.json`          | `mcpServers`                      |
+| Gemini            | `.gemini/settings.json`     | `mcpServers`                      |
 
 ## AG Grid server (`ag-mcp`)
 
@@ -31,14 +31,14 @@ Block for the same files, with the root key of the table: `{ "mcpServers": { "ag
 
 ## Default tools
 
-| Tool | Use |
-|---|---|
-| `search_documentation` | Search angular.dev |
-| `find_examples` | Best-practice examples for modern features |
-| `get_best_practices` | Angular Best Practices Guide |
-| `list_projects` | Apps and libraries from `angular.json` |
+| Tool                        | Use                                                      |
+| --------------------------- | -------------------------------------------------------- |
+| `search_documentation`      | Search angular.dev                                       |
+| `find_examples`             | Best-practice examples for modern features               |
+| `get_best_practices`        | Angular Best Practices Guide                             |
+| `list_projects`             | Apps and libraries from `angular.json`                   |
 | `onpush_zoneless_migration` | Plan for migrating to OnPush (prerequisite for zoneless) |
-| `ai_tutor` | Interactive tutor |
+| `ai_tutor`                  | Interactive tutor                                        |
 
 ## Experimental tools (enable with `-E <name>`)
 

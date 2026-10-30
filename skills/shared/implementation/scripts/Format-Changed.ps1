@@ -1,6 +1,8 @@
 <#
 .SYNOPSIS
   Runs a format (or check) command on the changed files with the given extensions.
+  Without -Language, -Extensions and -Command the changed files are grouped by extension (.ts .tsx .js .jsx .mjs .cjs .json .css .html: ts; .py: py;
+  .cs .csproj .sln .slnx: dotnet; .rs: rust; .go: go) and each detected language runs its defaults (a `format.<Language>` config entry still replaces them); other extensions are ignored.
   Precedence: `.agents/config.json` entry `format.<Language>` (legacy `.agents/format.json`; `"format": false` disables), then explicit -Extensions/-Command, then the built-in defaults of -Language
   (ts, ng: prettier then eslint, or biome check when biome.json[c] is at the git toplevel; py: ruff format then ruff check --fix;
   dotnet: dotnet format; rust: cargo fmt; go: gofmt).
@@ -38,6 +40,59 @@ if ($LASTEXITCODE -ne 0 -or -not $root) { Write-Output 'skipped: not a git repos
 function Stop-Fail([string]$Message) { Write-Error "error: $Message" -ErrorAction Continue; exit 1 }
 # `1 -is [pscustomobject]` is true in PowerShell: ask for the real type
 function Test-JsonObject($Value) { $null -ne $Value -and $Value.GetType().Name -eq 'PSCustomObject' }
+
+# NUL-separated output (-z): names with spaces, quotes or non-ASCII characters arrive unquoted
+[Console]::OutputEncoding = [System.Text.Encoding]::UTF8
+function Get-GitNames {
+  param([string[]]$GitArgs)
+  $out = & git -C $root @GitArgs 2>&1
+  if ($LASTEXITCODE -ne 0) { $code = $LASTEXITCODE; Write-Error (($out | Out-String).Trim()) -ErrorAction Continue; exit $(if ($code) { $code } else { 1 }) }
+  (@($out) -join "`n") -split "`0" | Where-Object { $_ }
+}
+function Get-ChangedFiles {
+$names = [System.Collections.Generic.List[string]]::new()
+if ($Base) {
+  # a bad ref must fail loudly: a swallowed error would let -Check pass with nothing checked
+  Get-GitNames @('diff', '--name-only', '-z', "$Base...HEAD", '--') | ForEach-Object { $names.Add($_) }
+}
+# staged + unstaged vs HEAD (a repository without a commit has no HEAD: fall back to the index)
+& git -C $root rev-parse --verify -q HEAD *> $null
+$diffArgs = if ($LASTEXITCODE -eq 0) { @('diff', '--name-only', '-z', 'HEAD', '--') } else { @('diff', '--name-only', '-z', '--cached', '--') }
+Get-GitNames $diffArgs | ForEach-Object { $names.Add($_) }
+Get-GitNames @('ls-files', '--others', '--exclude-standard', '-z') | ForEach-Object { $names.Add($_) }
+
+# repo-relative, existing (deleted dropped), no duplicates
+@($names | Select-Object -Unique | Where-Object { $_ -and (Test-Path -LiteralPath (Join-Path $root $_) -PathType Leaf) })
+}
+
+$code = 0
+# no -Language, -Extensions, -Command: group the changed files by extension, run the defaults of each detected language
+if (-not $Language -and -not $Extensions -and -not $Command) {
+  $langOf = @{}
+  foreach ($e in '.ts', '.tsx', '.js', '.jsx', '.mjs', '.cjs', '.json', '.css', '.html') { $langOf[$e] = 'ts' }
+  $langOf['.py'] = 'py'
+  foreach ($e in '.cs', '.csproj', '.sln', '.slnx') { $langOf[$e] = 'dotnet' }
+  $langOf['.rs'] = 'rust'; $langOf['.go'] = 'go'
+  # Markdown and YAML only in a Biome project (Biome >= 2.6 formats them)
+  if ((Test-Path -LiteralPath (Join-Path $root 'biome.json') -PathType Leaf) -or (Test-Path -LiteralPath (Join-Path $root 'biome.jsonc') -PathType Leaf)) {
+    foreach ($e in '.md', '.yml', '.yaml') { $langOf[$e] = 'ts' }
+  }
+  $present = @(Get-ChangedFiles | ForEach-Object { $langOf[[IO.Path]::GetExtension($_).ToLowerInvariant()] } | Where-Object { $_ })
+  $detected = @('ts', 'py', 'dotnet', 'rust', 'go' | Where-Object { $present -contains $_ })
+  $all = @()
+  foreach ($l in $detected) {
+    $sp = @{ Language = $l }
+    if ($Check) { $sp.Check = $true }
+    if ($Base) { $sp.Base = $Base }
+    if ($WhatIf) { $sp.WhatIf = $true }
+    if ($WhatIf) { $json = (& $PSCommandPath @sp | Out-String); if ($LASTEXITCODE -eq 0 -and $json.Trim()) { $all += @($json | ConvertFrom-Json) } }
+    else { & $PSCommandPath @sp }
+    if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+  }
+  if ($WhatIf) { ConvertTo-Json -Depth 4 -InputObject @($all) }
+  elseif ($detected.Count -eq 0) { Write-Output 'skipped: no changed files' }
+  exit 0
+}
 
 # per-project override: an entry for -Language replaces extensions and ALL default commands
 # source: `.agents/config.json` key `format` (false disables, else a map language -> entry); the legacy `.agents/format.json` (the map itself) is honoured when config.json has no `format` key
@@ -118,10 +173,10 @@ $defaults = @{
 }
 $defaults.ng = @($defaults.ts[0].Clone(), $defaults.ts[1])
 $defaults.ng[0].Ext = $exts5 + @('.json', '.html', '.scss', '.css')
-# a Biome project (biome.json[c] at the toplevel) replaces prettier + eslint with one biome step on the prettier extensions
+# a Biome project (biome.json[c] at the toplevel) replaces prettier + eslint with one biome step on the prettier extensions plus Markdown and YAML
 if ((Test-Path -LiteralPath (Join-Path $root 'biome.json') -PathType Leaf) -or (Test-Path -LiteralPath (Join-Path $root 'biome.jsonc') -PathType Leaf)) {
   foreach ($lang in 'ts', 'ng') {
-    $defaults[$lang] = @(@{ Tool = 'biome'; Ext = $defaults[$lang][0].Ext; Requires = 'npx --no-install biome --version'; Format = @('npx biome check --write {files}'); Check = @('npx biome check {files}') })
+    $defaults[$lang] = @(@{ Tool = 'biome'; Ext = $defaults[$lang][0].Ext + @('.md', '.yml', '.yaml'); Requires = 'npx --no-install biome --version'; Format = @('npx biome check --write --no-errors-on-unmatched {files}'); Check = @('npx biome check --no-errors-on-unmatched {files}') })
   }
 }
 
@@ -156,28 +211,7 @@ function ConvertTo-Ext($List) {
     ForEach-Object { $e = $_.Trim().ToLowerInvariant(); if ($e.StartsWith('.')) { $e } else { ".$e" } })
 }
 
-# NUL-separated output (-z): names with spaces, quotes or non-ASCII characters arrive unquoted
-[Console]::OutputEncoding = [System.Text.Encoding]::UTF8
-function Get-GitNames {
-  param([string[]]$GitArgs)
-  $out = & git -C $root @GitArgs 2>&1
-  if ($LASTEXITCODE -ne 0) { $code = $LASTEXITCODE; Write-Error (($out | Out-String).Trim()) -ErrorAction Continue; exit $(if ($code) { $code } else { 1 }) }
-  (@($out) -join "`n") -split "`0" | Where-Object { $_ }
-}
-$code = 0
-$names = [System.Collections.Generic.List[string]]::new()
-if ($Base) {
-  # a bad ref must fail loudly: a swallowed error would let -Check pass with nothing checked
-  Get-GitNames @('diff', '--name-only', '-z', "$Base...HEAD", '--') | ForEach-Object { $names.Add($_) }
-}
-# staged + unstaged vs HEAD (a repository without a commit has no HEAD: fall back to the index)
-& git -C $root rev-parse --verify -q HEAD *> $null
-$diffArgs = if ($LASTEXITCODE -eq 0) { @('diff', '--name-only', '-z', 'HEAD', '--') } else { @('diff', '--name-only', '-z', '--cached', '--') }
-Get-GitNames $diffArgs | ForEach-Object { $names.Add($_) }
-Get-GitNames @('ls-files', '--others', '--exclude-standard', '-z') | ForEach-Object { $names.Add($_) }
-
-# repo-relative, existing (deleted dropped), no duplicates
-$existing = @($names | Select-Object -Unique | Where-Object { $_ -and (Test-Path -LiteralPath (Join-Path $root $_) -PathType Leaf) })
+$existing = Get-ChangedFiles
 
 function Get-ArgList([string[]]$Tokens, [string[]]$Safe) {
   $argList = [System.Collections.Generic.List[string]]::new()

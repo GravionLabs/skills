@@ -1,6 +1,6 @@
 ---
 name: planner
-description: 'Plan an issue one level down with blockers and sizes, grill the open decisions, create the issues; refine <nr> grills an existing issue. Use for "plan issue #N".'
+description: 'Plan an issue one level down with blockers and sizes, grill the open decisions, create the issues; refine <nr> checks readiness. Use for "plan issue #N" or "refine #N".'
 ---
 
 Planning only: no source edits. The planning steps below ask nothing (open decisions go into `questions[]`, see `references/questions.md`); the plan is the reply.
@@ -18,21 +18,26 @@ Planning only: no source edits. The planning steps below ask nothing (open decis
 3. Show the items (id, title, size, `blocked_by`) and the answers. The user approves granularity, blockers and which items to create; also with zero questions. Create nothing before.
 4. Create the approved items with `github-issue` `references/create-from-plan.md`; each created issue gets the answers that concern it under `## Decisions` (`<question> — <answer>`).
 
-Task breakdown after a Feature plan: one cycle (steps 1-4) per PBI, in order, with its own grilling and approval. Never put the questions of several PBIs into one round.
-
 ## Refine
 
-`refine <nr>`: read the issue (`gh issue view <nr> --json title,body,labels,comments`), load `grill-me` with its open points, acceptance criteria and technical notes (explore the code named there first; facts are not asked). Update the body with the decisions (`## Decisions`) and the sharpened criteria and notes via `gh api -X PATCH repos/{owner}/{repo}/issues/<nr> -F body=@file`. No plan, no new issues.
+`refine <nr>`: no plan, no new issues except an approved split.
+
+- Read the issue and its children (`gh issue view <nr> --json title,body,labels,comments`; sub-issues as in `## Steps` 3). Explore the code it names; facts are not asked.
+- Check the list of its level in `references/ready.md`. Collect the gaps only.
+- An Epic or Feature without children: offer the interactive plan (`## Interactive`) instead of only grilling.
+- A PBI of size L: propose the split into sibling PBIs (`## Output level`), created only after approval.
+- Load `grill-me` with the gaps only. Update the body with the decisions (`## Decisions`) and the sharpened criteria and notes via `gh api -X PATCH repos/{owner}/{repo}/issues/<nr> -F body=@file`.
+- Labels: ready → remove `needs-refinement`; open decision left → add `needs-decision` and post the question as a comment. Create the label (`gh label create`) when the repository lacks it.
 
 ## Depth (exploration budget)
 
 Pick from the request ("quick plan", "deep planning") or default to **standard**.
 
-| Depth    | Exploration                                                     |
-|----------|-----------------------------------------------------------------|
-| quick    | ~5 key files                                                    |
-| standard | Grep/glob/read affected and related code                        |
-| deep     | Standard + call sites, tests, docs of every affected area       |
+| Depth    | Exploration                                               |
+| -------- | --------------------------------------------------------- |
+| quick    | ~5 key files                                              |
+| standard | Grep/glob/read affected and related code                  |
+| deep     | Standard + call sites, tests, docs of every affected area |
 
 Depth limits exploration, not the number of items. Size items by session: **one item = one fresh session**.
 
@@ -40,18 +45,20 @@ Depth limits exploration, not the number of items. Size items by session: **one 
 
 The input type decides it (`labels`, else title prefix `[Epic]`/`[Feature]`/`[PBI]`/`[Bug]`, or the legacy `Epic: `/`Feature: `). Plan titles are summaries; the caller adds the level prefix:
 
-| Input | Plan items |
-|:--|:--|
-| Epic | Features (`<capability>`, created as `[Feature] …`) |
-| Feature | PBIs (`feat: …`, `fix: …`, created as `[PBI] …`) |
-| PBI or bug | tasks (`chore: …`, created as `[Task] …`; one task needs no issue) |
-| Description only | internal tasks |
+| Input            | Plan items                                                                                                                                                                                                  |
+| :--------------- | :---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Epic             | Features (`<capability>`, created as `[Feature] …`)                                                                                                                                                         |
+| Feature          | PBIs (`feat: …`, `fix: …`, created as `[PBI] …`)                                                                                                                                                            |
+| PBI or bug       | none when it fits one session: `items: []`, the summary says `refine <nr>`. Too big (size L or more than one session) → a split into sibling PBIs under the same Feature (`feat: …`, `fix: …`, level `pbi`) |
+| Description only | internal steps (level `pbi`), no issues are created                                                                                                                                                         |
+
+In a split, `p1` becomes the planned issue (its title and body are replaced) and the other items are created as sibling `[PBI]`s (`github-issue` `references/create-from-plan.md`). No plan creates `[Task]` issues; `[Task]` sub-issues of older plans are read, never re-planned.
 
 ## Steps
 
 1. Resolve owner/repo from `git remote get-url origin` (SSH or HTTPS). Never ask the user.
 2. Load `detect-techstack`; keep the JSON.
-3. Read the input: `gh issue view <nr> --json title,body,labels`, or the description. Read ALL children, open and closed, with `gh api --paginate repos/{owner}/{repo}/issues/<nr>/sub_issues --jq '.[]|{number,state,title,labels:[.labels[].name]}'`; closed Tasks count as existing and are never re-planned ("Open vs. all tasks" in `github-issue` `references/task-issues.md`). Plan only what is missing; skip open Task issues already merged ("Task merged", same file) and list them in the return summary as `already merged: #<task> (<sha>)` for the caller to close.
+3. Read the input: `gh issue view <nr> --json title,body,labels`, or the description. Read ALL children, open and closed, with `gh api --paginate repos/{owner}/{repo}/issues/<nr>/sub_issues --jq '.[]|{number,state,title,labels:[.labels[].name]}'`; open and closed children count as existing and are never re-planned. Plan only what is missing; list open children labelled `merged` in the return summary as `already merged: #<nr>` for the caller to close. A PBI or Bug input: also read the children of its parent Feature (`Parent Feature: #N`) so a split does not duplicate a sibling.
 4. Explore per the depth with a subagent per affected area, given the file budget and the question; keep only its ≤ 300-word summaries (Claude Code built-in `Explore` subagent, OpenCode `task`, VS Code Copilot `runSubagent`). Without subagents, explore inline with Read/Grep/Glob under the same budget.
 5. Slice per `references/slicing.md`. Per item set `blocked_by`, `size` (S/M/L), `tier` (fast/standard/strong, see ## Tier) and `files`. Items whose files or exploration summary show background/async work, persistence or a state machine get an `## Invariants` section per `references/invariants.md` (load it only then).
 6. Collect open decisions as `questions[]` per `references/questions.md`; resolve anything the repo can answer yourself.
@@ -67,7 +74,7 @@ The plan JSON per `references/plan-schema.md`, then a summary of ≤ 10 lines: i
 
 ## Rules
 
-- Titles are summaries without level prefix (Feature: the capability; PBI/Task: `feat: `, `chore: `, `fix: `); the caller prefixes them per the `github-issue` Issue Types; bodies are implementable without re-exploring: exact files and symbols, where tests go, what is out of scope.
+- Titles are summaries without level prefix (Feature: the capability; PBI: `feat: `, `refactor: `, `fix: `); the caller prefixes them per the `github-issue` Issue Types; bodies are implementable without re-exploring: exact files and symbols, where tests go, what is out of scope.
 - `blocked_by` forms a DAG over plan ids and existing issue numbers; no cycles, no self-reference.
 - Never use markdown checklists for hierarchy; the caller uses native sub-issue and blocked-by links.
 - The plan schema is the contract between planning and the caller.

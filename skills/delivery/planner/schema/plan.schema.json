@@ -9,7 +9,7 @@
     "status": { "enum": ["ok", "fail"] },
     "parent_issue": { "type": ["integer", "null"], "minimum": 1 },
     "input_type": { "enum": ["epic", "feature", "pbi", "bug", "description"] },
-    "level": { "enum": ["feature", "pbi", "task"] },
+    "level": { "enum": ["feature", "pbi"] },
     "depth": { "enum": ["quick", "standard", "deep"] },
     "items": {
       "type": "array",

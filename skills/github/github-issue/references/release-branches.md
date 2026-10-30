@@ -3,11 +3,11 @@
 `main` is released code: a push to `main` builds the platform matrices and publishes. To keep those
 builds rare, day-to-day work never targets `main` directly.
 
-| Branch | Cut from | Merged into | Strategy | CI |
-| --- | --- | --- | --- | --- |
-| `release/next` (rolling; `release/<x.y>` only for parallel lines) | `main` | `main`, once per release, by the `github-release` skill | merge commit (`gh pr merge --merge`), never squash: git-cliff needs the individual conventional commits | Linux checks on the PR, platform builds after the merge |
-| `<type>/<nr>-<slug>` | the integration branch | the integration branch | squash | none: local build, tests and `code-review` before the PR are the gate |
-| `fix/<nr>-<slug>` hotfix | `main` | `main` | squash | Linux checks on the PR |
+| Branch                                                            | Cut from               | Merged into                                             | Strategy                                                                                                | CI                                                                    |
+| ----------------------------------------------------------------- | ---------------------- | ------------------------------------------------------- | ------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------- |
+| `release/next` (rolling; `release/<x.y>` only for parallel lines) | `main`                 | `main`, once per release, by the `github-release` skill | merge commit (`gh pr merge --merge`), never squash: git-cliff needs the individual conventional commits | Linux checks on the PR, platform builds after the merge               |
+| `<type>/<nr>-<slug>`                                              | the integration branch | the integration branch                                  | squash                                                                                                  | none: local build, tests and `code-review` before the PR are the gate |
+| `fix/<nr>-<slug>` hotfix                                          | `main`                 | `main`                                                  | squash                                                                                                  | Linux checks on the PR                                                |
 
 The release PR to `main` is created and refreshed by the caller of the reusable `release-branch.yml` (GravionLabs/ci, step `versioning/release-pr`) on every push to the release branch; the owner only merges it.
 

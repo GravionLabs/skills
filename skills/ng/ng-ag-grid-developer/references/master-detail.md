@@ -16,12 +16,12 @@ detailCellRendererParams: IDetailCellRendererParams<Account, CallRecord> = {
 
 ## Options
 
-| Option | Effect |
-|---|---|
-| `isRowMaster: (data) => data.callRecords?.length > 0` | Only some rows expandable |
-| `detailRowHeight: 300` | Fixed detail height |
-| `detailRowAutoHeight: true` | Fit content (`[Initial]`) |
-| `keepDetailRows: true`, `keepDetailRowsCount: 5` | Keep collapsed detail grids in memory (default: destroyed on collapse) |
-| `detailCellRenderer: MyComponent` | Replace the detail grid with an Angular component implementing `IDetailCellRenderer` (`agInit(params)`, `refresh(): false` recreates) |
+| Option                                                | Effect                                                                                                                                |
+| ----------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------- |
+| `isRowMaster: (data) => data.callRecords?.length > 0` | Only some rows expandable                                                                                                             |
+| `detailRowHeight: 300`                                | Fixed detail height                                                                                                                   |
+| `detailRowAutoHeight: true`                           | Fit content (`[Initial]`)                                                                                                             |
+| `keepDetailRows: true`, `keepDetailRowsCount: 5`      | Keep collapsed detail grids in memory (default: destroyed on collapse)                                                                |
+| `detailCellRenderer: MyComponent`                     | Replace the detail grid with an Angular component implementing `IDetailCellRenderer` (`agInit(params)`, `refresh(): false` recreates) |
 
 Detail API: `api.getRowNode(id)?.detailNode?.detailGridInfo?.api`.

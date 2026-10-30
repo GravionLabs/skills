@@ -28,10 +28,12 @@ The repo uses pnpm (`pnpm-lock.yaml`) only.
 2. Keep `SKILL.md` ≤ 100 lines; frontmatter only `name`, `description`, optional `license`/`metadata` plus the client keys of [skill frontmatter](docs/concepts/skill-frontmatter.md); shell fences ` ```powershell `. Long specs go to `references/` with a conditional load line, templates to `templates/`, procedures to `scripts/*.ps1`.
 3. If another skill already owns a step, delegate by name instead of repeating it.
 4. List it and run the checks:
+
    ```powershell
    node scripts/check-marketplace.mjs --fix   # marketplace.json and groups.json from the folders
    pnpm run check                                                  # everything CI runs
    ```
+
    Tests of skill content and scripts live in `test/skills/<group>/`, repository checks in `test/repo/`, shared helpers in `test/helpers/`. `pnpm test` runs Vitest, `pnpm run test:ci` adds coverage (CI), a single file runs with `pnpm vitest run <path>`.
 5. Update the group `description` in `.claude-plugin/marketplace.json` when the group scope changed, and the group table in AGENTS.md and README.md.
 6. Open a PR with a conventional-commit title (`feat(py): …`, `fix(github): …`). The changelog is generated from commit messages with git-cliff.
@@ -54,17 +56,17 @@ Public surface is everything a consumer can depend on: skill names (`npx skills 
 
 Renamed when moving from GravionLabs/apm-hub:
 
-| Old name | New name | Note |
-|:--|:--|:--|
-| `apm-install` (skill) | `skills-install` | installs with `npx skills` instead of `apm` |
-| `apm-tooling` (package) | `skill-tooling` (group) | same skills |
-| `core`, `all` (meta-packages) | presets of `skills-install` | no longer installable units |
+| Old name                      | New name                    | Note                                        |
+| :---------------------------- | :-------------------------- | :------------------------------------------ |
+| `apm-install` (skill)         | `skills-install`            | installs with `npx skills` instead of `apm` |
+| `apm-tooling` (package)       | `skill-tooling` (group)     | same skills                                 |
+| `core`, `all` (meta-packages) | presets of `skills-install` | no longer installable units                 |
 
 ## Issues
 
-Use the templates in `.github/ISSUE_TEMPLATE/` (Epic → Feature → PBI → Task, Bug). Children are linked as native GitHub sub-issues; see `skills/github/github-issue/references/sub-issues.md`.
+Use the templates in `.github/ISSUE_TEMPLATE/` (Epic → Feature → PBI, Bug; there is no Task level). Children are linked as native GitHub sub-issues; see `skills/github/github-issue/references/sub-issues.md`.
 
-The title of an issue starts with its level: `[Epic]`, `[Feature]`, `[PBI]`, `[Task]` or `[Bug]`, then the summary (`[PBI] feat: short summary`). The shared `issues.yml` workflow of `GravionLabs/ci` sets the prefix from the level label.
+The title of an issue starts with its level: `[Epic]`, `[Feature]`, `[PBI]` or `[Bug]`, then the summary (`[PBI] feat: short summary`). The shared `issues.yml` workflow of `GravionLabs/ci` sets the prefix from the level label.
 
 ## Releases
 

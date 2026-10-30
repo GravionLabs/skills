@@ -17,8 +17,8 @@ Test behavior through the public interface, never internals; expected values com
 - [ ] Tests follow the good-tests rules (no internals coupling, no tautological assertions)
 - [ ] Build passes when the stack compiles and compiled sources changed; targeted tests pass (test files of the changed paths and direct neighbours, `<lang>-test` "Targeted run"; unknown mapping: the fast/unit group, never the full suite)
 - [ ] Full suite: one full run before the pull request, and again after the last fix round
-- [ ] Every item of an Invariants section in the task or PBI body has a test that exercises it
-- [ ] Changed files formatted: `scripts/Format-Changed.ps1` runs the Format command of the language skill on them (`references/format.md`); a `format.<lang>` entry in `.agents/config.json` overrides it (`"format": false` disables)
+- [ ] Every item of an Invariants section in the PBI or Bug body has a test that exercises it
+- [ ] Changed files formatted: `scripts/Format-Changed.ps1` formats them, detecting the formatter from the file extensions when no `-Language` is given (`references/format.md`); a `format.<lang>` entry in `.agents/config.json` overrides it (`"format": false` disables)
 - [ ] Never commit red
 - [ ] No debug output left in code
 
@@ -28,4 +28,4 @@ Run `detect-techstack`, then load each `<lang>-implementation` and `<lang>-test`
 
 ## Runner contract
 
-Started by a runner for one Task (input is the Task body, PBI criteria and a worktree): load `references/runner-contract.md`. It fixes the commit rule (`Refs #<task>`), forbids `gh` and push, and defines the JSON result of `schema/implementer.schema.json`.
+Started by a runner for one PBI or Bug (input is the issue body with its criteria and a worktree): load `references/runner-contract.md`. It fixes the commit rule (`Refs #<nr>`), forbids `gh` and push, and defines the JSON result of `schema/implementer.schema.json`.

@@ -14,6 +14,7 @@ Loaded by `github-release` only when `cliff.toml` is missing or `git-cliff` is n
    - No prior changelog: `git-cliff -c cliff.toml -o CHANGELOG.md`
    - Existing changelog with `v*` tags: `git-cliff -c cliff.toml -o CHANGELOG.md --unreleased -t v{next-version}`
 4. **Integrate** — add to `package.json` scripts:
+
    ```json
    "changelog": "git-cliff -c cliff.toml -o CHANGELOG.md",
    "changelog:release": "git-cliff -c cliff.toml -o CHANGELOG.md --unreleased -t v{version}"

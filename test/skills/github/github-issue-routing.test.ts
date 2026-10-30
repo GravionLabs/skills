@@ -14,7 +14,6 @@ describe('github-issue without batch routing', () => {
       false,
     );
     expect(skill).not.toMatch(/batch/i);
-    expect(read('github/github-issue/references/task-issues.md')).not.toContain('batch-workflow');
   });
 
   it('routing has no batch row and keeps one issue per session', () => {
@@ -79,9 +78,9 @@ describe('github-issue creates issues from a plan with blocked-by links', () => 
     expect(doc).toContain('gh api repos/{owner}/{repo}/issues/<blocker-nr> --jq .id');
   });
 
-  it('every file task-issues.md and planner name for blocked-by links contains "blocked_by"', () => {
+  it('every file create-from-plan.md and planner name for blocked-by links contains "blocked_by"', () => {
     const sources = [
-      read('github/github-issue/references/task-issues.md'),
+      read('github/github-issue/references/create-from-plan.md'),
       readFileSync(path.join(planning, 'SKILL.md'), 'utf8'),
       ...readdirSync(path.join(planning, 'references'))
         .filter((f) => f.endsWith('.md'))
@@ -97,5 +96,33 @@ describe('github-issue creates issues from a plan with blocked-by links', () => 
     for (const file of named) {
       expect(read(`github/github-issue/references/${file}`), file).toContain('blocked_by');
     }
+  });
+});
+
+describe('github-issue without new Task issues (#890)', () => {
+  const ref = (f: string) => read(`github-issue/references/${f}`);
+
+  it('has no task-issues.md and keeps the legacy close rule in sub-issues.md', () => {
+    expect(existsSync(path.join(skills, 'github-issue/references/task-issues.md'))).toBe(false);
+    const legacy = ref('sub-issues.md').split('## Legacy Task issues')[1].split('\n## ')[0];
+    expect(legacy).toMatch(/never created/);
+    expect(legacy).toContain('gh issue close');
+    expect(legacy).toContain('.name == "task"');
+  });
+
+  it('create-from-plan.md has no task level and handles a split', () => {
+    const doc = ref('create-from-plan.md');
+    expect(doc).not.toContain('| `task` |');
+    expect(doc).toMatch(/no `\[Task\]` issue is created/);
+    expect(doc).toMatch(/split of a PBI or Bug/);
+  });
+
+  it('no reference names task-issues.md or a Refs #<task> footer', () => {
+    const files = readdirSync(path.join(skills, 'github-issue/references'));
+    for (const f of files) {
+      expect(ref(f), f).not.toMatch(/task-issues\.md|#<task>/);
+    }
+    const pr = read('github-pull-request/SKILL.md');
+    expect(pr).not.toMatch(/#<task>|open Task/);
   });
 });

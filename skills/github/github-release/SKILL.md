@@ -16,19 +16,19 @@ pwsh scripts/Get-ReleaseState.ps1 -Mode cut            # or: -Mode finish [-Bran
 
 The script is read-only and prints JSON: `default`, `branch`, `state`, `openPrs`, `localAhead`, `staleLines`, `deleteAllowed`, `action`, `hasSemverCommit`, `hasMajorCommit`, `releaseWorkflow`, `releasePr`. Exit 1 with a message on stderr (invalid branch name, no release branch) means stop and report. Do what `action` says; `stop: ...` means report the text and change nothing.
 
-| `state` | cut | finish |
-|:--|:--|:--|
-| `absent` | `create` | stop |
-| `fresh` (equals default) | no-op | stop: nothing to release |
-| `unreleased` | no-op | continue below |
-| `behind` (default moved on) | no-op | stop, merge default in first |
-| `merged`, `released` | `recreate` when `deleteAllowed`, else stop and name the blocker | `merged` with `deleteAllowed`: `delete-branch`; else stop "already released; cut a new release branch" |
-| `released-continued` | no-op | stop "already released; cut a new release branch" |
+| `state`                     | cut                                                             | finish                                                                                                 |
+| :-------------------------- | :-------------------------------------------------------------- | :----------------------------------------------------------------------------------------------------- |
+| `absent`                    | `create`                                                        | stop                                                                                                   |
+| `fresh` (equals default)    | no-op                                                           | stop: nothing to release                                                                               |
+| `unreleased`                | no-op                                                           | continue below                                                                                         |
+| `behind` (default moved on) | no-op                                                           | stop, merge default in first                                                                           |
+| `merged`, `released`        | `recreate` when `deleteAllowed`, else stop and name the blocker | `merged` with `deleteAllowed`: `delete-branch`; else stop "already released; cut a new release branch" |
+| `released-continued`        | no-op                                                           | stop "already released; cut a new release branch"                                                      |
 
 ## cut
 
 1. `action: create`: create `release/next` from the default branch and push it with upstream.
-2. `action: recreate`: delete `release/next` on origin (`git push origin --delete release/next`; the guardrail allows exactly this), then `git checkout -B release/next origin/<default>` and push with upstream. No force push, no `+semver` commit: the version comes from the GitVersion branch config.
+2. `action: recreate`: delete `release/next` on origin (`git push origin --delete release/next`; the guardrail allows exactly this), then `git checkout -B release/next origin/<default>` and push with upstream. No force push, no `+semver` commit: `finish` adds it.
 3. Each `staleLines` entry was released and is never reused. Report it with `git push origin --delete release/<x.y>`; the owner runs it (the guardrail blocks it in a session). Continue with the cut.
 4. `releaseWorkflow` false: tell the user the repo does not label merged issues and offer to copy `templates/release-branch.yml` to `.github/workflows/release-branch.yml` (never silently, one PR per repo, `references/merged-label.md`). A GitHub Project mirrors the label as status `In release` via `github-project sync`.
 5. With `--feature <nr>`: insert `Release branch: release/next` as the second line of that issue's body (`gh issue view <nr> --json body`, then `gh issue edit <nr> --body-file -`), the `Parent ...` line stays first.
@@ -36,7 +36,7 @@ The script is read-only and prints JSON: `default`, `branch`, `state`, `openPrs`
 ## finish
 
 1. `state` `unreleased`, `openPrs` empty: continue. Otherwise `action` already says stop; list `openPrs` when they block.
-2. Bump: minor by default, `major` only with the argument `major`; never ask in a fork. On `release/next` minor adds nothing. Major adds `git commit --allow-empty -m "chore: release major" -m "+semver: major"` and a push, only when `hasMajorCommit` is false. A `release/<x.y>` branch has no GitVersion Minor config: add `+semver: minor|major` the same way (`chore: release minor|major`) when `hasSemverCommit` is false.
+2. Bump: minor by default, `major` only with the argument `major`; never ask in a fork. The version is determined on the default branch after the merge, where no branch config of `release/*` applies, so every release branch needs the commit: `git commit --allow-empty -m "chore: release minor|major" -m "+semver: minor|major"` and a push. Minor only when `hasSemverCommit` is false, major only when `hasMajorCommit` is false.
 3. `releasePr` set: CI keeps it current, report it. None: open it with `github-pull-request` in release mode (`branch`, `base_branch: <default>`, `title: release: <branch>`, `merged_prs` per its default, `feature_number` only when recorded, `auto_merge: false`). Never use a direct `gh pr create`; when `github-pull-request` stops, stop and report. Do not touch `CHANGELOG.md`: the release job on `main` regenerates it with git-cliff, tags, publishes and closes the issues the release's PRs reference.
 4. Report the PR URL, `gh pr merge <nr> --merge` (merge commit, never squash) and the cleanup `git push origin --delete <branch>`, then stop; never wait for the merge. The cleanup after the merge is a later `finish` on the merged branch: `Get-ReleaseState.ps1` returns `delete-branch` and that run deletes `release/next`.
 

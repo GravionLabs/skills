@@ -14,7 +14,7 @@ Everything here is interactive: you start a Claude Code, Copilot CLI or OpenCode
 6. Open the PR: `Create a PR for this branch.` (`github-pull-request`).
 7. `/clear` (or close the session) before the next issue.
 
-Title and labels follow the hierarchy `[Epic]`, `[Feature]`, `[PBI]`, `[Task]`, `[Bug]`; see `github-issue`.
+Title and labels follow the hierarchy `[Epic]`, `[Feature]`, `[PBI]`, `[Bug]`; see `github-issue`. `[Task]` issues of older plans are read, never created.
 
 ## 2. Model choice
 

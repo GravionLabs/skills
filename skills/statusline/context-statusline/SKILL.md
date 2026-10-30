@@ -24,10 +24,10 @@ The installer points `statusLine` and `subagentStatusLine` at the skill's own sc
 
 ## What you get
 
-| Script | Output |
-|:--|:--|
-| `statusline.mjs` | `user@host:dir`, model, `ctx:<pct>% (<used>k/<size>k)` (no size part without a window size), `(git branch)`, `5h:<pct>% 7d:<pct>%` (`ctx` and each limit green below 50 %, yellow below 80 %, red above). Fields that are null or missing are skipped |
-| `subagent-statusline.mjs` | one row per subagent: `<agentType> <model> ctx:<pct>% (<k>k/<size>k) · <label>` (`1M` for a 1,000,000 window); green below 50 %, yellow below 80 %, red above; only `<k>k` when the context window size is unknown |
+| Script                    | Output                                                                                                                                                                                                                                                                                                                                  |
+| :------------------------ | :-------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `statusline.mjs`          | `user@host:dir`, model, `ctx:<pct>% (<used>k/<size>k)` (no size part without a window size), `(git branch)`, `5h:<pct>% 7d:<pct>%` (each limit green below 50 %, yellow below 80 %, red above; `ctx` yellow from min(50 %, 250k tokens), red from min(80 %, 500k), 50/80 % without a size). Fields that are null or missing are skipped |
+| `subagent-statusline.mjs` | one row per subagent: `<agentType> <model> ctx:<pct>% (<k>k/<size>k) · <label>` (`1M` for a 1,000,000 window); yellow from min(50 %, 250k tokens), red from min(80 %, 500k); only `<k>k` when the context window size is unknown                                                                                                        |
 
 ## Rules
 

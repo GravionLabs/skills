@@ -36,8 +36,6 @@ What happens instead.
 
 <!-- Optional. -->
 
-<!-- Optional: if the fix is split into Tasks, add them via GitHub's native sub-issues panel. -->
-
 ## Definition of Done
 
 - Fix merged with regression test

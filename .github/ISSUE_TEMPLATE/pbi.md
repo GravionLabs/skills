@@ -20,13 +20,11 @@ Parent Feature: #NNN
 
 ## Acceptance Criteria
 
-- [ ] 
+- [ ]
 
 ## Technical Notes
 
 <!-- Optional: implementation hints, affected files/packages. -->
-
-<!-- Optional: add Task children via GitHub's native sub-issues panel — not a checklist. -->
 
 ## Definition of Done
 

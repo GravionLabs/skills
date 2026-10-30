@@ -4,13 +4,14 @@ Module: `ExcelExportModule`. `api.exportDataAsExcel()` mirrors current grid stat
 
 ```typescript
 api.exportDataAsExcel({
-  fileName: 'my-report.xlsx', sheetName: 'Data',
-  columnKeys: ['name', 'price'],            // only these columns
+  fileName: 'my-report.xlsx',
+  sheetName: 'Data',
+  columnKeys: ['name', 'price'], // only these columns
   onlySelected: false,
-  shouldRowBeSkipped: p => p.node.data?.status === 'archived',
-  columnWidth: p => (p.column?.getId() === 'name' ? 200 : 100),
+  shouldRowBeSkipped: (p) => p.node.data?.status === 'archived',
+  columnWidth: (p) => (p.column?.getId() === 'name' ? 200 : 100),
   prependContent: [[{ data: { value: 'Report Title', type: 'String' }, mergeAcross: 3 }]],
-  appendContent:  [[{ data: { value: 'End of Report', type: 'String' } }]],
+  appendContent: [[{ data: { value: 'End of Report', type: 'String' } }]],
 });
 ```
 
@@ -23,7 +24,9 @@ Define `gridOptions.excelStyles: ExcelStyle[]` (`{ id: 'highlight', interior: { 
 ```typescript
 const s1 = api.getSheetDataForExcel({ sheetName: 'Summary' });
 const s2 = otherApi.getSheetDataForExcel({ sheetName: 'Detail' });
-if (s1 && s2) { const data = getMultipleSheetsAsExcel({ data: [s1, s2] }); /* Blob + <a download> */ }
+if (s1 && s2) {
+  const data = getMultipleSheetsAsExcel({ data: [s1, s2] }); /* Blob + <a download> */
+}
 ```
 
 ## Gotchas

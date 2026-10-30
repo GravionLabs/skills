@@ -8,7 +8,8 @@
   - worktrees on the head branch of the PR or on `wip-<Issue>`, and detached worktrees at a commit of the PR,
     when they have no uncommitted changes (the main worktree and the current one are never touched);
   - the local branches `<head branch>` and `wip-<Issue>` when no worktree has them checked out;
-  - `worktree-<name>` branches whose worktree `<name>` is gone and that have no commits beyond `origin/<base branch>`.
+  - `worktree-<name>` branches whose worktree `<name>` is gone and whose commits are all on a remote
+    branch (`git branch -r --contains`); a branch with local-only commits is listed in `left`.
   A worktree with uncommitted changes or a branch still checked out is listed in `left` with the command to remove it.
   Output: {removed[], branchesDeleted[], left[{path|branch, reason, command}]}. Exit 1 when the PR cannot be read.
 .PARAMETER Pr
@@ -81,15 +82,16 @@ foreach ($b in $branches) {
   if ($LASTEXITCODE -eq 0) { $deleted.Add($b) }
 }
 
-# leftover worktree-<name> branches of removed worktrees: only those without own commits
-$base = "origin/$($info.baseRefName)"
-& git rev-parse --verify --quiet $base 2>$null | Out-Null
-if ($LASTEXITCODE -eq 0) {
-  foreach ($b in ($local | Where-Object { $_ -like 'worktree-*' -and $checkedOut -notcontains $_ -and $wtNames -notcontains $_ })) {
-    if ((& git rev-list --count "$base..$b") -eq '0') {
-      & git branch -D $b 2>$null | Out-Null
-      if ($LASTEXITCODE -eq 0) { $deleted.Add($b) }
-    }
+# leftover worktree-<name> branches of removed worktrees: removed when every commit is on a remote branch
+# (the harness starts them at the default branch, not at the base branch); own local commits keep them
+foreach ($b in ($local | Where-Object { $_ -like 'worktree-*' -and $checkedOut -notcontains $_ -and $wtNames -notcontains $_ })) {
+  $remote = @(& git branch -r --contains $b 2>$null | Where-Object { $_.Trim() -and $_ -notmatch '->' })
+  if ($remote.Count -gt 0) {
+    & git branch -D $b 2>$null | Out-Null
+    if ($LASTEXITCODE -eq 0) { $deleted.Add($b) }
+  }
+  else {
+    $left.Add([ordered]@{ branch = $b; reason = 'commits not on any remote branch'; command = "git branch -D $b" })
   }
 }
 

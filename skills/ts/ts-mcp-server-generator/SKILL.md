@@ -9,6 +9,7 @@ metadata:
 Generate an MCP server in TypeScript. Paths to `scripts/` and `templates/` are relative to this skill's directory.
 
 ## Stack
+
 - `@modelcontextprotocol/sdk` — McpServer, transports
 - `zod` — schema validation
 - `tsx` for dev

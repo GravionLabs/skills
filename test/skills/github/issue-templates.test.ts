@@ -8,7 +8,6 @@ const expected: Record<string, string> = {
   'epic.md': '[Epic] ',
   'feature.md': '[Feature] ',
   'pbi.md': '[PBI] ',
-  'task.md': '[Task] ',
   'bug_report.md': '[Bug] ',
 };
 const titleOf = (file: string): string | undefined =>

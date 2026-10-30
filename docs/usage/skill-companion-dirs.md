@@ -15,12 +15,12 @@ skills/<group>/<skill-name>/
 
 Only create the directories you need. Paths inside `SKILL.md` are relative to the skill directory; the skill states that once near the top.
 
-| Directory | Content | Examples |
-| :-- | :-- | :-- |
-| `scripts/` | Repeatable procedures with parameters | `New-Solution.ps1`, `Get-SkillReport.ps1` |
-| `references/` | Specs, rule tables, workflow variants | `review-rules.md`, `sub-issues.md`, `skill-writing-rules.md` |
-| `templates/` | Files to copy or adapt | `Directory.Packages.props`, `eslint.config.mjs`, `vitest.setup.ts` |
-| `assets/` | Static files | `skill-template-optimized.md` |
+| Directory     | Content                               | Examples                                                           |
+| :------------ | :------------------------------------ | :----------------------------------------------------------------- |
+| `scripts/`    | Repeatable procedures with parameters | `New-Solution.ps1`, `Get-SkillReport.ps1`                          |
+| `references/` | Specs, rule tables, workflow variants | `review-rules.md`, `sub-issues.md`, `skill-writing-rules.md`       |
+| `templates/`  | Files to copy or adapt                | `Directory.Packages.props`, `eslint.config.mjs`, `vitest.setup.ts` |
+| `assets/`     | Static files                          | `skill-template-optimized.md`                                      |
 
 ## Loading references conditionally
 

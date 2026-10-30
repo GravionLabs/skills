@@ -7,6 +7,7 @@ Scaffold NgRx Signal Store for Angular feature state.
 1. Ask: feature name, state shape (fields + types + defaults), scope (`root` or feature), async operations needed
 2. Create `<feature>.models.ts` with state interface and supporting types
 3. Create `<feature>.store.ts`:
+
    ```typescript
    export const <Feature>Store = signalStore(
      { providedIn: 'root' },

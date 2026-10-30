@@ -2,13 +2,13 @@
 
 An `--unattended` run stops at the first permission prompt (spike #823, `docs/spikes/deliver.md` section 2). `deliver` and its subagents run five kinds of shell commands; each must be on the allowlist of the harness:
 
-| Commands | Used by |
-|:--|:--|
-| the verify commands of the repository's `AGENTS.md` (build, test, format, lint) | implement and fix subagents |
-| `git` (`fetch`, `switch`, `worktree`, `add`, `commit`, `rebase`, `push`, `diff`, `ls-remote`) | all |
-| `gh` (`auth status`, `api`, `issue`, `pr`) | this session, `github-pull-request` |
-| `pwsh` with `scripts/Remove-PbiWorktrees.ps1` of this skill: the path of the installed skill, e.g. `.claude/skills/deliver/…` in the project or `~/.claude/skills/deliver/…` for a global install | this session, step 8 (cleanup) |
-| `printenv HERDR_ENV`, `printenv HERDR_PANE_ID`, `herdr pane report-metadata` | only when the run is inside a herdr pane (`references/herdr.md`) |
+| Commands                                                                                                                                                                                          | Used by                                                          |
+| :------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ | :--------------------------------------------------------------- |
+| the verify commands of the repository's `AGENTS.md` (build, test, format, lint)                                                                                                                   | implement and fix subagents                                      |
+| `git` (`fetch`, `switch`, `worktree`, `add`, `commit`, `rebase`, `push`, `diff`, `ls-remote`)                                                                                                     | all                                                              |
+| `gh` (`auth status`, `api`, `issue`, `pr`)                                                                                                                                                        | this session, `github-pull-request`                              |
+| `pwsh` with `scripts/Remove-PbiWorktrees.ps1` of this skill: the path of the installed skill, e.g. `.claude/skills/deliver/…` in the project or `~/.claude/skills/deliver/…` for a global install | this session, step 8 (cleanup)                                   |
+| `printenv HERDR_ENV`, `printenv HERDR_PANE_ID`, `herdr pane report-metadata`                                                                                                                      | only when the run is inside a herdr pane (`references/herdr.md`) |
 
 Replace the `pnpm` lines below with the commands of the repository's `AGENTS.md`. The deny entries block the common force-push and `--admin` forms; `deliver` needs neither, and the ruleset on `release/next` stays the real gate.
 

@@ -17,7 +17,16 @@ describe.skipIf(!hasPwsh || process.platform === 'win32')('Format-Changed.ps1', 
   // fake tools on PATH: `ok` probes (`--version`) pass, `bad` probes fail, `gitOnly` has nothing but git
   const bins = { ok: '', bad: '', gitOnly: '' };
   // fixture repos shared by all cases: the cases only write the call log (outside every repo) and .agents/ of `cfg`
-  const repo = { langs: '', biome: '', clean: '', work: '', cfg: '', nohead: '', nogit: '' };
+  const repo = {
+    langs: '',
+    biome: '',
+    mdbiome: '',
+    clean: '',
+    work: '',
+    cfg: '',
+    nohead: '',
+    nogit: '',
+  };
   const log = () => path.join(tmp, 'calls.log');
 
   const git = (cwd: string, ...a: string[]) => spawnSync('git', a, { cwd });
@@ -94,6 +103,7 @@ describe.skipIf(!hasPwsh || process.platform === 'win32')('Format-Changed.ps1', 
       ],
     );
     repo.biome = mkRepo('biome', ['biome.jsonc'], ['a.html', 'b.ts', 'c.json', 'n.md']);
+    repo.mdbiome = mkRepo('mdbiome', ['biome.json'], ['n.md', 'ci.yml', 'v.yaml']);
     repo.clean = mkRepo('clean', ['base.ts'], ['n.md']);
     // branch feat has c.ts committed since main; the working tree has every kind of change
     repo.work = mkRepo('work', ['base.ts', 'gone.ts', 'staged.ts'], []);
@@ -188,19 +198,48 @@ describe.skipIf(!hasPwsh || process.platform === 'win32')('Format-Changed.ps1', 
     ],
     ['rust', 'langs', 1, ['cargo fmt -- src/lib.rs'], ['cargo fmt -- --check src/lib.rs']],
     ['go', 'langs', 1, ['gofmt -w cmd/app/main.go'], ['gofmt -l cmd/app/main.go']],
-    ['ts', 'biome', 2, ['npx biome check --write b.ts c.json'], ['npx biome check b.ts c.json']],
+    [
+      'ts',
+      'biome',
+      3,
+      ['npx biome check --write --no-errors-on-unmatched b.ts c.json n.md'],
+      ['npx biome check --no-errors-on-unmatched b.ts c.json n.md'],
+    ],
     [
       'ng',
       'biome',
+      4,
+      ['npx biome check --write --no-errors-on-unmatched a.html b.ts c.json n.md'],
+      ['npx biome check --no-errors-on-unmatched a.html b.ts c.json n.md'],
+    ],
+    // no -Language: Markdown and YAML alone are mapped to ts in a Biome project
+    [
+      'ts',
+      'mdbiome',
       3,
-      ['npx biome check --write a.html b.ts c.json'],
-      ['npx biome check a.html b.ts c.json'],
+      ['npx biome check --write --no-errors-on-unmatched ci.yml n.md v.yaml'],
+      ['npx biome check --no-errors-on-unmatched ci.yml n.md v.yaml'],
     ],
   ] as const;
   it.each(defaults)('default %s (%s repo) runs its format commands', async (lang, r, n, format) => {
     const f = await go(repo[r], ['-Language', lang]);
     expect(f).toMatchObject({ status: 0, stdout: `formatted: ${n} files\n` });
     expect(callLines()).toEqual(format);
+  });
+  it('without -Language a Biome project formats a changed Markdown/YAML file alone', async () => {
+    const f = await go(repo.mdbiome, []);
+    expect(f).toMatchObject({ status: 0, stdout: 'formatted: 3 files\n' });
+    expect(callLines()).toEqual([
+      'npx biome check --write --no-errors-on-unmatched ci.yml n.md v.yaml',
+    ]);
+  });
+  it('without -Language a project without biome.json leaves Markdown alone', async () => {
+    const f = await go(repo.clean, ['-Language', 'ts']);
+    expect(f.status).toBe(0);
+    expect(callLines()).toEqual([]);
+    const g = await go(repo.clean, []);
+    expect(g).toMatchObject({ status: 0, stdout: 'skipped: no changed files\n' });
+    expect(callLines()).toEqual([]);
   });
   it.each(defaults.filter(([lang]) => lang === 'ts'))(
     'default %s (%s repo) -Check runs its check commands',

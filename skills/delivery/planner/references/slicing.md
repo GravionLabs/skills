@@ -19,8 +19,8 @@ A change touching many call sites is never one item. Plan it as:
 
 ## Sizing
 
-| Size | Meaning |
-|:--|:--|
-| S | a few files, one concern, minutes of work |
-| M | one module or component with its tests, one session |
-| L | at the edge of one session; split it unless it cannot be split |
+| Size | Meaning                                                        |
+| :--- | :------------------------------------------------------------- |
+| S    | a few files, one concern, minutes of work                      |
+| M    | one module or component with its tests, one session            |
+| L    | at the edge of one session; split it unless it cannot be split |

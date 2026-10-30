@@ -20,8 +20,7 @@ Include only the items that apply, each worded for that item (named state, funct
 
 ## Placement
 
-- Level `pbi`: PBI body, template sections, then `## Invariants` directly before `## Definition of Done`.
-- Level `task`: Task body, `## Invariants` after Implementation Notes and before `<!-- agent-ready:start -->`.
-- Single-task plan (no Task issue): the same position inside the single `plan.json` item `body`.
+- PBI body only: template sections, then `## Invariants` directly before `## Definition of Done`. This holds for every item of level `pbi`, a split of a PBI or Bug and a description plan included.
+- `refine <nr>` on a PBI or Bug places the section at the same position in the refined body.
 
 The implementer covers each invariant with a test (`implementation` skill).

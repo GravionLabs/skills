@@ -16,16 +16,16 @@ without per-platform rewriting. The convention follows the
 
 ## Optional client keys
 
-A few keys change *how* a host loads a skill without changing what the skill says. They are
+A few keys change _how_ a host loads a skill without changing what the skill says. They are
 extensions in the sense of the agentskills.io spec: hosts that do not know them ignore them.
 These, and only these, may appear in addition to the keys above:
 
-| Key                        | Honored by                                   | Effect                                                                                                            |
-| :------------------------- | :------------------------------------------- | :---------------------------------------------------------------------------------------------------------------- |
-| `disable-model-invocation` | Claude Code, VS Code Copilot                 | `true` removes the description from the model's skill list; the skill runs only when the user types `/<name>`.    |
-| `user-invocable`           | Claude Code, VS Code Copilot                 | `false` hides the skill from the `/` menu; the model may still load it. Written only as `false`; `true` is the default.                                   |
-| `context`                  | Claude Code, VS Code Copilot (experimental)  | `fork` runs the skill in a subagent with its own context; only the result returns to the caller.                  |
-| `agent`                    | Claude Code                                  | With `context: fork`: the agent definition to run in (`explorer`, `reviewer`, or a built-in such as `Explore`).   |
+| Key                        | Honored by                                  | Effect                                                                                                                  |
+| :------------------------- | :------------------------------------------ | :---------------------------------------------------------------------------------------------------------------------- |
+| `disable-model-invocation` | Claude Code, VS Code Copilot                | `true` removes the description from the model's skill list; the skill runs only when the user types `/<name>`.          |
+| `user-invocable`           | Claude Code, VS Code Copilot                | `false` hides the skill from the `/` menu; the model may still load it. Written only as `false`; `true` is the default. |
+| `context`                  | Claude Code, VS Code Copilot (experimental) | `fork` runs the skill in a subagent with its own context; only the result returns to the caller.                        |
+| `agent`                    | Claude Code                                 | With `context: fork`: the agent definition to run in (`explorer`, `reviewer`, or a built-in such as `Explore`).         |
 
 Rules:
 
@@ -47,7 +47,7 @@ Rules:
 - **`allowed-tools` — dropped.** All three platforms run skills fine without it. The old values
   (`execute shell runCommands read write edit editFiles search codebase`) mixed Copilot and generic
   tool names in one space-separated string; Claude Code parses `allowed-tools` as a comma-separated
-  list of *its* tool names, so the field matched nothing anywhere. Tool restriction is the host
+  list of _its_ tool names, so the field matched nothing anywhere. Tool restriction is the host
   platform's job (agent `permission` blocks, Claude Code settings, Copilot policies), not the
   skill's. Decision recorded 2026-07 in #43.
 - **`model` — forbidden.** Model choice is platform-specific and goes stale (`gpt-4.1` meant
@@ -75,7 +75,7 @@ metadata:
 `metadata` values are free-form strings; hosts ignore them. Authorship/attribution
 (e.g. upstream copyright) also lives here.
 
-A user-only skill (see *Optional client keys*):
+A user-only skill (see _Optional client keys_):
 
 ```yaml
 ---

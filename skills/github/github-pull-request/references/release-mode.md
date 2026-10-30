@@ -6,12 +6,15 @@ Body (step 3):
 
 ```markdown
 ## Summary
+
 Release of `<branch>` into `<base>`.
 
 ## Merged pull requests
+
 - #<n> <title>
 
 ## Verification
+
 <as in step 3, one sentence>
 
 Closes #<feature_number>

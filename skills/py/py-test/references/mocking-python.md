@@ -41,11 +41,11 @@ with patch("myapp.orders.send_email") as mock_email:
 
 ## Specialised
 
-| Need | Library | Install |
-|------|---------|---------|
-| HTTP mocking (httpx) | respx | `uv add --dev respx` |
-| Time/date | freezegun | `uv add --dev freezegun` |
-| Async mocks (stdlib) | unittest.mock.AsyncMock | built-in |
+| Need                 | Library                 | Install                  |
+| -------------------- | ----------------------- | ------------------------ |
+| HTTP mocking (httpx) | respx                   | `uv add --dev respx`     |
+| Time/date            | freezegun               | `uv add --dev freezegun` |
+| Async mocks (stdlib) | unittest.mock.AsyncMock | built-in                 |
 
 ```python
 import respx, httpx

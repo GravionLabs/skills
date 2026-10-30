@@ -1,0 +1,27 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(git:*)",
+      "Bash(gh auth status)",
+      "Bash(gh api:*)",
+      "Bash(gh issue:*)",
+      "Bash(gh pr:*)",
+      "Bash(pwsh ~/.claude/skills/deliver/scripts/Remove-PbiWorktrees.ps1:*)",
+      "Bash(pwsh .claude/skills/deliver/scripts/Remove-PbiWorktrees.ps1:*)",
+      "Bash(pnpm install)",
+      "Bash(pnpm run generate)",
+      "Bash(node scripts/check-marketplace.mjs:*)",
+      "Bash(pnpm test:*)",
+      "Bash(pnpm vitest run:*)",
+      "Bash(pnpm run format:*)",
+      "Bash(pnpm run lint:ps)",
+      "Bash(pnpm run check)",
+      "Bash(printenv HERDR_ENV)",
+      "Bash(printenv HERDR_PANE_ID)",
+      "Bash(herdr pane report-metadata:*)",
+      "Edit",
+      "Write"
+    ],
+    "deny": ["Bash(git push --force:*)", "Bash(git push -f:*)", "Bash(gh pr merge --admin:*)"]
+  }
+}

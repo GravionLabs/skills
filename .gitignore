@@ -19,8 +19,10 @@ Thumbs.db
 !.vscode/settings.json
 !.vscode/extensions.json
 
-# Claude Code / OpenCode - local session state and skills installed into this repository
-.claude/
+# Claude Code / OpenCode - local session state; settings.json is the shared deliver allowlist
+.claude/*
+!.claude/settings.json
+# skills installed into this repository
 .agents/skills/
 skills-lock.json
 
@@ -33,6 +35,9 @@ skills-lock.json
 
 # Misc
 *.log
+
+# deliver loop: stream logs of Invoke-DeliverLoop.ps1
+.agents/deliver-loop/
 
 # Test results
 test-results/

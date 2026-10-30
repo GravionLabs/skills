@@ -8,12 +8,17 @@ bar and completion % automatically, so **closing a child is the only action need
 checklist to tick.
 
 Keep a human-readable parent line as the **first line of the child's body** (`Parent Epic: #12`,
-`Parent Feature: #34`, `Parent PBI: #56` — the same wording a Task uses) so the relationship is legible in plain text and in
+`Parent Feature: #34`) so the relationship is legible in plain text and in
 search. That line is documentation; the native link is the mechanism. Both must agree.
 
-## Tasks of a PBI are not separate work units
+## Legacy Task issues
 
-Task sub-issues of a PBI never become separate branches or PRs: the PBI has one branch and one PR (`Closes #<pbi>`), every task commit carries `Refs #<task>`. This differs from PBI sub-issues of a Feature, which each get their own branch and PR. Format and rules: `task-issues.md`.
+PBIs and Bugs have no sub-issues. `[Task]` issues (label `task`, first line `Parent PBI: #N` or `Parent Bug: #N`) of older plans are read, never created: they are part of their PBI, never a separate branch or PR. When the PBI is closed or delivered, close its open Task sub-issues with it:
+
+```powershell
+gh api repos/{owner}/{repo}/issues/<pbi>/sub_issues --jq '.[] | select(.state == "open") | select(any(.labels[]; .name == "task")) | .number' |
+  ForEach-Object { gh issue close $_ --comment "Closed with #<pbi>." }
+```
 
 ## Read the children of an issue
 
@@ -22,7 +27,7 @@ gh api repos/{owner}/{repo}/issues/<parent-nr>/sub_issues --jq '.[] | "\(.number
 ```
 
 Returns children in display order. Use this wherever a workflow needs the list of Features under an
-Epic, PBIs under a Feature, or Tasks under a PBI. An issue with no children returns `[]`.
+Epic or PBIs under a Feature (legacy: Tasks under a PBI). An issue with no children returns `[]`.
 
 ## Link a child to a parent
 

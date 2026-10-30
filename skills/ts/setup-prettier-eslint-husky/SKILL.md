@@ -18,21 +18,23 @@ Set up ESLint, Prettier and Husky for a TypeScript or Angular project. Paths to 
 
 1. Ask: project type (Angular / plain TS), selector prefix (Angular only), IDE (VS Code / WebStorm / both / none)
 2. Run the setup script:
+
    ```powershell
    pwsh scripts/Setup-CodeQuality.ps1 -ProjectType <angular|ts> [-SelectorPrefix app] [-IDE vscode]
    ```
+
    It installs the packages with pnpm or npm (detected from the lockfile / `packageManager` field), copies the templates, initializes Husky, adds the `lint-staged` block to `package.json` and writes the IDE settings.
 3. Verify: `npx eslint .` and `npx prettier --check .`
 
 ## Templates
 
-| File | Purpose |
-|---|---|
-| `.prettierrc` | Print width 100, single quotes, organize-imports plugin, Angular HTML override |
-| `.prettierignore` | Ignores `dist/`, `node_modules/`, `.angular/`, `coverage/`, `*.min.*` |
-| `.husky/pre-commit` | Runs `npx lint-staged` on commit |
-| `angular/eslint.config.mjs` | TypeScript + Angular ESLint + Prettier rules |
-| `plain-ts/eslint.config.mjs` | TypeScript + Prettier rules, no Angular deps |
+| File                         | Purpose                                                                        |
+| ---------------------------- | ------------------------------------------------------------------------------ |
+| `.prettierrc`                | Print width 100, single quotes, organize-imports plugin, Angular HTML override |
+| `.prettierignore`            | Ignores `dist/`, `node_modules/`, `.angular/`, `coverage/`, `*.min.*`          |
+| `.husky/pre-commit`          | Runs `npx lint-staged` on commit                                               |
+| `angular/eslint.config.mjs`  | TypeScript + Angular ESLint + Prettier rules                                   |
+| `plain-ts/eslint.config.mjs` | TypeScript + Prettier rules, no Angular deps                                   |
 
 ## Constraints
 
