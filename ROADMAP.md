@@ -11,7 +11,7 @@ History: apm-hub 2.x and 3.x are in the [apm-hub roadmap](https://github.com/Gra
 | #1 deliver issues through Claude Code workflows | open for Features #2, #3, #15           | `deliver` shipped with apm-hub 3.2.1 and in v1.0.0 here |
 | #2 deliver as a harness-neutral skill           | open: trials #4, #5, retro #6, tests #7 | the Claude Code trial (apm-hub#863) is done             |
 | #3 lessons contract                             | open: PBIs #23–#28                      | planned with `planner` on 2026-10-30                    |
-| #15 herdr integration of deliver                | open: #16, #12, #13, #17                | not in 1.1.0                                            |
+| #15 herdr integration of deliver                | open: #16, #12, #13, #17                | milestone 1.2.0                                         |
 | #18 finish the move from apm-hub                | open: #19, #20, #21                     | repository settings first, `deliver` needs the ruleset  |
 | #8 stack packages (Feature #9)                  | open: #10 (`needs-decision`), #11       | out of 1.1.0 until #10 is decided                       |
 
@@ -44,12 +44,12 @@ Feature #3 closes with its last PBI. Features #2 and #18 close when their PBIs a
 
 ## Later
 
-| Issue         | Title                                                     | Why later                                         |
-| ------------- | --------------------------------------------------------- | ------------------------------------------------- |
-| #16           | `deliver` reports step, issue and PR as herdr pane tokens | Feature #15 is the 1.2.0 candidate                |
-| #12, #13, #17 | herdr log pane, key toggle and plugin                     | #12 and #17 need refinement; #13 ← #12, #17 ← #16 |
-| #10           | jvm package for Java and Kotlin                           | `needs-decision`: one `jvm` group or two          |
-| #11           | swift package                                             | blocked by #10                                    |
+| Issue         | Title                                                     | Why later                                           |
+| ------------- | --------------------------------------------------------- | --------------------------------------------------- |
+| #16           | `deliver` reports step, issue and PR as herdr pane tokens | milestone 1.2.0 (Feature #15), refined              |
+| #12, #13, #17 | herdr log pane, key toggle and plugin                     | milestone 1.2.0, refined; #13 ← #12, #17 ← #13, #16 |
+| #10           | jvm package for Java and Kotlin                           | `needs-decision`: one `jvm` group or two            |
+| #11           | swift package                                             | blocked by #10                                      |
 
 ## Risks
 
