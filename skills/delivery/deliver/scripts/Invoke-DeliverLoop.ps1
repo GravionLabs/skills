@@ -5,8 +5,8 @@
   A long unattended run in one session grows its context and dies with it. This loop starts
   `claude -p "/deliver <targets> --unattended --max 1"` once per PBI; deliver keeps all state in GitHub, so there is no
   queue file. Progress is read from GitHub before and after each iteration: the open PBIs of the targets without the
-  labels needs-decision / needs-refinement. No change stops the loop ("no progress"); nothing open means done; open PBIs
-  that all wait on an open blocker or a label mean blocked.
+  labels needs-decision / needs-refinement / interactive (deliver skips interactive PBIs unattended). No change stops
+  the loop ("no progress"); nothing open means done; open PBIs that all wait on an open blocker or a label mean blocked.
   Observability: every stream record goes to .agents/deliver-loop/<run>/<nr>.jsonl (<nr> is the first PBI that was ready
   at the start of the iteration), a summary line per step to .agents/deliver-loop.log and stdout, desktop notifications
   for the attention steps (macOS osascript, Windows toast), the herdr pane display when HERDR_ENV=1.
@@ -41,7 +41,7 @@ if (($Nrs | Where-Object { $_ -notmatch '^\d+$' }) -or ($Nrs.Count -eq 0 -and -n
 }
 $Nrs = @($Nrs | ForEach-Object { [int]$_ })
 
-$Held = @('needs-decision', 'needs-refinement')
+$Held = @('needs-decision', 'needs-refinement', 'interactive')
 $LogFile = Join-Path (Get-Location) '.agents/deliver-loop.log'
 $RunDir = Join-Path (Get-Location) ".agents/deliver-loop/$((Get-Date).ToString('yyyyMMdd-HHmmss'))"
 $Recent = [System.Collections.Generic.List[string]]::new()

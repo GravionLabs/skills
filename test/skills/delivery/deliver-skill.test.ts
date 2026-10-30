@@ -70,6 +70,11 @@ describe('deliver SKILL.md', () => {
     expect(body).toContain('ties keep the order of the arguments');
     expect(body).toContain('#<nr> select: needs refinement, skipped');
     expect(body).toContain('planner refine <nr>');
+    expect(body).toContain('#<nr> select: interactive, skipped');
+    expect(body).toContain('`interactive` with `/deliver <nr>` in a session');
+    expect(body).toContain(
+      'interactive mode delivers it, also through a Feature, Epic or milestone',
+    );
     expect(body).toContain('per given number');
   });
 
