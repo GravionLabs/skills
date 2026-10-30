@@ -28,7 +28,7 @@
 param([ValidateSet('claude', 'copilot', 'all')][string]$Client = 'claude', [switch]$Force, [switch]$Uninstall)
 $ErrorActionPreference = 'Stop'
 
-$script:SkillRel = 'skills/statusline/context-statusline/scripts'
+$script:SkillRel = 'skills/context-statusline/scripts'
 
 function ConvertTo-Slash([string]$p) { ($p -replace '\\', '/').TrimEnd('/') }
 
@@ -71,7 +71,7 @@ $isOurs = { param($node)
 if (-not $Uninstall) {
   foreach ($f in $files) {
     if (-not (Test-Path -LiteralPath (Join-Path $cfg.Scripts $f))) {
-      throw "[$($cfg.Name)] $($cfg.Scripts)/$f not found. The context-statusline skill is not installed for this client (deployed for another target only?). Install it with apm for $($cfg.Name) and run the installer from that copy."
+      throw "[$($cfg.Name)] $($cfg.Scripts)/$f not found. The context-statusline skill is not installed for this client (deployed for another target only?). Install it with npx skills for $($cfg.Name) and run the installer from that copy."
     }
   }
 }
