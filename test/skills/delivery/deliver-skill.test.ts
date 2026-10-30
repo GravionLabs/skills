@@ -114,6 +114,13 @@ describe('deliver SKILL.md', () => {
     expect(body).toContain('gh issue close <nr>');
   });
 
+  it('keeps CI watch output unbuffered', () => {
+    const ci = body.slice(body.indexOf('**CI.**'), body.indexOf('**Merge.**'));
+    expect(ci).toContain('without a pipe or output filter');
+    for (const filter of ['tail', 'head', 'grep']) expect(ci).toContain(filter);
+    expect(ci).toContain('watch progress reaches the session');
+  });
+
   it('warns when release/next has no required status checks', () => {
     expect(body).toContain('rules/branches/release/next');
     expect(body).toContain('`required_status_checks`');
