@@ -1,0 +1,48 @@
+# Copilot Ignore File for GravionLabs/skills
+
+# Large generated files and build artifacts
+node_modules/
+dist/
+build/
+*.tgz
+
+# Test artifacts and coverage
+coverage/
+test-results/
+*.lcov
+
+# IDE and editor files
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# Environment files
+.env
+.env.local
+.env.*.local
+
+# Lock files (too verbose for context)
+package-lock.json
+pnpm-lock.yaml
+yarn.lock
+
+# Session and workspace files
+.copilot/
+.DS_Store
+
+# Playwright browser caches (these are massive)
+browsers/
+.playwright/
+
+# Build configuration artifacts
+tsconfig.tsbuildinfo
+
+# Large documentation files generated at build time
+docs/generated/
+
+# Temporary files
+*.tmp
+*.bak
+.tmp/

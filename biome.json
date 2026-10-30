@@ -1,0 +1,55 @@
+{
+  "$schema": "https://biomejs.dev/schemas/2.6.3/schema.json",
+  "vcs": {
+    "enabled": true,
+    "clientKind": "git",
+    "useIgnoreFile": true
+  },
+  "files": {
+    "includes": [
+      "test/**",
+      "scripts/**",
+      "site/**",
+      "*.json",
+      "!**/dist",
+      "!**/node_modules",
+      "!**/coverage",
+      "!**/test-results",
+      "!pnpm-lock.yaml",
+      "!site/.vitepress/cache",
+      "!site/.vitepress/dist"
+    ]
+  },
+  "formatter": {
+    "enabled": true,
+    "indentStyle": "space",
+    "indentWidth": 2,
+    "lineWidth": 100,
+    "lineEnding": "lf"
+  },
+  "javascript": {
+    "formatter": {
+      "quoteStyle": "single",
+      "semicolons": "always",
+      "trailingCommas": "all"
+    }
+  },
+  "assist": {
+    "actions": {
+      "source": {
+        "organizeImports": "off"
+      }
+    }
+  },
+  "linter": {
+    "enabled": true,
+    "rules": {
+      "preset": "recommended",
+      "suspicious": {
+        "useIterableCallbackReturn": "warn",
+        "noAssignInExpressions": "warn",
+        "noControlCharactersInRegex": "warn"
+      }
+    }
+  }
+}

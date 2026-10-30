@@ -1,0 +1,30 @@
+{
+  "name": "gravionlabs-skills-tools",
+  "version": "1.0.0",
+  "packageManager": "pnpm@11.6.0",
+  "description": "Checks, docs generator and tests for the GravionLabs skills",
+  "scripts": {
+    "generate": "node scripts/generate-skill-list.mjs",
+    "format": "biome format --write .",
+    "format:check": "biome check .",
+    "check": "pnpm run format:check && node scripts/check-marketplace.mjs && pwsh skills/skill-slim/scripts/Get-SkillReport.ps1 -Root . -FailOnDangling && pnpm run lint:ps && pnpm test",
+    "check:marketplace": "node scripts/check-marketplace.mjs",
+    "test": "vitest run",
+    "test:ci": "vitest run --coverage",
+    "test:watch": "vitest",
+    "typecheck": "tsc -p test --noEmit",
+    "lint": "biome lint .",
+    "lint:ps": "pwsh scripts/Invoke-ScriptAnalysis.ps1"
+  },
+  "dependencies": {
+    "yaml": "^2.8.3"
+  },
+  "devDependencies": {
+    "@biomejs/biome": "^2.6.3",
+    "@types/node": "^24.0.0",
+    "@vitest/coverage-v8": "^4.1.2",
+    "ajv": "^8.20.0",
+    "typescript": "^7.0.2",
+    "vitest": "^4.1.2"
+  }
+}

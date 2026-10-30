@@ -1,0 +1,12 @@
+packages:
+  - '.'
+  - site
+
+# The pages of the documentation site are the files of `docs/`, outside any package, and VitePress
+# compiles them to code that imports `vue`: it must be found from the repository root.
+publicHoistPattern:
+  - vue
+
+allowBuilds:
+  esbuild: true
+  puppeteer: true

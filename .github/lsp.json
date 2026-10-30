@@ -1,0 +1,64 @@
+{
+  "servers": [
+    {
+      "name": "typescript",
+      "languages": ["typescript", "javascript", "typescriptreact", "javascriptreact"],
+      "command": "node",
+      "args": [
+        "--require",
+        "typescript-language-server/lib/cli",
+        "--stdio"
+      ],
+      "initializationOptions": {
+        "preferences": {
+          "quotePreference": "single",
+          "importModuleSpecifierPreference": "non-relative",
+          "importModuleSpecifierEnding": "auto"
+        }
+      }
+    },
+    {
+      "name": "python",
+      "languages": ["python"],
+      "command": "pylsp",
+      "args": [],
+      "initializationOptions": {
+        "pylsp": {
+          "configurationSources": ["pyproject.toml"],
+          "plugins": {
+            "pycodestyle": {
+              "enabled": true
+            },
+            "pyflakes": {
+              "enabled": true
+            },
+            "mccabe": {
+              "enabled": false
+            }
+          }
+        }
+      }
+    },
+    {
+      "name": "go",
+      "languages": ["go"],
+      "command": "gopls",
+      "args": [],
+      "initializationOptions": {
+        "usePlaceholders": true,
+        "completeUnimported": true
+      }
+    },
+    {
+      "name": "csharp",
+      "languages": ["csharp"],
+      "command": "omnisharp",
+      "args": ["-lsp"],
+      "initializationOptions": {
+        "RoslynExtensionsOptions": {
+          "EnableAnalyzersSupport": true
+        }
+      }
+    }
+  ]
+}

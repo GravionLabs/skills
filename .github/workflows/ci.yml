@@ -1,0 +1,181 @@
+name: CI
+
+on:
+  push:
+    branches: [main, 'release/**']
+  pull_request:
+    branches: [main, release/next]
+    types: [opened, synchronize, reopened, labeled]
+  workflow_dispatch:
+
+permissions:
+  checks: write
+  pull-requests: write
+  contents: read
+
+# Required checks of the ruleset on release/next: "Build & Test" and "Test".
+# Nothing is generated into the repository: docs/skill-list.md is built in the working tree for the site only.
+jobs:
+  build-test:
+    name: Build & Test
+    runs-on: ubuntu-latest
+    # Local equivalent: pnpm run check; keep CI checks separate for individual job logs.
+    permissions:
+      contents: read
+    env:
+      PUPPETEER_SKIP_DOWNLOAD: true
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Node and pnpm
+        uses: GravionLabs/ci/node/setup@cbb01f83374efa76491226e97bcf1d5cf9674fab # main
+        with:
+          node-version: '24'
+          package-manager: pnpm
+
+      - name: Install
+        run: pnpm install --frozen-lockfile
+
+      - name: Check marketplace groups
+        run: node scripts/check-marketplace.mjs
+
+      - name: Skill report (sizes, dangling references)
+        shell: pwsh
+        run: ./skills/skill-slim/scripts/Get-SkillReport.ps1 -Root . -FailOnDangling
+
+      - name: Check formatting
+        run: pnpm run format:check
+
+      - name: Install PSScriptAnalyzer
+        shell: pwsh
+        run: Install-Module PSScriptAnalyzer -RequiredVersion 1.24.0 -Scope CurrentUser -Force
+
+      - name: Analyze PowerShell scripts
+        run: pnpm run lint:ps
+
+      # docs/skill-list.md is gitignored; generate it in the working tree only so the site build resolves its links.
+      - name: Generate docs for site build
+        run: pnpm run generate
+
+      - name: Test docs site
+        run: pnpm --filter site test
+
+      - name: Build docs site
+        run: pnpm --filter site build
+
+  # One Vitest project, one job. GravionLabs/ci/node/test@main is not used: its artifact and check names are fixed.
+  test:
+    name: Test
+    runs-on: ubuntu-latest
+    permissions:
+      checks: write
+      contents: read
+    env:
+      PUPPETEER_SKIP_DOWNLOAD: true
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Set up Node and pnpm
+        uses: GravionLabs/ci/node/setup@cbb01f83374efa76491226e97bcf1d5cf9674fab # main
+        with:
+          node-version: '24'
+          package-manager: pnpm
+
+      - name: Install
+        run: pnpm install --frozen-lockfile
+
+      - name: Test
+        run: pnpm run test:ci
+
+      - name: Upload test results
+        if: success() || failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: test-results
+          path: test-results/
+          if-no-files-found: ignore
+
+      - name: Upload coverage
+        if: success() || failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: coverage
+          path: coverage/
+          if-no-files-found: ignore
+
+      - name: Publish test results
+        if: success() || failure()
+        uses: dorny/test-reporter@v1
+        with:
+          name: Test Results
+          path: test-results/junit.xml
+          reporter: jest-junit
+          fail-on-error: false
+          fail-on-empty: false
+
+      - name: Coverage summary
+        if: (success() || failure()) && hashFiles('coverage/cobertura-coverage.xml') != ''
+        continue-on-error: true
+        uses: irongut/CodeCoverageSummary@v1.3.0
+        with:
+          filename: coverage/cobertura-coverage.xml
+          badge: true
+          format: markdown
+          output: both
+
+      - name: Add coverage to job summary
+        if: success() || failure()
+        shell: bash
+        run: '[ -f code-coverage-results.md ] && cat code-coverage-results.md >> "$GITHUB_STEP_SUMMARY" || true'
+
+  determine-version:
+    name: Determine Version
+    runs-on: ubuntu-latest
+    if: github.ref == 'refs/heads/main' && (github.event_name == 'push' || github.event_name == 'workflow_dispatch')
+    permissions:
+      contents: read
+    outputs:
+      semver: ${{ steps.version.outputs.semver }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Determine version
+        id: version
+        uses: GravionLabs/ci/versioning/determine-version@main
+        with:
+          gitversion-config-file: GitVersion.yml
+
+  # A release is a git tag: `npx skills add GravionLabs/skills#v<x.y.z>` pins it. No manifest carries a version.
+  release:
+    name: Release
+    runs-on: ubuntu-latest
+    needs:
+      - determine-version
+      - build-test
+      - test
+    permissions:
+      contents: write
+      issues: write
+      pull-requests: read
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          token: ${{ secrets.GH_PAT || github.token }}
+
+      - name: Create GitHub Release
+        uses: GravionLabs/ci/versioning/gh-release@main
+        with:
+          token: ${{ secrets.GH_PAT || github.token }}
+          version: ${{ needs.determine-version.outputs.semver }}
+          changelog-file: CHANGELOG.md
+          cliff-config: cliff.toml
+          update-changelog: 'true'

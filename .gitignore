@@ -1,0 +1,46 @@
+﻿# Node / JS
+node_modules/
+dist/
+coverage/
+
+# Python
+.venv/
+__pycache__/
+*.pyc
+
+# OS / IDE
+.DS_Store
+Thumbs.db
+
+# VS Code - share launch and tasks configurations
+.vscode/*
+!.vscode/launch.json
+!.vscode/tasks.json
+!.vscode/settings.json
+!.vscode/extensions.json
+
+# Claude Code / OpenCode - local session state and skills installed into this repository
+.claude/
+.agents/skills/
+skills-lock.json
+
+# JetBrains IDEs - share run configurations
+.idea/*
+!.idea/modules.xml
+!.idea/vcs.xml
+!.idea/codeStyles/
+!.idea/*.iml
+
+# Misc
+*.log
+
+# Test results
+test-results/
+
+# Generated docs — pnpm run generate builds them for the site; never committed
+docs/skill-list.md
+evals/results/
+
+# VitePress site
+site/.vitepress/cache/
+site/.vitepress/dist/

@@ -1,0 +1,140 @@
+{
+  "$schema": "https://anthropic.com/claude-code/marketplace.schema.json",
+  "name": "gravionlabs-skills",
+  "owner": {
+    "name": "Gravion",
+    "url": "https://github.com/GravionLabs"
+  },
+  "metadata": {
+    "description": "Agent skills for issue-driven delivery and per-stack implementation on Claude Code, OpenCode and Copilot CLI."
+  },
+  "plugins": [
+    {
+      "name": "shared",
+      "description": "Base skills every other group uses: stack detection (detect-techstack), language-agnostic implementation rules (implementation), code review (code-review), bug diagnosis (diagnose) and the prerequisite check (check-prerequisites).",
+      "source": "./",
+      "strict": false,
+      "skills": [
+        "./skills/check-prerequisites",
+        "./skills/code-review",
+        "./skills/detect-techstack",
+        "./skills/diagnose",
+        "./skills/implementation"
+      ]
+    },
+    {
+      "name": "github",
+      "description": "GitHub workflow: issue hierarchy (Epic, Feature, PBI, Task, Bug) with native sub-issues, pull requests into the release branch, release branches (cut, finish).",
+      "source": "./",
+      "strict": false,
+      "skills": [
+        "./skills/github-issue",
+        "./skills/github-pull-request",
+        "./skills/github-release"
+      ]
+    },
+    {
+      "name": "delivery",
+      "description": "Issue-driven delivery: /deliver with subagents on any harness, open-decision interview (grill-me), planning (planner), run retrospective (retro) and the installer (skills-install). Needs shared and github.",
+      "source": "./",
+      "strict": false,
+      "skills": [
+        "./skills/deliver",
+        "./skills/grill-me",
+        "./skills/planner",
+        "./skills/retro",
+        "./skills/skills-install"
+      ]
+    },
+    {
+      "name": "statusline",
+      "description": "Context status line and subagent status line for Claude Code and Copilot CLI (context-statusline).",
+      "source": "./",
+      "strict": false,
+      "skills": [
+        "./skills/context-statusline"
+      ]
+    },
+    {
+      "name": "ts",
+      "description": "TypeScript and Node.js: implementation conventions and review rules, Vitest testing, project scaffolding, Biome or ESLint/Prettier with Husky, pnpm workflow, MCP server generator.",
+      "source": "./",
+      "strict": false,
+      "skills": [
+        "./skills/setup-biome-husky",
+        "./skills/setup-prettier-eslint-husky",
+        "./skills/ts-create-project",
+        "./skills/ts-implementation",
+        "./skills/ts-mcp-server-generator",
+        "./skills/ts-pnpm-workflow",
+        "./skills/ts-test"
+      ]
+    },
+    {
+      "name": "py",
+      "description": "Python: implementation conventions and review rules, pytest testing, project scaffolding with uv and ruff.",
+      "source": "./",
+      "strict": false,
+      "skills": [
+        "./skills/py-create-project",
+        "./skills/py-implementation",
+        "./skills/py-test"
+      ]
+    },
+    {
+      "name": "ng",
+      "description": "Angular 21+: implementation conventions and review rules, Vitest/TestBed testing, project scaffolding, NgRx Signal Store, AG Grid. skills-install adds angular/skills (angular-developer).",
+      "source": "./",
+      "strict": false,
+      "skills": [
+        "./skills/ng-ag-grid-developer",
+        "./skills/ng-create-project",
+        "./skills/ng-implementation",
+        "./skills/ng-test"
+      ]
+    },
+    {
+      "name": "dotnet",
+      "description": "C#/.NET: implementation conventions and review rules, NUnit/NSubstitute/Shouldly testing, solution scaffolding with Central Package Management, MCP server generator. skills-install adds the dotnet plugin of dotnet/skills.",
+      "source": "./",
+      "strict": false,
+      "skills": [
+        "./skills/dotnet-create-solution",
+        "./skills/dotnet-implementation",
+        "./skills/dotnet-mcp-server-generator",
+        "./skills/dotnet-test"
+      ]
+    },
+    {
+      "name": "rust",
+      "description": "Rust: implementation conventions and review rules, cargo test / nextest testing with mockall and proptest.",
+      "source": "./",
+      "strict": false,
+      "skills": [
+        "./skills/rust-implementation",
+        "./skills/rust-test"
+      ]
+    },
+    {
+      "name": "go",
+      "description": "Go: implementation conventions and review rules, table-driven tests with testify and the race detector.",
+      "source": "./",
+      "strict": false,
+      "skills": [
+        "./skills/go-implementation",
+        "./skills/go-test"
+      ]
+    },
+    {
+      "name": "skill-tooling",
+      "description": "Contributor tooling for this repository: write, audit and slim SKILL.md files. Not part of the all preset.",
+      "source": "./",
+      "strict": false,
+      "skills": [
+        "./skills/skill-audit",
+        "./skills/skill-slim",
+        "./skills/skill-write"
+      ]
+    }
+  ]
+}

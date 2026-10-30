@@ -1,0 +1,9 @@
+# Known false positives of Get-SkillReport.ps1, one `skill: ref` per line as printed in danglingCandidates.
+# Put a comment line above each entry that says why it is not a dangling reference.
+
+# skill-tooling is a group name, not a skill
+skills-install: skill-tooling
+# dotnet-pinvoke is a skill of the external dotnet/skills pack that skills-install adds
+skills-install: dotnet-pinvoke
+# ng-template is the Angular element, not a skill
+ng-implementation: ng-template

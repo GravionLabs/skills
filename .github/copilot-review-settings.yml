@@ -1,0 +1,20 @@
+# GitHub Copilot Code Review Settings
+# See: https://docs.github.com/en/copilot/using-github-copilot/code-review/configuring-automatic-code-review-by-copilot
+
+version: 1
+
+review:
+  # Automatically request Copilot review on all pull requests
+  instructions: |
+    You are reviewing changes to the GravionLabs/skills repository — a library of agentskills.io
+    skills installed with npx skills (skills/<name>/SKILL.md, groups in .claude-plugin/marketplace.json).
+
+    When reviewing:
+    - **Skills** (SKILL.md and companion dirs): Frontmatter has only name, description and optional
+      license/metadata; SKILL.md is at most 100 lines; shell blocks are ```powershell; referenced
+      scripts/, references/ and templates/ files exist; no rules duplicated from another skill
+    - **Groups** (.claude-plugin/marketplace.json): every skill directory is in exactly one group
+    - **Scripts and tests** (scripts/, test/): correctness and test coverage
+    - **Documentation**: Verify accuracy, clarity, and that links are valid
+
+    Focus on correctness and reusability. Avoid style nits.
