@@ -4,14 +4,20 @@
   Each lesson is fenced as data with its id and evidence. At most 10 lessons of at most 600 characters each; the rest is listed as
   `skipped: <id> (<reason>)`. Lessons that hit the guard keyword list are never printed and are listed as `flagged: <id> (<keyword>)`.
   Without `.agents/lessons/` nothing is printed. Contract: references/contract.md.
+  With -Check every lesson file is validated instead (frontmatter, required keys, status, scope, version, body length, guard);
+  one `<file>: <reason>` line per error and exit 1, else exit 0.
 .PARAMETER Role
   The reading role: planner, implement, review or fix.
 .PARAMETER Lang
   Languages of the project as reported by detect-techstack (ts, js, py, dotnet, rust, go); several values or one comma-separated string.
+.PARAMETER Check
+  Validate every `.agents/lessons/*.md` for CI instead of printing lessons.
 #>
+[CmdletBinding(DefaultParameterSetName = 'Load')]
 param(
-  [Parameter(Mandatory)][ValidateSet('planner', 'implement', 'review', 'fix')][string]$Role,
-  [string[]]$Lang = @()
+  [Parameter(Mandatory, ParameterSetName = 'Load')][ValidateSet('planner', 'implement', 'review', 'fix')][string]$Role,
+  [Parameter(ParameterSetName = 'Load')][string[]]$Lang = @(),
+  [Parameter(Mandatory, ParameterSetName = 'Check')][switch]$Check
 )
 $ErrorActionPreference = 'Stop'
 Set-StrictMode -Version Latest
@@ -64,19 +70,55 @@ function Read-Lesson([string]$Path) {
   [pscustomobject]@{ Fm = $fm; Body = $m.Groups['body'].Value.Trim() }
 }
 
-# AND between kinds, OR within a kind; `repo` always matches. $null: the scope is invalid.
-function Test-Scope([string[]]$Scope) {
+# Parsed scope entries by kind; $null: the scope is empty or has an entry outside `repo`, `lang:<x>`, `role:<r>`.
+function Read-Scope([object]$Scope) {
+  $entries = @($Scope | Where-Object { $_ })
+  if (-not $entries.Count) { return $null }
   $want = @{ lang = @(); role = @() }
-  foreach ($s in $Scope) {
-    $e = $s.Trim().ToLowerInvariant()
+  foreach ($s in $entries) {
+    $e = "$s".Trim().ToLowerInvariant()
     if ($e -eq 'repo') { continue }
     if ($e -match '^lang:(?<x>[a-z][a-z0-9]*)$') { $want.lang += $Matches['x']; continue }
     if ($e -match '^role:(?<x>planner|implement|review|fix)$') { $want.role += $Matches['x']; continue }
     return $null
   }
+  $want
+}
+
+# First guard keyword the body hits, else $null.
+function Get-GuardHit([string]$Body) {
+  @($Guard.Keys | Where-Object { [regex]::IsMatch($Body, $Guard[$_], 'IgnoreCase') }) | Select-Object -First 1
+}
+
+# AND between kinds, OR within a kind; `repo` always matches. $null: the scope is invalid.
+function Test-Scope([object]$Scope) {
+  $want = Read-Scope $Scope
+  if ($null -eq $want) { return $null }
   if ($want.role.Count -and $want.role -notcontains $Role) { return $false }
   if ($want.lang.Count -and -not @($want.lang | Where-Object { $langs -contains $_ }).Count) { return $false }
   $true
+}
+
+if ($Check) {
+  $errors = [System.Collections.Generic.List[string]]::new()
+  foreach ($file in Get-ChildItem -LiteralPath $dir -Filter '*.md' -File | Sort-Object Name) {
+    $name = ".agents/lessons/$($file.Name)"
+    $l = Read-Lesson $file.FullName
+    if (-not $l) { $errors.Add("${name}: no frontmatter"); continue }
+    foreach ($k in 'id', 'scope', 'evidence', 'status', 'version', 'created') {
+      if (-not @($l.Fm[$k] | Where-Object { $_ }).Count) { $errors.Add("${name}: missing $k") }
+    }
+    $status = $l.Fm['status']
+    if ($status -and $status -notin 'proposed', 'approved', 'retired') { $errors.Add("${name}: unknown status '$status' (proposed, approved or retired)") }
+    if ($l.Fm['scope'] -and $null -eq (Read-Scope $l.Fm['scope'])) { $errors.Add("${name}: invalid scope (repo, lang:<x>, role:<r>)") }
+    $version = $l.Fm['version']
+    if ($version -and -not ($version -is [string] -and $version -match '^[1-9][0-9]*$')) { $errors.Add("${name}: version '$version' is not an integer >= 1") }
+    if ($l.Body.Length -gt $MaxChars) { $errors.Add("${name}: body over $MaxChars characters ($($l.Body.Length))") }
+    $hit = Get-GuardHit $l.Body
+    if ($hit) { $errors.Add("${name}: flagged by the guard (keyword: $hit)") }
+  }
+  $errors | ForEach-Object { Write-Output $_ }
+  exit ([int]($errors.Count -gt 0))
 }
 
 $lessons = [System.Collections.Generic.List[object]]::new()
@@ -86,11 +128,10 @@ foreach ($file in Get-ChildItem -LiteralPath $dir -Filter '*.md' -File | Sort-Ob
   if (-not $l -or $l.Fm['status'] -ne 'approved') { continue }
   $id = if ($l.Fm['id'] -is [string] -and $l.Fm['id']) { $l.Fm['id'] } else { $file.BaseName }
   if (-not ($l.Fm['id'] -is [string] -and $l.Fm['id'])) { $notes.Add("skipped: $id (no id)"); continue }
-  $scope = @($l.Fm['scope'] | Where-Object { $_ })
-  $match = if ($scope.Count) { Test-Scope $scope } else { $null }
+  $match = Test-Scope $l.Fm['scope']
   if ($null -eq $match) { $notes.Add("skipped: $id (invalid scope)"); continue }
   if (-not $match) { continue }
-  $hit = @($Guard.Keys | Where-Object { [regex]::IsMatch($l.Body, $Guard[$_], 'IgnoreCase') }) | Select-Object -First 1
+  $hit = Get-GuardHit $l.Body
   if ($hit) { $notes.Add("flagged: $id (keyword: $hit)"); continue }
   if ($l.Body.Length -gt $MaxChars) { $notes.Add("skipped: $id (over $MaxChars characters)"); continue }
   if ($lessons.Count -ge $MaxLessons) { $notes.Add("skipped: $id (more than $MaxLessons lessons)"); continue }

@@ -18,6 +18,7 @@ pwsh scripts/Get-Lessons.ps1 -Role implement -Lang ts,py
 - `-Role`: `planner`, `implement`, `review` or `fix` (required).
 - `-Lang`: zero or more languages (`ts`, `js`, `py`, `dotnet`, `rust`, `go`); without it only lessons without a `lang:` scope match.
 - No `.agents/lessons/` (git toplevel, else the working directory) → no output, exit 0: continue without lessons.
+- `-Check` instead of `-Role`: validates every lesson file for CI, one `<file>: <reason>` line per error, exit 1 on any error (`references/contract.md`).
 
 ## Output
 
