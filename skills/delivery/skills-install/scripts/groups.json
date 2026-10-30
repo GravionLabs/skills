@@ -41,7 +41,8 @@
     "code-review",
     "detect-techstack",
     "diagnose",
-    "implementation"
+    "implementation",
+    "lessons"
   ],
   "skill-tooling": [
     "skill-audit",

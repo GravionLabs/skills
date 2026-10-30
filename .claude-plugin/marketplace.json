@@ -19,7 +19,8 @@
         "./skills/shared/code-review",
         "./skills/shared/detect-techstack",
         "./skills/shared/diagnose",
-        "./skills/shared/implementation"
+        "./skills/shared/implementation",
+        "./skills/shared/lessons"
       ]
     },
     {
