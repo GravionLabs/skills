@@ -61,6 +61,30 @@ describe('deliver SKILL.md', () => {
     expect(body).toContain('`github-pull-request`');
   });
 
+  it('names the lessons role in the subagent prompts (#25)', () => {
+    const step = (a: string, b: string) => body.slice(body.indexOf(a), body.indexOf(b));
+    expect(step('**Implement.**', '**Review.**')).toContain(
+      'Load `implementation`, role `implement`.',
+    );
+    expect(step('**Review.**', '**Fix.**')).toContain('Load `code-review`, role `review`.');
+    expect(step('**Fix.**', '**PR.**')).toContain('loads `implementation` with role `fix`');
+  });
+
+  it('puts Get-Lessons.ps1 on every allowlist (#25)', () => {
+    expect(permissions).toContain('`pwsh` with `Get-Lessons.ps1` of the `lessons` skill');
+    expect(permissions).toContain('"Bash(pwsh .claude/skills/lessons/scripts/Get-Lessons.ps1:*)"');
+    expect(permissions).toContain('"pwsh *lessons/scripts/Get-Lessons.ps1*": "allow"');
+    const settings = JSON.parse(
+      fs.readFileSync(path.resolve(__dirname, '../../../.claude/settings.json'), 'utf8'),
+    );
+    expect(settings.permissions.allow).toEqual(
+      expect.arrayContaining([
+        'Bash(pwsh .claude/skills/lessons/scripts/Get-Lessons.ps1:*)',
+        'Bash(pwsh ~/.claude/skills/lessons/scripts/Get-Lessons.ps1:*)',
+      ]),
+    );
+  });
+
   it('takes several numbers and a milestone, skips needs-refinement, reports per number', () => {
     expect(body).toContain(
       '`/deliver <nr> [<nr> …] [--milestone <name>] [--unattended] [--max <n>]`',
