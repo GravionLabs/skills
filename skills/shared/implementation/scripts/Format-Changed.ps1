@@ -159,7 +159,11 @@ if ($disabled) {
 $exts5 = @('.ts', '.tsx', '.js', '.mjs', '.cjs')
 $defaults = @{
   ts     = @(
-    @{ Tool = 'prettier'; Ext = $exts5 + '.json'; Requires = 'npx --no-install prettier --version'; Format = @('npx --no-install prettier --write {files}'); Check = @('npx --no-install prettier --check {files}') },
+    @{ Tool = 'prettier'; Ext = $exts5 + @('.jsx', '.json', '.css', '.html'); Requires = 'npx --no-install prettier --version'; Format = @('npx --no-install prettier --write {files}'); Check = @('npx --no-install prettier --check {files}') },
+    @{ Tool = 'eslint'; Ext = $exts5 + '.jsx'; Requires = 'npx --no-install eslint --version'; Format = @('npx --no-install eslint --fix {files}'); Check = @('npx --no-install eslint {files}') })
+  # ng: the ts tools on the Angular extensions (.scss, no .jsx)
+  ng     = @(
+    @{ Tool = 'prettier'; Ext = $exts5 + @('.json', '.html', '.scss', '.css'); Requires = 'npx --no-install prettier --version'; Format = @('npx --no-install prettier --write {files}'); Check = @('npx --no-install prettier --check {files}') },
     @{ Tool = 'eslint'; Ext = $exts5; Requires = 'npx --no-install eslint --version'; Format = @('npx --no-install eslint --fix {files}'); Check = @('npx --no-install eslint {files}') })
   py     = @(
     @{ Tool = 'ruff'; Ext = @('.py', '.pyi'); Requires = 'uv run ruff --version'; Format = @('uv run ruff format {files}', 'uv run ruff check --fix {files}'); Check = @('uv run ruff format --check {files}', 'uv run ruff check {files}') })
@@ -171,8 +175,6 @@ $defaults = @{
   go     = @(
     @{ Tool = 'gofmt'; Ext = @('.go'); Requires = $null; Format = @('gofmt -w {files}'); Check = @('gofmt -l {files}') })
 }
-$defaults.ng = @($defaults.ts[0].Clone(), $defaults.ts[1])
-$defaults.ng[0].Ext = $exts5 + @('.json', '.html', '.scss', '.css')
 # a Biome project (biome.json[c] at the toplevel) replaces prettier + eslint with one biome step on the prettier extensions plus Markdown and YAML
 if ((Test-Path -LiteralPath (Join-Path $root 'biome.json') -PathType Leaf) -or (Test-Path -LiteralPath (Join-Path $root 'biome.jsonc') -PathType Leaf)) {
   foreach ($lang in 'ts', 'ng') {

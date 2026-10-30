@@ -95,6 +95,8 @@ describe.skipIf(!hasPwsh || process.platform === 'win32')('Format-Changed.ps1', 
         'c.html',
         'd.scss',
         'e.py',
+        'g.jsx',
+        'h.css',
         'F.cs',
         'src/lib.rs',
         'cmd/app/main.go',
@@ -102,7 +104,11 @@ describe.skipIf(!hasPwsh || process.platform === 'win32')('Format-Changed.ps1', 
         'sub/biome.json',
       ],
     );
-    repo.biome = mkRepo('biome', ['biome.jsonc'], ['a.html', 'b.ts', 'c.json', 'n.md']);
+    repo.biome = mkRepo(
+      'biome',
+      ['biome.jsonc'],
+      ['a.html', 'b.ts', 'c.json', 'g.jsx', 'h.css', 'n.md'],
+    );
     repo.mdbiome = mkRepo('mdbiome', ['biome.json'], ['n.md', 'ci.yml', 'v.yaml']);
     repo.clean = mkRepo('clean', ['base.ts'], ['n.md']);
     // branch feat has c.ts committed since main; the working tree has every kind of change
@@ -159,26 +165,26 @@ describe.skipIf(!hasPwsh || process.platform === 'win32')('Format-Changed.ps1', 
     [
       'ts',
       'langs',
-      3,
+      6,
       [
-        'npx --no-install prettier --write a.ts b.json sub/biome.json',
-        'npx --no-install eslint --fix a.ts',
+        'npx --no-install prettier --write a.ts b.json c.html g.jsx h.css sub/biome.json',
+        'npx --no-install eslint --fix a.ts g.jsx',
       ],
       [
-        'npx --no-install prettier --check a.ts b.json sub/biome.json',
-        'npx --no-install eslint a.ts',
+        'npx --no-install prettier --check a.ts b.json c.html g.jsx h.css sub/biome.json',
+        'npx --no-install eslint a.ts g.jsx',
       ],
     ],
     [
       'ng',
       'langs',
-      5,
+      6,
       [
-        'npx --no-install prettier --write a.ts b.json c.html d.scss sub/biome.json',
+        'npx --no-install prettier --write a.ts b.json c.html d.scss h.css sub/biome.json',
         'npx --no-install eslint --fix a.ts',
       ],
       [
-        'npx --no-install prettier --check a.ts b.json c.html d.scss sub/biome.json',
+        'npx --no-install prettier --check a.ts b.json c.html d.scss h.css sub/biome.json',
         'npx --no-install eslint a.ts',
       ],
     ],
@@ -201,16 +207,16 @@ describe.skipIf(!hasPwsh || process.platform === 'win32')('Format-Changed.ps1', 
     [
       'ts',
       'biome',
-      3,
-      ['npx biome check --write --no-errors-on-unmatched b.ts c.json n.md'],
-      ['npx biome check --no-errors-on-unmatched b.ts c.json n.md'],
+      6,
+      ['npx biome check --write --no-errors-on-unmatched a.html b.ts c.json g.jsx h.css n.md'],
+      ['npx biome check --no-errors-on-unmatched a.html b.ts c.json g.jsx h.css n.md'],
     ],
     [
       'ng',
       'biome',
-      4,
-      ['npx biome check --write --no-errors-on-unmatched a.html b.ts c.json n.md'],
-      ['npx biome check --no-errors-on-unmatched a.html b.ts c.json n.md'],
+      5,
+      ['npx biome check --write --no-errors-on-unmatched a.html b.ts c.json h.css n.md'],
+      ['npx biome check --no-errors-on-unmatched a.html b.ts c.json h.css n.md'],
     ],
     // no -Language: Markdown and YAML alone are mapped to ts in a Biome project
     [
@@ -538,13 +544,13 @@ describe.skipIf(!hasPwsh || process.platform === 'win32')('Format-Changed.ps1', 
     expect(JSON.parse(d.stdout)).toEqual([
       {
         tool: 'prettier',
-        extensions: ['.ts', '.tsx', '.js', '.mjs', '.cjs', '.json'],
+        extensions: ['.ts', '.tsx', '.js', '.mjs', '.cjs', '.jsx', '.json', '.css', '.html'],
         requires: 'npx --no-install prettier --version',
         commands: ['npx --no-install prettier --check {files}'],
       },
       {
         tool: 'eslint',
-        extensions: ['.ts', '.tsx', '.js', '.mjs', '.cjs'],
+        extensions: ['.ts', '.tsx', '.js', '.mjs', '.cjs', '.jsx'],
         requires: 'npx --no-install eslint --version',
         commands: ['npx --no-install eslint {files}'],
       },

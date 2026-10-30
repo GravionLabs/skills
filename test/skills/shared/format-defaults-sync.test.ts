@@ -41,9 +41,6 @@ const plainSteps: Record<string, string[]> = {};
     else if (lang && /@\{ Tool = /.test(l)) plainSteps[lang] = [...(plainSteps[lang] ?? []), l];
   }
 }
-// ng reuses both ts steps (only the prettier extensions differ), so its commands are the ts commands
-const ngFromTs = script.includes('$defaults.ng = @($defaults.ts[0].Clone(), $defaults.ts[1])');
-if (ngFromTs) plainSteps.ng = plainSteps.ts;
 // a Biome project replaces the steps of the languages in the foreach with the single biome step
 const biomeLangs = (/foreach \(\$lang in ([^)]*)\)/.exec(script)?.[1] ?? '')
   .split(',')
@@ -57,7 +54,6 @@ const defaults = (lang: string, biome: boolean, mode: Mode): string[] =>
 describe('## Format sections match the Format-Changed.ps1 defaults', () => {
   it('reads a defaults table from the script', () => {
     expect(Object.keys(plainSteps).sort()).toEqual([...LANGS].sort());
-    expect(ngFromTs).toBe(true);
     expect(biomeLangs).toEqual(['ts', 'ng']);
     expect(stepCommands(biomeStep, 'Format')).toHaveLength(1);
   });
