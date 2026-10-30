@@ -5,11 +5,14 @@ import * as path from 'path';
 // this test keeps both in sync. It reads the `$defaults` table of the script as text (no pwsh): that the script really
 // runs these commands per language (and in a Biome project) is pinned by the defaults table of format-changed.test.ts.
 const PACKAGES = path.resolve(__dirname, '../../../skills');
-const SCRIPT = path.join(PACKAGES, 'implementation/scripts/Format-Changed.ps1');
+const SCRIPT = path.join(PACKAGES, 'shared/implementation/scripts/Format-Changed.ps1');
 const LANGS = ['ts', 'ng', 'py', 'dotnet', 'rust', 'go'];
 
 const sectionLines = (lang: string): string[] => {
-  const skill = fs.readFileSync(path.join(PACKAGES, `${lang}-implementation/SKILL.md`), 'utf8');
+  const skill = fs.readFileSync(
+    path.join(PACKAGES, `${lang}/${lang}-implementation/SKILL.md`),
+    'utf8',
+  );
   const section = /^## Format$([\s\S]*?)(?=^## |(?![\s\S]))/m.exec(skill)?.[1] ?? '';
   return section.split('\n').filter((l) => l.trim());
 };

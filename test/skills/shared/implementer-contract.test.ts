@@ -2,7 +2,7 @@ import * as fs from 'fs';
 import * as path from 'path';
 import Ajv from 'ajv/dist/2020';
 
-const skillDir = path.resolve(__dirname, '../../../skills/implementation');
+const skillDir = path.resolve(__dirname, '../../../skills/shared/implementation');
 const read = (p: string) => fs.readFileSync(path.join(skillDir, p), 'utf-8');
 const schema = JSON.parse(read('schema/implementer.schema.json'));
 const validate = new Ajv({ allErrors: true, strict: true }).compile(schema);

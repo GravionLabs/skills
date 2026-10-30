@@ -4,7 +4,7 @@ import * as path from 'node:path';
 import { groupSkills } from '../../helpers/marketplace';
 
 const root = path.resolve(__dirname, '../../../skills');
-const skillDir = path.join(root, 'deliver');
+const skillDir = path.join(root, 'delivery/deliver');
 const text = fs.readFileSync(path.join(skillDir, 'SKILL.md'), 'utf8');
 const roles = fs.readFileSync(path.join(skillDir, 'references/roles.md'), 'utf8');
 const permissions = fs.readFileSync(path.join(skillDir, 'references/permissions.md'), 'utf8');
@@ -54,11 +54,11 @@ describe('deliver SKILL.md', () => {
   });
 
   it('delegates implementation and review to subagents with the existing skills', () => {
-    expect(body).toContain('Load `implementation`');
-    expect(body).toContain('Load `code-review`');
+    expect(body).toContain('Load `shared/implementation`');
+    expect(body).toContain('Load `shared/code-review`');
     expect(body).toContain('at most 10 lines');
     expect(body).toContain('At most 2 fix rounds per PBI, shared by review and CI');
-    expect(body).toContain('`github-pull-request`');
+    expect(body).toContain('`github/github-pull-request`');
   });
 
   it('works on the PBI branch without switching its own checkout', () => {
@@ -87,7 +87,9 @@ describe('deliver SKILL.md', () => {
   });
 
   it('plans a missing breakdown with planner and grill-me in the same session', () => {
-    expect(body).toContain('load `planner` (interactive) and `grill-me` in this session');
+    expect(body).toContain(
+      'load `delivery/planner` (interactive) and `delivery/grill-me` in this session',
+    );
   });
 
   it('prints one progress line per step', () => {
@@ -153,7 +155,7 @@ describe('deliver SKILL.md', () => {
     const select = body.slice(body.indexOf('**Select.**'), body.indexOf('**Resume.**'));
     const merge = body.slice(body.indexOf('**Merge.**'), body.indexOf('## Pause rules'));
     const pause = body.slice(body.indexOf('## Pause rules'), body.indexOf('## Report'));
-    const runner = fs.readFileSync(path.resolve(__dirname, '../../../docs/runner.md'), 'utf8');
+    const delivery = fs.readFileSync(path.resolve(__dirname, '../../../docs/delivery.md'), 'utf8');
 
     it('claims the announced PBI by assigning it', () => {
       expect(select).toContain(
@@ -190,10 +192,10 @@ describe('deliver SKILL.md', () => {
       expect(claim).toContain('When the PBI is merged (step 8), blocked or paused');
     });
 
-    it('documents parallel runs in docs/runner.md', () => {
-      expect(runner).toContain('## Parallel runs');
-      expect(runner).toContain('one worktree per session');
-      expect(runner).toContain('independent issues');
+    it('documents parallel runs in docs/delivery.md', () => {
+      expect(delivery).toContain('## Parallel runs');
+      expect(delivery).toContain('one worktree per session');
+      expect(delivery).toContain('independent issues');
     });
 
     it('contains no quoted $(…) substitution in its commands', () => {
@@ -207,7 +209,7 @@ describe('deliver SKILL.md', () => {
   });
 
   it('is listed in the delivery group of marketplace.json', () => {
-    expect(groupSkills('delivery')).toContain('deliver');
+    expect(groupSkills('delivery')).toContain('delivery/deliver');
   });
 
   it('documents the role defaults and the override key', () => {
@@ -284,7 +286,7 @@ describe('deliver permissions.md (#862)', () => {
 describe('config schema deliver key', () => {
   const schema = JSON.parse(
     fs.readFileSync(
-      path.resolve(__dirname, '../../../skills/implementation/schema/config.schema.json'),
+      path.resolve(__dirname, '../../../skills/shared/implementation/schema/config.schema.json'),
       'utf8',
     ),
   );

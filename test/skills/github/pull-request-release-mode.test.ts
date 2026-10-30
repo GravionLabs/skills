@@ -2,10 +2,10 @@ import * as fs from 'fs';
 import * as path from 'path';
 
 const read = (p: string) => fs.readFileSync(path.resolve(__dirname, '../../..', p), 'utf-8');
-const prDir = 'skills/github-pull-request';
+const prDir = 'skills/github/github-pull-request';
 const prSkill = read(`${prDir}/SKILL.md`);
 const prAll = `${prSkill}\n${read(`${prDir}/references/release-mode.md`)}`;
-const releaseSkill = read('skills/github-release/SKILL.md');
+const releaseSkill = read('skills/github/github-release/SKILL.md');
 const step8 = releaseSkill.slice(
   releaseSkill.indexOf('\n3. `releasePr` set'),
   releaseSkill.indexOf('\n4. Report'),
@@ -71,7 +71,7 @@ describe('github-pull-request release mode', () => {
     expect(prSkill).toMatch(/add `## Review notes`[^\n]*before the footer/);
     expect(prSkill).toMatch(/never turn `Closes` into `Refs`/);
     expect(prSkill).not.toMatch(/advisories_not_fixed|follow_up_candidates/);
-    const standalone = read('skills/github-issue/references/standalone-issue.md');
+    const standalone = read('skills/github/github-issue/references/standalone-issue.md');
     const step12 = /\n12\. [^\n]*/.exec(standalone)?.[0] ?? '';
     expect(step12).toMatch(/`base_branch: <base>`/);
     expect(step12).not.toMatch(/<type>|Closes/);

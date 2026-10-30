@@ -3,7 +3,7 @@
   Report skill size and cross-skill problems as JSON (read-only).
 
 .DESCRIPTION
-  Scans every SKILL.md under skills/<name>/ of -Root
+  Scans every SKILL.md under skills/<group>/<name>/ (or skills/<name>/) of -Root
   and reports: size per skill, skills over the line limit, dangling skill/file references
   (candidates), and lines duplicated across skills.
   References are read from SKILL.md and every references/*.md. A `references/<file>` (or scripts/, templates/,
@@ -43,10 +43,11 @@ if (-not (Test-Path $Root -PathType Container)) { Write-Error "Root '$Root' is n
 $Root = (Resolve-Path $Root).Path
 
 $skillFiles = @()
+# skills/<group>/<name>/SKILL.md; a skill directly under skills/ (skills/<name>/SKILL.md) counts too
 $skillsDir = Join-Path $Root 'skills'
 if (Test-Path $skillsDir) {
-  $skillFiles += Get-ChildItem -Path $skillsDir -Directory | ForEach-Object { Join-Path $_.FullName 'SKILL.md' } |
-    Where-Object { Test-Path $_ } | ForEach-Object { Get-Item $_ }
+  $skillFiles += Get-ChildItem -Path $skillsDir -Recurse -Depth 2 -Filter SKILL.md -File |
+    Where-Object { $_.Directory.Parent.FullName -eq $skillsDir -or $_.Directory.Parent.Parent.FullName -eq $skillsDir }
 }
 
 $names = @{}

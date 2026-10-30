@@ -5,7 +5,7 @@ import { PwshWorker } from '../../helpers/pwsh-worker';
 import { useReleaseFixture } from '../../helpers/release-fixture';
 
 const root = path.resolve(__dirname, '../../..');
-const script = path.join(root, 'skills/github-release/scripts/Get-ReleaseState.ps1');
+const script = path.join(root, 'skills/github/github-release/scripts/Get-ReleaseState.ps1');
 
 const fx = useReleaseFixture();
 const { git, commit, dropRef, resetHeads } = fx;
@@ -128,7 +128,7 @@ describe('Get-ReleaseState.ps1', () => {
 });
 
 describe('github-release SKILL.md finish step 4', () => {
-  const skill = fs.readFileSync(path.join(root, 'skills/github-release/SKILL.md'), 'utf8');
+  const skill = fs.readFileSync(path.join(root, 'skills/github/github-release/SKILL.md'), 'utf8');
   const step4 = skill.split('\n').find((l) => l.startsWith('4. Report the PR URL')) ?? '';
 
   it('names the merge command and the delete-branch path', () => {

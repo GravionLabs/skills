@@ -6,7 +6,7 @@
 |:--|:--|
 | `skills-lock.json` | commit (source and ref per skill; `npx skills update` and `npx skills check` read it) |
 | `.agents/skills/`, `.claude/skills/` | commit (instant context on clone). `.agents/skills/` holds the copies for OpenCode and Copilot; `.claude/skills/` links to them (copies on Windows) |
-| `.agents/config.json` | commit (project config, see [project config](https://github.com/GravionLabs/skills/blob/main/docs/usage/project-config.md)). A `.gitignore` that ignores `.agents/` hides it and the installed skills: drop the line, or add `!.agents/skills/` and `!.agents/config.json`; the installer prints a note |
+| `.agents/config.json` | commit (project config, see [project config](https://github.com/GravionLabs/skills/blob/main/docs/usage/project-config.md)). A `.gitignore` line `.agents/*` without exceptions hides it and the installed skills: add `!.agents/skills/` and `!.agents/config.json` below it; the installer prints a note |
 
 Updates: `npx skills check` (exit 1 when an update exists, usable in CI), `npx skills update` (all) or `npx skills update <name>`.
 
@@ -23,4 +23,4 @@ GravionLabs/skills replaces GravionLabs/apm-hub (archived; its last release `v3.
 1. Remove the apm-hub packages: delete the `GravionLabs/apm-hub/packages/...` entries from `apm.yml` and run `apm install` (project) or `apm uninstall -g GravionLabs/apm-hub/packages/<pkg>` (global). apm deletes the files it recorded in `apm.lock.yaml`.
 2. Run `/skills-install` (or `pwsh scripts/Install-Skills.ps1 -DryRun`) and confirm.
 3. When `apm.yml` lists nothing else, delete `apm.yml`, `apm.lock.yaml` and `apm_modules/`.
-4. `.agents/config.json` stays as it is; its schema moved to `https://raw.githubusercontent.com/GravionLabs/skills/main/skills/implementation/schema/config.schema.json`.
+4. `.agents/config.json` stays as it is; its schema moved to `https://raw.githubusercontent.com/GravionLabs/skills/main/skills/shared/implementation/schema/config.schema.json`.

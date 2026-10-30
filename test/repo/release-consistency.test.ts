@@ -34,19 +34,19 @@ describe('removed names are gone from skills and AGENTS.md', () => {
 
 describe('skill descriptions', () => {
   it('ng-implementation says Angular 21+', () => {
-    expect(read('skills/ng-implementation/SKILL.md')).toMatch(/^description: 'Angular 21\+/m);
+    expect(read('skills/ng/ng-implementation/SKILL.md')).toMatch(/^description: 'Angular 21\+/m);
   });
 
   it('diagnose and retro name no removed role', () => {
-    expect(read('skills/diagnose/SKILL.md')).not.toContain('As implementer');
-    expect(read('skills/diagnose/SKILL.md')).toContain('As a subagent');
-    const retro = read('skills/retro/SKILL.md');
+    expect(read('skills/shared/diagnose/SKILL.md')).not.toContain('As implementer');
+    expect(read('skills/shared/diagnose/SKILL.md')).toContain('As a subagent');
+    const retro = read('skills/delivery/retro/SKILL.md');
     expect(/^description: (.*)$/m.exec(retro)![1]).not.toContain('orchestrator run');
     expect(retro).toContain('run or session');
   });
 
   it('implementation asks for one full run before the pull request', () => {
-    expect(read('skills/implementation/SKILL.md')).toContain(
+    expect(read('skills/shared/implementation/SKILL.md')).toContain(
       'one full run before the pull request',
     );
   });

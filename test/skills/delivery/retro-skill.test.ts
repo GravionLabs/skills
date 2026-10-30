@@ -2,7 +2,10 @@ import { describe, it, expect } from 'vitest';
 import * as fs from 'node:fs';
 import * as path from 'node:path';
 
-const text = fs.readFileSync(path.resolve(__dirname, '../../../skills/retro/SKILL.md'), 'utf8');
+const text = fs.readFileSync(
+  path.resolve(__dirname, '../../../skills/delivery/retro/SKILL.md'),
+  'utf8',
+);
 
 describe('retro SKILL.md', () => {
   it('gathers figures with agentlens and gh and names no dromos', () => {
@@ -25,7 +28,7 @@ describe('retro SKILL.md', () => {
 
   it('names the source of every column in references/metrics-sources.md', () => {
     const ref = fs.readFileSync(
-      path.resolve(__dirname, '../../../skills/retro/references/metrics-sources.md'),
+      path.resolve(__dirname, '../../../skills/delivery/retro/references/metrics-sources.md'),
       'utf8',
     );
     expect(text).toContain('references/metrics-sources.md');

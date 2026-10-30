@@ -14,8 +14,8 @@ function walk(dir: string): string[] {
 
 describe('delivery and shared skills keep no state under .agents/', () => {
   const files = [
-    ...[...groupSkills('delivery'), ...groupSkills('shared')].flatMap((s) =>
-      walk(path.join(root, s)),
+    ...['delivery', 'shared'].flatMap((group) =>
+      groupSkills(group).flatMap((s) => walk(path.join(root, group, s))),
     ),
   ].filter((f) => /\.(md)$/.test(f));
 

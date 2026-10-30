@@ -17,19 +17,19 @@ What does not belong here:
 
 ```powershell
 pnpm install
-pwsh skills/check-prerequisites/scripts/Check-Prerequisites.ps1 -Full
+pwsh skills/shared/check-prerequisites/scripts/Check-Prerequisites.ps1 -Full
 ```
 
 The repo uses pnpm (`pnpm-lock.yaml`) only.
 
 ## Adding or changing a skill
 
-1. Put it under `skills/<name>/` (flat, one directory per skill; names are unique). Use the `skill-write` skill or start from its `assets/skill-template-optimized.md`.
+1. Put it under `skills/<group>/<name>/` (the folder is the group; names are unique across groups, installs are flat by name). Use the `skill-write` skill or start from its `assets/skill-template-optimized.md`.
 2. Keep `SKILL.md` ≤ 100 lines; frontmatter only `name`, `description`, optional `license`/`metadata` plus the client keys of [skill frontmatter](docs/concepts/skill-frontmatter.md); shell fences ` ```powershell `. Long specs go to `references/` with a conditional load line, templates to `templates/`, procedures to `scripts/*.ps1`.
 3. If another skill already owns a step, delegate by name instead of repeating it.
-4. List it in its group and run the checks:
+4. List it and run the checks:
    ```powershell
-   node scripts/check-marketplace.mjs --fix --add <group> <name>   # new skill
+   node scripts/check-marketplace.mjs --fix   # marketplace.json and groups.json from the folders
    pnpm run check                                                  # everything CI runs
    ```
    Tests of skill content and scripts live in `test/skills/<group>/`, repository checks in `test/repo/`, shared helpers in `test/helpers/`. `pnpm test` runs Vitest, `pnpm run test:ci` adds coverage (CI), a single file runs with `pnpm vitest run <path>`.
@@ -62,7 +62,7 @@ Renamed when moving from GravionLabs/apm-hub:
 
 ## Issues
 
-Use the templates in `.github/ISSUE_TEMPLATE/` (Epic → Feature → PBI → Task, Bug). Children are linked as native GitHub sub-issues; see `skills/github-issue/references/sub-issues.md`.
+Use the templates in `.github/ISSUE_TEMPLATE/` (Epic → Feature → PBI → Task, Bug). Children are linked as native GitHub sub-issues; see `skills/github/github-issue/references/sub-issues.md`.
 
 The title of an issue starts with its level: `[Epic]`, `[Feature]`, `[PBI]`, `[Task]` or `[Bug]`, then the summary (`[PBI] feat: short summary`). The shared `issues.yml` workflow of `GravionLabs/ci` sets the prefix from the level label.
 
@@ -74,4 +74,4 @@ Releases are cut from a single rolling branch, `release/next`. GitVersion increm
 - Patch: fix on `main` as a hotfix, then merge `main` into `release/next`.
 - Parallel lines: use `release/<x.y>` branches.
 
-Details: `skills/github-issue/references/release-branches.md`.
+Details: `skills/github/github-issue/references/release-branches.md`.

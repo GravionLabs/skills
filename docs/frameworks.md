@@ -49,5 +49,5 @@ standalone skills without the hook; that is an open owner decision, not yet an i
 2. Probe in a scratch directory: `npx skills add <owner/repo> --list` and count the `SKILL.md`
    files. More than ~5 descriptions per pack needs a reason.
 3. Pin the ref (`<owner/repo>#<sha>`) and add the source with its skill names to the `external` map of
-   `skills/skills-install/scripts/Install-Skills.ps1`, next to the group it belongs to.
+   `skills/delivery/skills-install/scripts/Install-Skills.ps1`, next to the group it belongs to.
 4. Remove what the pack now covers from the own skill; keep project conventions and `## Review rules`.

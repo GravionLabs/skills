@@ -15,7 +15,7 @@ Paths to `references/` and `assets/` are relative to this skill's directory.
 
 ### 1. Plan and validate
 
-1. Location: `skills/<name>/` (flat, one directory per skill). Pick the group in `.claude-plugin/marketplace.json` it belongs to; a new group needs a new plugin entry there.
+1. Location: `skills/<group>/<name>/`; the folder is the group. A new group needs a plugin entry in `.claude-plugin/marketplace.json`. Names are unique across groups.
 2. Validate the name: kebab-case, 1-64 chars, matches the directory, no leading, trailing or consecutive hyphens.
 
 ### 2. Create and structure
@@ -29,7 +29,7 @@ Paths to `references/` and `assets/` are relative to this skill's directory.
 6. All shell blocks use ` ```powershell `.
 7. Scripts (if any): flag-based, `--help`, data on stdout, diagnostics on stderr, non-zero on error.
 8. Final check: name matches directory, description says when to use it, references are conditional, nothing duplicated across body and references or with another skill.
-9. Run `node scripts/check-marketplace.mjs --fix` at the repo root so its group in `.claude-plugin/marketplace.json` lists the skill.
+9. Run `node scripts/check-marketplace.mjs --fix` at the repo root so `.claude-plugin/marketplace.json` and `groups.json` list the skill.
 
 ## Gotchas
 

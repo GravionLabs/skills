@@ -10,5 +10,5 @@ export function groupSkills(group: string): string[] {
   };
   const plugin = m.plugins.find((p) => p.name === group);
   if (!plugin) throw new Error(`no group ${group} in marketplace.json`);
-  return plugin.skills.map((s) => s.replace('./skills/', ''));
+  return plugin.skills.map((s) => s.split('/').at(-1) as string);
 }

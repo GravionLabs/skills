@@ -10,7 +10,7 @@ const read = (rel: string) => fs.readFileSync(path.join(root, rel), 'utf8');
 
 describe('rust group', () => {
   it('rust-test description explains purpose, not just keywords', () => {
-    const text = read('skills/rust-test/SKILL.md');
+    const text = read('skills/rust/rust-test/SKILL.md');
     expect(/^description: (.*)$/m.exec(text)![1].length).toBeGreaterThan(60);
   });
 
@@ -65,13 +65,13 @@ describe('rust group', () => {
   });
 
   it('is a group of marketplace.json and of the installer groups', () => {
-    const groups = JSON.parse(read('skills/skills-install/scripts/groups.json'));
+    const groups = JSON.parse(read('skills/delivery/skills-install/scripts/groups.json'));
     expect(groups.rust).toEqual([...skills].sort());
   });
 
   describe('Tauri conventions', () => {
-    const impl = () => read('skills/rust-implementation/SKILL.md');
-    const ref = () => read('skills/rust-implementation/references/tauri.md');
+    const impl = () => read('skills/rust/rust-implementation/SKILL.md');
+    const ref = () => read('skills/rust/rust-implementation/references/tauri.md');
 
     it('rust-implementation loads the reference only for framework tauri', () => {
       const line = impl()
@@ -84,13 +84,13 @@ describe('rust group', () => {
 
     it('detect-techstack reports tauri as a framework', () => {
       const dt =
-        read('skills/detect-techstack/SKILL.md') +
+        read('skills/shared/detect-techstack/SKILL.md') +
         fs
-          .readdirSync(path.join(root, 'skills/detect-techstack'), {
+          .readdirSync(path.join(root, 'skills/shared/detect-techstack'), {
             recursive: true,
           })
           .filter((f) => String(f).endsWith('.md'))
-          .map((f) => read(`skills/detect-techstack/${f}`))
+          .map((f) => read(`skills/shared/detect-techstack/${f}`))
           .join('');
       expect(dt).toContain('tauri');
     });
@@ -112,7 +112,7 @@ describe('rust group', () => {
     });
 
     it('rust-test names the command strategy conditionally and delegates frontend to ts-test', () => {
-      const t = read('skills/rust-test/SKILL.md');
+      const t = read('skills/rust/rust-test/SKILL.md');
       const line = t.split('\n').find((l) => l.includes('tauri::test'))!;
       expect(line).toContain('frameworks: ["tauri"]');
       expect(line).toContain('pure functions');

@@ -22,7 +22,7 @@ describe('ng skills content', () => {
   });
   it('keeps the per-client MCP config table once, in ng-implementation', () => {
     expect(grep('\\.cursor/mcp\\.json', 'skills/')).toEqual([
-      'skills/ng-implementation/references/mcp.md',
+      'skills/ng/ng-implementation/references/mcp.md',
     ]);
   });
 });

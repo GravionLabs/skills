@@ -7,13 +7,13 @@ review:
   # Automatically request Copilot review on all pull requests
   instructions: |
     You are reviewing changes to the GravionLabs/skills repository — a library of agentskills.io
-    skills installed with npx skills (skills/<name>/SKILL.md, groups in .claude-plugin/marketplace.json).
+    skills installed with npx skills (skills/<group>/<name>/SKILL.md, one plugin per group in .claude-plugin/marketplace.json).
 
     When reviewing:
     - **Skills** (SKILL.md and companion dirs): Frontmatter has only name, description and optional
       license/metadata; SKILL.md is at most 100 lines; shell blocks are ```powershell; referenced
       scripts/, references/ and templates/ files exist; no rules duplicated from another skill
-    - **Groups** (.claude-plugin/marketplace.json): every skill directory is in exactly one group
+    - **Groups** (.claude-plugin/marketplace.json): one plugin per group folder, skill names unique across groups
     - **Scripts and tests** (scripts/, test/): correctness and test coverage
     - **Documentation**: Verify accuracy, clarity, and that links are valid
 

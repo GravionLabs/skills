@@ -5,7 +5,7 @@ import * as path from 'path';
 import { PwshWorker } from '../../helpers/pwsh-worker';
 
 const repo = path.resolve(__dirname, '../../..');
-const SCRIPT = path.join(repo, 'skills/skill-slim/scripts/Get-SkillReport.ps1');
+const SCRIPT = path.join(repo, 'skills/skill-tooling/skill-slim/scripts/Get-SkillReport.ps1');
 const hasPwsh = spawnSync('pwsh', ['-NoProfile', '-Command', '1']).status === 0;
 vi.setConfig({ testTimeout: 30000, hookTimeout: 30000 });
 
@@ -92,7 +92,10 @@ describe('CI and skill-slim (#775)', () => {
   it('ci.yml passes -FailOnDangling and skill-slim documents the switch', () => {
     const ci = fs.readFileSync(path.join(repo, '.github/workflows/ci.yml'), 'utf-8');
     expect(ci).toMatch(/Get-SkillReport\.ps1 -Root \. -FailOnDangling/);
-    const md = fs.readFileSync(path.join(repo, 'skills/skill-slim/SKILL.md'), 'utf-8');
+    const md = fs.readFileSync(
+      path.join(repo, 'skills/skill-tooling/skill-slim/SKILL.md'),
+      'utf-8',
+    );
     expect(md).toContain('-FailOnDangling');
     expect(md).toContain('skill-report-allowlist.txt');
   });

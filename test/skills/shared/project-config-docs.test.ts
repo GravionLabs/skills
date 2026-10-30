@@ -24,19 +24,19 @@ describe('docs/usage/project-config.md', () => {
     expect(read('site/.vitepress/sidebar.ts')).toContain('/usage/project-config');
   });
   it('is mentioned by the implementation skill and stays within 100 lines', () => {
-    const s = read('skills/implementation/SKILL.md');
+    const s = read('skills/shared/implementation/SKILL.md');
     expect(s).toContain('.agents/config.json');
     expect(s.split('\n').length).toBeLessThanOrEqual(100);
   });
   it('implementation Before commit has separate targeted and full-run items', () => {
-    const s = read('skills/implementation/SKILL.md');
+    const s = read('skills/shared/implementation/SKILL.md');
     expect(s).toMatch(/^- \[ \] Build passes .*never the full suite\)$/m);
     expect(s).toMatch(
       /^- \[ \] Full suite: one full run before the pull request, and again after the last fix round$/m,
     );
   });
   it('skills link the override doc by full URL, not a relative docs/ path', () => {
-    const f = read('skills/implementation/references/format.md');
+    const f = read('skills/shared/implementation/references/format.md');
     expect(f).toContain(
       'https://github.com/GravionLabs/skills/blob/main/docs/usage/project-config.md',
     );

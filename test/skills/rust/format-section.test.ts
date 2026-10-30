@@ -3,7 +3,7 @@ import path from 'node:path';
 import { describe, expect, it } from 'vitest';
 
 const skill = readFileSync(
-  path.resolve(__dirname, '../../../skills/rust-implementation/SKILL.md'),
+  path.resolve(__dirname, '../../../skills/rust/rust-implementation/SKILL.md'),
   'utf8',
 );
 const section = /^## Format$([\s\S]*?)(?=^## |(?![\s\S]))/m.exec(skill)?.[1] ?? '';

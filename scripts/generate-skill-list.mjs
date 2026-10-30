@@ -9,8 +9,8 @@ const out = join(root, process.argv[2] ?? 'docs/skill-list.md');
 const manifest = JSON.parse(readFileSync(join(root, '.claude-plugin/marketplace.json'), 'utf-8'));
 
 /** The `description` of a SKILL.md frontmatter: single line, quoted or plain, or a folded block (`>`). */
-function description(skill) {
-  const lines = readFileSync(join(root, 'skills', skill, 'SKILL.md'), 'utf-8').split(/\r?\n/);
+function description(dir) {
+  const lines = readFileSync(join(root, dir, 'SKILL.md'), 'utf-8').split(/\r?\n/);
   const end = lines.indexOf('---', 1);
   const front = lines.slice(1, end);
   const at = front.findIndex((l) => l.startsWith('description:'));
@@ -32,8 +32,8 @@ function description(skill) {
 }
 
 const sections = manifest.plugins.map((p) => {
-  const skills = p.skills.map((s) => s.replace('./skills/', ''));
-  const rows = skills.map((s) => `| \`${s}\` | ${description(s)} |`);
+  const skills = p.skills.map((s) => s.split('/').at(-1));
+  const rows = p.skills.map((s, i) => `| \`${skills[i]}\` | ${description(s)} |`);
   return [
     `## ${p.name}`,
     '',

@@ -7,7 +7,7 @@
     "generate": "node scripts/generate-skill-list.mjs",
     "format": "biome format --write .",
     "format:check": "biome check .",
-    "check": "pnpm run format:check && node scripts/check-marketplace.mjs && pwsh skills/skill-slim/scripts/Get-SkillReport.ps1 -Root . -FailOnDangling && pnpm run lint:ps && pnpm test",
+    "check": "pnpm run format:check && node scripts/check-marketplace.mjs && pwsh skills/skill-tooling/skill-slim/scripts/Get-SkillReport.ps1 -Root . -FailOnDangling && pnpm run lint:ps && pnpm test",
     "check:marketplace": "node scripts/check-marketplace.mjs",
     "test": "vitest run",
     "test:ci": "vitest run --coverage",

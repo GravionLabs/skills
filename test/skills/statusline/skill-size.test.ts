@@ -2,7 +2,10 @@ import * as fs from 'fs';
 import * as path from 'path';
 
 const root = path.resolve(__dirname, '../../..');
-const skill = fs.readFileSync(path.join(root, 'skills/context-statusline/SKILL.md'), 'utf-8');
+const skill = fs.readFileSync(
+  path.join(root, 'skills/statusline/context-statusline/SKILL.md'),
+  'utf-8',
+);
 const doc = fs.readFileSync(path.join(root, 'docs/usage/statusline.md'), 'utf-8');
 
 describe('context-statusline SKILL.md (#773)', () => {

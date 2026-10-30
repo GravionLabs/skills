@@ -4,7 +4,10 @@ import * as os from 'os';
 import * as path from 'path';
 import { PwshWorker } from '../../helpers/pwsh-worker';
 
-const SCRIPT = path.resolve(__dirname, '../../../skills/implementation/scripts/Format-Changed.ps1');
+const SCRIPT = path.resolve(
+  __dirname,
+  '../../../skills/shared/implementation/scripts/Format-Changed.ps1',
+);
 const hasPwsh = spawnSync('pwsh', ['-NoProfile', '-Command', '1']).status === 0;
 vi.setConfig({ testTimeout: 30000, hookTimeout: 30000 });
 

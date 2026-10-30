@@ -9,7 +9,7 @@ Single source of truth for how a skill is shaped. `skill-audit` and `skill-slim`
 
 ### Placement and naming
 
-- Every skill lives in `skills/<name>/` (flat). It is listed in exactly one group (plugin) of `.claude-plugin/marketplace.json` (`node scripts/check-marketplace.mjs --fix` adds it to the group you name). Skill names are unique across the repository: `npx skills add --skill <name>` selects by name.
+- Every skill lives in `skills/<group>/<name>/`; the folder is its group. A new group folder needs a plugin with a description in `.claude-plugin/marketplace.json`; `node scripts/check-marketplace.mjs --fix` then lists the skill there and in the installer's `groups.json`. Skill names are unique across all groups: `npx skills add --skill <name>` selects by name, and installs are flat (`.claude/skills/<name>/`).
 - `name`: kebab-case, 1-64 chars, matches the directory exactly, no leading, trailing or consecutive hyphens.
 
 ### Frontmatter

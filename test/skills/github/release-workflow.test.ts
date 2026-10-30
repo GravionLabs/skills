@@ -5,7 +5,7 @@ import { parse } from 'yaml';
 const root = path.resolve(__dirname, '../../..');
 const files = {
   workflow: '.github/workflows/release-branch.yml',
-  template: 'skills/github-release/templates/release-branch.yml',
+  template: 'skills/github/github-release/templates/release-branch.yml',
 };
 
 describe.each(Object.entries(files))('release-branch caller %s (#358)', (_name, rel) => {
@@ -83,7 +83,7 @@ describe('In release status docs (#489)', () => {
   });
 });
 
-const skillDir = path.join(root, 'skills/github-release');
+const skillDir = path.join(root, 'skills/github/github-release');
 const skill = fs.readFileSync(path.join(skillDir, 'SKILL.md'), 'utf-8');
 
 describe('github-release skill (#358, #769)', () => {
@@ -121,7 +121,7 @@ describe('github-release skill (#358, #769)', () => {
 
 describe('github-release skill refuses a released branch (#252)', () => {
   const reference = fs.readFileSync(
-    path.join(root, 'skills/github-issue/references/release-branches.md'),
+    path.join(root, 'skills/github/github-issue/references/release-branches.md'),
     'utf-8',
   );
   const section = (text: string, from: string, to: string) => {

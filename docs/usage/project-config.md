@@ -14,7 +14,7 @@ By default `Format-Changed.ps1 -Language <lang>` runs the built-in commands of `
 
 ```json
 {
-  "$schema": "https://raw.githubusercontent.com/GravionLabs/skills/main/skills/implementation/schema/config.schema.json",
+  "$schema": "https://raw.githubusercontent.com/GravionLabs/skills/main/skills/shared/implementation/schema/config.schema.json",
   "format": {
     "dotnet": {
       "extensions": [".cs"],

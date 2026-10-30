@@ -15,11 +15,11 @@
       "source": "./",
       "strict": false,
       "skills": [
-        "./skills/check-prerequisites",
-        "./skills/code-review",
-        "./skills/detect-techstack",
-        "./skills/diagnose",
-        "./skills/implementation"
+        "./skills/shared/check-prerequisites",
+        "./skills/shared/code-review",
+        "./skills/shared/detect-techstack",
+        "./skills/shared/diagnose",
+        "./skills/shared/implementation"
       ]
     },
     {
@@ -28,9 +28,9 @@
       "source": "./",
       "strict": false,
       "skills": [
-        "./skills/github-issue",
-        "./skills/github-pull-request",
-        "./skills/github-release"
+        "./skills/github/github-issue",
+        "./skills/github/github-pull-request",
+        "./skills/github/github-release"
       ]
     },
     {
@@ -39,11 +39,11 @@
       "source": "./",
       "strict": false,
       "skills": [
-        "./skills/deliver",
-        "./skills/grill-me",
-        "./skills/planner",
-        "./skills/retro",
-        "./skills/skills-install"
+        "./skills/delivery/deliver",
+        "./skills/delivery/grill-me",
+        "./skills/delivery/planner",
+        "./skills/delivery/retro",
+        "./skills/delivery/skills-install"
       ]
     },
     {
@@ -52,7 +52,7 @@
       "source": "./",
       "strict": false,
       "skills": [
-        "./skills/context-statusline"
+        "./skills/statusline/context-statusline"
       ]
     },
     {
@@ -61,13 +61,13 @@
       "source": "./",
       "strict": false,
       "skills": [
-        "./skills/setup-biome-husky",
-        "./skills/setup-prettier-eslint-husky",
-        "./skills/ts-create-project",
-        "./skills/ts-implementation",
-        "./skills/ts-mcp-server-generator",
-        "./skills/ts-pnpm-workflow",
-        "./skills/ts-test"
+        "./skills/ts/setup-biome-husky",
+        "./skills/ts/setup-prettier-eslint-husky",
+        "./skills/ts/ts-create-project",
+        "./skills/ts/ts-implementation",
+        "./skills/ts/ts-mcp-server-generator",
+        "./skills/ts/ts-pnpm-workflow",
+        "./skills/ts/ts-test"
       ]
     },
     {
@@ -76,9 +76,9 @@
       "source": "./",
       "strict": false,
       "skills": [
-        "./skills/py-create-project",
-        "./skills/py-implementation",
-        "./skills/py-test"
+        "./skills/py/py-create-project",
+        "./skills/py/py-implementation",
+        "./skills/py/py-test"
       ]
     },
     {
@@ -87,10 +87,10 @@
       "source": "./",
       "strict": false,
       "skills": [
-        "./skills/ng-ag-grid-developer",
-        "./skills/ng-create-project",
-        "./skills/ng-implementation",
-        "./skills/ng-test"
+        "./skills/ng/ng-ag-grid-developer",
+        "./skills/ng/ng-create-project",
+        "./skills/ng/ng-implementation",
+        "./skills/ng/ng-test"
       ]
     },
     {
@@ -99,10 +99,10 @@
       "source": "./",
       "strict": false,
       "skills": [
-        "./skills/dotnet-create-solution",
-        "./skills/dotnet-implementation",
-        "./skills/dotnet-mcp-server-generator",
-        "./skills/dotnet-test"
+        "./skills/dotnet/dotnet-create-solution",
+        "./skills/dotnet/dotnet-implementation",
+        "./skills/dotnet/dotnet-mcp-server-generator",
+        "./skills/dotnet/dotnet-test"
       ]
     },
     {
@@ -111,8 +111,8 @@
       "source": "./",
       "strict": false,
       "skills": [
-        "./skills/rust-implementation",
-        "./skills/rust-test"
+        "./skills/rust/rust-implementation",
+        "./skills/rust/rust-test"
       ]
     },
     {
@@ -121,8 +121,8 @@
       "source": "./",
       "strict": false,
       "skills": [
-        "./skills/go-implementation",
-        "./skills/go-test"
+        "./skills/go/go-implementation",
+        "./skills/go/go-test"
       ]
     },
     {
@@ -131,9 +131,9 @@
       "source": "./",
       "strict": false,
       "skills": [
-        "./skills/skill-audit",
-        "./skills/skill-slim",
-        "./skills/skill-write"
+        "./skills/skill-tooling/skill-audit",
+        "./skills/skill-tooling/skill-slim",
+        "./skills/skill-tooling/skill-write"
       ]
     }
   ]

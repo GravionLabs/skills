@@ -6,13 +6,15 @@ const skills = path.resolve(__dirname, '../../../skills');
 const read = (rel: string): string => readFileSync(path.join(skills, rel), 'utf8');
 
 describe('github-issue without batch routing', () => {
-  const skill = read('github-issue/SKILL.md');
+  const skill = read('github/github-issue/SKILL.md');
   const routing = skill.slice(skill.indexOf('## Routing'), skill.indexOf('## Shared constraints'));
 
   it('has no batch-workflow reference file or mention', () => {
-    expect(existsSync(path.join(skills, 'github-issue/references/batch-workflow.md'))).toBe(false);
+    expect(existsSync(path.join(skills, 'github/github-issue/references/batch-workflow.md'))).toBe(
+      false,
+    );
     expect(skill).not.toMatch(/batch/i);
-    expect(read('github-issue/references/task-issues.md')).not.toContain('batch-workflow');
+    expect(read('github/github-issue/references/task-issues.md')).not.toContain('batch-workflow');
   });
 
   it('routing has no batch row and keeps one issue per session', () => {
@@ -27,7 +29,7 @@ describe('github-issue without batch routing', () => {
 });
 
 describe('github-pull-request reviewer is opt-in', () => {
-  const skill = read('github-pull-request/SKILL.md');
+  const skill = read('github/github-pull-request/SKILL.md');
   const step = skill.split('\n').find((l) => l.startsWith('5. '))!;
 
   it('requests no reviewer unless the caller asks for one', () => {
@@ -46,18 +48,18 @@ describe('github-pull-request reviewer is opt-in', () => {
 });
 
 describe('github-issue creates issues from a plan with blocked-by links', () => {
-  const skill = read('github-issue/SKILL.md');
+  const skill = read('github/github-issue/SKILL.md');
   const routing = skill.slice(skill.indexOf('## Routing'), skill.indexOf('## Shared constraints'));
-  const planning = path.resolve(__dirname, '../../../skills/planner');
+  const planning = path.resolve(__dirname, '../../../skills/delivery/planner');
 
   it('routes a plan from planner to create-from-plan.md', () => {
     expect(routing).toContain(
-      'A plan from `planner` (`plan.json`) → `references/create-from-plan.md`',
+      'A plan from `delivery/planner` (`plan.json`) → `references/create-from-plan.md`',
     );
   });
 
   it('create-from-plan.md exists, stays within 60 lines and sets blocked_by links', () => {
-    const doc = read('github-issue/references/create-from-plan.md');
+    const doc = read('github/github-issue/references/create-from-plan.md');
     expect(doc.trimEnd().split('\n').length).toBeLessThanOrEqual(60);
     expect(doc).toContain('questions[]');
     expect(doc).toContain('--body-file -');
@@ -65,7 +67,7 @@ describe('github-issue creates issues from a plan with blocked-by links', () => 
   });
 
   it('sub-issues.md documents the add, read and remove calls with the database id', () => {
-    const doc = read('github-issue/references/sub-issues.md');
+    const doc = read('github/github-issue/references/sub-issues.md');
     expect(doc).toContain('## Blocked-by links');
     expect(doc).toContain(
       'gh api -X POST repos/{owner}/{repo}/issues/<nr>/dependencies/blocked_by -F issue_id=$blockerId',
@@ -79,7 +81,7 @@ describe('github-issue creates issues from a plan with blocked-by links', () => 
 
   it('every file task-issues.md and planner name for blocked-by links contains "blocked_by"', () => {
     const sources = [
-      read('github-issue/references/task-issues.md'),
+      read('github/github-issue/references/task-issues.md'),
       readFileSync(path.join(planning, 'SKILL.md'), 'utf8'),
       ...readdirSync(path.join(planning, 'references'))
         .filter((f) => f.endsWith('.md'))
@@ -93,7 +95,7 @@ describe('github-issue creates issues from a plan with blocked-by links', () => 
     );
     expect([...named]).toContain('sub-issues.md');
     for (const file of named) {
-      expect(read(`github-issue/references/${file}`), file).toContain('blocked_by');
+      expect(read(`github/github-issue/references/${file}`), file).toContain('blocked_by');
     }
   });
 });

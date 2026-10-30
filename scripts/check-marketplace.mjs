@@ -1,91 +1,90 @@
 #!/usr/bin/env node
-// Keeps .claude-plugin/marketplace.json, the skill directories and the installer's groups.json in sync.
+// The folders decide the groups: skills/<group>/<name>/SKILL.md is skill <name> in group <group>.
+// This script keeps .claude-plugin/marketplace.json (one plugin per group) and the installer's
+// groups.json in step with the folders.
 //
-//   node scripts/check-marketplace.mjs                 check, exit 1 on any problem
-//   node scripts/check-marketplace.mjs --fix           rewrite groups.json; drop entries of deleted skills
-//   node scripts/check-marketplace.mjs --fix --add <group> <skill>   list a new skill under <group>
+//   node scripts/check-marketplace.mjs         check, exit 1 on any problem
+//   node scripts/check-marketplace.mjs --fix   rewrite the skill lists of marketplace.json and groups.json
 //
-// Rules: every skills/<name>/SKILL.md is listed in exactly one plugin (group); every listed path exists;
-// the frontmatter name equals the directory name; skill names are unique; groups.json mirrors the groups.
+// Rules: every group folder has a plugin with a description in marketplace.json (written by hand) and
+// every plugin has a folder; skill names are unique across groups; the frontmatter name equals the
+// directory name; no SKILL.md sits directly in skills/<name>/.
 import { existsSync, readdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { join, resolve } from 'node:path';
 
 const root = resolve(import.meta.dirname, '..');
+const skillsDir = join(root, 'skills');
 const manifestPath = join(root, '.claude-plugin/marketplace.json');
-const groupsPath = join(root, 'skills/skills-install/scripts/groups.json');
-const args = process.argv.slice(2);
-const fix = args.includes('--fix');
-const addAt = args.indexOf('--add');
+const groupsPath = join(skillsDir, 'delivery/skills-install/scripts/groups.json');
+const fix = process.argv.includes('--fix');
 
 const manifest = JSON.parse(readFileSync(manifestPath, 'utf-8'));
 const problems = [];
+const dirs = (dir) =>
+  readdirSync(dir, { withFileTypes: true })
+    .filter((d) => d.isDirectory())
+    .map((d) => d.name)
+    .sort();
 
-if (addAt >= 0) {
-  const [group, skill] = args.slice(addAt + 1, addAt + 3);
-  const plugin = manifest.plugins.find((p) => p.name === group);
-  if (!group || !skill) problems.push('--add needs <group> <skill>');
-  else if (!plugin) problems.push(`--add: no group "${group}" in marketplace.json`);
-  else if (!plugin.skills.includes(`./skills/${skill}`)) {
-    plugin.skills.push(`./skills/${skill}`);
-    plugin.skills.sort();
+// Folders on disk: group -> skill names
+const onDisk = new Map();
+const seen = new Map();
+for (const group of dirs(skillsDir)) {
+  if (existsSync(join(skillsDir, group, 'SKILL.md'))) {
+    problems.push(`skills/${group} is a skill outside a group folder: move it to skills/<group>/`);
+    continue;
+  }
+  const names = dirs(join(skillsDir, group)).filter((n) =>
+    existsSync(join(skillsDir, group, n, 'SKILL.md')),
+  );
+  onDisk.set(group, names);
+  for (const name of names) {
+    if (seen.has(name)) problems.push(`skill ${name} exists in ${seen.get(name)} and ${group}`);
+    seen.set(name, group);
+    const head = readFileSync(join(skillsDir, group, name, 'SKILL.md'), 'utf-8').split(/\r?\n/);
+    const end = head.indexOf('---', 1);
+    const nameLine = head.slice(1, end).find((l) => l.startsWith('name:'));
+    const declared = nameLine
+      ?.slice(5)
+      .trim()
+      .replace(/^['"]|['"]$/g, '');
+    if (declared !== name)
+      problems.push(`skills/${group}/${name}: frontmatter name is "${declared}"`);
   }
 }
 
-const onDisk = readdirSync(join(root, 'skills'), { withFileTypes: true })
-  .filter((d) => d.isDirectory() && existsSync(join(root, 'skills', d.name, 'SKILL.md')))
-  .map((d) => d.name)
-  .sort();
-
-const owner = new Map();
+// Plugins: one per group folder, skill list derived from the folder
+const plugins = new Map(manifest.plugins.map((p) => [p.name, p]));
+for (const group of onDisk.keys()) {
+  if (!plugins.has(group)) problems.push(`group ${group} has no plugin in marketplace.json`);
+}
 for (const plugin of manifest.plugins) {
-  if (plugin.source !== './') problems.push(`${plugin.name}: source must be "./"`);
-  const kept = [];
-  for (const path of plugin.skills ?? []) {
-    const name = path.replace(/^\.\/skills\//, '');
-    if (!path.startsWith('./skills/') || name.includes('/')) {
-      problems.push(`${plugin.name}: ${path} is not ./skills/<name>`);
-      continue;
-    }
-    if (!onDisk.includes(name)) {
-      if (fix) continue;
-      problems.push(`${plugin.name}: ${path} has no SKILL.md`);
-    }
-    if (owner.has(name))
-      problems.push(`${name} is listed in ${owner.get(name)} and ${plugin.name}`);
-    owner.set(name, plugin.name);
-    kept.push(path);
+  const names = onDisk.get(plugin.name);
+  if (!names) {
+    problems.push(`plugin ${plugin.name} has no folder skills/${plugin.name}`);
+    continue;
   }
-  plugin.skills = kept;
+  if (!plugin.description) problems.push(`plugin ${plugin.name} has no description`);
+  if (plugin.source !== './') problems.push(`plugin ${plugin.name}: source must be "./"`);
+  const wanted = names.map((n) => `./skills/${plugin.name}/${n}`);
+  if (JSON.stringify(plugin.skills ?? []) !== JSON.stringify(wanted)) {
+    if (fix) plugin.skills = wanted;
+    else problems.push(`plugin ${plugin.name}: skills differ from skills/${plugin.name}/ (--fix)`);
+  }
 }
 
-for (const name of onDisk) {
-  if (!owner.has(name))
-    problems.push(`skills/${name} is in no group (use --fix --add <group> ${name})`);
-  const head = readFileSync(join(root, 'skills', name, 'SKILL.md'), 'utf-8').split(/\r?\n/);
-  const end = head.indexOf('---', 1);
-  const nameLine = head.slice(1, end).find((l) => l.startsWith('name:'));
-  const declared = nameLine
-    ?.slice(5)
-    .trim()
-    .replace(/^['"]|['"]$/g, '');
-  if (declared !== name) problems.push(`skills/${name}: frontmatter name is "${declared}"`);
-}
-
-const groups = Object.fromEntries(
-  manifest.plugins.map((p) => [p.name, p.skills.map((s) => s.replace('./skills/', '')).sort()]),
-);
+const groups = Object.fromEntries([...onDisk].filter(([g]) => plugins.has(g)));
 const groupsJson = `${JSON.stringify(groups, null, 2)}\n`;
 const current = existsSync(groupsPath) ? readFileSync(groupsPath, 'utf-8') : '';
-
 if (fix) {
   writeFileSync(manifestPath, `${JSON.stringify(manifest, null, 2)}\n`);
   if (current !== groupsJson) writeFileSync(groupsPath, groupsJson);
 } else if (current !== groupsJson) {
-  problems.push('skills/skills-install/scripts/groups.json is out of date (run with --fix)');
+  problems.push('groups.json of skills-install is out of date (--fix)');
 }
 
 if (problems.length) {
   for (const p of problems) console.error(`✗ ${p}`);
   process.exit(1);
 }
-console.log(`✓ ${onDisk.length} skills in ${manifest.plugins.length} groups`);
+console.log(`✓ ${seen.size} skills in ${onDisk.size} groups`);

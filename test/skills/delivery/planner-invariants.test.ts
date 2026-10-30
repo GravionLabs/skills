@@ -3,7 +3,7 @@ import * as path from 'path';
 
 const pk = path.resolve(__dirname, '../../../skills');
 const read = (p: string) => fs.readFileSync(path.join(pk, p), 'utf-8');
-const skillDir = 'planner';
+const skillDir = 'delivery/planner';
 
 describe('planner invariants section (#484)', () => {
   const ref = read(`${skillDir}/references/invariants.md`);
@@ -51,7 +51,7 @@ describe('planner invariants section (#484)', () => {
   });
 
   it('task-issues.md template orders Implementation Notes, Invariants, agent-ready block', () => {
-    const t = read('github-issue/references/task-issues.md');
+    const t = read('github/github-issue/references/task-issues.md');
     const notes = t.indexOf('## Implementation Notes');
     const inv = t.indexOf('## Invariants');
     const block = t.indexOf('<!-- agent-ready:start -->');
@@ -69,7 +69,7 @@ describe('planner invariants section (#484)', () => {
   });
 
   it('implementation checklist requires a test per Invariants item', () => {
-    const skill = read('implementation/SKILL.md');
+    const skill = read('shared/implementation/SKILL.md');
     const section = skill.split('## Before commit')[1].split('\n## ')[0];
     expect(section).toMatch(/- \[ \] .*Invariants.*\btest\b/);
   });

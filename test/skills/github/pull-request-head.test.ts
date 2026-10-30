@@ -2,7 +2,7 @@ import * as fs from 'fs';
 import * as path from 'path';
 
 const prSkill = fs.readFileSync(
-  path.resolve(__dirname, '../../../skills/github-pull-request/SKILL.md'),
+  path.resolve(__dirname, '../../../skills/github/github-pull-request/SKILL.md'),
   'utf-8',
 );
 

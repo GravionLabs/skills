@@ -83,9 +83,10 @@ try {
   # Set up ESLint + Prettier + Husky
   if (-not $SkipEslint) {
     Write-Host "Setting up ESLint + Prettier + Husky..." -ForegroundColor Cyan
-    # setup-prettier-eslint-husky is installed next to this skill (skills-install ng brings it along)
+    # installed: a sibling skill (skills-install ng brings it along); in GravionLabs/skills: skills/ts/
     $candidates = @(
-      (Join-Path $ScriptDir '../../setup-prettier-eslint-husky/scripts/Setup-CodeQuality.ps1')
+      (Join-Path $ScriptDir '../../setup-prettier-eslint-husky/scripts/Setup-CodeQuality.ps1'),
+      (Join-Path $ScriptDir '../../../ts/setup-prettier-eslint-husky/scripts/Setup-CodeQuality.ps1')
     )
     $setupScript = $candidates | Where-Object { Test-Path $_ } | Select-Object -First 1
     if ($setupScript) {

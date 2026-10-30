@@ -28,7 +28,7 @@
 param([ValidateSet('claude', 'copilot', 'all')][string]$Client = 'claude', [switch]$Force, [switch]$Uninstall)
 $ErrorActionPreference = 'Stop'
 
-$script:SkillRel = 'skills/context-statusline/scripts'
+$script:SkillRel = 'skills/statusline/context-statusline/scripts'
 
 function ConvertTo-Slash([string]$p) { ($p -replace '\\', '/').TrimEnd('/') }
 

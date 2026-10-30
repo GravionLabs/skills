@@ -12,8 +12,11 @@ const namesAll = (line: string, keys: string[]): boolean =>
 
 describe('apm-tooling enforces the skill frontmatter convention', () => {
   it.each([
-    ['skill-write/references/skill-writing-rules.md', /Forbidden top-level keys \(🔴\)/],
-    ['skill-write/SKILL.md', /Never .* at top level/],
+    [
+      'skill-tooling/skill-write/references/skill-writing-rules.md',
+      /Forbidden top-level keys \(🔴\)/,
+    ],
+    ['skill-tooling/skill-write/SKILL.md', /Never .* at top level/],
   ])('%s lists every forbidden key on its forbidden-key rule line', (file, rule) => {
     const line = lines(file).find((l) => rule.test(l));
     expect(line, `${file} has no forbidden-key rule line`).toBeDefined();
@@ -22,24 +25,24 @@ describe('apm-tooling enforces the skill frontmatter convention', () => {
     }
   });
 
-  it.each(['skill-audit/references/audit-checklist.md', 'skill-audit/SKILL.md'])(
-    '%s rates every forbidden top-level key critical',
-    (file) => {
-      const line = lines(file).find((l) => namesAll(l, FORBIDDEN_KEYS));
-      expect(line, `${file} has no line naming all forbidden keys`).toBeDefined();
-      expect(line).toContain('🔴');
-    },
-  );
+  it.each([
+    'skill-tooling/skill-audit/references/audit-checklist.md',
+    'skill-tooling/skill-audit/SKILL.md',
+  ])('%s rates every forbidden top-level key critical', (file) => {
+    const line = lines(file).find((l) => namesAll(l, FORBIDDEN_KEYS));
+    expect(line, `${file} has no line naming all forbidden keys`).toBeDefined();
+    expect(line).toContain('🔴');
+  });
 
   it('skill-audit checklist recommends moving annotations to metadata', () => {
-    const line = lines('skill-audit/references/audit-checklist.md').find((l) =>
+    const line = lines('skill-tooling/skill-audit/references/audit-checklist.md').find((l) =>
       namesAll(l, FORBIDDEN_KEYS),
     );
     expect(line).toMatch(/recommendation: remove, or move annotations to `metadata:`/);
   });
 
   it('skill-write template frontmatter has only name and description', () => {
-    const text = read('skill-write/assets/skill-template-optimized.md');
+    const text = read('skill-tooling/skill-write/assets/skill-template-optimized.md');
     const match = /^---\r?\n([\s\S]*?)\r?\n---/.exec(text);
     expect(match).not.toBeNull();
     const keys = [...match![1].matchAll(/^([A-Za-z][\w/-]*):/gm)].map((m) => m[1]);
@@ -47,21 +50,21 @@ describe('apm-tooling enforces the skill frontmatter convention', () => {
   });
 
   it('skill-write sends chronicle-hints to metadata', () => {
-    expect(read('skill-write/references/skill-writing-rules.md')).toMatch(
+    expect(read('skill-tooling/skill-write/references/skill-writing-rules.md')).toMatch(
       /`chronicle-hints` \(move to `metadata:`\)/,
     );
-    expect(read('skill-write/SKILL.md')).toMatch(
+    expect(read('skill-tooling/skill-write/SKILL.md')).toMatch(
       /`chronicle-hints` at top level; annotations go under `metadata`/,
     );
   });
 
   it('no apm-tooling skill references the stale skill-size-validator.ts', () => {
     for (const file of [
-      'skill-write/SKILL.md',
-      'skill-write/references/skill-writing-rules.md',
-      'skill-audit/SKILL.md',
-      'skill-audit/references/audit-checklist.md',
-      'skill-slim/SKILL.md',
+      'skill-tooling/skill-write/SKILL.md',
+      'skill-tooling/skill-write/references/skill-writing-rules.md',
+      'skill-tooling/skill-audit/SKILL.md',
+      'skill-tooling/skill-audit/references/audit-checklist.md',
+      'skill-tooling/skill-slim/SKILL.md',
     ]) {
       expect(read(file), file).not.toContain('skill-size-validator.ts');
     }
@@ -70,9 +73,14 @@ describe('apm-tooling enforces the skill frontmatter convention', () => {
   it('no skill in any package writes user-invocable: true (the default)', () => {
     const packages = path.resolve(__dirname, '../../../skills');
     const offenders: string[] = [];
-    {
-      const dir = packages;
-      const names = readdirSync(dir);
+    for (const pkg of readdirSync(packages)) {
+      const dir = path.join(packages, pkg);
+      let names: string[] = [];
+      try {
+        names = readdirSync(dir);
+      } catch {
+        continue;
+      }
       for (const name of names) {
         let text: string;
         try {

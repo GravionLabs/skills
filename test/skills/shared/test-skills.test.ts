@@ -4,7 +4,7 @@ import * as path from 'path';
 const packages = path.resolve(__dirname, '../../../skills');
 const langs = ['ts', 'py', 'dotnet', 'rust', 'ng'];
 const read = (rel: string) => fs.readFileSync(path.join(packages, rel), 'utf-8');
-const testSkill = (l: string) => read(`${l}-test/SKILL.md`);
+const testSkill = (l: string) => read(`${l}/${l}-test/SKILL.md`);
 
 // walk every SKILL.md and reference of all packages
 const allFiles = (dir: string): string[] =>
@@ -18,7 +18,7 @@ describe('language test skills (#771)', () => {
     const hits = allFiles(packages)
       .filter((f) => /never the full suite/.test(fs.readFileSync(f, 'utf-8')))
       .map((f) => path.relative(packages, f));
-    expect(hits).toEqual(['implementation/SKILL.md']);
+    expect(hits).toEqual(['shared/implementation/SKILL.md']);
   });
 
   it.each(langs)('%s-test keeps one targeted-run line with its command', (l) => {
@@ -80,15 +80,15 @@ describe('language test skills (#771)', () => {
 
 describe('language skills: triggers and no generic content (#784)', () => {
   it.each(langs)('%s-implementation description contains "Use when"', (l) => {
-    const fm = /^---\n([\s\S]*?)\n---/.exec(read(`${l}-implementation/SKILL.md`))![1];
+    const fm = /^---\n([\s\S]*?)\n---/.exec(read(`${l}/${l}-implementation/SKILL.md`))![1];
     expect(fm).toMatch(/Use when/);
   });
 
   it('no runtime pin in test, implementation, pnpm-workflow and mcp-generator skills', () => {
     const files = [
-      ...langs.flatMap((l) => [testSkill(l), read(`${l}-implementation/SKILL.md`)]),
-      read('ts-pnpm-workflow/SKILL.md'),
-      read('ts-mcp-server-generator/SKILL.md'),
+      ...langs.flatMap((l) => [testSkill(l), read(`${l}/${l}-implementation/SKILL.md`)]),
+      read('ts/ts-pnpm-workflow/SKILL.md'),
+      read('ts/ts-mcp-server-generator/SKILL.md'),
     ];
     for (const t of files) expect(t).not.toMatch(/Node\.js 22|Python 3\.14\+/);
     expect(testSkill('py')).toContain('`.python-version` or `requires-python`');

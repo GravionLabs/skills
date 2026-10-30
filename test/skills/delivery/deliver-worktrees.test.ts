@@ -4,7 +4,10 @@ import * as os from 'os';
 import * as path from 'path';
 import { createFakeGh } from '../../helpers/fake-gh';
 
-const SCRIPT = path.resolve(__dirname, '../../../skills/deliver/scripts/Remove-PbiWorktrees.ps1');
+const SCRIPT = path.resolve(
+  __dirname,
+  '../../../skills/delivery/deliver/scripts/Remove-PbiWorktrees.ps1',
+);
 const hasPwsh = spawnSync('pwsh', ['-NoProfile', '-Command', '1']).status === 0;
 
 // #858: worktrees and branches a merged PBI leaves behind, as found after the agentlens trial

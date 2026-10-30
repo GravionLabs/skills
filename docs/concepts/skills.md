@@ -22,7 +22,7 @@ Use the dotnet-create-solution skill to scaffold the project.
 
 ## Where skills live
 
-Skills are authored once under `skills/<name>/` and installed by `npx skills add` into each platform's directory:
+Skills are authored once under `skills/<group>/<name>/` and installed (flat, by name) by `npx skills add` into each platform's directory:
 
 | Platform       | Project path              | Global path                    |
 | :------------- | :------------------------ | :----------------------------- |
@@ -59,7 +59,7 @@ Rules that every skill in this repo follows:
 - Scripts are PowerShell 7+ and are called as `pwsh scripts/<Name>.ps1`.
 - A skill that needs another skill's work delegates by name instead of restating it.
 
-The complete rule set is in `skills/skill-write/references/skill-writing-rules.md`; the `skill-write`, `skill-audit` and `skill-slim` skills apply it.
+The complete rule set is in `skills/skill-tooling/skill-write/references/skill-writing-rules.md`; the `skill-write`, `skill-audit` and `skill-slim` skills apply it.
 
 ## How the skills compose
 

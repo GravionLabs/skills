@@ -2,7 +2,7 @@ import { readFileSync } from 'node:fs';
 import path from 'node:path';
 import { describe, expect, it } from 'vitest';
 
-const skillDir = path.resolve(__dirname, '../../../skills/github-issue');
+const skillDir = path.resolve(__dirname, '../../../skills/github/github-issue');
 const read = (rel: string): string => readFileSync(path.join(skillDir, rel), 'utf8');
 
 describe('github-issue level-prefixed titles', () => {
@@ -35,7 +35,7 @@ describe('github-issue level-prefixed titles', () => {
     expect(read('references/standalone-issue.md')).toContain('the skill owns title and footer');
     expect(
       readFileSync(
-        path.resolve(__dirname, '../../../skills/github-pull-request/SKILL.md'),
+        path.resolve(__dirname, '../../../skills/github/github-pull-request/SKILL.md'),
         'utf-8',
       ),
     ).toContain('`<type>: <description> (#<issue_number>)`');
@@ -44,7 +44,7 @@ describe('github-issue level-prefixed titles', () => {
 
   it('takes the PR title from the issue title word for word (#859)', () => {
     const pr = readFileSync(
-      path.resolve(__dirname, '../../../skills/github-pull-request/SKILL.md'),
+      path.resolve(__dirname, '../../../skills/github/github-pull-request/SKILL.md'),
       'utf-8',
     );
     const step = pr.slice(pr.indexOf('2. **Title**'), pr.indexOf('3. **Body**'));
@@ -54,7 +54,7 @@ describe('github-issue level-prefixed titles', () => {
     );
     expect(step).not.toContain('60 chars');
     const deliver = readFileSync(
-      path.resolve(__dirname, '../../../skills/deliver/SKILL.md'),
+      path.resolve(__dirname, '../../../skills/delivery/deliver/SKILL.md'),
       'utf-8',
     );
     expect(deliver).toContain(

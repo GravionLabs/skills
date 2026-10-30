@@ -5,7 +5,7 @@ A skill can ship files next to its `SKILL.md`. `npx skills add` installs the who
 ## Directory convention
 
 ```
-skills/<skill-name>/
+skills/<group>/<skill-name>/
   SKILL.md          ← the skill (≤ 100 lines)
   scripts/          ← PowerShell 7+ procedures, run as `pwsh scripts/<Name>.ps1`
   references/       ← long material the skill loads conditionally
@@ -35,7 +35,7 @@ Keep the decision in `SKILL.md` and the detail in the reference. This is how ski
 ## Example: `dotnet-create-solution`
 
 ```
-skills/dotnet-create-solution/
+skills/dotnet/dotnet-create-solution/
   SKILL.md
   scripts/New-Solution.ps1
   templates/
@@ -53,7 +53,7 @@ skills/dotnet-create-solution/
 3. Run the repo checks: `pnpm test` (size limit) and the skill report for dangling references:
 
    ```powershell
-   pwsh skills/skill-slim/scripts/Get-SkillReport.ps1 -Root .
+   pwsh skills/skill-tooling/skill-slim/scripts/Get-SkillReport.ps1 -Root .
    ```
 
 The `skill-write` skill (group `skill-tooling`) walks through this.

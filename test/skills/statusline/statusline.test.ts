@@ -7,7 +7,7 @@ import { PwshWorker } from '../../helpers/pwsh-worker';
 const hasPwsh = spawnSync('pwsh', ['-NoProfile', '-Command', '1']).status === 0;
 const posix = process.platform !== 'win32';
 
-const DIR = path.resolve(__dirname, '../../../skills/context-statusline/scripts');
+const DIR = path.resolve(__dirname, '../../../skills/statusline/context-statusline/scripts');
 const STATUS = path.join(DIR, 'statusline.mjs');
 const SUB = path.join(DIR, 'subagent-statusline.mjs');
 const INSTALLER = path.join(DIR, 'Install-Statusline.ps1');

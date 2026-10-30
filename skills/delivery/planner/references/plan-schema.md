@@ -18,7 +18,7 @@ The only output contract of `planner`: one JSON object, returned to the caller, 
       "size": "S",
       "tier": "standard",
       "blocked_by": [],
-      "files": ["skills/y/SKILL.md"],
+      "files": ["skills/x/y/SKILL.md"],
       "skills": ["ts-implementation"]
     }
   ],

@@ -4,7 +4,7 @@ import * as path from 'node:path';
 import { groupSkills } from '../../helpers/marketplace';
 
 const root = path.resolve(__dirname, '../../../skills');
-const text = fs.readFileSync(path.join(root, 'grill-me/SKILL.md'), 'utf8');
+const text = fs.readFileSync(path.join(root, 'delivery/grill-me/SKILL.md'), 'utf8');
 
 describe('grill-me SKILL.md', () => {
   it('keeps the attribution to mattpocock/skills (MIT)', () => {
@@ -48,6 +48,6 @@ describe('grill-me SKILL.md', () => {
   });
 
   it('is listed in the delivery group of marketplace.json', () => {
-    expect(groupSkills('delivery')).toContain('grill-me');
+    expect(groupSkills('delivery')).toContain('delivery/grill-me');
   });
 });

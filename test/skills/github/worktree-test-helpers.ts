@@ -4,7 +4,7 @@ import * as fs from 'fs';
 import * as os from 'os';
 import * as path from 'path';
 
-export const SCRIPTS = path.resolve(__dirname, '../../../skills/github-issue/scripts');
+export const SCRIPTS = path.resolve(__dirname, '../../../skills/github/github-issue/scripts');
 
 const gitEnv = (): NodeJS.ProcessEnv => ({
   ...process.env,

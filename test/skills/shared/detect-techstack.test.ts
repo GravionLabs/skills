@@ -6,7 +6,7 @@ import { PwshWorker } from '../../helpers/pwsh-worker';
 
 const SCRIPT = path.resolve(
   __dirname,
-  '../../../skills/detect-techstack/scripts/Detect-TechStack.ps1',
+  '../../../skills/shared/detect-techstack/scripts/Detect-TechStack.ps1',
 );
 const hasPwsh = spawnSync('pwsh', ['-NoProfile', '-Command', '1']).status === 0;
 

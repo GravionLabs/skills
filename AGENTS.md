@@ -5,11 +5,11 @@ GravionLabs/skills is a collection of **skills** (agentskills.io `SKILL.md` form
 ## Layout
 
 ```
-skills/<name>/                 # SKILL.md (+ scripts/ references/ templates/ assets/), flat, names unique
-.claude-plugin/marketplace.json # groups: one plugin per group, every skill in exactly one group
-skills/skills-install/scripts/groups.json   # copy of the groups for the installer (check-marketplace.mjs --fix)
+skills/<group>/<name>/         # SKILL.md (+ scripts/ references/ templates/ assets/); folder = group, names unique
+.claude-plugin/marketplace.json # one plugin per group folder; description by hand, skill list by check-marketplace --fix
+skills/delivery/skills-install/scripts/groups.json   # copy of the groups for the installer (check-marketplace.mjs --fix)
 .github/ISSUE_TEMPLATE/        # issue templates (Epic, Feature, PBI, Task, Bug)
-scripts/check-marketplace.mjs  # marketplace ⇄ skill directories ⇄ groups.json; --fix, --add <group> <skill>
+scripts/check-marketplace.mjs  # group folders ⇄ marketplace.json ⇄ groups.json; --fix
 scripts/generate-skill-list.mjs # docs/skill-list.md (gitignored) for the site
 scripts/Invoke-ScriptAnalysis.ps1 # PSScriptAnalyzer over skills/, scripts/, .github/
 test/skills/<group>/           # Vitest tests of skill content and scripts
@@ -42,10 +42,10 @@ Every language group provides `<lang>-implementation` (conventions + `## Review 
 ## Skill conventions
 
 - Frontmatter: `name`, `description`, optional `license`, optional `metadata`, plus the optional client keys `disable-model-invocation` (paired with `metadata.opencode/autoinvoke: 'false'`), `user-invocable`, `context: fork`, `agent` — see [docs/concepts/skill-frontmatter.md](docs/concepts/skill-frontmatter.md). Nothing else (no `allowed-tools`, `model`, `compatibility`).
-- `SKILL.md` ≤ 100 lines (enforced by `src/generators/skill-size-validator.test.ts`). Long material goes to `references/` (loaded conditionally), templates to `templates/` or `assets/`, repeatable procedures to `scripts/*.ps1`.
+- `SKILL.md` ≤ 100 lines (enforced by `Get-SkillReport.ps1` in CI). Long material goes to `references/` (loaded conditionally), templates to `templates/` or `assets/`, repeatable procedures to `scripts/*.ps1`.
 - Shell blocks use ` ```powershell `. Scripts are PowerShell 7+ and are invoked as `pwsh scripts/<Name>.ps1`; paths inside a skill are relative to the skill directory.
 - Compose, don't duplicate: one skill owns a workflow, others delegate by name.
-- Rules live in `skills/skill-write/references/skill-writing-rules.md`.
+- Rules live in `skills/skill-tooling/skill-write/references/skill-writing-rules.md`.
 
 ## Issues
 
@@ -59,7 +59,7 @@ The title of an issue starts with its level: `[Epic]`, `[Feature]`, `[PBI]`, `[T
 - Time budget: no test file above 15 s summed test time (`pnpm vitest run <path> --reporter=json`, sum of `assertionResults[].duration`). A file above it is cut before new cases are added: per script one happy path, one case per distinct behavior branch, the error cases; data variants of one branch are one `it.each` table on a shared worker or are dropped; fixtures are built once in `beforeAll`.
 - Targeted run: `pnpm vitest run <path>`.
 - Script tests with many cases: `PwshWorker` (`test/helpers/pwsh-worker.ts`) starts one pwsh per describe (`beforeAll`/`afterAll`) and runs the script in-process per `await worker.run(args, {cwd, env})` (status/stdout/stderr like a spawn); cases that need their own process (PATH without git, stdin, the invoking process's env) stay single spawns with a comment.
-- Resolve repo files from `__dirname` (`path.resolve(__dirname, '../../../skills/<name>/...')` in `test/skills/<group>/`).
+- Resolve repo files from `__dirname` (`path.resolve(__dirname, '../../../skills/<group>/<name>/...')` in `test/skills/<group>/`).
 
 ## Commands
 
@@ -69,16 +69,15 @@ pnpm run check                          # local equivalent of the CI checks
 pnpm test                               # all tests
 pnpm run format:check                   # Biome format + lint (pnpm run format writes)
 pnpm run lint:ps                        # PSScriptAnalyzer (PSScriptAnalyzerSettings.psd1)
-node scripts/check-marketplace.mjs --fix                 # sync groups.json, drop deleted skills
-node scripts/check-marketplace.mjs --fix --add <group> <skill>   # list a new skill
+node scripts/check-marketplace.mjs --fix   # skill lists of marketplace.json and groups.json from the folders
 pnpm run generate                       # docs/skill-list.md for the site
-pwsh skills/skill-slim/scripts/Get-SkillReport.ps1 -Root .   # sizes, dangling refs, duplicates
+pwsh skills/skill-tooling/skill-slim/scripts/Get-SkillReport.ps1 -Root .   # sizes, dangling refs, duplicates
 ```
 
 ## Adding or changing a skill
 
-1. Use the `skill-write` skill (or copy `assets/skill-template-optimized.md`) under `skills/<name>/`.
-2. Run `node scripts/check-marketplace.mjs --fix --add <group> <name>`; update the group `description` in `.claude-plugin/marketplace.json` if the scope changed.
+1. Use the `skill-write` skill (or copy `assets/skill-template-optimized.md`) under `skills/<group>/<name>/`.
+2. Run `node scripts/check-marketplace.mjs --fix`; a new group also needs a plugin entry in `.claude-plugin/marketplace.json`. Update the group `description` in `.claude-plugin/marketplace.json` if the scope changed.
 3. Update the table above and the one in README.md.
 4. Commit with a conventional message (`feat(ng): …`, `refactor(skills): …`). Consumers pick it up with `npx skills update`.
 

@@ -82,7 +82,7 @@ describe('ci.yml checks', () => {
     expect(checkCommands).toEqual([
       'pnpm run format:check',
       'node scripts/check-marketplace.mjs',
-      'pwsh skills/skill-slim/scripts/Get-SkillReport.ps1 -Root . -FailOnDangling',
+      'pwsh skills/skill-tooling/skill-slim/scripts/Get-SkillReport.ps1 -Root . -FailOnDangling',
       'pnpm run lint:ps',
       'pnpm test',
     ]);

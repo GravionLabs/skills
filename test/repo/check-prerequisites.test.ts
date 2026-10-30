@@ -6,7 +6,7 @@ import { PwshWorker } from '../helpers/pwsh-worker';
 
 const SCRIPT = path.resolve(
   __dirname,
-  '../../skills/check-prerequisites/scripts/Check-Prerequisites.ps1',
+  '../../skills/shared/check-prerequisites/scripts/Check-Prerequisites.ps1',
 );
 const pwshProbe = spawnSync('sh', ['-c', 'command -v pwsh'], { encoding: 'utf8' });
 const hasPwsh = pwshProbe.status === 0;

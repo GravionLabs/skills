@@ -3,7 +3,7 @@ import * as fs from 'node:fs';
 import * as path from 'node:path';
 
 const script = fs
-  .readFileSync(path.resolve(__dirname, '../../../skills/deliver/workflow.js'), 'utf8')
+  .readFileSync(path.resolve(__dirname, '../../../skills/delivery/deliver/workflow.js'), 'utf8')
   .replace('export const meta =', 'const meta =');
 
 const AsyncFunction = Object.getPrototypeOf(async () => {}).constructor;

@@ -2,7 +2,7 @@ import { describe, it, expect } from 'vitest';
 import * as fs from 'node:fs';
 import * as path from 'node:path';
 
-const file = path.resolve(__dirname, '../../../skills/retro/references/categories.md');
+const file = path.resolve(__dirname, '../../../skills/delivery/retro/references/categories.md');
 const text = fs.readFileSync(file, 'utf8');
 
 describe('retro categories.md', () => {

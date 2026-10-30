@@ -4,7 +4,7 @@ Agent **skills** for issue-driven delivery and per-stack implementation, in the 
 
 Documentation site: **[gravionlabs.github.io/skills](https://gravionlabs.github.io/skills/)**
 
-Successor of [GravionLabs/apm-hub](https://github.com/GravionLabs/apm-hub) (archived): same skills, installed with `npx skills` instead of APM. Moving over: [after install](skills/skills-install/references/after-install.md#coming-from-apm-hub).
+Successor of [GravionLabs/apm-hub](https://github.com/GravionLabs/apm-hub) (archived): same skills, installed with `npx skills` instead of APM. Moving over: [after install](skills/delivery/skills-install/references/after-install.md#coming-from-apm-hub).
 
 ## Quick start
 
@@ -47,7 +47,7 @@ Commit `skills-lock.json`, `.agents/skills/` and `.claude/skills/` so a fresh cl
 
 ## Groups
 
-A group is a plugin in [`.claude-plugin/marketplace.json`](.claude-plugin/marketplace.json); the same file makes this repository a Claude Code plugin marketplace.
+A group is a folder `skills/<group>/` and a plugin in [`.claude-plugin/marketplace.json`](.claude-plugin/marketplace.json); the same file makes this repository a Claude Code plugin marketplace. Installs are flat by skill name.
 
 | Group           | Skills                                                                                                                                                 |
 | :-------------- | :----------------------------------------------------------------------------------------------------------------------------------------------------- |
@@ -65,7 +65,7 @@ A group is a plugin in [`.claude-plugin/marketplace.json`](.claude-plugin/market
 
 Presets of `skills-install`: `core` (`shared`, `github`, `delivery`, `statusline`) and `all` (every group except `skill-tooling`).
 
-📄 **[Skills](docs/concepts/skills.md)** · 📄 **[Skill list](docs/skill-list.md)** (generated) · 📄 **[Working mode](docs/working-mode.md)** · 📄 **[Delivery](docs/delivery.md)** · 📄 **[External frameworks](docs/frameworks.md)** · 📄 **[AGENTS.md](AGENTS.md)** for layout and conventions
+📄 **[Skills](docs/concepts/skills.md)** · 📄 **[Skill list](docs/skill-list.md)** (generated) · 📄 **[Working mode](docs/working-mode.md)** · 📄 **[Delivery](docs/delivery.md)** · 📄 **[Project config](docs/usage/project-config.md)** · 📄 **[External frameworks](docs/frameworks.md)** · 📄 **[AGENTS.md](AGENTS.md)** for layout and conventions
 
 ## Contributing
 
@@ -74,7 +74,7 @@ Read [CONTRIBUTING.md](CONTRIBUTING.md) before adding or changing a skill.
 ```bash
 pnpm install
 pnpm run check                                        # everything CI runs
-node scripts/check-marketplace.mjs --fix --add <group> <skill>   # list a new skill
+node scripts/check-marketplace.mjs --fix                 # after adding skills/<group>/<name>/
 ```
 
 New or changed skills follow the [skill frontmatter convention](docs/concepts/skill-frontmatter.md).

@@ -2,7 +2,7 @@ import * as fs from 'fs';
 import * as path from 'path';
 import Ajv from 'ajv/dist/2020';
 
-const skillDir = path.resolve(__dirname, '../../../skills/planner');
+const skillDir = path.resolve(__dirname, '../../../skills/delivery/planner');
 const refs = path.join(skillDir, 'references');
 const schema = JSON.parse(fs.readFileSync(path.join(skillDir, 'schema/plan.schema.json'), 'utf-8'));
 const doc = fs.readFileSync(path.join(refs, 'plan-schema.md'), 'utf-8');

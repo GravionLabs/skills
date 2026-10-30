@@ -1,6 +1,6 @@
 # Skill Frontmatter Convention
 
-Every `SKILL.md` in `skills/<name>/` must carry only the frontmatter defined here.
+Every `SKILL.md` in `skills/<group>/<name>/` must carry only the frontmatter defined here.
 The goal: one source file that loads cleanly on **GitHub Copilot**, **Claude Code**, and **OpenCode**
 without per-platform rewriting. The convention follows the
 [agentskills.io specification](https://agentskills.io/specification).

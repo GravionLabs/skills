@@ -3,7 +3,7 @@ import * as path from 'path';
 
 const packages = path.resolve(__dirname, '../../../skills');
 const read = (rel: string) => fs.readFileSync(path.join(packages, rel), 'utf-8');
-const skill = 'setup-biome-husky';
+const skill = 'ts/setup-biome-husky';
 
 describe('Biome setup (#556)', () => {
   it('the template matches the hub conventions', () => {
@@ -23,9 +23,9 @@ describe('Biome setup (#556)', () => {
   });
 
   it('ts skills point to Biome, ng skills state the Prettier choice', () => {
-    expect(read('ts-create-project/SKILL.md')).toContain('`setup-biome-husky`');
-    expect(read('ts-implementation/SKILL.md')).toContain('`setup-biome-husky`');
-    expect(read('ng-implementation/SKILL.md')).toContain('Angular stays on Prettier');
-    expect(read('ng-create-project/SKILL.md')).toContain('Angular stays on Prettier');
+    expect(read('ts/ts-create-project/SKILL.md')).toContain('`ts/setup-biome-husky`');
+    expect(read('ts/ts-implementation/SKILL.md')).toContain('`ts/setup-biome-husky`');
+    expect(read('ng/ng-implementation/SKILL.md')).toContain('Angular stays on Prettier');
+    expect(read('ng/ng-create-project/SKILL.md')).toContain('Angular stays on Prettier');
   });
 });

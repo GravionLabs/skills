@@ -7,7 +7,7 @@ import { useReleaseFixture } from '../../helpers/release-fixture';
 // Resolve the integration branch (release-branches.md steps 2-4, #252, #779) through Get-ReleaseState.ps1 -Mode base,
 // run against the shared release fixture.
 const root = path.resolve(__dirname, '../../..');
-const script = path.join(root, 'skills/github-release/scripts/Get-ReleaseState.ps1');
+const script = path.join(root, 'skills/github/github-release/scripts/Get-ReleaseState.ps1');
 
 const fx = useReleaseFixture();
 const { git, dropRef, resetHeads } = fx;
