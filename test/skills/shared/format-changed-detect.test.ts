@@ -147,13 +147,13 @@ describe.skipIf(!hasPwsh || process.platform === 'win32')('Format-Changed.ps1 de
     expect(JSON.parse(r.stdout)).toEqual([
       {
         tool: 'prettier',
-        extensions: ['.ts', '.tsx', '.js', '.mjs', '.cjs', '.json'],
+        extensions: ['.ts', '.tsx', '.js', '.mjs', '.cjs', '.jsx', '.json', '.css', '.html'],
         requires: 'npx --no-install prettier --version',
         commands: ['npx --no-install prettier --write {files}'],
       },
       {
         tool: 'eslint',
-        extensions: ['.ts', '.tsx', '.js', '.mjs', '.cjs'],
+        extensions: ['.ts', '.tsx', '.js', '.mjs', '.cjs', '.jsx'],
         requires: 'npx --no-install eslint --version',
         commands: ['npx --no-install eslint --fix {files}'],
       },
