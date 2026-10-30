@@ -100,10 +100,10 @@ describe('github-issue creates issues from a plan with blocked-by links', () => 
 });
 
 describe('github-issue without new Task issues (#890)', () => {
-  const ref = (f: string) => read(`github-issue/references/${f}`);
+  const ref = (f: string) => read(`github/github-issue/references/${f}`);
 
   it('has no task-issues.md and keeps the legacy close rule in sub-issues.md', () => {
-    expect(existsSync(path.join(skills, 'github-issue/references/task-issues.md'))).toBe(false);
+    expect(existsSync(path.join(skills, 'github/github-issue/references/task-issues.md'))).toBe(false);
     const legacy = ref('sub-issues.md').split('## Legacy Task issues')[1].split('\n## ')[0];
     expect(legacy).toMatch(/never created/);
     expect(legacy).toContain('gh issue close');
@@ -118,11 +118,11 @@ describe('github-issue without new Task issues (#890)', () => {
   });
 
   it('no reference names task-issues.md or a Refs #<task> footer', () => {
-    const files = readdirSync(path.join(skills, 'github-issue/references'));
+    const files = readdirSync(path.join(skills, 'github/github-issue/references'));
     for (const f of files) {
       expect(ref(f), f).not.toMatch(/task-issues\.md|#<task>/);
     }
-    const pr = read('github-pull-request/SKILL.md');
+    const pr = read('github/github-pull-request/SKILL.md');
     expect(pr).not.toMatch(/#<task>|open Task/);
   });
 });
