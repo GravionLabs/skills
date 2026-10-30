@@ -4,7 +4,7 @@
   Each lesson is fenced as data with its id and evidence. At most 10 lessons of at most 600 characters each; the rest is listed as
   `skipped: <id> (<reason>)`. Lessons that hit the guard keyword list are never printed and are listed as `flagged: <id> (<keyword>)`.
   Without `.agents/lessons/` nothing is printed. Contract: references/contract.md.
-  With -Check every lesson file is validated instead (frontmatter, required keys, status, scope, version, body length, guard);
+  With -Check every lesson file is validated instead (frontmatter, required keys, unique id, status, scope, version, body length, guard);
   one `<file>: <reason>` line per error and exit 1, else exit 0.
 .PARAMETER Role
   The reading role: planner, implement, review or fix.
@@ -101,12 +101,18 @@ function Test-Scope([object]$Scope) {
 
 if ($Check) {
   $errors = [System.Collections.Generic.List[string]]::new()
+  $seen = @{} # id -> file that has it first
   foreach ($file in Get-ChildItem -LiteralPath $dir -Filter '*.md' -File | Sort-Object Name) {
     $name = ".agents/lessons/$($file.Name)"
     $l = Read-Lesson $file.FullName
     if (-not $l) { $errors.Add("${name}: no frontmatter"); continue }
     foreach ($k in 'id', 'scope', 'evidence', 'status', 'version', 'created') {
       if (-not @($l.Fm[$k] | Where-Object { $_ }).Count) { $errors.Add("${name}: missing $k") }
+    }
+    $id = $l.Fm['id']
+    if ($id -is [string] -and $id) {
+      if ($seen.ContainsKey($id)) { $errors.Add("${name}: duplicate id '$id' (also in $($seen[$id]))") }
+      else { $seen[$id] = $name }
     }
     $status = $l.Fm['status']
     if ($status -and $status -notin 'proposed', 'approved', 'retired') { $errors.Add("${name}: unknown status '$status' (proposed, approved or retired)") }

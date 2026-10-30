@@ -131,6 +131,16 @@ describe('retro SKILL.md', () => {
       expect(block).toMatch(/finally \{\s*Pop-Location\s*Remove-Item -Recurse -Force \$tmp/);
     });
 
+    it('fixes errors of its drafts only and reports errors of existing lessons', () => {
+      const block = ref.match(/```powershell\n([\s\S]*?)```/)?.[1] ?? '';
+      expect(block).toContain('draft-<nnn>-<id>.md');
+      expect(block).toContain('existing-<file name>');
+      expect(ref).toMatch(/`draft-…`: fix it in the draft/);
+      expect(ref).toMatch(/`duplicate id` line that names a draft gives the draft a new id/);
+      expect(ref).toMatch(/`existing-…`: an error of a lesson already in the repository/);
+      expect(ref).toContain('never edits an existing lesson');
+    });
+
     it('writes no lesson file and opens no PR without approval', () => {
       expect(text).toMatch(/without the user's approval[^\n]*no PR[^\n]*no lesson file/);
       expect(ref).toMatch(/only after that approval/);
