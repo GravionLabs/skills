@@ -67,7 +67,7 @@ describe.skipIf(!hasPwsh || process.platform === 'win32')('Invoke-DeliverLoop.ps
       path.join(cwd, 'effect.js'),
       `const fs = require('fs'); const f = ${JSON.stringify(state)};
 const s = JSON.parse(fs.readFileSync(f, 'utf8'));
-const first = Object.keys(s.issues).map(Number).find((n) => (s.issues[n].state || 'OPEN') === 'OPEN' && !(s.issues[n].labels || []).some((l) => l.startsWith('needs-')) && !(s.issues[n].blockers || []).some((b) => b.state === 'open') && (s.issues[n].labels || []).includes('pbi'));
+const first = Object.keys(s.issues).map(Number).find((n) => (s.issues[n].state || 'OPEN') === 'OPEN' && !(s.issues[n].labels || []).some((l) => l.startsWith('needs-') || l === 'interactive') && !(s.issues[n].blockers || []).some((b) => b.state === 'open') && (s.issues[n].labels || []).includes('pbi'));
 if (s.effect === 'close-first') s.issues[first].state = 'CLOSED';
 if (s.effect === 'hold-first') s.issues[first].labels.push('needs-decision');
 fs.writeFileSync(f, JSON.stringify(s));`,
@@ -197,7 +197,18 @@ fs.writeFileSync(${JSON.stringify(st)}, JSON.stringify(s));`,
         issues: { 10: pbi(), 11: pbi({ labels: ['pbi', 'needs-refinement'] }) },
         effect: 'hold-first',
       });
-      const r = run(gh, ['-Target', '10', '11']);
+      const r = run(gh, ['-Target', '10,11']);
+      expect(claudeCalls()).toHaveLength(1);
+      expect(r.status).toBe(2);
+      expect(r.stdout).toContain('loop result: blocked');
+    });
+
+    it('counts an interactive PBI as held: one iteration for the ready one, then blocked', () => {
+      const gh = setup({
+        issues: { 10: pbi(), 11: pbi({ labels: ['pbi', 'interactive'] }) },
+        effect: 'close-first',
+      });
+      const r = run(gh, ['-Target', '10,11']);
       expect(claudeCalls()).toHaveLength(1);
       expect(r.status).toBe(2);
       expect(r.stdout).toContain('loop result: blocked');
