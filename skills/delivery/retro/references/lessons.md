@@ -64,3 +64,13 @@ Only the drafts the user approved, and only after that approval:
 3. Open a normal pull request with `github-pull-request`, one line per lesson with its evidence in the body.
 
 The lesson is approved in that pull request: a reviewer sets `status: approved` (a commit in the PR) before the merge. A lesson merged as `proposed` is not loaded. `retro` never sets `approved` itself and never merges the PR.
+
+## Retire ineffective lessons
+
+Load this in step 7 of `retro`. A lesson that did not prevent its finding is noise in every prompt.
+
+1. Read the lessons with `status: approved` in `.agents/lessons/` (the files, not the loaded set); the scope of the analysed issues decides which apply. `proposed` and `retired` lessons are skipped.
+2. For each one, look in the analysed runs at the review findings and fix rounds dated after its `created` date. It is **ineffective** when a finding repeats on the topic of the lesson (same file or rule, or the subject its text names), or fix rounds happened on that topic, in a run after `created`. Runs before `created` are no evidence.
+3. Each ineffective lesson becomes a retire proposal: the file, `status: retired`, `version` plus one, and the evidence (PR, review finding or retro reference of the run). A lesson with no later run on its topic is kept: no evidence is not proof of effect.
+4. Show the proposals as a draft (file name, the changed frontmatter lines, evidence) and ask which to keep. Nothing is edited before approval.
+5. After approval, retiring is a normal PR as under "After approval" (`docs(lessons): retire <id>`); the file stays in `.agents/lessons/`. Deleting lesson files is out of scope.
