@@ -62,6 +62,37 @@ describe('retro SKILL.md', () => {
     expect(text).not.toContain('packages/');
   });
 
+  describe('retiring ineffective lessons', () => {
+    const ref = fs.readFileSync(
+      path.resolve(__dirname, '../../../skills/delivery/retro/references/lessons.md'),
+      'utf8',
+    );
+    const step = text.split('\n').find((l) => l.includes('**Retire lessons.**')) ?? '';
+    const section = ref.split('## Retire ineffective lessons')[1] ?? '';
+
+    it('has a step that checks approved lessons against runs after their created date', () => {
+      expect(step).toContain('`approved` lessons');
+      expect(step).toContain('`created` date');
+      expect(step).toMatch(/repeated finding or fix rounds/);
+      expect(step).toContain('`status: retired`');
+      expect(step).toContain('references/lessons.md');
+    });
+
+    it('proposes retiring on a later repeated finding or fix rounds, with the run as evidence', () => {
+      expect(section).toMatch(/`status: approved`/);
+      expect(section).toMatch(/Runs before `created` are no evidence/);
+      expect(section).toMatch(/fix rounds/);
+      expect(section).toMatch(/evidence/);
+    });
+
+    it('shows the proposal as a draft and retires via a normal PR after approval', () => {
+      expect(section).toMatch(/as a draft/);
+      expect(section).toMatch(/normal PR/);
+      expect(section).toMatch(/Nothing is edited before approval/);
+      expect(section).toMatch(/Deleting lesson files is out of scope/);
+    });
+  });
+
   describe('lesson drafts', () => {
     const ref = fs.readFileSync(
       path.resolve(__dirname, '../../../skills/delivery/retro/references/lessons.md'),
