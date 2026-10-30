@@ -48,6 +48,6 @@ describe('grill-me SKILL.md', () => {
   });
 
   it('is listed in the delivery group of marketplace.json', () => {
-    expect(groupSkills('delivery')).toContain('delivery/grill-me');
+    expect(groupSkills('delivery')).toContain('grill-me');
   });
 });

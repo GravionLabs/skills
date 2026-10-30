@@ -24,9 +24,7 @@ describe('two-stage verify rule (#447, #771)', () => {
   });
 
   it('SKILL.md delegates to implementation in one line', () => {
-    const line = skill
-      .split('\n')
-      .find((l) => l.startsWith('- Verify per `shared/implementation`'))!;
+    const line = skill.split('\n').find((l) => l.startsWith('- Verify per `implementation`'))!;
     expect(line).toBeDefined();
     expect(line).toMatch(/one full run before the pull request/);
     expect(line).toMatch(/never commit or move on with a red run/i);
@@ -35,7 +33,7 @@ describe('two-stage verify rule (#447, #771)', () => {
 
   it('standalone-issue step 9 delegates to implementation and keeps the full-run points', () => {
     const step = standalone.split('\n').find((l) => l.startsWith('9. '))!;
-    expect(step).toContain('Verify per `shared/implementation`');
+    expect(step).toContain('Verify per `implementation`');
     expect(step).toMatch(/ONE full build \+ test suite run/);
     expect(step).toMatch(/after the last fix round/);
     expect(step).toMatch(/never commit red/);

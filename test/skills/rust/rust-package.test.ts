@@ -4,7 +4,7 @@ import * as path from 'path';
 import { groupSkills } from '../../helpers/marketplace';
 
 const root = path.resolve(__dirname, '../../..');
-const pkg = path.join(root, 'skills');
+const pkg = path.join(root, 'skills', 'rust');
 const skills = ['rust-implementation', 'rust-test'];
 const read = (rel: string) => fs.readFileSync(path.join(root, rel), 'utf8');
 
@@ -55,7 +55,7 @@ describe('rust group', () => {
     expect(groupSkills('rust').sort()).toEqual([...skills].sort());
     let refCount = 0;
     for (const name of skills) {
-      const text = read(`skills/${name}/SKILL.md`);
+      const text = read(`skills/rust/${name}/SKILL.md`);
       for (const m of text.matchAll(/`(references\/[\w.-]+)`/g)) {
         refCount++;
         expect(fs.existsSync(path.join(pkg, '.', name, m[1]))).toBe(true);

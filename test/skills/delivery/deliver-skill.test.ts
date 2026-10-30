@@ -54,11 +54,11 @@ describe('deliver SKILL.md', () => {
   });
 
   it('delegates implementation and review to subagents with the existing skills', () => {
-    expect(body).toContain('Load `shared/implementation`');
-    expect(body).toContain('Load `shared/code-review`');
+    expect(body).toContain('Load `implementation`');
+    expect(body).toContain('Load `code-review`');
     expect(body).toContain('at most 10 lines');
     expect(body).toContain('At most 2 fix rounds per PBI, shared by review and CI');
-    expect(body).toContain('`github/github-pull-request`');
+    expect(body).toContain('`github-pull-request`');
   });
 
   it('works on the PBI branch without switching its own checkout', () => {
@@ -87,9 +87,7 @@ describe('deliver SKILL.md', () => {
   });
 
   it('plans a missing breakdown with planner and grill-me in the same session', () => {
-    expect(body).toContain(
-      'load `delivery/planner` (interactive) and `delivery/grill-me` in this session',
-    );
+    expect(body).toContain('load `planner` (interactive) and `grill-me` in this session');
   });
 
   it('prints one progress line per step', () => {
@@ -209,7 +207,7 @@ describe('deliver SKILL.md', () => {
   });
 
   it('is listed in the delivery group of marketplace.json', () => {
-    expect(groupSkills('delivery')).toContain('delivery/deliver');
+    expect(groupSkills('delivery')).toContain('deliver');
   });
 
   it('documents the role defaults and the override key', () => {

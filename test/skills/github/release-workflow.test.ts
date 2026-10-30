@@ -65,7 +65,7 @@ describe('release workflow and template call the same reusable workflow (#489)',
 });
 
 describe('In release status docs (#489)', () => {
-  const read = (p: string) => fs.readFileSync(path.join(root, 'skills', p), 'utf-8');
+  const read = (p: string) => fs.readFileSync(path.join(root, 'skills', 'github', p), 'utf-8');
 
   it('merged-label.md documents PROJECT_TOKEN, scope project and the release/next limit', () => {
     const doc = read('github-release/references/merged-label.md');

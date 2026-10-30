@@ -23,8 +23,8 @@ describe('Biome setup (#556)', () => {
   });
 
   it('ts skills point to Biome, ng skills state the Prettier choice', () => {
-    expect(read('ts/ts-create-project/SKILL.md')).toContain('`ts/setup-biome-husky`');
-    expect(read('ts/ts-implementation/SKILL.md')).toContain('`ts/setup-biome-husky`');
+    expect(read('ts/ts-create-project/SKILL.md')).toContain('`setup-biome-husky`');
+    expect(read('ts/ts-implementation/SKILL.md')).toContain('`setup-biome-husky`');
     expect(read('ng/ng-implementation/SKILL.md')).toContain('Angular stays on Prettier');
     expect(read('ng/ng-create-project/SKILL.md')).toContain('Angular stays on Prettier');
   });

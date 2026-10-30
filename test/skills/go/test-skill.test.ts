@@ -3,7 +3,7 @@ import path from 'node:path';
 import { describe, expect, it } from 'vitest';
 
 const read = (skill: string): string =>
-  readFileSync(path.resolve(__dirname, `../../../skills/${skill}/SKILL.md`), 'utf8');
+  readFileSync(path.resolve(__dirname, `../../../skills/go/${skill}/SKILL.md`), 'utf8');
 const goTest = read('go-test');
 const goImplementation = read('go-implementation');
 const reviewRules = /^## Review rules$([\s\S]*?)(?=^## |(?![\s\S]))/m.exec(goTest)?.[1] ?? '';

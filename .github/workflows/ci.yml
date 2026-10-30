@@ -42,7 +42,7 @@ jobs:
 
       - name: Skill report (sizes, dangling references)
         shell: pwsh
-        run: ./skills/skill-slim/scripts/Get-SkillReport.ps1 -Root . -FailOnDangling
+        run: ./skills/skill-tooling/skill-slim/scripts/Get-SkillReport.ps1 -Root . -FailOnDangling
 
       - name: Check formatting
         run: pnpm run format:check

@@ -54,7 +54,7 @@ describe('github-issue creates issues from a plan with blocked-by links', () => 
 
   it('routes a plan from planner to create-from-plan.md', () => {
     expect(routing).toContain(
-      'A plan from `delivery/planner` (`plan.json`) → `references/create-from-plan.md`',
+      'A plan from `planner` (`plan.json`) → `references/create-from-plan.md`',
     );
   });
 
