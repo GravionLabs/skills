@@ -37,5 +37,4 @@ describe('planner refine definition of ready (#891)', () => {
   it('description triggers on "refine #N"', () => {
     expect(skill.split('---')[1]).toContain('refine #N');
   });
-
 });
