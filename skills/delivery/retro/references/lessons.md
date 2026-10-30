@@ -43,7 +43,7 @@ $script = (Resolve-Path '<lessons-dir>/scripts/Get-Lessons.ps1').Path   # resolv
 $tmp = Join-Path ([IO.Path]::GetTempPath()) "retro-lessons-$PID"
 New-Item -ItemType Directory -Path (Join-Path $tmp '.agents/lessons') -Force | Out-Null
 try {
-  # write each draft to $tmp/.agents/lessons/<nnn>-<id>.md, plus copies of the existing lessons to check id uniqueness
+  # write each draft to $tmp/.agents/lessons/draft-<nnn>-<id>.md and copy each existing lesson to existing-<file name>, so -Check sees duplicate ids
   Push-Location $tmp
   pwsh $script -Check
   $checkExit = $LASTEXITCODE
@@ -53,14 +53,19 @@ try {
 }
 ```
 
-Every `<file>: <reason>` line is fixed in the draft before it is shown; `$checkExit` 0 means the drafts are valid. `lessons` not installed: say so, check the frontmatter by hand against the contract and mark the drafts as unchecked. Then show each draft as text (file name and content) and ask which to keep.
+Sort each `<file>: <reason>` line by its file prefix:
+
+- `draft-…`: fix it in the draft before it is shown. A `duplicate id` line that names a draft gives the draft a new id, never the existing lesson.
+- `existing-…`: an error of a lesson already in the repository. Report it to the user as such, next to the drafts; `retro` never edits an existing lesson for it.
+
+The drafts are valid when every remaining line names an `existing-…` file only, and `$checkExit` 0 means both are valid. `lessons` not installed: say so, check the frontmatter by hand against the contract and mark the drafts as unchecked. Then show each draft as text (file name and content) and ask which to keep.
 
 ## After approval
 
 Only the drafts the user approved, and only after that approval:
 
 1. Branch from the release branch (`github-issue` `references/release-branches.md`), e.g. `docs/<issue>-lessons`.
-2. Write the drafts into `.agents/lessons/` with `status: proposed`, run `Get-Lessons.ps1 -Check` in the repository (exit 0), commit `docs(lessons): <summary>` (`Refs #<issue>` when there is one).
+2. Write the drafts into `.agents/lessons/` with `status: proposed`, run `Get-Lessons.ps1 -Check` in the repository (exit 0, or only lines of existing lessons, which go into the PR body as known errors), commit `docs(lessons): <summary>` (`Refs #<issue>` when there is one).
 3. Open a normal pull request with `github-pull-request`, one line per lesson with its evidence in the body.
 
 The lesson is approved in that pull request: a reviewer sets `status: approved` (a commit in the PR) before the merge. A lesson merged as `proposed` is not loaded. `retro` never sets `approved` itself and never merges the PR.

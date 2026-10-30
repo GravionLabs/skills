@@ -105,6 +105,12 @@ describe.skipIf(!hasPwsh)('Get-Lessons.ps1', () => {
       check[file] = mkRepo(`check-${file}`, { [file]: l });
     // two broken files report one line each
     check.two = mkRepo('check-two', { x: bad['no-id'], y: bad.scope });
+    // the same id in two files, whatever their status
+    check.dup = mkRepo('check-dup', {
+      a: { id: 'utc', scope: '[repo]', body: 'Dates are UTC.' },
+      b: { id: 'other', scope: '[repo]', body: 'Fine.' },
+      c: { id: 'utc', scope: '[repo]', status: 'proposed', body: 'Times are UTC.' },
+    });
   });
   afterAll(() => {
     worker?.close();
@@ -216,6 +222,12 @@ describe.skipIf(!hasPwsh)('Get-Lessons.ps1', () => {
       ".agents/lessons/version.md: version '1.5' is not an integer >= 1\n",
     ],
     ['no frontmatter', 'nofm', 1, '.agents/lessons/nofm.md: no frontmatter\n'],
+    [
+      'a duplicate id',
+      'dup',
+      1,
+      ".agents/lessons/c.md: duplicate id 'utc' (also in .agents/lessons/a.md)\n",
+    ],
     [
       'two broken files',
       'two',

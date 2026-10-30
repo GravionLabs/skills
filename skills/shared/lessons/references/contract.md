@@ -56,7 +56,7 @@ For every approved, matching lesson `Get-Lessons.ps1` first checks the body agai
 
 ## Check
 
-`Get-Lessons.ps1 -Check` validates every `.agents/lessons/*.md`, whatever its status, with the same parser and guard as the loading path: frontmatter present; the keys `id`, `scope`, `evidence`, `status`, `version`, `created` set; `status` one of `proposed`, `approved`, `retired`; `scope` in the forms above; `version` an integer ≥ 1; body at most 600 characters; no guard hit. Each error is one line `<file>: <reason>` (e.g. `.agents/lessons/010-utc-dates.md: missing id`) and the exit code is 1; valid files or no `.agents/lessons/` exit 0. It never changes a file.
+`Get-Lessons.ps1 -Check` validates every `.agents/lessons/*.md`, whatever its status, with the same parser and guard as the loading path: frontmatter present; the keys `id`, `scope`, `evidence`, `status`, `version`, `created` set; `id` not used by another file (`<file>: duplicate id '<id>' (also in <first file>)`, reported on the later file by name); `status` one of `proposed`, `approved`, `retired`; `scope` in the forms above; `version` an integer ≥ 1; body at most 600 characters; no guard hit. Each error is one line `<file>: <reason>` (e.g. `.agents/lessons/010-utc-dates.md: missing id`) and the exit code is 1; valid files or no `.agents/lessons/` exit 0. It never changes a file.
 
 CI step in the consumer repository (`<skill-dir>` is the installed skill, e.g. `.agents/skills/lessons`):
 
