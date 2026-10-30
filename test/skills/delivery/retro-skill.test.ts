@@ -85,6 +85,21 @@ describe('retro SKILL.md', () => {
       expect(ref).toMatch(/temporary folder outside any git repository/);
     });
 
+    it('resolves the Get-Lessons.ps1 path before changing into the temporary folder', () => {
+      const block = ref.match(/```powershell\n([\s\S]*?)```/)?.[1] ?? '';
+      const resolve = block.indexOf(
+        "$script = (Resolve-Path '<lessons-dir>/scripts/Get-Lessons.ps1').Path",
+      );
+      expect(resolve).toBeGreaterThanOrEqual(0);
+      expect(block.indexOf('Push-Location $tmp')).toBeGreaterThan(resolve);
+      expect(block).toContain('pwsh $script -Check');
+      expect(block).not.toContain('pwsh <lessons-dir>');
+      expect(block.indexOf('$checkExit = $LASTEXITCODE')).toBeLessThan(
+        block.indexOf('Pop-Location'),
+      );
+      expect(block).toMatch(/finally \{\s*Pop-Location\s*Remove-Item -Recurse -Force \$tmp/);
+    });
+
     it('writes no lesson file and opens no PR without approval', () => {
       expect(text).toMatch(/without the user's approval[^\n]*no PR[^\n]*no lesson file/);
       expect(ref).toMatch(/only after that approval/);

@@ -39,14 +39,21 @@ created: <today, YYYY-MM-DD>
 `Get-Lessons.ps1 -Check` reads `.agents/lessons/` of the git toplevel, else of the working directory. To check drafts without touching the repository, write them to a new temporary folder outside any git repository and run the check from there (`<lessons-dir>` is the installed `lessons` skill, e.g. `.claude/skills/lessons/`, `~/.claude/skills/lessons/` or `.agents/skills/lessons/`):
 
 ```powershell
+$script = (Resolve-Path '<lessons-dir>/scripts/Get-Lessons.ps1').Path   # resolve before the directory change
 $tmp = Join-Path ([IO.Path]::GetTempPath()) "retro-lessons-$PID"
 New-Item -ItemType Directory -Path (Join-Path $tmp '.agents/lessons') -Force | Out-Null
-# write each draft to $tmp/.agents/lessons/<nnn>-<id>.md, plus copies of the existing lessons to check id uniqueness
-Push-Location $tmp; pwsh <lessons-dir>/scripts/Get-Lessons.ps1 -Check; Pop-Location
-Remove-Item -Recurse -Force $tmp
+try {
+  # write each draft to $tmp/.agents/lessons/<nnn>-<id>.md, plus copies of the existing lessons to check id uniqueness
+  Push-Location $tmp
+  pwsh $script -Check
+  $checkExit = $LASTEXITCODE
+} finally {
+  Pop-Location
+  Remove-Item -Recurse -Force $tmp
+}
 ```
 
-Every `<file>: <reason>` line is fixed in the draft before it is shown; exit 0 means the drafts are valid. `lessons` not installed: say so, check the frontmatter by hand against the contract and mark the drafts as unchecked. Then show each draft as text (file name and content) and ask which to keep.
+Every `<file>: <reason>` line is fixed in the draft before it is shown; `$checkExit` 0 means the drafts are valid. `lessons` not installed: say so, check the frontmatter by hand against the contract and mark the drafts as unchecked. Then show each draft as text (file name and content) and ask which to keep.
 
 ## After approval
 
