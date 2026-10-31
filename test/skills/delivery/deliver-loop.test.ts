@@ -286,6 +286,10 @@ fs.writeFileSync(${JSON.stringify(st)}, JSON.stringify(s));`,
           ],
         },
       },
+      {
+        type: 'assistant',
+        message: { content: [{ type: 'text', text: `#401 review: ${'x'.repeat(90)}` }] },
+      },
     ];
 
     it('logs one line per step with the agent prefix, tool errors and writes every record to the jsonl', async () => {
@@ -314,15 +318,20 @@ fs.writeFileSync(${JSON.stringify(st)}, JSON.stringify(s));`,
       }
     });
 
-    it('owns the herdr display: harness runs without HERDR_ENV, position per progress line, cleared at the end', async () => {
+    it('owns the herdr display: harness runs without HERDR_ENV, pane tokens with the position per progress line, cleared at the end (#16)', async () => {
       const gh = setup({ issues: { 401: pbi() }, effect: 'close-first', stream });
       await run(gh, ['-Target', '401'], { HERDR_ENV: '1', HERDR_PANE_ID: 'p7' });
       expect(read('claude-calls.txt')).toContain('herdr_env=[]');
       const calls = read('herdr-calls.txt').trim().split('\n');
-      expect(calls).toContain(
-        'pane report-metadata p7 --source deliver --display-agent deliver 1/1 #401 pr: opened #55',
-      );
-      expect(calls.at(-1)).toBe('pane report-metadata p7 --source deliver --clear-display-agent');
+      const tokens = '--ttl-ms 3600000';
+      expect(calls).toEqual([
+        `pane report-metadata p7 --source deliver --token deliver=#401 --token deliver_step=1/1 starting ${tokens}`,
+        `pane report-metadata p7 --source deliver --token deliver=#401 --token deliver_step=1/1 pr: opened #55 --token deliver_pr=#55 ${tokens}`,
+        // the PR token stays for later steps; the step value is cut at 80 characters
+        `pane report-metadata p7 --source deliver --token deliver=#401 --token deliver_step=1/1 review: ${'x'.repeat(67)}… --token deliver_pr=#55 ${tokens}`,
+        'pane report-metadata p7 --source deliver --clear-token deliver --clear-token deliver_step --clear-token deliver_pr',
+      ]);
+      expect(calls.join('\n')).not.toContain('display-agent');
     });
 
     it('clears the herdr display when the loop fails', async () => {
@@ -330,7 +339,7 @@ fs.writeFileSync(${JSON.stringify(st)}, JSON.stringify(s));`,
       const r = await run(gh, ['-Target', '10,99'], { HERDR_ENV: '1', HERDR_PANE_ID: 'p7' });
       expect(r.status).not.toBe(0);
       expect(read('herdr-calls.txt').trim()).toBe(
-        'pane report-metadata p7 --source deliver --clear-display-agent',
+        'pane report-metadata p7 --source deliver --clear-token deliver --clear-token deliver_step --clear-token deliver_pr',
       );
     });
   });
