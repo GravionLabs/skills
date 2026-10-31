@@ -142,9 +142,10 @@ describe('deliver SKILL.md', () => {
     expect(body).toContain('`#<nr> <step>: <result>`');
   });
 
-  it('no longer starts workflow.js', () => {
-    expect(body).toContain('this skill does not start it');
-    expect(fs.existsSync(path.join(skillDir, 'workflow.js'))).toBe(true);
+  it('ships no workflow.js and does not mention it (#57)', () => {
+    expect(fs.existsSync(path.join(skillDir, 'workflow.js'))).toBe(false);
+    expect(text).not.toContain('workflow.js');
+    expect(roles).not.toContain('workflow.js');
   });
 
   describe('herdr progress (#855)', () => {
@@ -380,7 +381,7 @@ describe('config schema deliver key', () => {
   );
   const roleNames = Object.keys(schema.properties.deliver.properties.roles.properties);
 
-  it('knows exactly the roles the workflow uses', () => {
+  it('knows exactly the roles of references/roles.md', () => {
     expect(roleNames.sort()).toEqual(
       ['ci', 'create', 'fix', 'gate', 'implement', 'plan', 'pr', 'review', 'select'].sort(),
     );
