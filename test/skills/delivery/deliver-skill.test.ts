@@ -114,6 +114,25 @@ describe('deliver SKILL.md', () => {
     expect(body).toContain('gh issue close <nr>');
   });
 
+  it('merges into release/next without asking, only on a clean review and green checks (#78)', () => {
+    const merge = body.slice(body.indexOf('**Merge.**'), body.indexOf('**Release.**'));
+    expect(merge).toContain('Without asking, in both modes');
+    expect(merge).toContain('no blocking finding or unmet criterion');
+    expect(merge).toContain('the required checks are green');
+    expect(body).not.toContain('ask before merging');
+  });
+
+  it('ends a fully delivered milestone with the release PR for human review (#78)', () => {
+    const release = body.slice(body.indexOf('**Release.**'), body.indexOf('## Pause rules'));
+    expect(release).toContain('Only with `--milestone`');
+    expect(release).toContain('gh issue list --milestone <name> --label pbi --state open');
+    expect(release).toContain('`github-release` and run `finish`');
+    expect(release).toContain('`auto_merge: false`');
+    expect(release).toContain('never merge it');
+    expect(body).toContain('Never merge the release PR into `main`');
+    expect(body).toContain('the release PR of step 9');
+  });
+
   it('keeps CI watch output unbuffered', () => {
     const ci = body.slice(body.indexOf('**CI.**'), body.indexOf('**Merge.**'));
     expect(ci).toContain('without a pipe or output filter');
