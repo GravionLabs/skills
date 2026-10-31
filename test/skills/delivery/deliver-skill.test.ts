@@ -70,6 +70,13 @@ describe('deliver SKILL.md', () => {
     expect(step('**Fix.**', '**PR.**')).toContain('loads `implementation` with role `fix`');
   });
 
+  it('writes the review result file per schema in step 4 (#53)', () => {
+    const step4 = body.slice(body.indexOf('**Review.**'), body.indexOf('**Fix.**'));
+    expect(step4).toContain('<git-common-dir>/.agents/state/review-<nr>.json');
+    expect(step4).toContain('schema/deliver-review.schema.json');
+    expect(step4).toContain('`review.schema.json`');
+  });
+
   it('puts Get-Lessons.ps1 on every allowlist (#25)', () => {
     expect(permissions).toContain('`pwsh` with `Get-Lessons.ps1` of the `lessons` skill');
     expect(permissions).toContain('"Bash(pwsh .claude/skills/lessons/scripts/Get-Lessons.ps1:*)"');
