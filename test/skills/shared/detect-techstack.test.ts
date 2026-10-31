@@ -121,6 +121,37 @@ describe.skipIf(!hasPwsh)('Detect-TechStack.ps1', () => {
     expect(r.packageManager).toEqual(['cargo']);
   });
 
+  it('reports aspire for an SDK-style AppHost csproj (attribute and element form)', async () => {
+    write('src/AppHost/AppHost.csproj', '<Project Sdk="Aspire.AppHost.Sdk/13.6.0"></Project>');
+    let r = await detect();
+    expect(r.languages).toEqual(['dotnet']);
+    expect(r.frameworks).toEqual(['dotnet', 'aspire']);
+    fs.rmSync(path.join(dir, 'src'), { recursive: true });
+    write(
+      'AppHost.csproj',
+      '<Project Sdk="Microsoft.NET.Sdk"><Sdk Name="Aspire.AppHost.Sdk" Version="13.6.0" /></Project>',
+    );
+    r = await detect();
+    expect(r.frameworks).toEqual(['dotnet', 'aspire']);
+  });
+
+  it('reports aspire for a file-based apphost.cs without any csproj', async () => {
+    write(
+      'apphost.cs',
+      '#:sdk Aspire.AppHost.Sdk@13.6.0\nvar b = DistributedApplication.CreateBuilder(args);\n',
+    );
+    const r = await detect();
+    expect(r.languages).toEqual(['dotnet']);
+    expect(r.frameworks).toEqual(['dotnet', 'aspire']);
+  });
+
+  it('does not report aspire for a plain .NET project or an ordinary .cs file', async () => {
+    write('App.csproj', '<Project Sdk="Microsoft.NET.Sdk"></Project>');
+    write('Program.cs', 'Console.WriteLine("hi");\n');
+    const r = await detect();
+    expect(r.frameworks).toEqual(['dotnet']);
+  });
+
   it('reports react, next, vue and svelte from dependencies and devDependencies, skills stay ts', async () => {
     write(
       'package.json',
