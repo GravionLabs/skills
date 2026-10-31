@@ -10,7 +10,7 @@
   Observability: every stream record goes to .agents/deliver-loop/<run>/<nr>.jsonl (<nr> is the first PBI that was ready
   at the start of the iteration), a summary line per step to .agents/deliver-loop.log (plain) and stdout, the same line
   with ANSI colors to .agents/deliver-loop.ansi.log, desktop notifications for the attention steps (macOS osascript,
-  Windows toast), the herdr pane display when HERDR_ENV=1 and, in herdr on a terminal, a split pane labeled deliver-log
+  Windows toast), the herdr pane tokens deliver, deliver_step, deliver_pr when HERDR_ENV=1 and, in herdr on a terminal, a split pane labeled deliver-log
   below the session that tails the log (LogPane.ps1; never closed by the loop).
   Run it from the repository root. Exit code: 0 done or max reached, 1 no progress, 2 blocked, 64 bad arguments.
 .PARAMETER Target
@@ -95,12 +95,22 @@ function Send-Notice([string]$text) {
   } catch { Write-Verbose "notification failed: $_" }
 }
 
-function Set-Pane([string]$text, [switch]$Clear) {
+$PanePbi = ''
+$PanePr = ''
+function Set-Pane([string]$Nr = '', [string]$Step = '', [switch]$Clear) {
+  # herdr pane tokens (#16): deliver=#<nr>, deliver_step=<pos>/<total> <step>[: <result>], deliver_pr=#<pr>; values <= 80 chars
   if (-not $Pane) { return }
-  try {
-    if ($Clear) { & herdr pane report-metadata $Pane --source deliver --clear-display-agent 2>$null | Out-Null }
-    else { & herdr pane report-metadata $Pane --source deliver --display-agent $text 2>$null | Out-Null }
-  } catch { Write-Verbose "herdr failed: $_" }
+  if ($Clear) {
+    $tokenArgs = @('--clear-token', 'deliver', '--clear-token', 'deliver_step', '--clear-token', 'deliver_pr')
+  } else {
+    if ($Nr -ne $script:PanePbi) { $script:PanePbi = $Nr; $script:PanePr = '' }
+    if ($Step -match '^\d+/\d+ pr: .*?#(\d+)') { $script:PanePr = $Matches[1] }
+    $value = if ($Step.Length -gt 80) { $Step.Substring(0, 79) + '…' } else { $Step }
+    $tokenArgs = @('--token', "deliver=#$Nr", '--token', "deliver_step=$value")
+    if ($script:PanePr) { $tokenArgs += @('--token', "deliver_pr=#$($script:PanePr)") }
+    $tokenArgs += @('--ttl-ms', '3600000')
+  }
+  try { & herdr pane report-metadata $Pane --source deliver @tokenArgs 2>$null | Out-Null } catch { Write-Verbose "herdr failed: $_" }
 }
 
 function Get-Json([string[]]$ghArgs) {
@@ -203,7 +213,7 @@ function Read-Record([string]$line, [int]$position, [int]$total) {
       if ($prefix) { continue }
       foreach ($l in ($c.text -split "`r?`n")) {
         if ($l -match '^#(\d+) ([\w-]+): (.*)$') {
-          Set-Pane "deliver $position/$total #$($Matches[1]) $($Matches[2]): $($Matches[3])"
+          Set-Pane $Matches[1] "$position/$total $($Matches[2]): $($Matches[3])"
           $why = Get-Attention $Matches[2] $Matches[3]
           if ($why) { Send-Notice "#$($Matches[1]) $why" }
         }
@@ -222,7 +232,7 @@ function Invoke-Iteration([int]$n, [int]$total, $state) {
   if ($Milestone) { $targets += @('--milestone', $Milestone) }
   $prompt = "/deliver $($targets -join ' ') --unattended --max 1"
   Write-Step "iteration $n/$total start: $prompt"
-  Set-Pane "deliver $n/$total starting"
+  Set-Pane "$($state.Ready[0])" "$n/$total starting"
   $saved = $env:HERDR_ENV
   $env:HERDR_ENV = ''
   try {
@@ -263,6 +273,6 @@ try {
   Write-Step "loop result: $result ($i iteration(s), $($state.Open) PBI(s) open)" $color
   Send-Notice "loop result: $result"
 } finally {
-  Set-Pane '' -Clear
+  Set-Pane -Clear
 }
 exit $code
