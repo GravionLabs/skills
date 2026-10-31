@@ -12,6 +12,7 @@ skills/delivery/skills-install/scripts/groups.json   # copy of the groups for th
 scripts/check-marketplace.mjs  # group folders ⇄ marketplace.json ⇄ groups.json; --fix
 scripts/generate-skill-list.mjs # docs/skill-list.md (gitignored) for the site
 scripts/Invoke-ScriptAnalysis.ps1 # PSScriptAnalyzer over skills/, scripts/, .github/
+scripts/Link-Skills.ps1        # links skills/<group>/<name> as project skills into .claude/skills/ and .agents/skills/; -Remove
 scripts/Invoke-TriggerEvals.ps1 # skill trigger evals (evals/skill-triggers.json, scorer skill-trigger-score.mjs, docs/usage/trigger-evals.md)
 test/skills/<group>/           # Vitest tests of skill content and scripts
 test/repo/ test/helpers/       # repository checks (workflows), shared test helpers
