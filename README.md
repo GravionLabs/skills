@@ -51,7 +51,7 @@ A group is a folder `skills/<group>/` and a plugin in [`.claude-plugin/marketpla
 
 | Group           | Skills                                                                                                                                                 |
 | :-------------- | :----------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `shared`        | `implementation`, `detect-techstack`, `diagnose`, `code-review`, `check-prerequisites`, `lessons`                                                      |
+| `shared`        | `implementation`, `detect-techstack`, `diagnose`, `code-review`, `check-prerequisites`, `lessons`, `adr`                                               |
 | `delivery`      | `deliver`, `planner`, `grill-me`, `retro`, `skills-install`                                                                                            |
 | `github`        | `github-issue`, `github-pull-request`, `github-release`                                                                                                |
 | `dotnet`        | `dotnet-implementation`, `dotnet-test`, `dotnet-create-solution`, `dotnet-mcp-server-generator`; `skills-install` adds `dotnet/skills` (dotnet plugin) |
