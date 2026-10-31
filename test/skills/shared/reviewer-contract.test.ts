@@ -74,3 +74,34 @@ describe('code-review skill', () => {
     expect(ref).not.toMatch(/\.agents|\.dromos|<state>/);
   });
 });
+
+describe('governance rules of code-review', () => {
+  const rules = read('references/governance.md');
+
+  it('accepts the optional rule on a blocking item and rejects other values', () => {
+    expect(validate({ blocking: [{ ...finding, rule: 'adr-missing' }], notes: [] })).toBe(true);
+    expect(validate({ blocking: [{ ...finding, rule: 'spec-drift' }], notes: [] })).toBe(true);
+    expect(validate({ blocking: [{ ...finding, rule: 'other' }], notes: [] })).toBe(false);
+  });
+
+  it('names the rule in the reviewer contract', () => {
+    const ref = read('references/reviewer-contract.md');
+    expect(ref).toContain('`rule`');
+    expect(ref).toContain('adr-missing');
+    expect(ref).toContain('spec-drift');
+  });
+
+  it('points at governance.md in one line and stays within 100 lines', () => {
+    const skill = read('SKILL.md');
+    expect(skill.split('\n').filter((l) => l.includes('references/governance.md'))).toHaveLength(1);
+    expect(skill).toMatch(/`governance`/);
+    expect(skill.split('\n').length).toBeLessThanOrEqual(100);
+  });
+
+  it('states the adr-missing and spec-drift rules', () => {
+    expect(rules).toContain('Get-GovernanceMatches.ps1');
+    expect(rules).toMatch(/## adr-missing[\s\S]*blocking[\s\S]*`skipLabels`/);
+    expect(rules).toMatch(/## spec-drift[\s\S]*`specMode: require`[\s\S]*\*\*note\*\*/);
+    expect(rules).toContain('no spec change needed: <that spec>');
+  });
+});

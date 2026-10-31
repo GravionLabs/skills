@@ -1,0 +1,22 @@
+[
+  { "glob": "infra/**", "path": "infra/main.tf", "match": true },
+  { "glob": "infra/**", "path": "infra/a/b/c.tf", "match": true },
+  { "glob": "infra/**", "path": "infrastructure/a.tf", "match": false },
+  { "glob": "infra/**", "path": "src/infra/a.tf", "match": false },
+  { "glob": "docker-compose.yml", "path": "docker-compose.yml", "match": true },
+  { "glob": "docker-compose.yml", "path": "sub/docker-compose.yml", "match": false },
+  { "glob": "*.yml", "path": "ci.yml", "match": true },
+  { "glob": "*.yml", "path": "dir/ci.yml", "match": false },
+  { "glob": "apps/*/Dockerfile", "path": "apps/bff/Dockerfile", "match": true },
+  { "glob": "apps/*/Dockerfile", "path": "apps/bff/sub/Dockerfile", "match": false },
+  { "glob": "**/Dockerfile", "path": "Dockerfile", "match": true },
+  { "glob": "**/Dockerfile", "path": "apps/bff/Dockerfile", "match": true },
+  { "glob": "**/*.sql", "path": "db/migrations/001.sql", "match": true },
+  { "glob": "apps/**/src/*.ts", "path": "apps/a/b/src/x.ts", "match": true },
+  { "glob": "apps/**/src/*.ts", "path": "apps/src/x.ts", "match": true },
+  { "glob": "apps/**/src/*.ts", "path": "apps/a/src/x/y.ts", "match": false },
+  { "glob": "file?.txt", "path": "file1.txt", "match": true },
+  { "glob": "file?.txt", "path": "file12.txt", "match": false },
+  { "glob": "a?b", "path": "a/b", "match": false },
+  { "glob": "lib.v1/**", "path": "libXv1/a", "match": false }
+]
