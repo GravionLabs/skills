@@ -37,6 +37,7 @@
     "rust-test"
   ],
   "shared": [
+    "adr",
     "check-prerequisites",
     "code-review",
     "detect-techstack",

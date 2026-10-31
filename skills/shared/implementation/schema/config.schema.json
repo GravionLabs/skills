@@ -16,6 +16,32 @@
         }
       ]
     },
+    "governance": {
+      "description": "Architecture decisions and specs; read by adr, github-issue and the CI check.",
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "adrDir": { "type": "string", "minLength": 1, "default": "docs/adr" },
+        "adrPaths": {
+          "description": "Globs of paths whose change needs an ADR.",
+          "type": "array",
+          "items": { "type": "string", "minLength": 1 },
+          "default": []
+        },
+        "specDir": { "type": "string", "minLength": 1, "default": "docs/specs" },
+        "specMap": {
+          "description": "Glob of source paths -> spec file.",
+          "type": "object",
+          "additionalProperties": { "type": "string", "minLength": 1 }
+        },
+        "specMode": { "enum": ["warn", "require"], "default": "warn" },
+        "skipLabels": {
+          "type": "array",
+          "items": { "type": "string", "minLength": 1 },
+          "default": ["skip-adr"]
+        }
+      }
+    },
     "deliver": {
       "description": "Settings of the deliver workflow.",
       "type": "object",

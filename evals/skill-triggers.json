@@ -67,5 +67,8 @@
     "shouldNotTrigger": ["Create a PR for my feature branch", "Break the epic into features and size them"] },
   { "skill": "grill-me",
     "shouldTrigger": ["Grill me on the open decisions of issue #42", "Ask me every open question of this plan before we start"],
-    "shouldNotTrigger": ["Split Feature #120 into PBIs with sizes", "Write the release notes for 3.3.0"] }
+    "shouldNotTrigger": ["Split Feature #120 into PBIs with sizes", "Write the release notes for 3.3.0"] },
+  { "skill": "adr",
+    "shouldTrigger": ["Write an ADR for moving the realtime service to its own container", "Record this decision as an ADR and supersede ADR 0020 in part"],
+    "shouldNotTrigger": ["Update the spec of the BFF", "Plan Feature #64 into PBIs"] }
 ]
