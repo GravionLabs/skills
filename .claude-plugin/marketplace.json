@@ -101,6 +101,7 @@
       "source": "./",
       "strict": false,
       "skills": [
+        "./skills/dotnet/dotnet-aspire",
         "./skills/dotnet/dotnet-create-solution",
         "./skills/dotnet/dotnet-implementation",
         "./skills/dotnet/dotnet-mcp-server-generator",

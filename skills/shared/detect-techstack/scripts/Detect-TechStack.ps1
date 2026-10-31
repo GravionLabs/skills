@@ -173,6 +173,23 @@ if ($csprojFiles -or $slnFiles -or $slnxFiles) {
   $frameworks.Add("dotnet")
 }
 
+# --- Aspire AppHost: SDK-style csproj or file-based apphost (#:sdk directive, .NET 10) ---
+$aspireRx = 'Aspire\.AppHost\.Sdk'
+$aspireFound = $false
+foreach ($f in @($csprojFiles)) {
+  if ($f -and (Get-Content -LiteralPath $f.FullName -Raw -ErrorAction SilentlyContinue) -match $aspireRx) { $aspireFound = $true; break }
+}
+if (-not $aspireFound) {
+  foreach ($f in @(Get-IndicatorFile -Path $rootFull -Filter "*.cs" -Depth 5 | Where-Object { $_.FullName -notmatch '[\\/](bin|obj)[\\/]' })) {
+    if ((Get-Content -LiteralPath $f.FullName -Raw -ErrorAction SilentlyContinue) -match '(?m)^#:sdk\s+Aspire\.AppHost\.Sdk') { $aspireFound = $true; break }
+  }
+}
+if ($aspireFound) {
+  if (-not $languages.Contains("csharp")) { $languages.Add("csharp") }
+  if (-not $frameworks.Contains("dotnet")) { $frameworks.Add("dotnet") }
+  $frameworks.Add("aspire")
+}
+
 # --- Rust (+ Tauri 1 and 2) ---
 # build output and vendored crates carry their own Cargo.toml; they do not make the project Rust
 if (Get-IndicatorFile -Path $rootFull -Filter "Cargo.toml" -Depth 5 |
