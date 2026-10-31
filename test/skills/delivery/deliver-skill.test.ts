@@ -434,4 +434,51 @@ describe('config schema deliver key', () => {
     );
     expect(tiered.sort()).toEqual(['fix', 'implement']);
   });
+
+  describe('governance (#87)', () => {
+    const gov = fs.readFileSync(path.join(skillDir, 'references/governance.md'), 'utf8');
+    const docs = fs.readFileSync(path.resolve(__dirname, '../../../docs/delivery.md'), 'utf8');
+    const body = text.slice(text.indexOf('\n---', 3) + 4);
+    const sect = (a: string, b: string) => body.slice(body.indexOf(a), body.indexOf(b));
+
+    it('points to the reference with one line', () => {
+      expect(body).toMatch(/has `governance`: load `references\/governance\.md`/);
+      expect(gov).toMatch(/Loaded only when `\.agents\/config\.json` has the `governance` key/);
+    });
+
+    it('the reference defines the decision PBI and the human steps', () => {
+      expect(gov).toContain('`needs-decision`');
+      expect(gov).toContain('ADR (the next free ADR number) with Status: Proposed');
+      expect(gov).toMatch(/never writes the ADR/);
+      expect(gov).toMatch(
+        /writes the ADR with the `adr` skill, accepts it, removes `needs-decision` and merges/,
+      );
+      expect(gov).toContain('spec_notes');
+    });
+
+    it('Select reports the decision hint and the report lists it as paused', () => {
+      expect(sect('1. **Select.**', '2. **Resume.**')).toContain(
+        '`#<nr> select: decision, write the ADR with adr`',
+      );
+      expect(sect('## Report', '## Rules')).toContain('decision, write the ADR with adr');
+    });
+
+    it('step 4 passes labels and notes, step 6 passes spec_notes', () => {
+      const s4 = sect('4. **Review.**', '5. **Fix.**');
+      expect(s4).toMatch(/issue labels <labels> and implementer `notes\[\]`/);
+      const s6 = sect('6. **PR.**', '7. **CI.**');
+      expect(s6).toMatch(
+        /`spec_notes` \(the implementer `notes\[\]` lines starting with `no spec change needed:`\)/,
+      );
+    });
+
+    it('docs/delivery.md describes the decision PBI and the spec note', () => {
+      expect(docs).toContain('## Decision PBIs and spec notes');
+      expect(docs).toContain('`## Spec`');
+    });
+
+    it('stays within 100 lines', () => {
+      expect(text.split('\n').length).toBeLessThanOrEqual(100);
+    });
+  });
 });
