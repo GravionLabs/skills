@@ -321,13 +321,47 @@ describe('deliver permissions.md (#862)', () => {
 
   it('Copilot CLI: --allow-tool shell entries', () => {
     const copilot = section('Copilot CLI');
+    for (const sub of [
+      'fetch',
+      'switch',
+      'worktree',
+      'add',
+      'commit',
+      'rebase',
+      'push',
+      'diff',
+      'ls-remote',
+      'branch',
+    ])
+      expect(copilot).toContain(`--allow-tool 'shell(git ${sub})'`);
+    expect(copilot).not.toContain("--allow-tool 'shell(git)'");
     for (const flag of [
-      "--allow-tool 'shell(git)'",
       "--allow-tool 'shell(gh pr)'",
+      "--allow-tool 'shell(gh label)'",
+      "--allow-tool 'shell(gh repo view)'",
       "--deny-tool 'shell(git push --force)'",
     ])
       expect(copilot).toContain(flag);
     expect(copilot).not.toContain("'shell(pnpm)'");
+  });
+
+  it('Copilot CLI: notes on git subcommands, deny lines, timeout, model and herdr', () => {
+    const copilot = section('Copilot CLI');
+    expect(copilot).toContain('`shell(git)` covered read-only subcommands only');
+    expect(copilot).toContain('did not block `git push --force --dry-run origin release/next`');
+    expect(copilot).toContain('`COPILOT_TASK_WAIT_TIMEOUT_SECONDS=3600`');
+    expect(copilot).toContain('`copilot --resume=<id> -p "continue"`');
+    expect(copilot).toContain(
+      '`~/.copilot/settings.json` (`subagents.agents.general-purpose.model`)',
+    );
+    expect(copilot).toContain('`herdr pane report-metadata` with quoted arguments was denied');
+  });
+
+  it('the gh row of the table names label and repo view', () => {
+    expect(permissions).toMatch(
+      /`gh` \(`auth status`, `api`, `issue`, `pr`, `label`, `repo view`\)/,
+    );
+    expect(permissions).toMatch(/`ls-remote`, `branch`\)/);
   });
 
   it('contains no quoted $(…) substitution in its examples', () => {
