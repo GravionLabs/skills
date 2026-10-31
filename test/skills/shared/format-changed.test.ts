@@ -14,8 +14,9 @@ vi.setConfig({ testTimeout: 30000, hookTimeout: 30000 });
 describe.skipIf(!hasPwsh || process.platform === 'win32')('Format-Changed.ps1', () => {
   let worker: PwshWorker;
   let tmp: string;
-  // fake tools on PATH: `ok` probes (`--version`) pass, `bad` probes fail, `gitOnly` has nothing but git
-  const bins = { ok: '', bad: '', gitOnly: '' };
+  // fake tools on PATH: `ok` probes (`--version`) pass, `bad` probes fail, `gitOnly` has nothing but git, `diffFail` has a
+  // git whose `diff HEAD` fails (everything else runs the real git)
+  const bins = { ok: '', bad: '', gitOnly: '', diffFail: '' };
   // fixture repos shared by all cases: the cases only write the call log (outside every repo) and .agents/ of `cfg`
   const repo = {
     langs: '',
@@ -84,6 +85,13 @@ describe.skipIf(!hasPwsh || process.platform === 'win32')('Format-Changed.ps1', 
     bins.gitOnly = mkdir('bin-git');
     const gitPath = spawnSync('sh', ['-c', 'command -v git'], { encoding: 'utf8' }).stdout.trim();
     fs.symlinkSync(gitPath, path.join(bins.gitOnly, 'git'));
+    bins.diffFail = mkdir('bin-difffail');
+    fs.writeFileSync(
+      path.join(bins.diffFail, 'git'),
+      `#!/bin/sh\ncase " $* " in *" diff "*" HEAD "*) echo 'fatal: bad object HEAD' >&2; exit 128;; esac\n` +
+        `exec ${JSON.stringify(gitPath)} "$@"\n`,
+      { mode: 0o755 },
+    );
 
     // one changed file per language; sub/biome.json is no Biome project (not at the toplevel), prettier takes it as json
     repo.langs = mkRepo(
@@ -159,8 +167,9 @@ describe.skipIf(!hasPwsh || process.platform === 'win32')('Format-Changed.ps1', 
   };
   const ts = ['-Language', 'ts', '-Extensions', '.ts'];
 
-  // built-in defaults: a format run per language; -Check runs once per toolchain (prettier/eslint, Biome), the other check
-  // commands are data pinned by format-defaults-sync. The Biome rows run in the repo with biome.jsonc at the toplevel
+  // built-in defaults, one row per step shape (#56: data variants dropped for the 15 s budget): ts and ng (two steps, their own
+  // extensions), go (no probe), Biome (one step, Markdown included). py runs in format-changed-detect; the py, dotnet, rust and
+  // ng Biome commands are the same table data, pinned by format-defaults-sync. -Check runs once per toolchain
   const defaults = [
     [
       'ts',
@@ -188,21 +197,6 @@ describe.skipIf(!hasPwsh || process.platform === 'win32')('Format-Changed.ps1', 
         'npx --no-install eslint a.ts',
       ],
     ],
-    [
-      'py',
-      'langs',
-      1,
-      ['uv run ruff format e.py', 'uv run ruff check --fix e.py'],
-      ['uv run ruff format --check e.py', 'uv run ruff check e.py'],
-    ],
-    [
-      'dotnet',
-      'langs',
-      1,
-      ['dotnet format --include F.cs'],
-      ['dotnet format --verify-no-changes --include F.cs'],
-    ],
-    ['rust', 'langs', 1, ['cargo fmt -- src/lib.rs'], ['cargo fmt -- --check src/lib.rs']],
     ['go', 'langs', 1, ['gofmt -w cmd/app/main.go'], ['gofmt -l cmd/app/main.go']],
     [
       'ts',
@@ -210,21 +204,6 @@ describe.skipIf(!hasPwsh || process.platform === 'win32')('Format-Changed.ps1', 
       6,
       ['npx biome check --write --no-errors-on-unmatched a.html b.ts c.json g.jsx h.css n.md'],
       ['npx biome check --no-errors-on-unmatched a.html b.ts c.json g.jsx h.css n.md'],
-    ],
-    [
-      'ng',
-      'biome',
-      5,
-      ['npx biome check --write --no-errors-on-unmatched a.html b.ts c.json h.css n.md'],
-      ['npx biome check --no-errors-on-unmatched a.html b.ts c.json h.css n.md'],
-    ],
-    // no -Language: Markdown and YAML alone are mapped to ts in a Biome project
-    [
-      'ts',
-      'mdbiome',
-      3,
-      ['npx biome check --write --no-errors-on-unmatched ci.yml n.md v.yaml'],
-      ['npx biome check --no-errors-on-unmatched ci.yml n.md v.yaml'],
     ],
   ] as const;
   it.each(defaults)('default %s (%s repo) runs its format commands', async (lang, r, n, format) => {
@@ -535,6 +514,15 @@ describe.skipIf(!hasPwsh || process.platform === 'win32')('Format-Changed.ps1', 
     expect(r.status).not.toBe(0);
     expect(r.stdout).toBe('');
     expect(r.stderr).toMatch(/no-such-ref|unknown revision/);
+    expect(calls()).toEqual([]);
+  });
+
+  it('fails with the git error when the diff against an existing HEAD fails, nothing run', async () => {
+    const env = { PATH: `${bins.diffFail}:${bins.ok}:${process.env.PATH}` };
+    const r = await go(repo.work, ['-Extensions', '.ts', '-Command', 'fmt {files}'], bins.ok, env);
+    expect(r.status).toBe(128);
+    expect(r.stdout).toBe('');
+    expect(r.stderr).toContain('fatal: bad object HEAD');
     expect(calls()).toEqual([]);
   });
 
