@@ -5,8 +5,8 @@ An `--unattended` run stops at the first permission prompt (spike #823, `docs/sp
 | Commands                                                                                                                                                                                          | Used by                                                               |
 | :------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ | :-------------------------------------------------------------------- |
 | the verify commands of the repository's `AGENTS.md` (build, test, format, lint)                                                                                                                   | implement and fix subagents                                           |
-| `git` (`fetch`, `switch`, `worktree`, `add`, `commit`, `rebase`, `push`, `diff`, `ls-remote`)                                                                                                     | all                                                                   |
-| `gh` (`auth status`, `api`, `issue`, `pr`)                                                                                                                                                        | this session, `github-pull-request`                                   |
+| `git` (`fetch`, `switch`, `worktree`, `add`, `commit`, `rebase`, `push`, `diff`, `ls-remote`, `branch`)                                                                                           | all                                                                   |
+| `gh` (`auth status`, `api`, `issue`, `pr`, `label`, `repo view`)                                                                                                                                  | this session, `github-pull-request`                                   |
 | `pwsh` with `scripts/Remove-PbiWorktrees.ps1` of this skill: the path of the installed skill, e.g. `.claude/skills/deliver/…` in the project or `~/.claude/skills/deliver/…` for a global install | this session, step 8 (cleanup)                                        |
 | `pwsh` with `Get-Lessons.ps1` of the `lessons` skill: `.claude/skills/lessons/…`, `~/.claude/skills/lessons/…` or `.agents/skills/lessons/…`                                                      | implement, review and fix subagents (`implementation`, `code-review`) |
 | `printenv HERDR_ENV`, `printenv HERDR_PANE_ID`, `herdr pane report-metadata`                                                                                                                      | only when the run is inside a herdr pane (`references/herdr.md`)      |
@@ -86,15 +86,26 @@ Headless: `opencode run "/deliver <nr> --unattended"`. A rule left at `ask` stop
 
 ## Copilot CLI
 
-No project file: the allowlist is passed per run with `--allow-tool`. `shell(<command>)` allows the command with every subcommand and argument; `--deny-tool` wins over `--allow-tool`. `write` allows file edits.
+No project file: the allowlist is passed per run with `--allow-tool`. `shell(<command>)` should allow the command with every subcommand and argument; for `git` the trial below shows it does not. `--deny-tool` wins over `--allow-tool`. `write` allows file edits.
 
 ```powershell
 copilot -p "/deliver <nr> --unattended" `
-  --allow-tool 'shell(git)' `
+  --allow-tool 'shell(git fetch)' `
+  --allow-tool 'shell(git switch)' `
+  --allow-tool 'shell(git worktree)' `
+  --allow-tool 'shell(git add)' `
+  --allow-tool 'shell(git commit)' `
+  --allow-tool 'shell(git rebase)' `
+  --allow-tool 'shell(git push)' `
+  --allow-tool 'shell(git diff)' `
+  --allow-tool 'shell(git ls-remote)' `
+  --allow-tool 'shell(git branch)' `
   --allow-tool 'shell(gh auth status)' `
   --allow-tool 'shell(gh api)' `
   --allow-tool 'shell(gh issue)' `
   --allow-tool 'shell(gh pr)' `
+  --allow-tool 'shell(gh label)' `
+  --allow-tool 'shell(gh repo view)' `
   --allow-tool 'shell(pwsh)' `
   --allow-tool 'shell(printenv HERDR_ENV)' `
   --allow-tool 'shell(printenv HERDR_PANE_ID)' `
@@ -109,5 +120,13 @@ copilot -p "/deliver <nr> --unattended" `
   --deny-tool 'shell(git push -f)' `
   --deny-tool 'shell(gh pr merge --admin)'
 ```
+
+Trial #5 (Copilot CLI 1.0.105, `-p` mode):
+
+- `shell(git)` covered read-only subcommands only; `git push`, `commit`, `switch`, `rebase`, `fetch`, `add`, `worktree` and `clone` were denied until each had its own `shell(git <sub>)` entry.
+- The `--deny-tool` lines did not block `git push --force --dry-run origin release/next` while `shell(git push)` was allowed. The ruleset on `release/next` is the gate.
+- `-p` gives up on the background CI watch after 600 s and ends before the merge. Set `COPILOT_TASK_WAIT_TIMEOUT_SECONDS=3600` for `-p` runs; `copilot --resume=<id> -p "continue"` finishes a run that ended early.
+- The model per subagent is set only in `~/.copilot/settings.json` (`subagents.agents.general-purpose.model`), not per repository.
+- `herdr pane report-metadata` with quoted arguments was denied, so the herdr display stays empty on Copilot. No workaround is required.
 
 Keep the call in a PowerShell script of the repository so the list lives next to the code like the other two files.
