@@ -41,4 +41,18 @@ rows = [["state_icon", "agent", "state_text"], [{ token = "$deliver", bold = tru
 
 A herdr plugin can filter panes on the `deliver` token of source `deliver`.
 
+## Log pane toggle
+
+`scripts/Switch-LogPane.ps1` toggles the `deliver-log` pane of the active tab. herdr has no hide, so it closes the pane, and opens it again below the active pane (last 40 lines of `.agents/deliver-loop.ansi.log` under the pane's cwd, else `.agents/deliver-loop.log`). Never two in one tab; no log or outside herdr: no pane, exit 0. A keybinding for the user's herdr config (propose it, never write it; `<skill dir>` is the installed `deliver` skill):
+
+```toml
+[[keys.command]]
+key = "prefix+l"
+type = "shell"
+command = "pwsh -NoProfile -File <skill dir>/scripts/Switch-LogPane.ps1"
+description = "toggle deliver log"
+```
+
+`type = "shell"` runs detached from the focused pane's cwd with `HERDR_ACTIVE_TAB_ID`, `HERDR_ACTIVE_PANE_ID` and `HERDR_ACTIVE_PANE_CWD` set; these count as in herdr even without `HERDR_ENV`. With a herdr plugin, `type = "plugin_action"` takes its place and the script reads `HERDR_TAB_ID` and `HERDR_PANE_ID` (with `HERDR_ENV=1`).
+
 The allowlist entries (`printenv HERDR_ENV`, `printenv HERDR_PANE_ID`, `herdr pane report-metadata`) are in `references/permissions.md`.
