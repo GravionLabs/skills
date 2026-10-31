@@ -13,7 +13,7 @@ Scaffold a TypeScript/Node.js project with a production-ready baseline. Paths to
 - **TypeScript** — NodeNext modules, strict mode, `tsc` for builds
 - **`tsx`** — run TypeScript directly during development
 - **Vitest** — unit tests with globals, v8 coverage
-- **Node.js 22 LTS**; package manager npm or pnpm
+- **Node.js 26 LTS**; package manager npm or pnpm
 
 ## Steps
 

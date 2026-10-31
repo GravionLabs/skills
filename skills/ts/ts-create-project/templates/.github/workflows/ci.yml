@@ -9,5 +9,5 @@ jobs:
   build:
     uses: GravionLabs/ci/.github/workflows/node.yml@main
     with:
-      node-version: '22'
+      node-version: '26'
     secrets: inherit
