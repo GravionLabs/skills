@@ -3,7 +3,8 @@ import * as path from 'path';
 
 // The `## Format` section of every <lang>-implementation skill spells the default commands of Format-Changed.ps1;
 // this test keeps both in sync. It reads the `$defaults` table of the script as text (no pwsh): that the script really
-// runs these commands per language (and in a Biome project) is pinned by the defaults table of format-changed.test.ts.
+// runs a step's commands is pinned per step shape by the defaults table of format-changed.test.ts (ts, ng, go, Biome) and
+// for py by format-changed-detect.test.ts; dotnet and rust are rows of the same table, pinned here only.
 const PACKAGES = path.resolve(__dirname, '../../../skills');
 const SCRIPT = path.join(PACKAGES, 'shared/implementation/scripts/Format-Changed.ps1');
 const LANGS = ['ts', 'ng', 'py', 'dotnet', 'rust', 'go'];
