@@ -199,5 +199,27 @@ exec ${JSON.stringify(realGit)} "$@"
         'feat/12-x',
       );
     });
+
+    it('deletes a worktree-* branch with git branch -d when -D is refused', () => {
+      git(repo, 'branch', 'worktree-agent-z'); // at origin/release/next, fully merged into HEAD
+      const gh = createFakeGh(
+        path.join(root, 'gh2'),
+        `(call) => ({ rest: { headRefName: 'feat/12-x', baseRefName: 'release/next', commits: [] } })`,
+      );
+      const env = gh.env();
+      env.PATH = `${shim}${path.delimiter}${env.PATH}`;
+      const r = spawnSync('pwsh', ['-NoProfile', '-File', SCRIPT, '-Pr', '9', '-Issue', '12'], {
+        cwd: repo,
+        encoding: 'utf8',
+        env,
+      });
+      expect(r.status, r.stderr).toBe(0);
+      const json = JSON.parse(r.stdout);
+      expect(json.branchesDeleted).toEqual(['worktree-agent-z']);
+      expect(json.left.map((l: { branch: string }) => l.branch)).toEqual(['feat/12-x']);
+      expect(git(repo, 'for-each-ref', '--format=%(refname:short)', 'refs/heads')).not.toContain(
+        'worktree-agent-z',
+      );
+    });
   },
 );
