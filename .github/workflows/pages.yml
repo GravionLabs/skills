@@ -42,9 +42,12 @@ jobs:
       BASE: /${{ github.event.repository.name }}/
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+      # node/setup has no node-version-file input: the version comes from .nvmrc
+      - id: node
+        run: echo "version=$(cat .nvmrc)" >> "$GITHUB_OUTPUT"
       - uses: GravionLabs/ci/node/setup@cbb01f83374efa76491226e97bcf1d5cf9674fab # main
         with:
-          node-version: '24'
+          node-version: ${{ steps.node.outputs.version }}
           package-manager: pnpm
       - run: pnpm install --frozen-lockfile
       - name: Generate the skill list
