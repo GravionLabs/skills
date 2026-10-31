@@ -19,6 +19,7 @@ Test behavior through the public interface, never internals; expected values com
 - [ ] Full suite: one full run before the pull request, and again after the last fix round
 - [ ] Every item of an Invariants section in the PBI or Bug body has a test that exercises it
 - [ ] Changed files formatted: `scripts/Format-Changed.ps1` formats them, detecting the formatter from the file extensions when no `-Language` is given (`references/format.md`); a `format.<lang>` entry in `.agents/config.json` overrides it (`"format": false` disables)
+- [ ] `governance.specMap` in `.agents/config.json`: spec updated with the code, new service gets a spec (`references/specs.md`)
 - [ ] Never commit red
 - [ ] No debug output left in code
 
