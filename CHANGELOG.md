@@ -5,6 +5,25 @@ Versioning follows [Semantic Versioning](https://semver.org/).
 
 ---
 
+## [1.1.0] — 2026-10-31
+
+### Bug Fixes
+- GitVersion bumps the minor version on a release merge into main (#73) (#77)
+
+
+### Documentation
+- Roadmap records v1.0.2 and plans 1.1.0 (#73) (#74)
+- Roadmap moves the herdr plugin of #17 to herdr-plugins (#17) (#75)
+- Roadmap plans Node.js 26 in 1.1.0 and lists the open issues (#72) (#76)
+
+
+### Features
+- **deliver**: Merge into release/next without asking, end a milestone with the release PR (#78) (#79)
+- **delivery**: Invoke-DeliverLoop shows its log in a herdr split pane (#12) (#81)
+- **delivery**: Deliver reports step, issue and PR as herdr pane tokens (#16) (#82)
+- **delivery**: Toggle the deliver log pane with a herdr key (#13) (#83)
+
+
 ## [1.0.2] — 2026-10-31
 
 ### Bug Fixes
@@ -23,6 +42,7 @@ Versioning follows [Semantic Versioning](https://semver.org/).
 - Roadmap lists the lessons PBIs and puts herdr in 1.2.0 (#14) (#31)
 - **delivery**: Skills-install warns that a global skill copy can shadow the project install (#48) (#51)
 - Roadmap records retro #6 and the workflow.js decision (#6) (#58)
+- Update CHANGELOG.md for v1.0.2 [skip ci]
 
 
 ### Features
