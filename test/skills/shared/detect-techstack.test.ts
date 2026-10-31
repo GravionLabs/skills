@@ -208,4 +208,66 @@ describe.skipIf(!hasPwsh)('Detect-TechStack.ps1', () => {
     expect(r.test).toEqual(['py-test', 'rust-test', 'go-test']);
     expect(r.packageManager).toEqual(['cargo', 'go']);
   });
+
+  const hint =
+    'docs/adr or docs/specs found but no governance key in .agents/config.json; add it to opt in (docs/usage/project-config.md)';
+  it.each<[string, Record<string, string>, Record<string, unknown>]>([
+    [
+      'no docs',
+      {},
+      {
+        configured: false,
+        adrDir: 'docs/adr',
+        adrCount: 0,
+        specDir: 'docs/specs',
+        specCount: 0,
+        hint: null,
+      },
+    ],
+    [
+      'ADRs only without the key (hint set, README is no ADR)',
+      { 'docs/adr/0001-first.md': '', 'docs/adr/0002-second.md': '', 'docs/adr/README.md': '' },
+      {
+        configured: false,
+        adrDir: 'docs/adr',
+        adrCount: 2,
+        specDir: 'docs/specs',
+        specCount: 0,
+        hint,
+      },
+    ],
+    [
+      'ADRs and specs with the key and a custom adrDir (no hint)',
+      {
+        '.agents/config.json': '{"governance":{"adrDir":"decisions"}}',
+        'decisions/0001-x.md': '',
+        'decisions/0002-y.md': '',
+        'docs/adr/0009-ignored.md': '',
+        'docs/specs/a.md': '',
+      },
+      {
+        configured: true,
+        adrDir: 'decisions',
+        adrCount: 2,
+        specDir: 'docs/specs',
+        specCount: 1,
+        hint: null,
+      },
+    ],
+    [
+      'invalid config.json without failure (not configured, hint set)',
+      { '.agents/config.json': '{"governance": ', 'docs/adr/0001-a.md': '' },
+      {
+        configured: false,
+        adrDir: 'docs/adr',
+        adrCount: 1,
+        specDir: 'docs/specs',
+        specCount: 0,
+        hint,
+      },
+    ],
+  ])('reports governance for %s', async (_n, files, expected) => {
+    for (const [rel, content] of Object.entries(files)) write(rel, content);
+    expect((await detect()).governance).toEqual(expected);
+  });
 });

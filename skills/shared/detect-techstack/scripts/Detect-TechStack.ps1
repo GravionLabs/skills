@@ -227,6 +227,37 @@ for ($i = 0; $i -lt $languages.Count; $i++) {
 $test = $languages | ForEach-Object { "${_}-test" }
 $implementation = $languages | ForEach-Object { "${_}-implementation" }
 
+# --- governance (#68): ADR and spec folders; opt-in key of .agents/config.json (#65) ---
+$govConfigured = $false
+$govKey = $null
+$configFile = Join-Path $rootFull '.agents/config.json'
+if (Test-Path -LiteralPath $configFile -PathType Leaf) {
+  try {
+    $cfg = Get-Content -LiteralPath $configFile -Raw | ConvertFrom-Json -ErrorAction Stop
+    if ($cfg -is [pscustomobject] -and @($cfg.PSObject.Properties.Name) -contains 'governance') {
+      $govConfigured = $true
+      $govKey = $cfg.governance
+    }
+  } catch {
+    $govConfigured = $false
+  }
+}
+function Get-GovernanceDir([string]$Name, [string]$Default) {
+  if ($govKey -is [pscustomobject] -and @($govKey.PSObject.Properties.Name) -contains $Name -and $govKey.$Name -is [string] -and $govKey.$Name.Length -gt 0) {
+    return $govKey.$Name
+  }
+  $Default
+}
+$adrRel = Get-GovernanceDir 'adrDir' 'docs/adr'
+$specRel = Get-GovernanceDir 'specDir' 'docs/specs'
+$adrCount = @(Get-ChildItem -LiteralPath (Join-Path $rootFull $adrRel) -File -Filter '*.md' -ErrorAction SilentlyContinue |
+  Where-Object { $_.Name -match '^\d{4}-.+\.md$' }).Count
+$specCount = @(Get-ChildItem -LiteralPath (Join-Path $rootFull $specRel) -File -Filter '*.md' -ErrorAction SilentlyContinue).Count
+$govHint = $null
+if (-not $govConfigured -and ($adrCount + $specCount) -gt 0) {
+  $govHint = 'docs/adr or docs/specs found but no governance key in .agents/config.json; add it to opt in (docs/usage/project-config.md)'
+}
+
 $report = [ordered]@{
   languages       = @($languages)
   frameworks      = @($frameworks)
@@ -234,6 +265,14 @@ $report = [ordered]@{
   tools           = @($tools)
   test            = @($test)
   implementation  = @($implementation)
+  governance      = [ordered]@{
+    configured = $govConfigured
+    adrDir     = $adrRel
+    adrCount   = $adrCount
+    specDir    = $specRel
+    specCount  = $specCount
+    hint       = $govHint
+  }
 }
 
 $report | ConvertTo-Json -Compress
