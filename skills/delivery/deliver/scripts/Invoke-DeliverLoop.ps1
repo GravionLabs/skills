@@ -8,8 +8,10 @@
   labels needs-decision / needs-refinement / interactive (deliver skips interactive PBIs unattended). No change stops
   the loop ("no progress"); nothing open means done; open PBIs that all wait on an open blocker or a label mean blocked.
   Observability: every stream record goes to .agents/deliver-loop/<run>/<nr>.jsonl (<nr> is the first PBI that was ready
-  at the start of the iteration), a summary line per step to .agents/deliver-loop.log and stdout, desktop notifications
-  for the attention steps (macOS osascript, Windows toast), the herdr pane display when HERDR_ENV=1.
+  at the start of the iteration), a summary line per step to .agents/deliver-loop.log (plain) and stdout, the same line
+  with ANSI colors to .agents/deliver-loop.ansi.log, desktop notifications for the attention steps (macOS osascript,
+  Windows toast), the herdr pane display when HERDR_ENV=1 and, in herdr on a terminal, a split pane labeled deliver-log
+  below the session that tails the log (LogPane.ps1; never closed by the loop).
   Run it from the repository root. Exit code: 0 done or max reached, 1 no progress, 2 blocked, 64 bad arguments.
 .PARAMETER Target
   Issue numbers (PBI, Feature or Epic), as for `/deliver`: `-Target 12,14` or `-Target 12 14` (a comma list also works
@@ -22,6 +24,10 @@
   Model of the orchestrating session.
 .PARAMETER Harness
   Only claude (Claude Code) for now.
+.PARAMETER NoPane
+  Opens no herdr log pane.
+.PARAMETER NoColor
+  Writes no .ansi.log (as does a non-empty NO_COLOR); the pane tails the plain log.
 #>
 [CmdletBinding()]
 param(
@@ -30,6 +36,8 @@ param(
   [ValidateRange(1, 10000)][int]$Max = 0,
   [string]$Model = 'sonnet',
   [ValidateSet('claude')][string]$Harness = 'claude',
+  [switch]$NoPane,
+  [switch]$NoColor,
   [Parameter(ValueFromRemainingArguments)][string[]]$MoreTargets = @()
 )
 $ErrorActionPreference = 'Stop'
@@ -43,16 +51,30 @@ $Nrs = @($Nrs | ForEach-Object { [int]$_ })
 
 $Held = @('needs-decision', 'needs-refinement', 'interactive')
 $LogFile = Join-Path (Get-Location) '.agents/deliver-loop.log'
+$AnsiFile = if ($NoColor -or $env:NO_COLOR) { '' } else { Join-Path (Get-Location) '.agents/deliver-loop.ansi.log' }
+$Esc = [char]27
+$Ansi = @{ dim = "$Esc[2m"; cyan = "$Esc[36m"; red = "$Esc[31m"; yellow = "$Esc[33m"; green = "$Esc[32m"; reset = "$Esc[0m" }
 $RunDir = Join-Path (Get-Location) ".agents/deliver-loop/$((Get-Date).ToString('yyyyMMdd-HHmmss'))"
 $Recent = [System.Collections.Generic.List[string]]::new()
 $AgentNames = @{}
 $Pane = if ($env:HERDR_ENV -eq '1') { $env:HERDR_PANE_ID } else { '' }
 
-function Write-Step([string]$text) {
-  $line = '{0} {1}' -f (Get-Date).ToString('HH:mm:ss'), $text
+. (Join-Path $PSScriptRoot 'LogPane.ps1')
+
+# One step: plain to the log and stdout; colored to the .ansi.log (time dim, $Tool cyan, the rest in $Color).
+# $Tool is looked up from $ToolAt on (after the subagent prefix).
+function Write-Step([string]$text, [string]$Color = '', [string]$Tool = '', [int]$ToolAt = 0) {
+  $time = (Get-Date).ToString('HH:mm:ss')
+  $line = "$time $text"
   New-Item -ItemType Directory -Force -Path (Split-Path $LogFile) | Out-Null
   [IO.File]::AppendAllText($LogFile, $line + "`n")
-  [Console]::Out.WriteLine($line)
+  if ($AnsiFile) {
+    $body = if ($Color) { "$($Ansi[$Color])$text$($Ansi.reset)" } else { $text }
+    $at = if ($Tool) { $text.IndexOf($Tool, $ToolAt) } else { -1 }
+    if ($at -ge 0 -and -not $Color) { $body = $text.Substring(0, $at) + "$($Ansi.cyan)$Tool$($Ansi.reset)" + $text.Substring($at + $Tool.Length) }
+    [IO.File]::AppendAllText($AnsiFile, "$($Ansi.dim)$time$($Ansi.reset) $body`n")
+  }
+  Write-Host $line
   $Recent.Add($line)
   if ($Recent.Count -gt 10) { $Recent.RemoveAt(0) }
 }
@@ -148,6 +170,15 @@ function Get-Attention([string]$step, [string]$result) {
   return $null
 }
 
+# Color of a progress line in the pane: PR opened, merged, done green; the other attention steps yellow.
+function Get-StepColor([string]$step, [string]$result) {
+  if ($step -eq 'done') { return 'green' }
+  $why = Get-Attention $step $result
+  if ($why -in 'PR opened', 'merged') { return 'green' }
+  if ($why) { return 'yellow' }
+  return ''
+}
+
 # One stream-json record: summary line, progress lines of deliver (top level only), tool errors.
 function Read-Record([string]$line, [int]$position, [int]$total) {
   try { $rec = $line | ConvertFrom-Json } catch { Write-Step "? $(Get-Short $line)"; return }
@@ -162,9 +193,13 @@ function Read-Record([string]$line, [int]$position, [int]$total) {
         if ($in.$k) { $what = Get-Short ([string]$in.$k); break }
       }
       if ($c.name -in 'Agent', 'Task') { $AgentNames[$c.id] = Get-Short ([string]$in.description) 60 }
-      Write-Step "$prefix$($c.name) $what"
+      Write-Step "$prefix$($c.name) $what" -Tool $c.name -ToolAt $prefix.Length
     } elseif ($rec.type -eq 'assistant' -and $c.type -eq 'text') {
-      Write-Step "$prefix» $(Get-Short $c.text)"
+      $color = ''
+      if (-not $prefix) {
+        foreach ($l in ($c.text -split "`r?`n")) { if ($l -match '^#\d+ ([\w-]+): (.*)$') { $color = Get-StepColor $Matches[1] $Matches[2]; if ($color) { break } } }
+      }
+      Write-Step "$prefix» $(Get-Short $c.text)" $color
       if ($prefix) { continue }
       foreach ($l in ($c.text -split "`r?`n")) {
         if ($l -match '^#(\d+) ([\w-]+): (.*)$') {
@@ -175,7 +210,7 @@ function Read-Record([string]$line, [int]$position, [int]$total) {
       }
     } elseif ($rec.type -eq 'user' -and $c.type -eq 'tool_result' -and $c.is_error) {
       $body = if ($c.content -is [string]) { $c.content } else { ($c.content | ForEach-Object { $_.text }) -join "`n" }
-      Write-Step "$prefix✗ $(Get-Short $body)"
+      Write-Step "$prefix✗ $(Get-Short $body)" 'red'
     }
   }
 }
@@ -193,11 +228,11 @@ function Invoke-Iteration([int]$n, [int]$total, $state) {
   try {
     & claude -p $prompt --model $Model --permission-mode auto --output-format stream-json --verbose 2>&1 | ForEach-Object {
       $line = "$_"
-      if ($_ -is [System.Management.Automation.ErrorRecord]) { Write-Step "stderr $(Get-Short $line)"; return }
+      if ($_ -is [System.Management.Automation.ErrorRecord]) { Write-Step "stderr $(Get-Short $line)" 'red'; return }
       [IO.File]::AppendAllText($jsonl, $line + "`n")
       Read-Record $line $n $total
     }
-    if ($LASTEXITCODE -ne 0) { Write-Step "claude exited with $LASTEXITCODE" }
+    if ($LASTEXITCODE -ne 0) { Write-Step "claude exited with $LASTEXITCODE" 'red' }
   } finally { $env:HERDR_ENV = $saved }
 }
 
@@ -205,6 +240,7 @@ $result = 'done'
 $code = 0
 $i = 0
 try {
+  if (-not $NoPane) { Open-LogPane -LogFile $(if ($AnsiFile) { $AnsiFile } else { $LogFile }) }
   $state = Get-State
   $result = Get-StopReason $state
   $total = if ($Max -gt 0) { [Math]::Min($Max, $state.Eligible.Count) } else { $state.Eligible.Count }
@@ -214,8 +250,8 @@ try {
     $after = Get-State
     if (($after.Eligible -join ',') -eq ($state.Eligible -join ',')) {
       $result = 'no progress'
-      Write-Step 'no progress: the open PBIs did not change. Last log lines:'
-      foreach ($l in $Recent.ToArray()) { [Console]::Out.WriteLine("  $l") }
+      Write-Step 'no progress: the open PBIs did not change. Last log lines:' 'yellow'
+      foreach ($l in $Recent.ToArray()) { Write-Host "  $l" }
       break
     }
     $state = $after
@@ -223,7 +259,8 @@ try {
     if (-not $result -and $Max -gt 0 -and $i -ge $Max) { $result = 'max reached' }
   }
   $code = switch ($result) { 'no progress' { 1 } 'blocked' { 2 } default { 0 } }
-  Write-Step "loop result: $result ($i iteration(s), $($state.Open) PBI(s) open)"
+  $color = if ($result -in 'done', 'max reached') { 'green' } else { 'yellow' }
+  Write-Step "loop result: $result ($i iteration(s), $($state.Open) PBI(s) open)" $color
   Send-Notice "loop result: $result"
 } finally {
   Set-Pane '' -Clear
