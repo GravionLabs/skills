@@ -5,6 +5,9 @@
   { "skill": "dotnet-test",
     "shouldTrigger": ["Write NUnit tests with NSubstitute and Shouldly for the OrderService", "How do I structure C# tests and mock a dependency with NSubstitute?"],
     "shouldNotTrigger": ["Write Jest snapshot tests for this React component", "Scaffold a new .NET solution with Central Package Management"] },
+  { "skill": "dotnet-aspire",
+    "shouldTrigger": ["Add Aspire to this repo so the API, Postgres and Keycloak start together", "Make this repo Aspire-capable with an apphost.cs for local development"],
+    "shouldNotTrigger": ["Add a single-project console app that prints the current date", "Deploy this app to Azure Container Apps with aspire publish"] },
   { "skill": "dotnet-implementation",
     "shouldTrigger": ["Implement a C# repository class following the .NET conventions", "Which C# coding rules apply when I add a new service in this .NET project?"],
     "shouldNotTrigger": ["Implement a Python service class using pytest", "Generate an MCP server project in C#"] },
@@ -67,5 +70,8 @@
     "shouldNotTrigger": ["Create a PR for my feature branch", "Break the epic into features and size them"] },
   { "skill": "grill-me",
     "shouldTrigger": ["Grill me on the open decisions of issue #42", "Ask me every open question of this plan before we start"],
-    "shouldNotTrigger": ["Split Feature #120 into PBIs with sizes", "Write the release notes for 3.3.0"] }
+    "shouldNotTrigger": ["Split Feature #120 into PBIs with sizes", "Write the release notes for 3.3.0"] },
+  { "skill": "adr",
+    "shouldTrigger": ["Write an ADR for moving the realtime service to its own container", "Record this decision as an ADR and supersede ADR 0020 in part"],
+    "shouldNotTrigger": ["Update the spec of the BFF", "Plan Feature #64 into PBIs"] }
 ]

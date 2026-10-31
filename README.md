@@ -49,19 +49,19 @@ Commit `skills-lock.json`, `.agents/skills/` and `.claude/skills/` so a fresh cl
 
 A group is a folder `skills/<group>/` and a plugin in [`.claude-plugin/marketplace.json`](.claude-plugin/marketplace.json); the same file makes this repository a Claude Code plugin marketplace. Installs are flat by skill name.
 
-| Group           | Skills                                                                                                                                                 |
-| :-------------- | :----------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `shared`        | `implementation`, `detect-techstack`, `diagnose`, `code-review`, `check-prerequisites`, `lessons`                                                      |
-| `delivery`      | `deliver`, `planner`, `grill-me`, `retro`, `skills-install`                                                                                            |
-| `github`        | `github-issue`, `github-pull-request`, `github-release`                                                                                                |
-| `dotnet`        | `dotnet-implementation`, `dotnet-test`, `dotnet-create-solution`, `dotnet-mcp-server-generator`; `skills-install` adds `dotnet/skills` (dotnet plugin) |
-| `ts`            | `ts-implementation`, `ts-test`, `ts-create-project`, `ts-mcp-server-generator`, `ts-pnpm-workflow`, `setup-biome-husky`, `setup-prettier-eslint-husky` |
-| `py`            | `py-implementation`, `py-test`, `py-create-project`                                                                                                    |
-| `rust`          | `rust-implementation`, `rust-test`                                                                                                                     |
-| `go`            | `go-implementation`, `go-test`                                                                                                                         |
-| `ng`            | `ng-implementation`, `ng-test`, `ng-create-project`, `ng-ag-grid-developer`; `skills-install` adds `angular/skills` (`angular-developer`)              |
-| `statusline`    | `context-statusline`: status line and subagent status line                                                                                             |
-| `skill-tooling` | `skill-write`, `skill-audit`, `skill-slim` (contributor tooling)                                                                                       |
+| Group           | Skills                                                                                                                                                                                                    |
+| :-------------- | :-------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `shared`        | `implementation`, `detect-techstack`, `diagnose`, `code-review`, `check-prerequisites`, `lessons`, `adr`                                                                                                  |
+| `delivery`      | `deliver`, `planner`, `grill-me`, `retro`, `skills-install`                                                                                                                                               |
+| `github`        | `github-issue`, `github-pull-request`, `github-release`                                                                                                                                                   |
+| `dotnet`        | `dotnet-implementation`, `dotnet-test`, `dotnet-create-solution`, `dotnet-mcp-server-generator`, `dotnet-aspire` (AppHost for local orchestration); `skills-install` adds `dotnet/skills` (dotnet plugin) |
+| `ts`            | `ts-implementation`, `ts-test`, `ts-create-project`, `ts-mcp-server-generator`, `ts-pnpm-workflow`, `setup-biome-husky`, `setup-prettier-eslint-husky`                                                    |
+| `py`            | `py-implementation`, `py-test`, `py-create-project`                                                                                                                                                       |
+| `rust`          | `rust-implementation`, `rust-test`                                                                                                                                                                        |
+| `go`            | `go-implementation`, `go-test`                                                                                                                                                                            |
+| `ng`            | `ng-implementation`, `ng-test`, `ng-create-project`, `ng-ag-grid-developer`; `skills-install` adds `angular/skills` (`angular-developer`)                                                                 |
+| `statusline`    | `context-statusline`: status line and subagent status line                                                                                                                                                |
+| `skill-tooling` | `skill-write`, `skill-audit`, `skill-slim` (contributor tooling)                                                                                                                                          |
 
 Presets of `skills-install`: `core` (`shared`, `github`, `delivery`, `statusline`) and `all` (every group except `skill-tooling`).
 

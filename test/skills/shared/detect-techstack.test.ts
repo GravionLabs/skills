@@ -121,6 +121,37 @@ describe.skipIf(!hasPwsh)('Detect-TechStack.ps1', () => {
     expect(r.packageManager).toEqual(['cargo']);
   });
 
+  it('reports aspire for an SDK-style AppHost csproj (attribute and element form)', async () => {
+    write('src/AppHost/AppHost.csproj', '<Project Sdk="Aspire.AppHost.Sdk/13.6.0"></Project>');
+    let r = await detect();
+    expect(r.languages).toEqual(['dotnet']);
+    expect(r.frameworks).toEqual(['dotnet', 'aspire']);
+    fs.rmSync(path.join(dir, 'src'), { recursive: true });
+    write(
+      'AppHost.csproj',
+      '<Project Sdk="Microsoft.NET.Sdk"><Sdk Name="Aspire.AppHost.Sdk" Version="13.6.0" /></Project>',
+    );
+    r = await detect();
+    expect(r.frameworks).toEqual(['dotnet', 'aspire']);
+  });
+
+  it('reports aspire for a file-based apphost.cs without any csproj', async () => {
+    write(
+      'apphost.cs',
+      '#:sdk Aspire.AppHost.Sdk@13.6.0\nvar b = DistributedApplication.CreateBuilder(args);\n',
+    );
+    const r = await detect();
+    expect(r.languages).toEqual(['dotnet']);
+    expect(r.frameworks).toEqual(['dotnet', 'aspire']);
+  });
+
+  it('does not report aspire for a plain .NET project or an ordinary .cs file', async () => {
+    write('App.csproj', '<Project Sdk="Microsoft.NET.Sdk"></Project>');
+    write('Program.cs', 'Console.WriteLine("hi");\n');
+    const r = await detect();
+    expect(r.frameworks).toEqual(['dotnet']);
+  });
+
   it('reports react, next, vue and svelte from dependencies and devDependencies, skills stay ts', async () => {
     write(
       'package.json',
@@ -176,5 +207,67 @@ describe.skipIf(!hasPwsh)('Detect-TechStack.ps1', () => {
     expect(r.languages).toEqual(['py', 'rust', 'go']);
     expect(r.test).toEqual(['py-test', 'rust-test', 'go-test']);
     expect(r.packageManager).toEqual(['cargo', 'go']);
+  });
+
+  const hint =
+    'docs/adr or docs/specs found but no governance key in .agents/config.json; add it to opt in (docs/usage/project-config.md)';
+  it.each<[string, Record<string, string>, Record<string, unknown>]>([
+    [
+      'no docs',
+      {},
+      {
+        configured: false,
+        adrDir: 'docs/adr',
+        adrCount: 0,
+        specDir: 'docs/specs',
+        specCount: 0,
+        hint: null,
+      },
+    ],
+    [
+      'ADRs only without the key (hint set, README is no ADR)',
+      { 'docs/adr/0001-first.md': '', 'docs/adr/0002-second.md': '', 'docs/adr/README.md': '' },
+      {
+        configured: false,
+        adrDir: 'docs/adr',
+        adrCount: 2,
+        specDir: 'docs/specs',
+        specCount: 0,
+        hint,
+      },
+    ],
+    [
+      'ADRs and specs with the key and a custom adrDir (no hint)',
+      {
+        '.agents/config.json': '{"governance":{"adrDir":"decisions"}}',
+        'decisions/0001-x.md': '',
+        'decisions/0002-y.md': '',
+        'docs/adr/0009-ignored.md': '',
+        'docs/specs/a.md': '',
+      },
+      {
+        configured: true,
+        adrDir: 'decisions',
+        adrCount: 2,
+        specDir: 'docs/specs',
+        specCount: 1,
+        hint: null,
+      },
+    ],
+    [
+      'invalid config.json without failure (not configured, hint set)',
+      { '.agents/config.json': '{"governance": ', 'docs/adr/0001-a.md': '' },
+      {
+        configured: false,
+        adrDir: 'docs/adr',
+        adrCount: 1,
+        specDir: 'docs/specs',
+        specCount: 0,
+        hint,
+      },
+    ],
+  ])('reports governance for %s', async (_n, files, expected) => {
+    for (const [rel, content] of Object.entries(files)) write(rel, content);
+    expect((await detect()).governance).toEqual(expected);
   });
 });
