@@ -10,7 +10,7 @@ description: 'TypeScript implementation and test rules (Vitest) extending `imple
 
 ## Format
 
-- Extensions: prettier `.ts .tsx .js .mjs .cjs .json`; eslint only `.ts .tsx .js .mjs .cjs`
+- Extensions: prettier `.ts .tsx .js .mjs .cjs .jsx .json .css .html`; eslint only `.ts .tsx .js .mjs .cjs .jsx`
 - Format: `npx --no-install prettier --write {files}` then `npx --no-install eslint --fix {files}`
 - Check (read-only): `npx --no-install prettier --check {files}` and `npx --no-install eslint {files}`
 - Biome project (`biome.json[c]`, the default for new plain-TS projects): `npx biome check --write --no-errors-on-unmatched {files}` / check `npx biome check --no-errors-on-unmatched {files}`; never run prettier on the same files

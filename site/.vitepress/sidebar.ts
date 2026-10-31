@@ -35,6 +35,7 @@ export const sidebar: SidebarGroup[] = [
       { text: 'Project config', link: '/usage/project-config' },
       { text: 'Status lines', link: '/usage/statusline' },
       { text: 'Skill companion directories', link: '/usage/skill-companion-dirs' },
+      { text: 'Skill trigger evals', link: '/usage/trigger-evals' },
     ],
   },
   {

@@ -43,11 +43,13 @@ function Test-JsonObject($Value) { $null -ne $Value -and $Value.GetType().Name -
 
 # NUL-separated output (-z): names with spaces, quotes or non-ASCII characters arrive unquoted
 [Console]::OutputEncoding = [System.Text.Encoding]::UTF8
+function Stop-Git($Out, [int]$Code) { Write-Error (($Out | Out-String).Trim()) -ErrorAction Continue; exit $(if ($Code) { $Code } else { 1 }) }
+function Split-GitNames($Out) { (@($Out) -join "`n") -split "`0" | Where-Object { $_ } }
 function Get-GitNames {
   param([string[]]$GitArgs)
   $out = & git -C $root @GitArgs 2>&1
-  if ($LASTEXITCODE -ne 0) { $code = $LASTEXITCODE; Write-Error (($out | Out-String).Trim()) -ErrorAction Continue; exit $(if ($code) { $code } else { 1 }) }
-  (@($out) -join "`n") -split "`0" | Where-Object { $_ }
+  if ($LASTEXITCODE -ne 0) { Stop-Git $out $LASTEXITCODE }
+  Split-GitNames $out
 }
 function Get-ChangedFiles {
 $names = [System.Collections.Generic.List[string]]::new()
@@ -55,10 +57,15 @@ if ($Base) {
   # a bad ref must fail loudly: a swallowed error would let -Check pass with nothing checked
   Get-GitNames @('diff', '--name-only', '-z', "$Base...HEAD", '--') | ForEach-Object { $names.Add($_) }
 }
-# staged + unstaged vs HEAD (a repository without a commit has no HEAD: fall back to the index)
-& git -C $root rev-parse --verify -q HEAD *> $null
-$diffArgs = if ($LASTEXITCODE -eq 0) { @('diff', '--name-only', '-z', 'HEAD', '--') } else { @('diff', '--name-only', '-z', '--cached', '--') }
-Get-GitNames $diffArgs | ForEach-Object { $names.Add($_) }
+# staged + unstaged vs HEAD; a repository without a commit has no HEAD: the index instead (HEAD is probed only when the diff fails)
+$out = & git -C $root diff --name-only -z HEAD -- 2>&1
+if ($LASTEXITCODE -eq 0) { Split-GitNames $out | ForEach-Object { $names.Add($_) } }
+else {
+  $diffCode = $LASTEXITCODE
+  & git -C $root rev-parse --verify -q HEAD *> $null
+  if ($LASTEXITCODE -eq 0) { Stop-Git $out $diffCode }
+  Get-GitNames @('diff', '--name-only', '-z', '--cached', '--') | ForEach-Object { $names.Add($_) }
+}
 Get-GitNames @('ls-files', '--others', '--exclude-standard', '-z') | ForEach-Object { $names.Add($_) }
 
 # repo-relative, existing (deleted dropped), no duplicates
@@ -159,7 +166,11 @@ if ($disabled) {
 $exts5 = @('.ts', '.tsx', '.js', '.mjs', '.cjs')
 $defaults = @{
   ts     = @(
-    @{ Tool = 'prettier'; Ext = $exts5 + '.json'; Requires = 'npx --no-install prettier --version'; Format = @('npx --no-install prettier --write {files}'); Check = @('npx --no-install prettier --check {files}') },
+    @{ Tool = 'prettier'; Ext = $exts5 + @('.jsx', '.json', '.css', '.html'); Requires = 'npx --no-install prettier --version'; Format = @('npx --no-install prettier --write {files}'); Check = @('npx --no-install prettier --check {files}') },
+    @{ Tool = 'eslint'; Ext = $exts5 + '.jsx'; Requires = 'npx --no-install eslint --version'; Format = @('npx --no-install eslint --fix {files}'); Check = @('npx --no-install eslint {files}') })
+  # ng: the ts tools on the Angular extensions (.scss, no .jsx)
+  ng     = @(
+    @{ Tool = 'prettier'; Ext = $exts5 + @('.json', '.html', '.scss', '.css'); Requires = 'npx --no-install prettier --version'; Format = @('npx --no-install prettier --write {files}'); Check = @('npx --no-install prettier --check {files}') },
     @{ Tool = 'eslint'; Ext = $exts5; Requires = 'npx --no-install eslint --version'; Format = @('npx --no-install eslint --fix {files}'); Check = @('npx --no-install eslint {files}') })
   py     = @(
     @{ Tool = 'ruff'; Ext = @('.py', '.pyi'); Requires = 'uv run ruff --version'; Format = @('uv run ruff format {files}', 'uv run ruff check --fix {files}'); Check = @('uv run ruff format --check {files}', 'uv run ruff check {files}') })
@@ -171,8 +182,6 @@ $defaults = @{
   go     = @(
     @{ Tool = 'gofmt'; Ext = @('.go'); Requires = $null; Format = @('gofmt -w {files}'); Check = @('gofmt -l {files}') })
 }
-$defaults.ng = @($defaults.ts[0].Clone(), $defaults.ts[1])
-$defaults.ng[0].Ext = $exts5 + @('.json', '.html', '.scss', '.css')
 # a Biome project (biome.json[c] at the toplevel) replaces prettier + eslint with one biome step on the prettier extensions plus Markdown and YAML
 if ((Test-Path -LiteralPath (Join-Path $root 'biome.json') -PathType Leaf) -or (Test-Path -LiteralPath (Join-Path $root 'biome.jsonc') -PathType Leaf)) {
   foreach ($lang in 'ts', 'ng') {

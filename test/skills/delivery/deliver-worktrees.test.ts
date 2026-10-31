@@ -124,3 +124,102 @@ describe.skipIf(!hasPwsh || process.platform === 'win32')('Remove-PbiWorktrees.p
     expect(r.stderr).toContain('gh pr view 9 failed');
   });
 });
+
+// #45: a delete refused by a sandbox or hook must not vanish from the report
+describe.skipIf(!hasPwsh || process.platform === 'win32')(
+  'Remove-PbiWorktrees.ps1 failed branch delete',
+  () => {
+    let root: string;
+    let repo: string;
+    let shim: string;
+    const git = (cwd: string, ...args: string[]) =>
+      execFileSync('git', args, { cwd, encoding: 'utf8' }).trim();
+
+    beforeAll(() => {
+      root = fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(), 'pbiwt-fail-')));
+      const origin = path.join(root, 'origin.git');
+      repo = path.join(root, 'repo');
+      git(root, 'init', '-q', '--bare', '-b', 'release/next', origin);
+      git(root, 'clone', '-q', origin, repo);
+      for (const [k, v] of [
+        ['user.email', 't@example.com'],
+        ['user.name', 't'],
+        ['commit.gpgsign', 'false'],
+      ])
+        git(repo, 'config', k, v);
+      git(repo, 'commit', '-q', '--allow-empty', '-m', 'base');
+      git(repo, 'push', '-q', 'origin', 'release/next');
+      git(repo, 'switch', '-q', '-c', 'feat/12-x');
+      git(repo, 'commit', '-q', '--allow-empty', '-m', 'feat');
+      git(repo, 'switch', '-q', 'release/next');
+      // a git shim first on PATH: branch -D is refused, everything else goes to the real git
+      const realGit = execFileSync('sh', ['-c', 'command -v git'], { encoding: 'utf8' }).trim();
+      shim = path.join(root, 'shim');
+      fs.mkdirSync(shim, { recursive: true });
+      fs.writeFileSync(
+        path.join(shim, 'git'),
+        `#!/bin/sh
+for a in "$@"; do
+  if [ "$a" = branch ]; then
+    case " $* " in
+      *" -D "*) echo 'error: refusing to delete branch' >&2; exit 1;;
+    esac
+  fi
+done
+exec ${JSON.stringify(realGit)} "$@"
+`,
+        { mode: 0o755 },
+      );
+    });
+    afterAll(() => fs.rmSync(root, { recursive: true, force: true }));
+
+    it('lists a refused branch delete in left with the stderr line', () => {
+      const gh = createFakeGh(
+        path.join(root, 'gh'),
+        `(call) => ({ rest: { headRefName: 'feat/12-x', baseRefName: 'release/next', commits: [] } })`,
+      );
+      const env = gh.env();
+      env.PATH = `${shim}${path.delimiter}${env.PATH}`;
+      const r = spawnSync('pwsh', ['-NoProfile', '-File', SCRIPT, '-Pr', '9', '-Issue', '12'], {
+        cwd: repo,
+        encoding: 'utf8',
+        env,
+      });
+      expect(r.status, r.stderr).toBe(0);
+      const json = JSON.parse(r.stdout);
+      expect(json.left).toEqual([
+        {
+          branch: 'feat/12-x',
+          reason: 'git branch -D failed: error: refusing to delete branch',
+          command: 'git branch -D feat/12-x',
+        },
+      ]);
+      expect(json.branchesDeleted).toEqual([]);
+      expect(git(repo, 'for-each-ref', '--format=%(refname:short)', 'refs/heads')).toContain(
+        'feat/12-x',
+      );
+    });
+
+    it('deletes a worktree-* branch with git branch -d when -D is refused', () => {
+      git(repo, 'branch', 'worktree-agent-z'); // at origin/release/next, fully merged into HEAD
+      const gh = createFakeGh(
+        path.join(root, 'gh2'),
+        `(call) => ({ rest: { headRefName: 'feat/12-x', baseRefName: 'release/next', commits: [] } })`,
+      );
+      const env = gh.env();
+      env.PATH = `${shim}${path.delimiter}${env.PATH}`;
+      const r = spawnSync('pwsh', ['-NoProfile', '-File', SCRIPT, '-Pr', '9', '-Issue', '12'], {
+        cwd: repo,
+        encoding: 'utf8',
+        env,
+      });
+      expect(r.status, r.stderr).toBe(0);
+      const json = JSON.parse(r.stdout);
+      expect(json.branchesDeleted).toEqual(['worktree-agent-z']);
+      expect(json.left.map((l: { branch: string }) => l.branch)).toEqual(['feat/12-x']);
+      expect(git(repo, 'for-each-ref', '--format=%(refname:short)', 'refs/heads')).not.toContain(
+        'worktree-agent-z',
+      );
+    });
+  },
+);

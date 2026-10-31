@@ -10,7 +10,10 @@
   - the local branches `<head branch>` and `wip-<Issue>` when no worktree has them checked out;
   - `worktree-<name>` branches whose worktree `<name>` is gone and whose commits are all on a remote
     branch (`git branch -r --contains`); a branch with local-only commits is listed in `left`.
+  Deletion order: `worktree-<name>` branches first get `git branch -d` (a user git hook may block `-D`) and `git branch -D`
+  only when `-d` fails; the head branch and `wip-<Issue>` always get `-D` (a squash merge does not mark them merged).
   A worktree with uncommitted changes or a branch still checked out is listed in `left` with the command to remove it.
+  A `git branch -D` that fails is listed in `left` with reason `git branch -D failed: <first stderr line>`.
   Output: {removed[], branchesDeleted[], left[{path|branch, reason, command}]}. Exit 1 when the PR cannot be read.
 .PARAMETER Pr
   Number of the merged pull request.
@@ -24,6 +27,18 @@ param(
 $ErrorActionPreference = 'Stop'
 
 function Fail([string]$m) { Write-Error $m -ErrorAction Continue; exit 1 }
+
+function Remove-Branch([string]$b, [switch]$TrySafe) {
+  if ($TrySafe) {
+    & git branch -d $b 2>&1 | Out-Null
+    if ($LASTEXITCODE -eq 0) { $deleted.Add($b); return }
+  }
+  $lines = @(& git branch -D $b 2>&1 | ForEach-Object { "$_" })
+  if ($LASTEXITCODE -eq 0) { $deleted.Add($b); return }
+  $line = $lines | Where-Object { $_.Trim() } | Select-Object -First 1
+  if (-not $line) { $line = 'unknown error' }
+  $left.Add([ordered]@{ branch = $b; reason = "git branch -D failed: $line"; command = "git branch -D $b" })
+}
 
 $json = & gh pr view $Pr --json headRefName,baseRefName,commits 2>$null
 if ($LASTEXITCODE -ne 0 -or -not $json) { Fail "gh pr view $Pr failed" }
@@ -78,8 +93,7 @@ foreach ($b in $branches) {
     $left.Add([ordered]@{ branch = $b; reason = 'checked out in a worktree'; command = "git branch -D $b" })
     continue
   }
-  & git branch -D $b 2>$null | Out-Null
-  if ($LASTEXITCODE -eq 0) { $deleted.Add($b) }
+  Remove-Branch $b
 }
 
 # leftover worktree-<name> branches of removed worktrees: removed when every commit is on a remote branch
@@ -87,8 +101,7 @@ foreach ($b in $branches) {
 foreach ($b in ($local | Where-Object { $_ -like 'worktree-*' -and $checkedOut -notcontains $_ -and $wtNames -notcontains $_ })) {
   $remote = @(& git branch -r --contains $b 2>$null | Where-Object { $_.Trim() -and $_ -notmatch '->' })
   if ($remote.Count -gt 0) {
-    & git branch -D $b 2>$null | Out-Null
-    if ($LASTEXITCODE -eq 0) { $deleted.Add($b) }
+    Remove-Branch $b -TrySafe
   }
   else {
     $left.Add([ordered]@{ branch = $b; reason = 'commits not on any remote branch'; command = "git branch -D $b" })

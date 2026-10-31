@@ -105,6 +105,62 @@ describe.skipIf(!hasPwsh || process.platform === 'win32')('Format-Changed.ps1 de
     expect(calls()).toEqual([]);
   });
 
+  // the language of a step is the one its tool belongs to (ts: prettier, eslint or biome; py: ruff; ...)
+  const toLanguage: Record<string, string> = {
+    prettier: 'ts',
+    eslint: 'ts',
+    biome: 'ts',
+    ruff: 'py',
+    dotnet: 'dotnet',
+    cargo: 'rust',
+    gofmt: 'go',
+  };
+  it.each([
+    ['a.ts', 'ts'],
+    ['a.tsx', 'ts'],
+    ['a.js', 'ts'],
+    ['a.jsx', 'ts'],
+    ['a.mjs', 'ts'],
+    ['a.cjs', 'ts'],
+    ['a.json', 'ts'],
+    ['a.css', 'ts'],
+    ['a.html', 'ts'],
+    ['b.py', 'py'],
+    ['c.cs', 'dotnet'],
+    ['c.csproj', 'dotnet'],
+    ['c.sln', 'dotnet'],
+    ['c.slnx', 'dotnet'],
+    ['d.rs', 'rust'],
+    ['e.go', 'go'],
+  ])('maps %s to the %s language', async (file, language) => {
+    const dir = mkRepo(`ext-${path.extname(file).slice(1)}`, [file]);
+    const r = await go(dir, ['-WhatIf']);
+    expect(r.status).toBe(0);
+    const tools: string[] = JSON.parse(r.stdout).map((s: { tool: string }) => s.tool);
+    expect([...new Set(tools.map((t) => toLanguage[t]))]).toEqual([language]);
+    expect(calls()).toEqual([]);
+  });
+
+  it('-Language ts output is the ts steps only, unchanged by the detection (repo has .py too)', async () => {
+    const r = await go(repo.mixed, ['-Language', 'ts', '-WhatIf']);
+    expect(r.status).toBe(0);
+    expect(JSON.parse(r.stdout)).toEqual([
+      {
+        tool: 'prettier',
+        extensions: ['.ts', '.tsx', '.js', '.mjs', '.cjs', '.jsx', '.json', '.css', '.html'],
+        requires: 'npx --no-install prettier --version',
+        commands: ['npx --no-install prettier --write {files}'],
+      },
+      {
+        tool: 'eslint',
+        extensions: ['.ts', '.tsx', '.js', '.mjs', '.cjs', '.jsx'],
+        requires: 'npx --no-install eslint --version',
+        commands: ['npx --no-install eslint --fix {files}'],
+      },
+    ]);
+    expect(calls()).toEqual([]);
+  });
+
   it('a format.<Language> config entry replaces the defaults of that language only', async () => {
     await go(repo.cfg, []);
     // the untracked .agents/config.json is itself a changed .json file, so prettier takes it too

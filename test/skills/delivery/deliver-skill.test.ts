@@ -61,6 +61,30 @@ describe('deliver SKILL.md', () => {
     expect(body).toContain('`github-pull-request`');
   });
 
+  it('names the lessons role in the subagent prompts (#25)', () => {
+    const step = (a: string, b: string) => body.slice(body.indexOf(a), body.indexOf(b));
+    expect(step('**Implement.**', '**Review.**')).toContain(
+      'Load `implementation`, role `implement`.',
+    );
+    expect(step('**Review.**', '**Fix.**')).toContain('Load `code-review`, role `review`.');
+    expect(step('**Fix.**', '**PR.**')).toContain('loads `implementation` with role `fix`');
+  });
+
+  it('puts Get-Lessons.ps1 on every allowlist (#25)', () => {
+    expect(permissions).toContain('`pwsh` with `Get-Lessons.ps1` of the `lessons` skill');
+    expect(permissions).toContain('"Bash(pwsh .claude/skills/lessons/scripts/Get-Lessons.ps1:*)"');
+    expect(permissions).toContain('"pwsh *lessons/scripts/Get-Lessons.ps1*": "allow"');
+    const settings = JSON.parse(
+      fs.readFileSync(path.resolve(__dirname, '../../../.claude/settings.json'), 'utf8'),
+    );
+    expect(settings.permissions.allow).toEqual(
+      expect.arrayContaining([
+        'Bash(pwsh .claude/skills/lessons/scripts/Get-Lessons.ps1:*)',
+        'Bash(pwsh ~/.claude/skills/lessons/scripts/Get-Lessons.ps1:*)',
+      ]),
+    );
+  });
+
   it('takes several numbers and a milestone, skips needs-refinement, reports per number', () => {
     expect(body).toContain(
       '`/deliver <nr> [<nr> …] [--milestone <name>] [--unattended] [--max <n>]`',
@@ -70,6 +94,11 @@ describe('deliver SKILL.md', () => {
     expect(body).toContain('ties keep the order of the arguments');
     expect(body).toContain('#<nr> select: needs refinement, skipped');
     expect(body).toContain('planner refine <nr>');
+    expect(body).toContain('#<nr> select: interactive, skipped');
+    expect(body).toContain('`interactive` with `/deliver <nr>` in a session');
+    expect(body).toContain(
+      'interactive mode delivers it, also through a Feature, Epic or milestone',
+    );
     expect(body).toContain('per given number');
   });
 
@@ -83,6 +112,13 @@ describe('deliver SKILL.md', () => {
     expect(body).toContain('`gh pr checks <pr> --watch --required`');
     expect(body).toContain('gh pr merge <pr> --squash');
     expect(body).toContain('gh issue close <nr>');
+  });
+
+  it('keeps CI watch output unbuffered', () => {
+    const ci = body.slice(body.indexOf('**CI.**'), body.indexOf('**Merge.**'));
+    expect(ci).toContain('without a pipe or output filter');
+    for (const filter of ['tail', 'head', 'grep']) expect(ci).toContain(filter);
+    expect(ci).toContain('watch progress reaches the session');
   });
 
   it('warns when release/next has no required status checks', () => {
@@ -106,9 +142,10 @@ describe('deliver SKILL.md', () => {
     expect(body).toContain('`#<nr> <step>: <result>`');
   });
 
-  it('no longer starts workflow.js', () => {
-    expect(body).toContain('this skill does not start it');
-    expect(fs.existsSync(path.join(skillDir, 'workflow.js'))).toBe(true);
+  it('ships no workflow.js and does not mention it (#57)', () => {
+    expect(fs.existsSync(path.join(skillDir, 'workflow.js'))).toBe(false);
+    expect(text).not.toContain('workflow.js');
+    expect(roles).not.toContain('workflow.js');
   });
 
   describe('herdr progress (#855)', () => {
@@ -285,13 +322,47 @@ describe('deliver permissions.md (#862)', () => {
 
   it('Copilot CLI: --allow-tool shell entries', () => {
     const copilot = section('Copilot CLI');
+    for (const sub of [
+      'fetch',
+      'switch',
+      'worktree',
+      'add',
+      'commit',
+      'rebase',
+      'push',
+      'diff',
+      'ls-remote',
+      'branch',
+    ])
+      expect(copilot).toContain(`--allow-tool 'shell(git ${sub})'`);
+    expect(copilot).not.toContain("--allow-tool 'shell(git)'");
     for (const flag of [
-      "--allow-tool 'shell(git)'",
       "--allow-tool 'shell(gh pr)'",
+      "--allow-tool 'shell(gh label)'",
+      "--allow-tool 'shell(gh repo view)'",
       "--deny-tool 'shell(git push --force)'",
     ])
       expect(copilot).toContain(flag);
     expect(copilot).not.toContain("'shell(pnpm)'");
+  });
+
+  it('Copilot CLI: notes on git subcommands, deny lines, timeout, model and herdr', () => {
+    const copilot = section('Copilot CLI');
+    expect(copilot).toContain('`shell(git)` covered read-only subcommands only');
+    expect(copilot).toContain('did not block `git push --force --dry-run origin release/next`');
+    expect(copilot).toContain('`COPILOT_TASK_WAIT_TIMEOUT_SECONDS=3600`');
+    expect(copilot).toContain('`copilot --resume=<id> -p "continue"`');
+    expect(copilot).toContain(
+      '`~/.copilot/settings.json` (`subagents.agents.general-purpose.model`)',
+    );
+    expect(copilot).toContain('`herdr pane report-metadata` with quoted arguments was denied');
+  });
+
+  it('the gh row of the table names label and repo view', () => {
+    expect(permissions).toMatch(
+      /`gh` \(`auth status`, `api`, `issue`, `pr`, `label`, `repo view`\)/,
+    );
+    expect(permissions).toMatch(/`ls-remote`, `branch`\)/);
   });
 
   it('contains no quoted $(…) substitution in its examples', () => {
@@ -310,7 +381,7 @@ describe('config schema deliver key', () => {
   );
   const roleNames = Object.keys(schema.properties.deliver.properties.roles.properties);
 
-  it('knows exactly the roles the workflow uses', () => {
+  it('knows exactly the roles of references/roles.md', () => {
     expect(roleNames.sort()).toEqual(
       ['ci', 'create', 'fix', 'gate', 'implement', 'plan', 'pr', 'review', 'select'].sort(),
     );

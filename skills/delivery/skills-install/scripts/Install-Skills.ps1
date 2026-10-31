@@ -213,7 +213,7 @@ $gitignore = Join-Path $scopeBase '.gitignore'
 if (-not $Global -and (Test-Path -LiteralPath $gitignore -PathType Leaf)) {
   $gi = @(Get-Content -LiteralPath $gitignore | ForEach-Object { $_.Trim() })
   if (@($gi | Where-Object { $_ -match '^/?\.agents(/(\*{1,2})?)?$' }).Count -gt 0) {
-    $notes.Add('.gitignore ignores .agents/: that hides the installed skills (.agents/skills/) and the project config (.agents/config.json). Remove the line, or keep both with !.agents/skills/ and !.agents/config.json.')
+    $notes.Add('.gitignore ignores .agents/: that hides the installed skills (.agents/skills/), the project config (.agents/config.json) and the committed lessons (.agents/lessons/). Remove the line, or keep them with !.agents/skills/, !.agents/config.json and !.agents/lessons/.')
   }
 }
 

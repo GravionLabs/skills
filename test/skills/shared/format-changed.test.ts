@@ -14,8 +14,9 @@ vi.setConfig({ testTimeout: 30000, hookTimeout: 30000 });
 describe.skipIf(!hasPwsh || process.platform === 'win32')('Format-Changed.ps1', () => {
   let worker: PwshWorker;
   let tmp: string;
-  // fake tools on PATH: `ok` probes (`--version`) pass, `bad` probes fail, `gitOnly` has nothing but git
-  const bins = { ok: '', bad: '', gitOnly: '' };
+  // fake tools on PATH: `ok` probes (`--version`) pass, `bad` probes fail, `gitOnly` has nothing but git, `diffFail` has a
+  // git whose `diff HEAD` fails (everything else runs the real git)
+  const bins = { ok: '', bad: '', gitOnly: '', diffFail: '' };
   // fixture repos shared by all cases: the cases only write the call log (outside every repo) and .agents/ of `cfg`
   const repo = {
     langs: '',
@@ -84,6 +85,13 @@ describe.skipIf(!hasPwsh || process.platform === 'win32')('Format-Changed.ps1', 
     bins.gitOnly = mkdir('bin-git');
     const gitPath = spawnSync('sh', ['-c', 'command -v git'], { encoding: 'utf8' }).stdout.trim();
     fs.symlinkSync(gitPath, path.join(bins.gitOnly, 'git'));
+    bins.diffFail = mkdir('bin-difffail');
+    fs.writeFileSync(
+      path.join(bins.diffFail, 'git'),
+      `#!/bin/sh\ncase " $* " in *" diff "*" HEAD "*) echo 'fatal: bad object HEAD' >&2; exit 128;; esac\n` +
+        `exec ${JSON.stringify(gitPath)} "$@"\n`,
+      { mode: 0o755 },
+    );
 
     // one changed file per language; sub/biome.json is no Biome project (not at the toplevel), prettier takes it as json
     repo.langs = mkRepo(
@@ -95,6 +103,8 @@ describe.skipIf(!hasPwsh || process.platform === 'win32')('Format-Changed.ps1', 
         'c.html',
         'd.scss',
         'e.py',
+        'g.jsx',
+        'h.css',
         'F.cs',
         'src/lib.rs',
         'cmd/app/main.go',
@@ -102,7 +112,11 @@ describe.skipIf(!hasPwsh || process.platform === 'win32')('Format-Changed.ps1', 
         'sub/biome.json',
       ],
     );
-    repo.biome = mkRepo('biome', ['biome.jsonc'], ['a.html', 'b.ts', 'c.json', 'n.md']);
+    repo.biome = mkRepo(
+      'biome',
+      ['biome.jsonc'],
+      ['a.html', 'b.ts', 'c.json', 'g.jsx', 'h.css', 'n.md'],
+    );
     repo.mdbiome = mkRepo('mdbiome', ['biome.json'], ['n.md', 'ci.yml', 'v.yaml']);
     repo.clean = mkRepo('clean', ['base.ts'], ['n.md']);
     // branch feat has c.ts committed since main; the working tree has every kind of change
@@ -153,72 +167,43 @@ describe.skipIf(!hasPwsh || process.platform === 'win32')('Format-Changed.ps1', 
   };
   const ts = ['-Language', 'ts', '-Extensions', '.ts'];
 
-  // built-in defaults: a format run per language; -Check runs once per toolchain (prettier/eslint, Biome), the other check
-  // commands are data pinned by format-defaults-sync. The Biome rows run in the repo with biome.jsonc at the toplevel
+  // built-in defaults, one row per step shape (#56: data variants dropped for the 15 s budget): ts and ng (two steps, their own
+  // extensions), go (no probe), Biome (one step, Markdown included). py runs in format-changed-detect; the py, dotnet, rust and
+  // ng Biome commands are the same table data, pinned by format-defaults-sync. -Check runs once per toolchain
   const defaults = [
     [
       'ts',
       'langs',
-      3,
+      6,
       [
-        'npx --no-install prettier --write a.ts b.json sub/biome.json',
-        'npx --no-install eslint --fix a.ts',
+        'npx --no-install prettier --write a.ts b.json c.html g.jsx h.css sub/biome.json',
+        'npx --no-install eslint --fix a.ts g.jsx',
       ],
       [
-        'npx --no-install prettier --check a.ts b.json sub/biome.json',
-        'npx --no-install eslint a.ts',
+        'npx --no-install prettier --check a.ts b.json c.html g.jsx h.css sub/biome.json',
+        'npx --no-install eslint a.ts g.jsx',
       ],
     ],
     [
       'ng',
       'langs',
-      5,
+      6,
       [
-        'npx --no-install prettier --write a.ts b.json c.html d.scss sub/biome.json',
+        'npx --no-install prettier --write a.ts b.json c.html d.scss h.css sub/biome.json',
         'npx --no-install eslint --fix a.ts',
       ],
       [
-        'npx --no-install prettier --check a.ts b.json c.html d.scss sub/biome.json',
+        'npx --no-install prettier --check a.ts b.json c.html d.scss h.css sub/biome.json',
         'npx --no-install eslint a.ts',
       ],
     ],
-    [
-      'py',
-      'langs',
-      1,
-      ['uv run ruff format e.py', 'uv run ruff check --fix e.py'],
-      ['uv run ruff format --check e.py', 'uv run ruff check e.py'],
-    ],
-    [
-      'dotnet',
-      'langs',
-      1,
-      ['dotnet format --include F.cs'],
-      ['dotnet format --verify-no-changes --include F.cs'],
-    ],
-    ['rust', 'langs', 1, ['cargo fmt -- src/lib.rs'], ['cargo fmt -- --check src/lib.rs']],
     ['go', 'langs', 1, ['gofmt -w cmd/app/main.go'], ['gofmt -l cmd/app/main.go']],
     [
       'ts',
       'biome',
-      3,
-      ['npx biome check --write --no-errors-on-unmatched b.ts c.json n.md'],
-      ['npx biome check --no-errors-on-unmatched b.ts c.json n.md'],
-    ],
-    [
-      'ng',
-      'biome',
-      4,
-      ['npx biome check --write --no-errors-on-unmatched a.html b.ts c.json n.md'],
-      ['npx biome check --no-errors-on-unmatched a.html b.ts c.json n.md'],
-    ],
-    // no -Language: Markdown and YAML alone are mapped to ts in a Biome project
-    [
-      'ts',
-      'mdbiome',
-      3,
-      ['npx biome check --write --no-errors-on-unmatched ci.yml n.md v.yaml'],
-      ['npx biome check --no-errors-on-unmatched ci.yml n.md v.yaml'],
+      6,
+      ['npx biome check --write --no-errors-on-unmatched a.html b.ts c.json g.jsx h.css n.md'],
+      ['npx biome check --no-errors-on-unmatched a.html b.ts c.json g.jsx h.css n.md'],
     ],
   ] as const;
   it.each(defaults)('default %s (%s repo) runs its format commands', async (lang, r, n, format) => {
@@ -532,19 +517,28 @@ describe.skipIf(!hasPwsh || process.platform === 'win32')('Format-Changed.ps1', 
     expect(calls()).toEqual([]);
   });
 
+  it('fails with the git error when the diff against an existing HEAD fails, nothing run', async () => {
+    const env = { PATH: `${bins.diffFail}:${bins.ok}:${process.env.PATH}` };
+    const r = await go(repo.work, ['-Extensions', '.ts', '-Command', 'fmt {files}'], bins.ok, env);
+    expect(r.status).toBe(128);
+    expect(r.stdout).toBe('');
+    expect(r.stderr).toContain('fatal: bad object HEAD');
+    expect(calls()).toEqual([]);
+  });
+
   it('-WhatIf prints the resolved steps as JSON and runs nothing', async () => {
     const d = await go(repo.langs, ['-Language', 'ts', '-Check', '-WhatIf']);
     expect(d.status).toBe(0);
     expect(JSON.parse(d.stdout)).toEqual([
       {
         tool: 'prettier',
-        extensions: ['.ts', '.tsx', '.js', '.mjs', '.cjs', '.json'],
+        extensions: ['.ts', '.tsx', '.js', '.mjs', '.cjs', '.jsx', '.json', '.css', '.html'],
         requires: 'npx --no-install prettier --version',
         commands: ['npx --no-install prettier --check {files}'],
       },
       {
         tool: 'eslint',
-        extensions: ['.ts', '.tsx', '.js', '.mjs', '.cjs'],
+        extensions: ['.ts', '.tsx', '.js', '.mjs', '.cjs', '.jsx'],
         requires: 'npx --no-install eslint --version',
         commands: ['npx --no-install eslint {files}'],
       },

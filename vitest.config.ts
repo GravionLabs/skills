@@ -9,6 +9,9 @@ export default defineConfig({
     exclude: [...configDefaults.exclude, '**/.worktrees/**'],
     testTimeout: 30000,
     hookTimeout: 30000,
+    // #56: a pwsh cache directory per worker slot; parallel files sharing ~/.cache/powershell crash pwsh at startup
+    globalSetup: ['test/helpers/pwsh-cache-global.ts'],
+    setupFiles: ['test/helpers/pwsh-cache.ts'],
     // github-actions turns failures into annotations, readable without the log download.
     reporters: [
       'default',

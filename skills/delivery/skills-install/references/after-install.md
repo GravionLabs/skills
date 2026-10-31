@@ -2,13 +2,17 @@
 
 ## What to commit
 
-| Path                                 | Action                                                                                                                                                                                                                                                                                                     |
-| :----------------------------------- | :--------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `skills-lock.json`                   | commit (source and ref per skill; `npx skills update` and `npx skills check` read it)                                                                                                                                                                                                                      |
-| `.agents/skills/`, `.claude/skills/` | commit (instant context on clone). `.agents/skills/` holds the copies for OpenCode and Copilot; `.claude/skills/` links to them (copies on Windows)                                                                                                                                                        |
-| `.agents/config.json`                | commit (project config, see [project config](https://github.com/GravionLabs/skills/blob/main/docs/usage/project-config.md)). A `.gitignore` line `.agents/*` without exceptions hides it and the installed skills: add `!.agents/skills/` and `!.agents/config.json` below it; the installer prints a note |
+| Path                                 | Action                                                                                                                                                                                                                                                                                                                          |
+| :----------------------------------- | :------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| `skills-lock.json`                   | commit (source and ref per skill; `npx skills update` and `npx skills check` read it)                                                                                                                                                                                                                                           |
+| `.agents/skills/`, `.claude/skills/` | commit (instant context on clone). `.agents/skills/` holds the copies for OpenCode and Copilot; `.claude/skills/` links to them (copies on Windows)                                                                                                                                                                             |
+| `.agents/config.json`                | commit (project config, see [project config](https://github.com/GravionLabs/skills/blob/main/docs/usage/project-config.md)). A `.gitignore` line `.agents/*` without exceptions hides it and the installed skills: add `!.agents/skills/`, `!.agents/config.json` and `!.agents/lessons/` below it; the installer prints a note |
 
 Updates: `npx skills check` (exit 1 when an update exists, usable in CI), `npx skills update` (all) or `npx skills update <name>`.
+
+## Global and project copies
+
+A skill installed both globally (`-g`) and in the project may resolve to the global copy, depending on the client: OpenCode, for example, loaded `detect-techstack` from `~/.agents/skills/` although `.opencode/skills/` linked the project copy. An outdated global copy then wins silently. Keep the global copy current (`npx skills update -g`) or remove it. To see which copy is loaded, OpenCode prints the resolved path per skill with `opencode debug skill`.
 
 ## Delivery
 

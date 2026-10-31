@@ -14,7 +14,7 @@ Run it from the repository root. It starts `claude -p "/deliver <targets> --unat
 
 ## Stop rules
 
-Checked from GitHub (not from the output) before and after each iteration, on the open PBIs of the targets without `needs-decision` / `needs-refinement`:
+Checked from GitHub (not from the output) before and after each iteration, on the open PBIs of the targets without `needs-decision` / `needs-refinement` / `interactive` (unattended, `deliver` skips `interactive` PBIs; they count as held):
 
 | Result      | When                                                                                | Exit |
 | :---------- | :---------------------------------------------------------------------------------- | :--- |

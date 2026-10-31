@@ -4,7 +4,7 @@ Delivery runs through the skill `deliver` (group `delivery`), the same on Claude
 
 Interactive by default: an unclear criterion, extra scope or a blocker asks you in the chat. `/deliver <nr> --unattended` (`claude -p`, `opencode run`, `copilot -p`) comments on the issue instead, labels it `needs-decision` and continues with the next independent PBI.
 
-The hard gate is a GitHub ruleset on `release/next` (required checks, no bypass): a red check blocks the merge whatever the session does. `deliver` warns at the start when the repository has none. The Claude Code workflow `workflow.js` of an earlier version stays frozen next to the skill until a retro decides on it.
+The hard gate is a GitHub ruleset on `release/next` (required checks, no bypass): a red check blocks the merge whatever the session does. `deliver` warns at the start when the repository has none.
 
 ## A release in fresh sessions
 

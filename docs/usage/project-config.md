@@ -8,7 +8,7 @@ By default `Format-Changed.ps1 -Language <lang>` runs the built-in commands of `
 
 ## Deliver roles
 
-`deliver.roles` sets `model` and `effort` per role: the `deliver` skill uses `implement`, `review` and `fix` for its subagents when the harness takes a model per call; the frozen `workflow.js` uses all roles (`select`, `plan`, `create`, `implement`, `fix`, `gate`, `review`, `pr`, `ci`); `implement` and `fix` also take `tiers` (`fast`, `standard`, `strong`). Unset keys keep the defaults, see `references/roles.md` of the `deliver` skill.
+`deliver.roles` sets `model` and `effort` per role: the `deliver` skill uses `implement`, `review` and `fix` for its subagents when the harness takes a model per call; the schema also knows `select`, `plan`, `create`, `gate`, `pr` and `ci`, which the skill does not use; `implement` and `fix` also take `tiers` (`fast`, `standard`, `strong`). Unset keys keep the defaults, see `references/roles.md` of the `deliver` skill.
 
 ## Schema
 
