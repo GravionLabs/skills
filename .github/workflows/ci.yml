@@ -28,10 +28,15 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
+      # node/setup has no node-version-file input: the version comes from .nvmrc
+      - name: Read the Node version
+        id: node
+        run: echo "version=$(cat .nvmrc)" >> "$GITHUB_OUTPUT"
+
       - name: Set up Node and pnpm
         uses: GravionLabs/ci/node/setup@cbb01f83374efa76491226e97bcf1d5cf9674fab # main
         with:
-          node-version: '24'
+          node-version: ${{ steps.node.outputs.version }}
           package-manager: pnpm
 
       - name: Install
@@ -79,10 +84,15 @@ jobs:
         with:
           fetch-depth: 0
 
+      # node/setup has no node-version-file input: the version comes from .nvmrc
+      - name: Read the Node version
+        id: node
+        run: echo "version=$(cat .nvmrc)" >> "$GITHUB_OUTPUT"
+
       - name: Set up Node and pnpm
         uses: GravionLabs/ci/node/setup@cbb01f83374efa76491226e97bcf1d5cf9674fab # main
         with:
-          node-version: '24'
+          node-version: ${{ steps.node.outputs.version }}
           package-manager: pnpm
 
       - name: Install

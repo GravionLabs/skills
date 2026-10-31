@@ -114,6 +114,25 @@ describe('deliver SKILL.md', () => {
     expect(body).toContain('gh issue close <nr>');
   });
 
+  it('merges into release/next without asking, only on a clean review and green checks (#78)', () => {
+    const merge = body.slice(body.indexOf('**Merge.**'), body.indexOf('**Release.**'));
+    expect(merge).toContain('Without asking, in both modes');
+    expect(merge).toContain('no blocking finding or unmet criterion');
+    expect(merge).toContain('the required checks are green');
+    expect(body).not.toContain('ask before merging');
+  });
+
+  it('ends a fully delivered milestone with the release PR for human review (#78)', () => {
+    const release = body.slice(body.indexOf('**Release.**'), body.indexOf('## Pause rules'));
+    expect(release).toContain('Only with `--milestone`');
+    expect(release).toContain('gh issue list --milestone <name> --label pbi --state open');
+    expect(release).toContain('`github-release` and run `finish`');
+    expect(release).toContain('`auto_merge: false`');
+    expect(release).toContain('never merge it');
+    expect(body).toContain('Never merge the release PR into `main`');
+    expect(body).toContain('the release PR of step 9');
+  });
+
   it('keeps CI watch output unbuffered', () => {
     const ci = body.slice(body.indexOf('**CI.**'), body.indexOf('**Merge.**'));
     expect(ci).toContain('without a pipe or output filter');
@@ -163,17 +182,32 @@ describe('deliver SKILL.md', () => {
       expect(body).not.toMatch(/`herdr /);
     });
 
-    it('reads the pane id once, sets the progress line per step and clears it at the end', () => {
+    it('reads the pane id once, reports the step as pane tokens and clears them at the end (#16)', () => {
       expect(herdr).toContain('`printenv HERDR_PANE_ID` once');
       expect(herdrCalls).toEqual([
-        'herdr pane report-metadata <pane> --source deliver --display-agent "#12 review ✗1"',
-        'herdr pane report-metadata <pane> --source deliver --clear-display-agent',
+        'herdr pane report-metadata <pane> --source deliver --token deliver=#12 --token "deliver_step=review: 1 blocking" --token deliver_pr=#55 --ttl-ms 3600000',
+        'herdr pane report-metadata <pane> --source deliver --clear-token deliver --clear-token deliver_step --clear-token deliver_pr',
       ]);
-      expect(herdr.indexOf('--clear-display-agent')).toBeGreaterThan(herdr.indexOf('## End'));
+      expect(herdr.indexOf('--clear-token')).toBeGreaterThan(herdr.indexOf('## End'));
+      expect(herdr).toContain('at most 80 characters');
     });
 
-    it('keeps the sidebar text short', () => {
-      expect(herdr).toContain('no `deliver` prefix, no transient states');
+    it('never uses --display-agent in deliver; the agent name stays the harness (#16)', () => {
+      const files = fs
+        .readdirSync(skillDir, { recursive: true, withFileTypes: true })
+        .filter((e) => e.isFile())
+        .map((e) => path.join(e.parentPath, e.name));
+      for (const f of [...files, path.resolve(__dirname, '../../../docs/delivery.md')]) {
+        expect(fs.readFileSync(f, 'utf8'), f).not.toContain('display-agent');
+      }
+      expect(herdr).toContain('never replace the agent name');
+    });
+
+    it('documents a sidebar layout with the tokens without writing the config (#16)', () => {
+      expect(herdr).toContain(
+        'rows = [["state_icon", "agent", "state_text"], [{ token = "$deliver", bold = true }, { token = "$deliver_step", rules = [{ contains = "blocked", fg = "#f55" }, { contains = "merged", fg = "#5f5" }] }, "$deliver_pr"], ["workspace", "tab"]]',
+      );
+      expect(herdr).toContain('propose it, never write it');
     });
 
     it('never expands a variable in a herdr call', () => {

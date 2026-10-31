@@ -7,3 +7,5 @@ skills-install: skill-tooling
 skills-install: dotnet-pinvoke
 # ng-template is the Angular element, not a skill
 ng-implementation: ng-template
+# deliver-log is the label of the herdr log pane of Invoke-DeliverLoop.ps1, not a skill
+deliver: deliver-log

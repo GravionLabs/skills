@@ -1,8 +1,8 @@
 # Delivery
 
-Delivery runs through the skill `deliver` (group `delivery`), the same on Claude Code, OpenCode and Copilot CLI: `/deliver <nr> [<nr> …] [--milestone <name>]` takes the open PBIs of PBIs, Features, Epics or a milestone in dependency order (each once; `needs-refinement` is skipped); per PBI a subagent implements with `implementation`, a subagent reviews with `code-review`, at most 2 fix rounds follow, then the PR into `release/next`, the wait for the required checks, the squash merge and the closed issue. State lives in GitHub only, so `/deliver <nr>` resumes a stopped run. A missing breakdown is planned with `planner` and `grill-me` in the same session.
+Delivery runs through the skill `deliver` (group `delivery`), the same on Claude Code, OpenCode and Copilot CLI: `/deliver <nr> [<nr> …] [--milestone <name>]` takes the open PBIs of PBIs, Features, Epics or a milestone in dependency order (each once; `needs-refinement` is skipped); per PBI a subagent implements with `implementation`, a subagent reviews with `code-review`, at most 2 fix rounds follow, then the PR into `release/next`, the wait for the required checks, the squash merge without asking (clean review, green checks) and the closed issue. When every PBI of a `--milestone` is closed, `deliver` opens the release PR into `main` with `github-release` `finish` and stops there: that merge waits for a person's review. State lives in GitHub only, so `/deliver <nr>` resumes a stopped run. A missing breakdown is planned with `planner` and `grill-me` in the same session.
 
-Interactive by default: an unclear criterion, extra scope or a blocker asks you in the chat. `/deliver <nr> --unattended` (`claude -p`, `opencode run`, `copilot -p`) comments on the issue instead, labels it `needs-decision` and continues with the next independent PBI.
+Interactive by default: an unclear criterion, extra scope or a blocker asks you in the chat; a merge into `release/next` never does. `/deliver <nr> --unattended` (`claude -p`, `opencode run`, `copilot -p`) comments on the issue instead, labels it `needs-decision` and continues with the next independent PBI.
 
 The hard gate is a GitHub ruleset on `release/next` (required checks, no bypass): a red check blocks the merge whatever the session does. `deliver` warns at the start when the repository has none.
 
@@ -16,7 +16,7 @@ Several sessions can run `/deliver` at the same time, one worktree per session (
 
 ## herdr
 
-In a [herdr](https://herdr.dev) pane, `deliver` shows its current step in the herdr Agent sidebar (`references/herdr.md` of the skill). herdr detects whether the agent waits for you by itself; no bus or daemon is involved.
+In a [herdr](https://herdr.dev) pane, `deliver` (and `Invoke-DeliverLoop.ps1`) reports its progress as pane tokens of source `deliver`: `deliver` (issue), `deliver_step` (step and result) and `deliver_pr` (PR), cleared at the end. The agent name in the sidebar stays the harness. herdr shows a token only where a row of `[ui.sidebar.agents]` names it (`$deliver_step`); the skill's `references/herdr.md` has a layout to copy into your herdr config. herdr detects whether the agent waits for you by itself; no bus or daemon is involved.
 
 Without `/deliver` you work interactively, see [Working mode](working-mode.md).
 

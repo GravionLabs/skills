@@ -1,5 +1,5 @@
 mode: ContinuousDeployment
-next-version: 1.0.0
+minor-version-bump-message: '\+semver:\s?(feature|minor)|^Merge pull request #\d+ from [^/]+/release/'
 branches:
   release:
     regex: ^release/next$

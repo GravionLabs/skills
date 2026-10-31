@@ -3,6 +3,7 @@ import * as fs from 'fs';
 import * as os from 'os';
 import * as path from 'path';
 import { createFakeGh } from '../../helpers/fake-gh';
+import { PwshWorker } from '../../helpers/pwsh-worker';
 
 const SCRIPT = path.resolve(
   __dirname,
@@ -24,16 +25,23 @@ type Fixture = {
 };
 
 // #893: stop rules and observability of Invoke-DeliverLoop.ps1 with gh, claude, herdr and osascript as stubs on PATH.
-// Each case is its own pwsh spawn: the script reads the environment, writes the console directly and calls exit.
+// All cases share one PwshWorker (the script writes its steps with Write-Host, which the worker captures as stdout);
+// only 'needs a target' is its own spawn: it reads the message the script writes to the console's stderr.
 describe.skipIf(!hasPwsh || process.platform === 'win32')('Invoke-DeliverLoop.ps1', () => {
   let dir: string;
   let cwd: string;
   let seq = 0;
 
+  let worker: PwshWorker;
+
   beforeAll(() => {
     dir = fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(), 'deliver-loop-')));
+    worker = new PwshWorker(SCRIPT);
   });
-  afterAll(() => fs.rmSync(dir, { recursive: true, force: true }));
+  afterAll(() => {
+    worker.close();
+    fs.rmSync(dir, { recursive: true, force: true });
+  });
 
   const setup = (fx: Fixture) => {
     cwd = path.join(dir, `case-${++seq}`);
@@ -97,16 +105,17 @@ fs.writeFileSync(f, JSON.stringify(s));`,
       .split('\n')
       .filter((l) => l.startsWith('-p'));
   const run = (gh: ReturnType<typeof createFakeGh>, args: string[], env: NodeJS.ProcessEnv = {}) =>
-    spawnSync('pwsh', ['-NoProfile', '-File', SCRIPT, ...args], {
-      cwd,
-      encoding: 'utf8',
-      env: { ...gh.env(), HERDR_ENV: '', ...env },
-    });
+    worker.run(args, { cwd, env: { ...gh.env(), HERDR_ENV: '', NO_COLOR: '', ...env } });
   const pbi = (extra: Issue = {}): Issue => ({ labels: ['pbi'], ...extra });
 
   describe('arguments', () => {
     it('needs a target or a milestone', () => {
-      const r = run(setup({ issues: {} }), []);
+      const gh = setup({ issues: {} });
+      const r = spawnSync('pwsh', ['-NoProfile', '-File', SCRIPT], {
+        cwd,
+        encoding: 'utf8',
+        env: gh.env(),
+      });
       expect(r.status).toBe(64);
       expect(r.stderr).toContain('-Target');
     });
@@ -115,21 +124,21 @@ fs.writeFileSync(f, JSON.stringify(s));`,
       [['-Target', '1', '-Harness', 'opencode']],
       [['-Target', '1', '-Max', '0']],
       [['-Target', 'abc']],
-    ])('rejects %j', (args) => {
-      const r = run(setup({ issues: { 1: pbi() } }), args);
+    ])('rejects %j', async (args) => {
+      const r = await run(setup({ issues: { 1: pbi() } }), args);
       expect(r.status).not.toBe(0);
       expect(claudeCalls()).toEqual([]);
     });
   });
 
   describe('stop rules', () => {
-    it('-Milestone -Max 1 delivers exactly one PBI in one fresh process and stops', () => {
+    it('-Milestone -Max 1 delivers exactly one PBI in one fresh process and stops', async () => {
       const gh = setup({
         issues: { 10: pbi({ blockers: [{ number: 5, state: 'closed' }] }), 11: pbi() },
         milestones: { '0.13': [10, 11] },
         effect: 'close-first',
       });
-      const r = run(gh, ['-Milestone', '0.13', '-Max', '1']);
+      const r = await run(gh, ['-Milestone', '0.13', '-Max', '1']);
       expect(r.status).toBe(0);
       expect(claudeCalls()).toEqual([
         '-p /deliver --milestone 0.13 --unattended --max 1 --model sonnet --permission-mode auto --output-format stream-json --verbose',
@@ -137,7 +146,7 @@ fs.writeFileSync(f, JSON.stringify(s));`,
       expect(r.stdout).toContain('loop result: max reached');
     });
 
-    it('passes targets and -Model on and runs until nothing is open (Feature expanded to its PBIs)', () => {
+    it('passes targets and -Model on and runs until nothing is open (Feature expanded to its PBIs)', async () => {
       const gh = setup({
         issues: {
           100: { labels: ['feature'], children: [101, 102, 103] },
@@ -157,7 +166,7 @@ s.issues[n].state = 'CLOSED';
 for (const i of Object.values(s.issues)) i.blockers = (i.blockers || []).filter((b) => b.number !== n);
 fs.writeFileSync(${JSON.stringify(st)}, JSON.stringify(s));`,
       );
-      const r = run(gh, ['-Target', '100', '-Model', 'opus']);
+      const r = await run(gh, ['-Target', '100', '-Model', 'opus']);
       expect(r.status).toBe(0);
       const calls = claudeCalls();
       expect(calls).toHaveLength(2);
@@ -167,7 +176,7 @@ fs.writeFileSync(${JSON.stringify(st)}, JSON.stringify(s));`,
       expect(r.stdout).toContain('loop result: done');
     });
 
-    it('stops with "no progress" and the last log lines when a PBI stays open', () => {
+    it('stops with "no progress" and the last log lines when a PBI stays open', async () => {
       const gh = setup({
         issues: { 10: pbi() },
         effect: 'none',
@@ -175,48 +184,54 @@ fs.writeFileSync(${JSON.stringify(st)}, JSON.stringify(s));`,
           { type: 'assistant', message: { content: [{ type: 'text', text: 'working on it' }] } },
         ],
       });
-      const r = run(gh, ['-Target', '10']);
+      const r = await run(gh, ['-Target', '10']);
       expect(r.status).toBe(1);
       expect(claudeCalls()).toHaveLength(1);
       expect(r.stdout).toContain('no progress');
       expect(r.stdout).toMatch(/ {2}\d\d:\d\d:\d\d » working on it/);
     });
 
-    it('is blocked when the only PBI waits on an open blocker, without starting the harness', () => {
-      const r = run(setup({ issues: { 10: pbi({ blockers: [{ number: 5, state: 'open' }] }) } }), [
-        '-Target',
-        '10',
-      ]);
+    it('is blocked when the only PBI waits on an open blocker, without starting the harness', async () => {
+      const r = await run(
+        setup({ issues: { 10: pbi({ blockers: [{ number: 5, state: 'open' }] }) } }),
+        ['-Target', '10'],
+      );
       expect(r.status).toBe(2);
       expect(claudeCalls()).toEqual([]);
       expect(r.stdout).toContain('loop result: blocked');
     });
 
-    it('a paused PBI counts as progress; what remains behind labels ends as blocked', () => {
+    it('a paused PBI counts as progress; what remains behind labels ends as blocked', async () => {
       const gh = setup({
         issues: { 10: pbi(), 11: pbi({ labels: ['pbi', 'needs-refinement'] }) },
         effect: 'hold-first',
       });
-      const r = run(gh, ['-Target', '10,11']);
+      const r = await run(gh, ['-Target', '10,11']);
       expect(claudeCalls()).toHaveLength(1);
       expect(r.status).toBe(2);
       expect(r.stdout).toContain('loop result: blocked');
     });
 
-    it('counts an interactive PBI as held: one iteration for the ready one, then blocked', () => {
+    it('counts an interactive PBI as held: one iteration for the ready one, then blocked', async () => {
       const gh = setup({
         issues: { 10: pbi(), 11: pbi({ labels: ['pbi', 'interactive'] }) },
         effect: 'close-first',
       });
-      const r = run(gh, ['-Target', '10,11']);
+      const r = await run(gh, ['-Target', '10,11']);
       expect(claudeCalls()).toHaveLength(1);
       expect(r.status).toBe(2);
       expect(r.stdout).toContain('loop result: blocked');
     });
 
-    it('is done at once when nothing is open, and reads or writes no queue file', () => {
-      const r = run(setup({ issues: { 10: pbi({ state: 'CLOSED' }) } }), ['-Target', '10']);
+    it('is done at once when nothing is open, reads or writes no queue file; outside herdr it touches no herdr', async () => {
+      // outside herdr (#12): no pane is attempted, no display is set and no error is printed
+      const r = await run(setup({ issues: { 10: pbi({ state: 'CLOSED' }) } }), ['-Target', '10'], {
+        HERDR_PANE_ID: 'w1:p5',
+        DELIVER_LOOP_ASSUME_TTY: '1',
+      });
       expect(r.status).toBe(0);
+      expect(r.stderr).toBe('');
+      expect(read('herdr-calls.txt')).toBe('');
       expect(r.stdout).toContain('loop result: done');
       expect(claudeCalls()).toEqual([]);
       const files = fs.readdirSync(cwd, { recursive: true }).map(String);
@@ -271,11 +286,15 @@ fs.writeFileSync(${JSON.stringify(st)}, JSON.stringify(s));`,
           ],
         },
       },
+      {
+        type: 'assistant',
+        message: { content: [{ type: 'text', text: `#401 review: ${'x'.repeat(90)}` }] },
+      },
     ];
 
-    it('logs one line per step with the agent prefix, tool errors and writes every record to the jsonl', () => {
+    it('logs one line per step with the agent prefix, tool errors and writes every record to the jsonl', async () => {
       const gh = setup({ issues: { 401: pbi() }, effect: 'close-first', stream });
-      const r = run(gh, ['-Target', '401']);
+      const r = await run(gh, ['-Target', '401']);
       expect(r.status).toBe(0);
       const lines = read('.agents/deliver-loop.log');
       expect(lines).toMatch(/\d\d:\d\d:\d\d » #401 pr: opened #55/);
@@ -299,30 +318,154 @@ fs.writeFileSync(${JSON.stringify(st)}, JSON.stringify(s));`,
       }
     });
 
-    it('owns the herdr display: harness runs without HERDR_ENV, position per progress line, cleared at the end', () => {
+    it('owns the herdr display: harness runs without HERDR_ENV, pane tokens with the position per progress line, cleared at the end (#16)', async () => {
       const gh = setup({ issues: { 401: pbi() }, effect: 'close-first', stream });
-      run(gh, ['-Target', '401'], { HERDR_ENV: '1', HERDR_PANE_ID: 'p7' });
+      await run(gh, ['-Target', '401'], { HERDR_ENV: '1', HERDR_PANE_ID: 'p7' });
       expect(read('claude-calls.txt')).toContain('herdr_env=[]');
       const calls = read('herdr-calls.txt').trim().split('\n');
-      expect(calls).toContain(
-        'pane report-metadata p7 --source deliver --display-agent deliver 1/1 #401 pr: opened #55',
-      );
-      expect(calls.at(-1)).toBe('pane report-metadata p7 --source deliver --clear-display-agent');
+      const tokens = '--ttl-ms 3600000';
+      expect(calls).toEqual([
+        `pane report-metadata p7 --source deliver --token deliver=#401 --token deliver_step=1/1 starting ${tokens}`,
+        `pane report-metadata p7 --source deliver --token deliver=#401 --token deliver_step=1/1 pr: opened #55 --token deliver_pr=#55 ${tokens}`,
+        // the PR token stays for later steps; the step value is cut at 80 characters
+        `pane report-metadata p7 --source deliver --token deliver=#401 --token deliver_step=1/1 review: ${'x'.repeat(67)}… --token deliver_pr=#55 ${tokens}`,
+        'pane report-metadata p7 --source deliver --clear-token deliver --clear-token deliver_step --clear-token deliver_pr',
+      ]);
+      expect(calls.join('\n')).not.toContain('display-agent');
     });
 
-    it('clears the herdr display when the loop fails', () => {
+    it('clears the herdr display when the loop fails', async () => {
       const gh = setup({ issues: { 10: pbi({ children: [] }) } });
-      const r = run(gh, ['-Target', '10,99'], { HERDR_ENV: '1', HERDR_PANE_ID: 'p7' });
+      const r = await run(gh, ['-Target', '10,99'], { HERDR_ENV: '1', HERDR_PANE_ID: 'p7' });
       expect(r.status).not.toBe(0);
       expect(read('herdr-calls.txt').trim()).toBe(
-        'pane report-metadata p7 --source deliver --clear-display-agent',
+        'pane report-metadata p7 --source deliver --clear-token deliver --clear-token deliver_step --clear-token deliver_pr',
       );
     });
+  });
 
-    it('does not touch herdr without HERDR_ENV=1', () => {
-      const gh = setup({ issues: { 401: pbi() }, effect: 'close-first', stream });
-      run(gh, ['-Target', '401'], { HERDR_PANE_ID: 'p7' });
-      expect(read('herdr-calls.txt')).toBe('');
+  // #12: the herdr log pane and the plain versus ANSI log; herdr is a stub that answers
+  // `pane list` from herdr-list.json and `pane split` with pane w1:p9 (or fails when split-fail exists).
+  describe('log pane', () => {
+    const ESC = String.fromCharCode(27);
+    const paneStream = [
+      {
+        type: 'assistant',
+        message: {
+          content: [{ type: 'tool_use', id: 't1', name: 'Read', input: { file_path: 'src/a.ts' } }],
+        },
+      },
+      {
+        type: 'user',
+        message: {
+          content: [{ type: 'tool_result', tool_use_id: 't1', is_error: true, content: 'boom' }],
+        },
+      },
+      { type: 'assistant', message: { content: [{ type: 'text', text: '#401 ci: red' }] } },
+      { type: 'assistant', message: { content: [{ type: 'text', text: '#401 merged: squash' }] } },
+    ];
+    const panes = (list: object[]) => ({
+      id: 'cli:pane:list',
+      result: { panes: list, type: 'pane_list' },
+    });
+    const own = { pane_id: 'w1:p5', tab_id: 'w1:t5', label: 'skills' };
+    // without `stream` #401 is closed, so the loop is done at once (no harness run): only the pane cases need no stream
+    const prepare = (opts: { list?: object; splitFails?: boolean; stream?: boolean } = {}) => {
+      const gh = opts.stream
+        ? setup({ issues: { 401: pbi() }, effect: 'close-first', stream: paneStream })
+        : setup({ issues: { 401: pbi({ state: 'CLOSED' }) } });
+      fs.writeFileSync(
+        path.join(cwd, 'herdr-list.json'),
+        JSON.stringify(opts.list ?? panes([own])),
+      );
+      if (opts.splitFails) fs.writeFileSync(path.join(cwd, 'split-fail'), '');
+      fs.writeFileSync(
+        path.join(gh.bin, 'herdr'),
+        `#!/bin/sh
+echo "$*" >> ${cwd}/herdr-calls.txt
+case "$1 $2" in
+  "pane list") cat ${cwd}/herdr-list.json ;;
+  "pane split") [ -f ${cwd}/split-fail ] && { echo "no split" >&2; exit 1; }; echo '{"id":"cli:pane:split","result":{"pane":{"pane_id":"w1:p9"}}}' ;;
+esac
+`,
+        { mode: 0o755 },
+      );
+      return gh;
+    };
+    const herdrEnv = { HERDR_ENV: '1', HERDR_PANE_ID: 'w1:p5', DELIVER_LOOP_ASSUME_TTY: '1' };
+    const go = (gh: ReturnType<typeof createFakeGh>, args: string[], env: NodeJS.ProcessEnv) =>
+      run(gh, ['-Target', '401', ...args], env);
+    const paneCalls = () =>
+      read('herdr-calls.txt')
+        .split('\n')
+        .filter((l) => l && !l.startsWith('pane report-metadata'));
+
+    it('opens one pane below that tails the ANSI log, labels it deliver-log and leaves it open', async () => {
+      // a deliver-log pane of another tab does not count
+      const list = panes([own, { pane_id: 'w2:p1', tab_id: 'w2:t1', label: 'deliver-log' }]);
+      const r = await go(prepare({ list }), [], herdrEnv);
+      expect(r.status).toBe(0);
+      expect(r.stderr).toBe('');
+      expect(paneCalls()).toEqual([
+        'pane list',
+        'pane split --current --direction down --ratio 0.7 --no-focus',
+        `pane run w1:p9 pwsh -NoProfile -Command "Get-Content -Tail 40 -Wait '${path.join(cwd, '.agents/deliver-loop.ansi.log')}'"`,
+        'pane rename w1:p9 deliver-log',
+      ]);
+    });
+
+    it('opens no second pane when the tab already has one labeled deliver-log', async () => {
+      const list = panes([
+        own,
+        { pane_id: 'w1:p6', tab_id: 'w1:t5', label: 'deliver-log' },
+        { pane_id: 'w2:p1', tab_id: 'w2:t1', label: 'other' },
+      ]);
+      await go(prepare({ list }), [], herdrEnv);
+      expect(paneCalls()).toEqual(['pane list']);
+    });
+
+    // outside herdr: see 'is done at once'
+    it('stdout redirected: attempts no pane and prints no error', async () => {
+      const r = await go(prepare(), [], { ...herdrEnv, DELIVER_LOOP_ASSUME_TTY: '' });
+      expect(r.status).toBe(0);
+      expect(r.stderr).toBe('');
+      expect(paneCalls()).toEqual([]);
+    });
+
+    it('a failing split is ignored and the loop runs on', async () => {
+      const r = await go(prepare({ splitFails: true }), [], herdrEnv);
+      expect(r.status).toBe(0);
+      expect(r.stderr).toBe('');
+      expect(paneCalls()).toEqual([
+        'pane list',
+        'pane split --current --direction down --ratio 0.7 --no-focus',
+      ]);
+      expect(read('.agents/deliver-loop.log')).toContain('loop result: done');
+    });
+
+    it('-NoPane: opens no pane; writes the plain log without escape codes and the colored ANSI log', async () => {
+      await go(prepare({ stream: true }), ['-NoPane'], herdrEnv);
+      expect(paneCalls()).toEqual([]);
+      const plain = read('.agents/deliver-loop.log');
+      expect(plain).toMatch(/\d\d:\d\d:\d\d ✗ boom/);
+      expect(plain).not.toContain(ESC);
+      const ansi = read('.agents/deliver-loop.ansi.log');
+      expect(ansi).toMatch(new RegExp(`${ESC}\\[2m\\d\\d:\\d\\d:\\d\\d${ESC}\\[0m `));
+      expect(ansi).toContain(`${ESC}[36mRead${ESC}[0m src/a.ts`);
+      expect(ansi).toContain(`${ESC}[31m✗ boom${ESC}[0m`);
+      expect(ansi).toContain(`${ESC}[33m» #401 ci: red${ESC}[0m`);
+      expect(ansi).toContain(`${ESC}[32m» #401 merged: squash${ESC}[0m`);
+      expect(ansi).toContain(`${ESC}[32mloop result: done`);
+    });
+
+    // -NoColor takes the same branch as NO_COLOR
+    it('NO_COLOR: no ANSI log, the pane tails the plain log', async () => {
+      await go(prepare(), [], { ...herdrEnv, NO_COLOR: '1' });
+      expect(fs.existsSync(path.join(cwd, '.agents/deliver-loop.ansi.log'))).toBe(false);
+      expect(read('.agents/deliver-loop.log')).not.toContain(ESC);
+      expect(paneCalls()).toContain(
+        `pane run w1:p9 pwsh -NoProfile -Command "Get-Content -Tail 40 -Wait '${path.join(cwd, '.agents/deliver-loop.log')}'"`,
+      );
     });
   });
 });
