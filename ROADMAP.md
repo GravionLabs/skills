@@ -11,6 +11,7 @@ History: apm-hub 2.x and 3.x are in the [apm-hub roadmap](https://github.com/Gra
 | #1 deliver issues through Claude Code workflows | open for Feature #15              | Features #2 and #3 done in v1.0.2 |
 | #15 herdr integration of deliver                | open: #16, #12, #13               | milestone 1.1.0                   |
 | #8 stack packages (Feature #9)                  | open: #10 (`needs-decision`), #11 | out of 1.1.0 until #10 is decided |
+| #64 ADRs and specs in the skills                | open: #65, #66, #67, #68          | after 1.1.0                       |
 
 ## Done in 1.0.0 and 1.0.1
 
@@ -32,15 +33,23 @@ Milestone 1.1.0 (renamed from 1.2.0). `release/next` is cut from `v1.0.2`.
 | 2     | #16   | `deliver` reports step, issue and PR as herdr pane tokens           | S    | Feature #15, refined                         |
 | 2     | #12   | `Invoke-DeliverLoop` shows its log in a herdr or WezTerm split pane | S    | Feature #15, refined                         |
 | 3     | #13   | toggle the `deliver` log pane with a herdr key                      | S    | #12                                          |
+| 2     | #72   | move to Node.js 26                                                  | S    | — (part of GravionLabs/ci#100)               |
 
 Feature #15 and Epic #1 close with #16, #12 and #13. The herdr plugin of #17 moved to [GravionLabs/herdr-plugins](https://github.com/GravionLabs/herdr-plugins): GravionLabs/herdr-plugins#3 (`deliver-starter`), #5 (`agent-notify`), #22 (`deliver-view`) and #23 (`deliver-log`) there build on #16 and #13 here.
 
 ## Later
 
-| Issue | Title                           | Why later                                |
-| ----- | ------------------------------- | ---------------------------------------- |
-| #10   | jvm package for Java and Kotlin | `needs-decision`: one `jvm` group or two |
-| #11   | swift package                   | blocked by #10                           |
+| Issue | Title                                                    | Why later                                                     |
+| ----- | -------------------------------------------------------- | ------------------------------------------------------------- |
+| #10   | jvm package for Java and Kotlin                          | `needs-decision`: one `jvm` group or two                      |
+| #11   | swift package                                            | blocked by #10                                                |
+| #71   | adopt the bundled pr-checks.yml                          | blocked by GravionLabs/ci#93 and ci#96                        |
+| #65   | `adr` skill and `governance` key                         | Feature #64; first, #66–#68 need the key                      |
+| #66   | spec rules in `implementation`                           | #65                                                           |
+| #67   | `planner` and `code-review` apply the ADR and spec rules | #65, #66; PRs pass the `pr-checks.yml` of #71                 |
+| #68   | `detect-techstack` reports ADRs, specs and governance    | #65                                                           |
+| #53   | `deliver` writes the review result to a file             | candidate for 1.1.0: GravionLabs/herdr-plugins#4 builds on it |
+| #61   | `dotnet-aspire` skill                                    | size M, no dependency; not yet scheduled                      |
 
 ## Risks
 
