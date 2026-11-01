@@ -8,6 +8,8 @@ metadata:
 
 # skills-install
 
+`help` (or `--help`, `-h`): print `references/help.md` unchanged, nothing else.
+
 `scripts/Install-Skills.ps1` resolves the skill groups a project needs and installs their skills with `npx skills add GravionLabs/skills --skill …`. PowerShell 7+ and Node.js 22+ (`npx`) are required; the script exits 1 with a hint otherwise. Run from the project root.
 
 ## Slash usage

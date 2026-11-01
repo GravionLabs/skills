@@ -47,6 +47,8 @@ The same pattern works with `ts`, `py` and `ng`: `<lang>-create-project` or `ng-
 /skills-install            # per project: detects the stack
 ```
 
+`/skills-install help` prints the usage (groups, `dry-run`, `-g`, presets).
+
 One issue per session, see [Working mode](../working-mode.md).
 
 1. **Plan a large issue into sub-issues** (optional)
