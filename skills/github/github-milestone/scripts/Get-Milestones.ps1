@@ -74,7 +74,7 @@ if ($Mode -eq 'issues') {
   if (-not $m) { Fail "milestone '$Name' not found" }
   $list = @(Get-Paged "repos/$Repo/issues?milestone=$($m.number)&state=$State&per_page=100" | Where-Object { $null -eq $_.pull_request } | Sort-Object number | ForEach-Object {
       [ordered]@{
-        number = $_.number; title = $_.title; state = $_.state; body = $_.body
+        number = $_.number; title = $_.title; state = $_.state; closed_at = $_.closed_at; body = $_.body
         labels = @($_.labels | ForEach-Object { $_.name }); assignees = @($_.assignees | ForEach-Object { $_.login })
       }
     })
