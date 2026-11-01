@@ -17,7 +17,7 @@
   Issue numbers (PBI, Feature or Epic), as for `/deliver`: `-Target 12,14` or `-Target 12 14` (a comma list also works
   under `pwsh -File`, which does not split it itself).
 .PARAMETER Milestone
-  Adds the open PBIs of this milestone (as `/deliver --milestone`).
+  Adds the open PBIs and bugs of this milestone (as `/deliver --milestone`).
 .PARAMETER Max
   Stop after this many iterations (PBIs delivered, blocked or paused in total).
 .PARAMETER Model
@@ -125,7 +125,7 @@ function Add-Pbis([int]$nr, [hashtable]$seen, $found) {
   $seen[$nr] = $true
   $issue = Get-Json @('issue', 'view', "$nr", '--json', 'number,state,labels')
   $labels = @($issue.labels | ForEach-Object { $_.name })
-  if ($labels -contains 'pbi') {
+  if ($labels -contains 'pbi' -or $labels -contains 'bug') {
     if ($issue.state -eq 'OPEN') { $found.Add([pscustomobject]@{ Number = $nr; Labels = $labels }) }
     return
   }

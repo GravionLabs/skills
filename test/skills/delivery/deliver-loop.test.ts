@@ -75,7 +75,7 @@ describe.skipIf(!hasPwsh || process.platform === 'win32')('Invoke-DeliverLoop.ps
       path.join(cwd, 'effect.js'),
       `const fs = require('fs'); const f = ${JSON.stringify(state)};
 const s = JSON.parse(fs.readFileSync(f, 'utf8'));
-const first = Object.keys(s.issues).map(Number).find((n) => (s.issues[n].state || 'OPEN') === 'OPEN' && !(s.issues[n].labels || []).some((l) => l.startsWith('needs-') || l === 'interactive') && !(s.issues[n].blockers || []).some((b) => b.state === 'open') && (s.issues[n].labels || []).includes('pbi'));
+const first = Object.keys(s.issues).map(Number).find((n) => (s.issues[n].state || 'OPEN') === 'OPEN' && !(s.issues[n].labels || []).some((l) => l.startsWith('needs-') || l === 'interactive') && !(s.issues[n].blockers || []).some((b) => b.state === 'open') && ['pbi', 'bug'].some((l) => (s.issues[n].labels || []).includes(l)));
 if (s.effect === 'close-first') s.issues[first].state = 'CLOSED';
 if (s.effect === 'hold-first') s.issues[first].labels.push('needs-decision');
 fs.writeFileSync(f, JSON.stringify(s));`,
@@ -132,6 +132,18 @@ fs.writeFileSync(f, JSON.stringify(s));`,
   });
 
   describe('stop rules', () => {
+    it('selects an open bug of the milestone like a PBI (#103)', async () => {
+      const gh = setup({
+        issues: { 20: { labels: ['bug'] } },
+        milestones: { '0.13': [20] },
+        effect: 'close-first',
+      });
+      const r = await run(gh, ['-Milestone', '0.13', '-Max', '1']);
+      expect(r.status).toBe(0);
+      expect(claudeCalls()).toHaveLength(1);
+      expect(r.stdout).toContain('loop result: done');
+    });
+
     it('-Milestone -Max 1 delivers exactly one PBI in one fresh process and stops', async () => {
       const gh = setup({
         issues: { 10: pbi({ blockers: [{ number: 5, state: 'closed' }] }), 11: pbi() },
