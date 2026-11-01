@@ -583,6 +583,8 @@ describe('config schema deliver key', () => {
       expect(gov).toMatch(
         /writes the ADR with the `adr` skill, accepts it, removes `needs-decision` and merges/,
       );
+      expect(gov).toContain('`gh issue close <nr> --comment "Decided in #<pr>"`');
+      expect(docs).toContain('`gh issue close <nr> --comment "Decided in #<pr>"`');
       expect(gov).toContain('spec_notes');
     });
 

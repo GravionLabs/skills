@@ -17,7 +17,7 @@
       ]
     },
     "governance": {
-      "description": "Architecture decisions and specs; read by adr, github-issue and the CI check.",
+      "description": "Architecture decisions and specs; read by adr, github-issue, planner, implementation, code-review, deliver, detect-techstack and the CI checks adr and spec of GravionLabs/ci.",
       "type": "object",
       "additionalProperties": false,
       "properties": {

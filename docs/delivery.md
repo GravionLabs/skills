@@ -26,7 +26,7 @@ Details: `references/release-review.md` of the `deliver` skill. A manual `github
 
 ## Decision PBIs and spec notes
 
-With the `governance` key in `.agents/config.json`, a PBI with the label `needs-decision` and the ADR criterion is a decision PBI. `deliver` skips it (`#<nr> select: decision, write the ADR with adr`) and lists it under paused; PBIs it blocks wait. You write the ADR with the `adr` skill, accept it, remove `needs-decision` and merge; `/deliver` then continues. A `no spec change needed: <spec>` line in the implementer notes reaches the PR body as a `## Spec` section before `## Review notes`, and the review gets the issue labels and notes to apply `skipLabels` and the spec notes. Details: `references/governance.md` of the `deliver` skill.
+With the `governance` key in `.agents/config.json`, a PBI with the label `needs-decision` and the ADR criterion is a decision PBI. `deliver` skips it (`#<nr> select: decision, write the ADR with adr`) and lists it under paused; PBIs it blocks wait. You write the ADR with the `adr` skill, accept it, remove `needs-decision` and merge the ADR PR (with `Closes #<nr>`) into `release/next`, then close the decision PBI by hand (`gh issue close <nr> --comment "Decided in #<pr>"`), because `Closes` does not fire there; `/deliver` then continues. A `no spec change needed: <spec>` line in the implementer notes reaches the PR body as a `## Spec` section before `## Review notes`, and the review gets the issue labels and notes to apply `skipLabels` and the spec notes. Details: `references/governance.md` of the `deliver` skill; the whole flow from the key to CI: [ADRs and specs](usage/governance.md).
 
 ## Parallel runs
 

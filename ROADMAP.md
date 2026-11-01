@@ -10,7 +10,8 @@ History: apm-hub 2.x and 3.x are in the [apm-hub roadmap](https://github.com/Gra
 | ----------------------------------------------- | --------------------------------- | ---------------------------------------- |
 | #1 deliver issues through Claude Code workflows | all Features closed               | Features #2, #3 in v1.0.2, #15 in v1.1.0 |
 | #8 stack packages (Feature #9)                  | open: #10 (`needs-decision`), #11 | not scheduled until #10 is decided       |
-| #64 ADRs and specs in the skills                | open: #65, #66, #67, #68          | milestone 1.2.0                          |
+| #64 ADRs and specs in the skills                | closed                            | PBIs #65–#68, #86, #87 in 1.2.0          |
+| #104 help for user-invoked skills               | open: #105–#111                   | milestone 1.3.0                          |
 
 ## Done in 1.0.0 and 1.0.1
 
@@ -28,27 +29,39 @@ Milestone 1.1.0: GitVersion bumps the minor version on a release merge into `mai
 
 ## 1.2.0 — review file, Aspire, ADRs and specs
 
-Milestone 1.2.0. `release/next` is cut from `v1.1.0`.
+Milestone 1.2.0, `release/next` cut from `v1.1.0`; release PR #96. Delivered:
 
-| Order | Issue | Title                                                    | Size | Depends on / decision                                                  |
-| ----- | ----- | -------------------------------------------------------- | ---- | ---------------------------------------------------------------------- |
-| 1     | #53   | `deliver` writes the review result to a file             | S    | refined; GravionLabs/herdr-plugins#4 builds on it                      |
-| 1     | #61   | `dotnet-aspire` skill                                    | M    | refined; check against GravionLabs/elysion#867                         |
-| 1     | #65   | `adr` skill and `governance` key                         | M    | Feature #64; the key names are read by GravionLabs/ci#94 and ci#95     |
-| 1     | #71   | adopt the bundled pr-checks.yml                          | S    | GravionLabs/ci#93 and ci#96 are done; every later PR needs `Closes #n` |
-| 1     | #102  | Conventional Commit versioning and the PR title check    | S    | GravionLabs/ci#107 and ci#108 (ci v1.4.0); #101 is merged              |
-| 2     | #66   | spec rules in `implementation`                           | M    | #65                                                                    |
-| 2     | #68   | `detect-techstack` reports ADRs, specs and governance    | M    | #65                                                                    |
-| 3     | #67   | `planner` and `code-review` apply the ADR and spec rules | M    | #65, #66                                                               |
+| Issue   | Title                                                                                             | Note                                                            |
+| ------- | ------------------------------------------------------------------------------------------------- | --------------------------------------------------------------- |
+| #53     | `deliver` writes the review result to a file                                                      | GravionLabs/herdr-plugins#4 (`review-popup`) reads it           |
+| #61     | `dotnet-aspire` skill                                                                             |                                                                 |
+| #65     | `adr` skill and `governance` key                                                                  | Feature #64; the key names are read by GravionLabs/ci#94, ci#95 |
+| #66     | spec rules in `implementation`                                                                    | Feature #64                                                     |
+| #67     | `code-review` checks the ADR and spec rules                                                       | Feature #64                                                     |
+| #68     | `detect-techstack` reports ADRs, specs and governance                                             | Feature #64                                                     |
+| #86     | `planner` applies the ADR and spec rules                                                          | Feature #64                                                     |
+| #87     | `deliver` handles decision PBIs and spec notes                                                    | Feature #64                                                     |
+| #97–#99 | fixes: implementer notes in `deliver`, `Get-GovernanceMatches` base, test files in the spec check | found while delivering #64                                      |
+| #100    | `deliver` reviews `release/next` with Opus before the release PR                                  | [delivery](docs/delivery.md#release-review)                     |
+| #103    | `deliver` selects PBIs and Bugs                                                                   |                                                                 |
+| #113    | `github-milestone` skill                                                                          |                                                                 |
+| #117    | hot `gh` reads and CI polling over REST instead of GraphQL                                        |                                                                 |
+| #101    | `github-release finish` derives the bump from Conventional Commits                                |                                                                 |
+| #102    | Conventional Commit versioning and the PR title check                                             | GravionLabs/ci#107, ci#108 (ci v1.4.0)                          |
 
-Feature #64 closes with #65–#68. After #65 is merged, GravionLabs/ci#94 (ADR job) and then ci#95 (spec job) can start; GravionLabs/herdr-plugins#4 (`review-popup`) reads the file of #53.
+Also in the milestone: #112 (these docs) and #115 (drop the hourly project-needs sync). How the ADR and spec rules work together: [ADRs and specs](docs/usage/governance.md).
+
+## 1.3.0 — help for user-invoked skills
+
+Milestone 1.3.0: Feature #104, `/<skill> help` for the user-invoked skills. #105 sets the help convention and the test helper; #106–#111 add `references/help.md` to `deliver`, `planner`, `skills-install`, `github-release`, `retro` and `context-statusline`.
 
 ## Later
 
-| Issue | Title                           | Why later                                |
-| ----- | ------------------------------- | ---------------------------------------- |
-| #10   | jvm package for Java and Kotlin | `needs-decision`: one `jvm` group or two |
-| #11   | swift package                   | blocked by #10                           |
+| Issue | Title                           | Why later                                                                            |
+| ----- | ------------------------------- | ------------------------------------------------------------------------------------ |
+| #10   | jvm package for Java and Kotlin | `needs-decision`: one `jvm` group or two                                             |
+| #11   | swift package                   | blocked by #10                                                                       |
+| #71   | adopt the bundled pr-checks.yml | no milestone; GravionLabs/ci#93 and ci#96 are done, every later PR needs `Closes #n` |
 
 ## Risks
 
