@@ -70,6 +70,13 @@ describe('deliver SKILL.md', () => {
     expect(step('**Fix.**', '**PR.**')).toContain('loads `implementation` with role `fix`');
   });
 
+  it('asks the implementer for notes[] incl. the spec note in step 3 (#97)', () => {
+    const step3 = body.slice(body.indexOf('**Implement.**'), body.indexOf('**Review.**'));
+    expect(step3).toContain('`notes[]` (one per line)');
+    expect(step3).toContain('`no spec change needed: <spec> — <reason>`');
+    expect(step3).toContain('`specMap`');
+  });
+
   it('writes the review result file per schema in step 4 (#53)', () => {
     const step4 = body.slice(body.indexOf('**Review.**'), body.indexOf('**Fix.**'));
     expect(step4).toContain('<git-common-dir>/.agents/state/review-<nr>.json');
