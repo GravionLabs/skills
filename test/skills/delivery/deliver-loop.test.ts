@@ -56,14 +56,15 @@ describe.skipIf(!hasPwsh || process.platform === 'win32')('Invoke-DeliverLoop.ps
         const s = JSON.parse(fs.readFileSync(${JSON.stringify(state)}, 'utf8'));
         const a = call.args;
         const get = (n) => { if (!s.issues[n]) throw new Error('no issue ' + n); return s.issues[n]; };
-        if (a[0] === 'issue' && a[1] === 'view') {
-          const i = get(a[2]);
-          return { rest: { number: Number(a[2]), state: i.state || 'OPEN', labels: (i.labels || []).map((name) => ({ name })) } };
+        let m = /^repos\\/\\{owner\\}\\/\\{repo\\}\\/issues\\/(\\d+)$/.exec(a[1] || '');
+        if (a[0] === 'api' && m) {
+          const i = get(m[1]);
+          return { rest: { number: Number(m[1]), state: (i.state || 'OPEN').toLowerCase(), labels: (i.labels || []).map((name) => ({ name })) } };
         }
         if (a[0] === 'issue' && a[1] === 'list') {
           return { rest: (s.milestones[a[a.indexOf('--milestone') + 1]] || []).map((number) => ({ number })) };
         }
-        let m = /issues\\/(\\d+)\\/sub_issues/.exec(a[1] || '');
+        m = /issues\\/(\\d+)\\/sub_issues/.exec(a[1] || '');
         if (m) return { rest: (get(m[1]).children || []).map((number) => ({ number })) };
         m = /issues\\/(\\d+)\\/dependencies\\/blocked_by/.exec(a[1] || '');
         if (m) return { rest: get(m[1]).blockers || [] };

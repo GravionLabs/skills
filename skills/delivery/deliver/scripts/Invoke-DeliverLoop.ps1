@@ -123,10 +123,11 @@ function Get-Json([string[]]$ghArgs) {
 function Add-Pbis([int]$nr, [hashtable]$seen, $found) {
   if ($seen.ContainsKey($nr)) { return }
   $seen[$nr] = $true
-  $issue = Get-Json @('issue', 'view', "$nr", '--json', 'number,state,labels')
+  # REST per issue: `gh issue view` runs on the GraphQL budget (#117)
+  $issue = Get-Json @('api', "repos/{owner}/{repo}/issues/$nr")
   $labels = @($issue.labels | ForEach-Object { $_.name })
   if ($labels -contains 'pbi' -or $labels -contains 'bug') {
-    if ($issue.state -eq 'OPEN') { $found.Add([pscustomobject]@{ Number = $nr; Labels = $labels }) }
+    if ($issue.state -eq 'open') { $found.Add([pscustomobject]@{ Number = $nr; Labels = $labels }) }
     return
   }
   foreach ($child in @(Get-Json @('api', "repos/{owner}/{repo}/issues/$nr/sub_issues?per_page=100"))) {

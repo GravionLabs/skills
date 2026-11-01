@@ -123,8 +123,19 @@ describe('deliver SKILL.md', () => {
     expect(body).toContain('never switches its own checkout');
   });
 
+  it('reads issues and the open PR of a branch over REST, not GraphQL (#117)', () => {
+    expect(body).toContain(
+      "`gh api repos/{owner}/{repo}/issues/<nr> --jq '{number,title,state,labels:[.labels[].name],body}'`",
+    );
+    expect(body).toContain(
+      '`gh api "repos/{owner}/{repo}/pulls?head=<owner>:<branch>&state=open" --jq \'.[].number\'`',
+    );
+    // a porcelain read with an argument (the rule text names them without one)
+    expect(body).not.toMatch(/gh (issue view|pr list|pr view) </);
+  });
+
   it('waits for the required checks and squash-merges', () => {
-    expect(body).toContain('`gh pr checks <pr> --watch --required`');
+    expect(body).toContain('`gh pr checks <pr> --watch --required --interval 60`');
     expect(body).toContain('gh pr merge <pr> --squash');
     expect(body).toContain('gh issue close <nr>');
   });
@@ -371,7 +382,10 @@ describe('deliver SKILL.md', () => {
       expect(claim).toContain(
         'gh api repos/{owner}/{repo}/branches/<branch> --jq .commit.commit.committer.date',
       );
-      expect(claim).toContain('gh pr list --head <branch> --state open --json number,updatedAt');
+      expect(claim).toContain(
+        `gh api "repos/{owner}/{repo}/pulls?head=<owner>:<branch>&state=open" --jq '.[] | {number, updated_at}'`,
+      );
+      expect(claim).not.toContain('gh pr list --head');
     });
 
     it('continues a PBI named directly regardless of the claim', () => {
