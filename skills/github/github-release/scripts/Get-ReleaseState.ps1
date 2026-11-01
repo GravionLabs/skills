@@ -4,7 +4,8 @@
 .DESCRIPTION
   Runs `git fetch origin --tags` and the git/gh checks of `cut` and `finish`, never pushes or deletes.
   Fields: default, branch, state, openPrs[], localAhead, staleLines[], deleteAllowed, action, plus
-  hasSemverCommit, hasMajorCommit, releaseWorkflow and releasePr (the CI release PR, or null).
+  hasMajorCommit (a `+semver: major` commit on the branch: `finish major` adds none again), releaseWorkflow and
+  releasePr (the CI release PR, or null). The bump otherwise comes from the Conventional Commits on the branch.
   state: absent (not on origin), fresh (equals default), unreleased (own work, not behind), behind (default
   has commits the branch lacks), merged (tip is the second parent of a merge on default), released (ancestor
   of default, not a merge tip), released-continued (continued after its release merge).
@@ -100,7 +101,7 @@ if ($Branch -notmatch '^release/(next|[0-9]+\.[0-9]+)$') { Fail "invalid branch 
 $remote = "origin/$Branch"
 $def = "origin/$default"
 $onOrigin = $heads -contains $Branch
-$state = 'absent'; $openPrs = @(); $localAhead = 0; $semver = $false; $major = $false
+$state = 'absent'; $openPrs = @(); $localAhead = 0; $major = $false
 
 if ($onOrigin) {
   $null = Invoke-Git merge-base --is-ancestor $remote $def; $inDefault = $gitOk
@@ -131,7 +132,6 @@ if ($onOrigin) {
   $openPrs = @($raw | ConvertFrom-Json)
   $null = Invoke-Git rev-parse -q --verify "refs/heads/$Branch"
   if ($gitOk) { $localAhead = [int](Invoke-Git rev-list --count "$remote..refs/heads/$Branch") }
-  $semver = [bool](Invoke-Git log "$def..$remote" -F --grep '+semver:')
   $major = [bool](Invoke-Git log "$def..$remote" -F --grep '+semver: major')
 }
 
@@ -169,5 +169,5 @@ if ($Mode -eq 'finish' -and $onOrigin) {
 [ordered]@{
   default = $default; branch = $Branch; state = $state; openPrs = @($openPrs); localAhead = $localAhead
   staleLines = @($staleLines); deleteAllowed = $deleteAllowed; action = $action
-  hasSemverCommit = $semver; hasMajorCommit = $major; releaseWorkflow = $workflow; releasePr = $releasePr
+  hasMajorCommit = $major; releaseWorkflow = $workflow; releasePr = $releasePr
 } | ConvertTo-Json -Depth 4
