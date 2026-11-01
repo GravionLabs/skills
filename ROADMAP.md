@@ -1,6 +1,6 @@
 # Roadmap
 
-Order of work and release assignment for the open issues. Written 2026-10-30 after the move from GravionLabs/apm-hub (archived by #21). Last release `v1.1.0` (2026-10-31). Work runs on `release/next`, the release PR into `main` is the human review point; each release has a GitHub milestone of the same name.
+Order of work and release assignment for the open issues. Written 2026-10-30 after the move from GravionLabs/apm-hub (archived by #21). Last release `v1.1.0` (2026-10-31). Work runs on `release/next`, the release PR into `main` is the human review point; each release has a GitHub milestone of the same name (`/github-milestone current` shows the one being worked on, `list` all of them).
 
 History: apm-hub 2.x and 3.x are in the [apm-hub roadmap](https://github.com/GravionLabs/apm-hub/blob/main/ROADMAP.md). A bare `#<n>` here is an issue of GravionLabs/skills.
 
