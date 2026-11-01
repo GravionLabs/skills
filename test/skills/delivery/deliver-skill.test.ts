@@ -2,6 +2,7 @@ import { describe, it, expect } from 'vitest';
 import * as fs from 'node:fs';
 import * as path from 'node:path';
 import { groupSkills } from '../../helpers/marketplace';
+import { expectSkillHelp } from '../../helpers/skill-help';
 
 const root = path.resolve(__dirname, '../../../skills');
 const skillDir = path.join(root, 'delivery/deliver');
@@ -643,5 +644,29 @@ describe('config schema deliver key', () => {
     it('stays within 100 lines', () => {
       expect(text.split('\n').length).toBeLessThanOrEqual(100);
     });
+  });
+});
+
+describe('deliver help', () => {
+  it('follows the help convention', () => {
+    expectSkillHelp(skillDir);
+  });
+
+  it('names the loop parameters and config keys', () => {
+    const help = fs.readFileSync(path.join(skillDir, 'references/help.md'), 'utf8');
+    for (const word of [
+      '-Target',
+      '-Milestone',
+      '-Max',
+      '-Model',
+      'deliver.roles',
+      'release-review',
+      'governance',
+      'needs-decision',
+      'needs-refinement',
+      'interactive',
+    ]) {
+      expect(help).toContain(word);
+    }
   });
 });
