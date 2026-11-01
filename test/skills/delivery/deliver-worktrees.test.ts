@@ -9,6 +9,11 @@ const SCRIPT = path.resolve(
   '../../../skills/delivery/deliver/scripts/Remove-PbiWorktrees.ps1',
 );
 const hasPwsh = spawnSync('pwsh', ['-NoProfile', '-Command', '1']).status === 0;
+// REST answers of `pulls/9` and `pulls/9/commits` (#117: no `gh pr view`, it runs on GraphQL)
+const prHandler = (shas: string[]) =>
+  `(call) => call.args[1].endsWith('/commits?per_page=100')
+    ? { rest: ${JSON.stringify(shas.map((sha) => ({ sha })))} }
+    : { rest: { head: { ref: 'feat/12-x' }, base: { ref: 'release/next' } } }`;
 
 // #858: worktrees and branches a merged PBI leaves behind, as found after the agentlens trial
 describe.skipIf(!hasPwsh || process.platform === 'win32')('Remove-PbiWorktrees.ps1', () => {
@@ -74,18 +79,12 @@ describe.skipIf(!hasPwsh || process.platform === 'win32')('Remove-PbiWorktrees.p
   afterAll(() => fs.rmSync(root, { recursive: true, force: true }));
 
   it('removes the clean worktrees and branches of the PBI and reports the rest', () => {
-    const gh = createFakeGh(
-      path.join(root, 'gh'),
-      `(call) => ({ rest: { headRefName: 'feat/12-x', baseRefName: 'release/next', commits: ${JSON.stringify(pr.map((oid) => ({ oid })))} } })`,
-    );
+    const gh = createFakeGh(path.join(root, 'gh'), prHandler(pr));
     const r = run(gh);
     expect(r.status, r.stderr).toBe(0);
-    expect(gh.calls()[0].args).toEqual([
-      'pr',
-      'view',
-      '9',
-      '--json',
-      'headRefName,baseRefName,commits',
+    expect(gh.calls().map((c) => c.args)).toEqual([
+      ['api', 'repos/{owner}/{repo}/pulls/9'],
+      ['api', 'repos/{owner}/{repo}/pulls/9/commits?per_page=100'],
     ]);
     expect(r.json.removed).toEqual([wt('a'), wt('b'), wt('c')]);
     expect(r.json.left).toEqual([
@@ -121,7 +120,7 @@ describe.skipIf(!hasPwsh || process.platform === 'win32')('Remove-PbiWorktrees.p
     const gh = createFakeGh(path.join(root, 'gh-fail'), `() => { throw new Error('no PR') }`);
     const r = run(gh);
     expect(r.status).toBe(1);
-    expect(r.stderr).toContain('gh pr view 9 failed');
+    expect(r.stderr).toContain('gh api repos/{owner}/{repo}/pulls/9 failed');
   });
 });
 
@@ -174,10 +173,7 @@ exec ${JSON.stringify(realGit)} "$@"
     afterAll(() => fs.rmSync(root, { recursive: true, force: true }));
 
     it('lists a refused branch delete in left with the stderr line', () => {
-      const gh = createFakeGh(
-        path.join(root, 'gh'),
-        `(call) => ({ rest: { headRefName: 'feat/12-x', baseRefName: 'release/next', commits: [] } })`,
-      );
+      const gh = createFakeGh(path.join(root, 'gh'), prHandler([]));
       const env = gh.env();
       env.PATH = `${shim}${path.delimiter}${env.PATH}`;
       const r = spawnSync('pwsh', ['-NoProfile', '-File', SCRIPT, '-Pr', '9', '-Issue', '12'], {
@@ -202,10 +198,7 @@ exec ${JSON.stringify(realGit)} "$@"
 
     it('deletes a worktree-* branch with git branch -d when -D is refused', () => {
       git(repo, 'branch', 'worktree-agent-z'); // at origin/release/next, fully merged into HEAD
-      const gh = createFakeGh(
-        path.join(root, 'gh2'),
-        `(call) => ({ rest: { headRefName: 'feat/12-x', baseRefName: 'release/next', commits: [] } })`,
-      );
+      const gh = createFakeGh(path.join(root, 'gh2'), prHandler([]));
       const env = gh.env();
       env.PATH = `${shim}${path.delimiter}${env.PATH}`;
       const r = spawnSync('pwsh', ['-NoProfile', '-File', SCRIPT, '-Pr', '9', '-Issue', '12'], {
