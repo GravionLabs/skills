@@ -56,3 +56,55 @@ describe('deliver-review.schema.json', () => {
     expect(validate({ ...valid(), round: 0 })).toBe(false);
   });
 });
+
+describe('deliver-release-review.schema.json (#100)', () => {
+  const validateRelease = ajv.compile({
+    ...read('delivery/deliver/schema/deliver-release-review.schema.json'),
+    $id: `${base}delivery/deliver/schema/deliver-release-review.schema.json`,
+  });
+  const result = () => ({
+    milestone: 'v1.2.0',
+    sha: 'e3838c9',
+    round: 2,
+    review: {
+      blocking: [{ file: 'a.md', line: 9, title: 'drift', why: 'step 9 names a missing input' }],
+      notes: [],
+    },
+    bugs: [131],
+  });
+
+  it('accepts a round with bugs and a clean round', () => {
+    expect(validateRelease(result())).toBe(true);
+    expect(validateRelease({ ...result(), review: { blocking: [], notes: ['n'] }, bugs: [] })).toBe(
+      true,
+    );
+  });
+
+  it.each(['milestone', 'sha', 'round', 'review', 'bugs'])('rejects a missing %s', (key) => {
+    const doc: any = result();
+    delete doc[key];
+    expect(validateRelease(doc)).toBe(false);
+  });
+
+  it('rejects round 0, a bug number 0 and an extra field', () => {
+    expect(validateRelease({ ...result(), round: 0 })).toBe(false);
+    expect(validateRelease({ ...result(), bugs: [0] })).toBe(false);
+    expect(validateRelease({ ...result(), pbi: 1 })).toBe(false);
+  });
+});
+
+describe('config schema release-review role (#100)', () => {
+  const validateConfig = new Ajv({ allErrors: true }).compile(
+    read('shared/implementation/schema/config.schema.json'),
+  );
+  const config = (role: unknown) => ({ deliver: { roles: { 'release-review': role } } });
+
+  it('accepts a model and effort override', () => {
+    expect(validateConfig(config({ model: 'sonnet', effort: 'medium' }))).toBe(true);
+  });
+
+  it('rejects tiers and an unknown effort', () => {
+    expect(validateConfig(config({ tiers: { fast: { model: 'haiku' } } }))).toBe(false);
+    expect(validateConfig(config({ effort: 'huge' }))).toBe(false);
+  });
+});

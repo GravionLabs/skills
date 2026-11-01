@@ -1,6 +1,6 @@
 # Delivery
 
-Delivery runs through the skill `deliver` (group `delivery`), the same on Claude Code, OpenCode and Copilot CLI: `/deliver <nr> [<nr> …] [--milestone <name>]` takes the open PBIs and Bugs (issues labelled `pbi` or `bug`; a Bug runs the same loop with branch type `fix`) of PBIs, Bugs, Features, Epics or a milestone in dependency order (each once; `needs-refinement` is skipped); per PBI a subagent implements with `implementation`, a subagent reviews with `code-review`, at most 2 fix rounds follow, then the PR into `release/next`, the wait for the required checks, the squash merge without asking (clean review, green checks) and the closed issue. When every PBI of a `--milestone` is closed, `deliver` opens the release PR into `main` with `github-release` `finish` and stops there: that merge waits for a person's review. State lives in GitHub only, so `/deliver <nr>` resumes a stopped run. A missing breakdown is planned with `planner` and `grill-me` in the same session.
+Delivery runs through the skill `deliver` (group `delivery`), the same on Claude Code, OpenCode and Copilot CLI: `/deliver <nr> [<nr> …] [--milestone <name>]` takes the open PBIs and Bugs (issues labelled `pbi` or `bug`; a Bug runs the same loop with branch type `fix`) of PBIs, Bugs, Features, Epics or a milestone in dependency order (each once; `needs-refinement` is skipped); per PBI a subagent implements with `implementation`, a subagent reviews with `code-review`, at most 2 fix rounds follow, then the PR into `release/next`, the wait for the required checks, the squash merge without asking (clean review, green checks) and the closed issue. When every PBI of a `--milestone` is closed, `deliver` runs a release review of the whole release diff and, without blocking findings, opens the release PR into `main` with `github-release` `finish` and stops there: that merge waits for a person's review. State lives in GitHub only, so `/deliver <nr>` resumes a stopped run. A missing breakdown is planned with `planner` and `grill-me` in the same session.
 
 Interactive by default: an unclear criterion, extra scope or a blocker asks you in the chat; a merge into `release/next` never does. `/deliver <nr> --unattended` (`claude -p`, `opencode run`, `copilot -p`) comments on the issue instead, labels it `needs-decision` and continues with the next independent PBI.
 
@@ -13,6 +13,16 @@ The hard gate is a GitHub ruleset on `release/next` (required checks, no bypass)
 ## Review result file
 
 After every review round `deliver` writes the result to `<git-common-dir>/.agents/state/review-<nr>.json` (`git rev-parse --git-common-dir`, so the same file from every worktree; never committed). The next round overwrites it. It holds `pbi`, `branch`, `sha` (reviewed head), `round`, `unmet[]` and `review` (the `code-review` result) and validates against `skills/delivery/deliver/schema/deliver-review.schema.json`. Tools outside the session, such as a herdr plugin, can read it.
+
+## Release review
+
+Before `deliver` opens the release PR of a `--milestone`, a subagent (role `release-review`, default opus/high, overridable in `deliver.roles`) reviews the whole release diff `origin/main...origin/release/next` with `code-review` against the acceptance criteria of the milestone's closed PBIs and Bugs. Each PBI was reviewed alone; this review looks for what only shows across PBIs, such as contract drift between skills or a hand-off one PBI promises and another never fills. The result goes to `<git-common-dir>/.agents/state/release-review-<milestone>.json` (schema `skills/delivery/deliver/schema/deliver-release-review.schema.json`).
+
+- Blocking findings: one `[Bug] fix: …` issue per finding in the milestone (`Related: #<PBI>`, marker `Found in release review round <n>`), no release PR, `release: <n> blocking → #a, #b`. Interactive mode shows the findings and asks before filing; unattended files them. The next `/deliver --milestone <name>` delivers the bugs and reviews again.
+- At most 2 rounds per milestone: a third round with blocking findings pauses (interactive: asks; unattended: comment and `needs-decision` on the milestone's last PBI).
+- No blocking finding: up to 5 notes go into the release PR body as `## Release review notes`.
+
+Details: `references/release-review.md` of the `deliver` skill. A manual `github-release finish` has no release review.
 
 ## Decision PBIs and spec notes
 

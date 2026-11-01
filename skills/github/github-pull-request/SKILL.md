@@ -12,6 +12,7 @@ Create a PR from the current branch. No dialogue — tool calls only. On Claude 
 - `title` (default: computed per step 2; required in release mode, e.g. `release: <branch>`)
 - `merged_prs` (release mode: `#<n> <title>` lines merged into the release branch; default: `gh pr list --base <branch> --state merged --limit 200 --search "merged:>=<date of the last tag on origin/<base>>" --json number,title`, so already released PRs are left out)
 - `feature_number` (release mode only, optional)
+- `release_review_notes` (release mode only, default: empty): note lines of the release review
 - `branch` (default: `git branch --show-current`). Passed and not the current branch (a caller whose work sits in another worktree): `<head>` below is `origin/<branch>`, otherwise `HEAD`
 - `base_branch` (default: the integration branch per the `github-issue` skill's `references/release-branches.md`, `pwsh <github-release dir>/scripts/Get-ReleaseState.ps1 -Mode base -Issue <nr>`: `release/next`, or `main` only when the head is `release/*` or the user asked for a hotfix; `<base>` below)
 - `not_delivered` (default: empty): acceptance-criterion text this PR leaves open; the PR body lists no task numbers
