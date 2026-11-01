@@ -36,6 +36,16 @@ describe.skipIf(!hasPwsh || process.platform === 'win32')('Get-SkillReport.ps1 (
   const refs = (report: { danglingCandidates: { skill: string; ref: string }[] }) =>
     report.danglingCandidates.map((d) => `${d.skill}: ${d.ref}`);
 
+  it('does not flag references/help.md named by the help pointer line', async () => {
+    skill(
+      'gamma',
+      '`help` (or `--help`, `-h`): print `references/help.md` unchanged, nothing else.',
+    );
+    write('skills/gamma/references/help.md', '# /gamma\n');
+    const r = await run();
+    expect(refs(r.report)).toEqual([]);
+  });
+
   it('resolves every reference form and still exits 0 with dangling references without -FailOnDangling', async () => {
     // one sentence per form: same-sentence owner (missing, existing), <skill>/ and ../<skill>/ prefixes, a prefix of
     // another tool (not ours), repo-root paths against -Root, and references/*.md resolved against their own skill
