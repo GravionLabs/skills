@@ -5,10 +5,40 @@ Versioning follows [Semantic Versioning](https://semver.org/).
 
 ---
 
+## [1.3.0] — 2026-11-01
+
+### Bug Fixes
+- **delivery**: Release review round-3 pause is recorded and not repeated (#137) (#141)
+- **delivery**: Step 9 reads the milestone once with -State all (#155) (#156)
+
+
+### Documentation
+- **delivery**: Herdr sidebar layout starts with the repo (#149) (#150)
+
+
+### Features
+- **skill-tooling**: Help convention and test helper for user-invoked skills (#105) (#138)
+- **github**: Github-pull-request copies the skip-adr label onto the PR (#136) (#142)
+- **delivery**: /skills-install help from references/help.md (#108) (#143)
+- **delivery**: /deliver help from references/help.md (#106) (#144)
+- **delivery**: /planner help from references/help.md (#107) (#145)
+- **github**: /github-release help from references/help.md (#109) (#146)
+- **delivery**: /retro help from references/help.md (#110) (#147)
+- **statusline**: /context-statusline help from references/help.md (#111) (#148)
+
+
+### Performance
+- **delivery**: Read milestone issues in one batched REST call (#127) (#140)
+
+
 ## [1.2.1] — 2026-11-01
 
 ### Bug Fixes
 - **ci**: Recreate release/next after the release (#133)
+
+
+### Documentation
+- Update CHANGELOG.md for v1.2.1 [skip ci]
 
 
 ## [1.2.0] — 2026-11-01
