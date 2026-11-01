@@ -6,6 +6,8 @@ context: fork
 
 Owns the lifecycle of the rolling `release/next` branch (explicit `release/<x.y>` only in parallel lines). The model and the base-branch resolver are in the `github-issue` skill's `references/release-branches.md`. No dialogue, tool calls only; on Claude Code this runs in a forked context without the session history.
 
+`help` (or `--help`, `-h`): print `references/help.md` unchanged, nothing else.
+
 Prerequisites: `gh` authenticated, repo root, clean `git status`. Mode: `cut [--feature <nr>]` or `finish [major] [release/next|release/<x.y>]`; `finish` takes optional `release_review_notes` (lines from the release review of `deliver`).
 
 ## Check the state first
