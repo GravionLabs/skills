@@ -123,7 +123,7 @@ Run the build and the tests.
 Finish the release with an updated changelog.
 ```
 
-`github-release finish` runs git-cliff for the changelog and, on first use, installs git-cliff, creates `cliff.toml` from its template and adds a `changelog` script (see its `references/cliff-setup.md`). Commit titles produced by `github-issue` and `github-pull-request` already follow the conventional-commit format it expects.
+`github-release finish` runs git-cliff for the changelog and, on first use, installs git-cliff, creates `cliff.toml` from its template and adds a `changelog` script (see its `references/cliff-setup.md`). `/github-release help` prints the usage. Commit titles produced by `github-issue` and `github-pull-request` already follow the conventional-commit format it expects.
 
 ---
 
