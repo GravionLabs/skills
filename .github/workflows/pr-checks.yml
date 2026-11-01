@@ -4,6 +4,8 @@
 # release/** into main are exempt from the title rule. readiness, adr and spec stay off (readiness: #71).
 # The job id `pr-checks` makes the required status check "pr-checks / PR checks" (rulesets main and release).
 # No secrets, no checkout: pr-checks.yml reads the title and commits through the API with the GITHUB_TOKEN.
+# The job grants the union of what the jobs of pr-checks.yml request (readiness, adr, title): GitHub validates the
+# permissions of every called job at startup, skipped ones included, so less ends in startup_failure.
 name: PR checks
 
 on:
@@ -16,6 +18,8 @@ permissions: {}
 jobs:
   pr-checks:
     permissions:
+      contents: read
+      issues: read
       pull-requests: read
     uses: GravionLabs/ci/.github/workflows/pr-checks.yml@v1.5.0
     with:

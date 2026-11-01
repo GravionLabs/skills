@@ -27,9 +27,15 @@ describe('pr-checks.yml', () => {
     expect(job.with).toEqual({ readiness: false, adr: false, spec: false, title: true });
   });
 
-  it('grants nothing at top level, only pull-requests: read to the job, and passes no secrets', () => {
+  // GitHub validates the permissions of every called job at startup, skipped ones included: the caller grants the
+  // union of readiness, adr and title of ci v1.5.0, read-only (less ended in startup_failure on PR #125).
+  it('grants nothing at top level, the read-only union of the called jobs to the job, and passes no secrets', () => {
     expect(wf.permissions).toEqual({});
-    expect(job.permissions).toEqual({ 'pull-requests': 'read' });
+    expect(job.permissions).toEqual({
+      contents: 'read',
+      issues: 'read',
+      'pull-requests': 'read',
+    });
     expect(job.secrets).toBeUndefined();
     expect(text).not.toContain('pull_request_target');
   });
