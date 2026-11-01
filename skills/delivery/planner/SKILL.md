@@ -5,6 +5,8 @@ description: 'Plan an issue one level down with blockers and sizes, grill the op
 
 Planning only: no source edits. The planning steps below ask nothing (open decisions go into `questions[]`, see `references/questions.md`); the plan is the reply.
 
+`help` (or `--help`, `-h`): print `references/help.md` unchanged, nothing else.
+
 ## Modes
 
 - **Non-interactive** (a workflow subagent, e.g. `deliver` phase 1): no questions, no issue creation; return the plan with `questions[]` as data, the caller decides.
