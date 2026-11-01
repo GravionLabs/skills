@@ -6,7 +6,7 @@
   `claude -p "/deliver <targets> --unattended --max 1"` once per PBI; deliver keeps all state in GitHub, so there is no
   queue file. Progress is read from GitHub before and after each iteration: the open PBIs of the targets without the
   labels needs-decision / needs-refinement / interactive (deliver skips interactive PBIs unattended). No change stops
-  the loop ("no progress"); nothing open means done; open PBIs that all wait on an open blocker or a label mean blocked.
+  the loop ("no progress"); nothing open means done (unless a closed PBI of the milestone carries needs-decision, the paused release review: blocked); open PBIs that all wait on an open blocker or a label mean blocked.
   Observability: every stream record goes to .agents/deliver-loop/<run>/<nr>.jsonl (<nr> is the first PBI that was ready
   at the start of the iteration), a summary line per step to .agents/deliver-loop.log (plain) and stdout, the same line
   with ANSI colors to .agents/deliver-loop.ansi.log, desktop notifications for the attention steps (macOS osascript,
@@ -154,6 +154,12 @@ function Get-State {
       } else { Add-Pbis ([int]$item.number) $seen $found }
     }
   }
+  # release-review pause (references/release-review.md): nothing open, but a closed PBI or Bug of the milestone carries needs-decision
+  $paused = $false
+  if ($Milestone -and $found.Count -eq 0) {
+    $closed = Get-Json @('-File', $MilestoneScript, '-Mode', 'issues', '-Name', $Milestone, '-State', 'closed') -Pwsh
+    $paused = [bool]@(@($closed.issues) | Where-Object { $_ -and $_.labels -contains 'needs-decision' -and ($_.labels -contains 'pbi' -or $_.labels -contains 'bug') })
+  }
   $eligible = @($found | Where-Object { -not ($_.Labels | Where-Object { $Held -contains $_ }) })
   $ready = @($eligible | Where-Object {
       $blockers = @(Get-Json @('api', "repos/{owner}/{repo}/issues/$($_.Number)/dependencies/blocked_by?per_page=100"))
@@ -161,13 +167,14 @@ function Get-State {
     })
   [pscustomobject]@{
     Open     = $found.Count
+    Paused   = $paused
     Eligible = @($eligible | ForEach-Object { $_.Number } | Sort-Object)
     Ready    = @($ready | ForEach-Object { $_.Number } | Sort-Object)
   }
 }
 
 function Get-StopReason($state) {
-  if ($state.Open -eq 0) { return 'done' }
+  if ($state.Open -eq 0) { return $(if ($state.Paused) { 'blocked' } else { 'done' }) }
   if ($state.Ready.Count -eq 0) { return 'blocked' }
   return $null
 }

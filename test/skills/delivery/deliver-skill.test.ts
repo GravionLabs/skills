@@ -236,8 +236,8 @@ describe('deliver SKILL.md', () => {
       );
       expect(ref).toContain('`round` ≤ 2: file one bug per finding');
       expect(ref).toContain('`round` > 2: a pause instead of more bugs');
-      expect(ref).toContain("comment the findings on the milestone's last closed PBI");
-      expect(ref).toContain('add `needs-decision` to it');
+      expect(ref).toContain("the milestone's last closed one");
+      expect(ref).toContain('`gh issue edit <nr> --add-label needs-decision`');
     });
 
     it('asks before filing in interactive mode, files without asking unattended', () => {
@@ -249,6 +249,22 @@ describe('deliver SKILL.md', () => {
     it('passes up to 5 notes to the release PR when nothing blocks', () => {
       expect(release).toContain('`finish` with `release_review_notes` (the `notes[]`, up to 5)');
       expect(ref).toContain('`## Release review notes`');
+    });
+
+    it('skips the release review when the needs-decision marker exists and names the two ways on in the pause comment', () => {
+      expect(release).toContain('release: paused in round 3, waits for a decision');
+      expect(release).toContain('labeled `needs-decision`');
+      expect(ref).toContain('## Pause marker');
+      expect(ref).toContain(
+        'skip the review, print `release: paused in round 3, waits for a decision`',
+      );
+      expect(ref).toContain(
+        'remove the marker (`gh issue edit <nr> --remove-label needs-decision`) and run `/deliver --milestone <name>`',
+      );
+      expect(ref).toContain('run `github-release` `finish` with them as `release_review_notes`');
+      expect(ref).toContain(
+        'Interactive: ask the user with the findings; the user defers the decision: record the pause',
+      );
     });
 
     it('uses the release-review role for the subagent', () => {
