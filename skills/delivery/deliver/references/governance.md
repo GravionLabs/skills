@@ -8,7 +8,7 @@ A PBI is a decision PBI when it has the label `needs-decision` and its body has 
 
 - Select reports `#<nr> select: decision, write the ADR with adr` instead of the plain skip; the report lists it under paused with the same hint.
 - PBIs blocked by it wait at the blocker, as for any open blocker.
-- The human writes the ADR with the `adr` skill, accepts it, removes `needs-decision` and merges. `/deliver` again then picks up the PBIs that waited.
+- The human writes the ADR with the `adr` skill, accepts it, removes `needs-decision` and merges the ADR PR (with `Closes #<nr>`) into `release/next`, then closes the decision PBI by hand (`gh issue close <nr> --comment "Decided in #<pr>"`), because `Closes` does not fire there; an open one would be selected as a normal PBI. `/deliver` again then picks up the PBIs that waited.
 
 ## Spec notes and labels
 
