@@ -9,6 +9,10 @@ const SCRIPT = path.join(root, 'skills/shared/code-review/scripts/Get-Governance
 const globCases: { glob: string; path: string; match: boolean }[] = JSON.parse(
   fs.readFileSync(path.join(root, 'test/fixtures/governance-globs.json'), 'utf8'),
 );
+// shared with the spec job of GravionLabs/ci (#95): test and .md files are not counted
+const testFileCases: { path: string; counted: boolean }[] = JSON.parse(
+  fs.readFileSync(path.join(root, 'test/fixtures/governance-test-files.json'), 'utf8'),
+);
 const hasPwsh = spawnSync('pwsh', ['-NoProfile', '-Command', '1']).status === 0;
 vi.setConfig({ testTimeout: 30000, hookTimeout: 30000 });
 
@@ -82,9 +86,7 @@ describe.skipIf(!hasPwsh)('Get-GovernanceMatches.ps1', () => {
       put('docs/specs/bff.md', 'changed\n');
     });
     branch('excluded', () => {
-      put('apps/bff/a.test.ts');
-      put('apps/bff/tests/b.ts');
-      put('apps/bff/README.md');
+      for (const c of testFileCases) put(c.path);
     });
     branch('globs', () => {
       for (const c of globCases) put(c.path);
@@ -139,11 +141,17 @@ describe.skipIf(!hasPwsh)('Get-GovernanceMatches.ps1', () => {
     expect(ok.changedFiles).toEqual(['apps/bff/a.ts']);
   });
 
-  it('does not count test files and .md files under the glob', async () => {
-    const j = await run('excluded');
-    const bff = j.spec.find((s: { glob: string }) => s.glob === 'apps/bff/**');
-    expect(bff.changedFiles).toEqual([]);
-  });
+  // one run for the whole table, shared by its cases
+  let excluded: Promise<string[]> | undefined;
+  it.each(testFileCases.map((c) => [c.path, c.counted] as const))(
+    'counts %s under the glob as a changed source file: %s (#99)',
+    async (p, counted) => {
+      excluded ??= run('excluded').then(
+        (j) => j.spec.find((s: { glob: string }) => s.glob === 'apps/bff/**').changedFiles,
+      );
+      expect((await excluded).includes(p)).toBe(counted);
+    },
+  );
 
   it('diffs -Head against the base from a checkout other than the branch (#98)', async () => {
     config({ governance: gov });

@@ -35,9 +35,10 @@ function ConvertTo-GlobRegex([string]$Glob) {
   $sb.ToString()
 }
 function Test-Glob([string]$Glob, [string]$Path) { $Path -match (ConvertTo-GlobRegex $Glob) }
+# Case-sensitive (-cmatch) and anchored to a name or folder boundary: latest.ts and Contest.cs are source (#99)
 function Test-TestOrDoc([string]$Path) {
-  $Path -match '\.md$' -or $Path -match '(^|/)(tests?|__tests__)/' -or $Path -match '[._](test|spec)\.[^./]+$' -or
-  $Path -match '(^|/)test_[^/]*$' -or $Path -match 'Tests?\.[^./]+$'
+  $Path -match '\.md$' -or $Path -cmatch '(^|/)(tests?|Tests?|__tests__)/' -or $Path -cmatch '[._](test|spec)\.[^./]+$' -or
+  $Path -cmatch '(^|/)test_[^/]*$' -or $Path -cmatch 'Tests?\.cs$' -or $Path -cmatch '\.Tests?/'
 }
 
 $top = (& git rev-parse --show-toplevel 2>$null)
