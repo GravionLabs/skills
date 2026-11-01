@@ -5,6 +5,12 @@ Versioning follows [Semantic Versioning](https://semver.org/).
 
 ---
 
+## [1.2.1] — 2026-11-01
+
+### Bug Fixes
+- **ci**: Recreate release/next after the release (#133)
+
+
 ## [1.2.0] — 2026-11-01
 
 ### Bug Fixes
@@ -19,6 +25,7 @@ Versioning follows [Semantic Versioning](https://semver.org/).
 ### Documentation
 - Roadmap records v1.1.0 and plans 1.2.0 (#85)
 - Overview, roadmap and governance page for 1.2.0 (#112) (#129)
+- Update CHANGELOG.md for v1.2.0 [skip ci]
 
 
 ### Features
