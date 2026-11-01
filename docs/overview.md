@@ -8,19 +8,19 @@ This documentation is also published as a site at <https://gravionlabs.github.io
 
 A group is a set of skills for one domain, listed in `.claude-plugin/marketplace.json`. Installing it copies (or links) the skills into your repository, where the agent picks them up by their `description` or when you name them. `/skills-install` resolves the groups for a project; `npx skills add GravionLabs/skills --skill <name>` installs single skills.
 
-| Group           | What it covers                                                                                                                                          |
-| :-------------- | :------------------------------------------------------------------------------------------------------------------------------------------------------ |
-| `shared`        | `implementation` (tests per change), `detect-techstack`, `code-review` (blocking findings and notes), `diagnose` (bug diagnosis), `check-prerequisites` |
-| `delivery`      | `deliver`, `planner`, `grill-me`, `retro`, `skills-install`                                                                                             |
-| `github`        | `github-issue` (Epic → Feature → PBI hierarchy with native sub-issues), `github-pull-request`, `github-release`                                         |
-| `dotnet`        | `dotnet-implementation`, `dotnet-test`, `dotnet-create-solution`, `dotnet-mcp-server-generator`                                                         |
-| `ts`            | `ts-implementation`, `ts-test`, `ts-create-project`, `ts-mcp-server-generator`, `ts-pnpm-workflow`, `setup-biome-husky`, `setup-prettier-eslint-husky`  |
-| `py`            | `py-implementation`, `py-test`, `py-create-project`                                                                                                     |
-| `rust`          | `rust-implementation`, `rust-test`                                                                                                                      |
-| `go`            | `go-implementation`, `go-test`                                                                                                                          |
-| `ng`            | `ng-implementation`, `ng-test`, `ng-create-project`, `ng-ag-grid-developer`                                                                             |
-| `statusline`    | `context-statusline`: status line and subagent status line                                                                                              |
-| `skill-tooling` | `skill-write`, `skill-audit`, `skill-slim` (contributor tooling, not in the `all` preset)                                                               |
+| Group           | What it covers                                                                                                                                                                                                                                                                       |
+| :-------------- | :----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `shared`        | `implementation` (tests per change), `detect-techstack`, `code-review` (blocking findings and notes), `diagnose` (bug diagnosis), `check-prerequisites`, `lessons` (approved project lessons per role), `adr` (ADR with the next free number, see [governance](usage/governance.md)) |
+| `delivery`      | `deliver`, `planner`, `grill-me`, `retro`, `skills-install`                                                                                                                                                                                                                          |
+| `github`        | `github-issue` (Epic → Feature → PBI hierarchy with native sub-issues), `github-pull-request`, `github-release`, `github-milestone` (current and all milestones with their progress)                                                                                                 |
+| `dotnet`        | `dotnet-implementation`, `dotnet-test`, `dotnet-create-solution`, `dotnet-mcp-server-generator`, `dotnet-aspire` (AppHost for local orchestration)                                                                                                                                   |
+| `ts`            | `ts-implementation`, `ts-test`, `ts-create-project`, `ts-mcp-server-generator`, `ts-pnpm-workflow`, `setup-biome-husky`, `setup-prettier-eslint-husky`                                                                                                                               |
+| `py`            | `py-implementation`, `py-test`, `py-create-project`                                                                                                                                                                                                                                  |
+| `rust`          | `rust-implementation`, `rust-test`                                                                                                                                                                                                                                                   |
+| `go`            | `go-implementation`, `go-test`                                                                                                                                                                                                                                                       |
+| `ng`            | `ng-implementation`, `ng-test`, `ng-create-project`, `ng-ag-grid-developer`                                                                                                                                                                                                          |
+| `statusline`    | `context-statusline`: status line and subagent status line                                                                                                                                                                                                                           |
+| `skill-tooling` | `skill-write`, `skill-audit`, `skill-slim` (contributor tooling, not in the `all` preset)                                                                                                                                                                                            |
 
 Presets of `/skills-install`: `core` (`shared`, `github`, `delivery`, `statusline`, for the global install) and `all` (every group except `skill-tooling`). The full list with descriptions is generated into [skill-list.md](skill-list.md).
 
@@ -39,6 +39,7 @@ Skills delegate by name instead of repeating each other. One skill owns a workfl
 - [Skills](concepts/skills.md): how skills load on each platform and how they are structured
 - [Skill frontmatter convention](concepts/skill-frontmatter.md): the restricted frontmatter that keeps skills portable
 - [Common workflows](usage/common-workflows.md): end-to-end examples with the installed skills
+- [ADRs and specs](usage/governance.md): how the `governance` key ties `adr`, `planner`, `implementation`, `code-review`, `deliver` and CI together
 - [Skill companion directories](usage/skill-companion-dirs.md): `scripts/`, `references/`, `templates/`, `assets/`
 - [Working mode](working-mode.md) and [delivery](delivery.md): one issue per session, and delivery through `/deliver`
 - [Prerequisites](prerequisites.md): tools the skill scripts depend on

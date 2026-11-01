@@ -12,7 +12,7 @@ By default `Format-Changed.ps1 -Language <lang>` runs the built-in commands of `
 
 ## Governance
 
-`governance` names where ADRs and specs live and which changes need them. The `adr` skill and `github-issue` read it; the CI check of GravionLabs/ci reads the same names. Without the key, `adr` works on request with `docs/adr` and no change is held to an ADR or spec rule.
+`governance` names where ADRs and specs live and which changes need them. It is read by `adr`, `github-issue`, `planner`, `implementation`, `code-review`, `deliver` and `detect-techstack`, and the CI checks `adr` and `spec` of GravionLabs/ci read the same names. How they work together: [ADRs and specs](governance.md). Without the key, `adr` works on request with `docs/adr` and no change is held to an ADR or spec rule.
 
 - `adrDir`: ADR directory (default `docs/adr`).
 - `adrPaths`: globs whose change needs an ADR (default `[]`).
