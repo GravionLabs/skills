@@ -78,6 +78,28 @@ describe('github-issue creates issues from a plan with blocked-by links', () => 
     expect(doc).toContain('gh api repos/{owner}/{repo}/issues/<blocker-nr> --jq .id');
   });
 
+  it('sub-issues.md links and unlinks over REST with the database id, not GraphQL (#117)', () => {
+    const doc = read('github/github-issue/references/sub-issues.md');
+    expect(doc).not.toContain('gh api graphql');
+    expect(doc).not.toContain('gh issue view <');
+    expect(doc).toContain('$childId = gh api repos/{owner}/{repo}/issues/<child-nr> --jq .id');
+    expect(doc).toContain(
+      'gh api -X POST repos/{owner}/{repo}/issues/<parent-nr>/sub_issues -F sub_issue_id=$childId',
+    );
+    expect(doc).toContain(
+      'gh api -X DELETE repos/{owner}/{repo}/issues/<old-parent-nr>/sub_issue -F sub_issue_id=$childId',
+    );
+    // re-linking answers 422: the parent endpoint tells done from another parent
+    expect(doc).toContain('HTTP 422');
+    expect(doc).toContain('gh api repos/{owner}/{repo}/issues/<child-nr>/parent --jq .number');
+    expect(read('github/github-issue/references/create-from-plan.md')).not.toContain('addSubIssue');
+  });
+
+  it('standalone-issue.md waits for checks at a 60 s interval (#117)', () => {
+    const doc = read('github/github-issue/references/standalone-issue.md');
+    expect(doc).toContain('`gh pr checks <nr> --watch --interval 60`');
+  });
+
   it('every file create-from-plan.md and planner name for blocked-by links contains "blocked_by"', () => {
     const sources = [
       read('github/github-issue/references/create-from-plan.md'),
