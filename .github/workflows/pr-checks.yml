@@ -1,0 +1,25 @@
+# Pull request checks, handled by the reusable workflow pr-checks.yml of GravionLabs/ci. Only the title job runs: the PR
+# title is a Conventional Commit and agrees with the commits (feat commit -> feat title, breaking commit -> "!"), because
+# the squash merge into release/next takes the PR title and the version bump reads it (#102). Release PRs from
+# release/** into main are exempt from the title rule. readiness, adr and spec stay off (readiness: #71).
+# The job id `pr-checks` makes the required status check "pr-checks / PR checks" (rulesets main and release).
+# No secrets, no checkout: pr-checks.yml reads the title and commits through the API with the GITHUB_TOKEN.
+name: PR checks
+
+on:
+  pull_request:
+    branches: [main, 'release/**']
+    types: [opened, edited, synchronize, reopened]
+
+permissions: {}
+
+jobs:
+  pr-checks:
+    permissions:
+      pull-requests: read
+    uses: GravionLabs/ci/.github/workflows/pr-checks.yml@v1.5.0
+    with:
+      readiness: false
+      adr: false
+      spec: false
+      title: true

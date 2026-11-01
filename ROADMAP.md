@@ -18,13 +18,13 @@ v1.0.0 is apm-hub 3.3.0 (released there as `v3.2.1`) plus its unreleased `releas
 
 ## Done in 1.0.2
 
-Planned as 1.1.0; the release PR #70 missed the `+semver: minor` commit, so GitVersion tagged `v1.0.2` (fixed by #73). Milestone 1.0.2 (renamed from 1.1.0): repository settings and ruleset on `release/next` (#19), trigger evals (#20), the lessons contract of Feature #3 (#23–#28, #43), the `deliver` trials in OpenCode (#4) and Copilot CLI (#5) with their fixes (#45, #47–#49), the retro (#6) and its follow-ups (#54–#57), the archive of GravionLabs/apm-hub (#21). Features #2, #3 and #18 are closed.
+Planned as 1.1.0; the release PR #70 carried no minor bump, so GitVersion tagged `v1.0.2` (worked around by #73, replaced by the Conventional Commit versioning of #102). Milestone 1.0.2 (renamed from 1.1.0): repository settings and ruleset on `release/next` (#19), trigger evals (#20), the lessons contract of Feature #3 (#23–#28, #43), the `deliver` trials in OpenCode (#4) and Copilot CLI (#5) with their fixes (#45, #47–#49), the retro (#6) and its follow-ups (#54–#57), the archive of GravionLabs/apm-hub (#21). Features #2, #3 and #18 are closed.
 
 Retro #6 (2026-10-31, 14 `deliver` runs: 12 Claude Code, 1 OpenCode, 1 Copilot CLI): red CI at the end 0 %, fix rounds 0.21 per PBI, median time per PBI about 8 min, human wait ≈ 0 except the Copilot allowlist pause (fixed by #49); cost not measured (agentlens not installed). **Decision: `deliver/workflow.js` is deleted** (#57); plain subagents sufficed on all three harnesses. The Claude Code runs loaded an outdated global `deliver`, hence #54.
 
 ## Done in 1.1.0
 
-Milestone 1.1.0: GitVersion bumps the minor version on a release merge into `main` (#73), Node.js 26 (#72), `deliver` merges into `release/next` without asking (#78), the herdr integration of Feature #15: pane tokens (#16), the log pane of `Invoke-DeliverLoop` (#12) and its herdr key (#13). The herdr plugin of #17 moved to [GravionLabs/herdr-plugins](https://github.com/GravionLabs/herdr-plugins): GravionLabs/herdr-plugins#3 (`deliver-starter`), #5 (`agent-notify`), #22 (`deliver-view`) and #23 (`deliver-log`) there build on #16 and #13 here.
+Milestone 1.1.0: GitVersion bumps the minor version on a release merge into `main` (#73; since #101 and #102 the bump comes from the Conventional Commits, GravionLabs/ci#107), Node.js 26 (#72), `deliver` merges into `release/next` without asking (#78), the herdr integration of Feature #15: pane tokens (#16), the log pane of `Invoke-DeliverLoop` (#12) and its herdr key (#13). The herdr plugin of #17 moved to [GravionLabs/herdr-plugins](https://github.com/GravionLabs/herdr-plugins): GravionLabs/herdr-plugins#3 (`deliver-starter`), #5 (`agent-notify`), #22 (`deliver-view`) and #23 (`deliver-log`) there build on #16 and #13 here.
 
 ## 1.2.0 — review file, Aspire, ADRs and specs
 
@@ -36,6 +36,7 @@ Milestone 1.2.0. `release/next` is cut from `v1.1.0`.
 | 1     | #61   | `dotnet-aspire` skill                                    | M    | refined; check against GravionLabs/elysion#867                         |
 | 1     | #65   | `adr` skill and `governance` key                         | M    | Feature #64; the key names are read by GravionLabs/ci#94 and ci#95     |
 | 1     | #71   | adopt the bundled pr-checks.yml                          | S    | GravionLabs/ci#93 and ci#96 are done; every later PR needs `Closes #n` |
+| 1     | #102  | Conventional Commit versioning and the PR title check    | S    | GravionLabs/ci#107 and ci#108 (ci v1.4.0); #101 is merged              |
 | 2     | #66   | spec rules in `implementation`                           | M    | #65                                                                    |
 | 2     | #68   | `detect-techstack` reports ADRs, specs and governance    | M    | #65                                                                    |
 | 3     | #67   | `planner` and `code-review` apply the ADR and spec rules | M    | #65, #66                                                               |
