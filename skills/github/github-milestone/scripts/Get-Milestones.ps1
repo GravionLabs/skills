@@ -9,19 +9,24 @@
   requests filtered out) as needsDecision, needsRefinement, blocked (open blockers), claimed (assignee)
   and ready, in that precedence (a blocker from another repository carries repository owner/repo), and add the release PR release/next -> default from Get-ReleaseState.ps1
   of the github-release skill. create: creates milestone <x.y.z> when no milestone has that title; it
-  never renames or closes one.
+  never renames or closes one. issues: resolves the milestone title -Name to its number and lists its issues
+  (body, labels, assignees, state; pull requests filtered out) in one paginated REST call, for the batched
+  reads of deliver; unknown milestone: exit 1.
 .PARAMETER Mode
-  current, list, show or create.
+  current, list, show, create or issues.
 .PARAMETER Name
   show and create: the milestone title, a bare version x.y.z (a leading v is dropped).
+.PARAMETER State
+  issues: open, closed or all (default).
 .PARAMETER Repo
   owner/name; default: the repository of the current directory ({owner}/{repo} of gh).
 .PARAMETER ReleaseState
   Path of Get-ReleaseState.ps1; default: the sibling github-release skill. Missing: releasePr is null.
 #>
 param(
-  [Parameter(Mandatory)][ValidateSet('current', 'list', 'show', 'create')][string]$Mode,
+  [Parameter(Mandatory)][ValidateSet('current', 'list', 'show', 'create', 'issues')][string]$Mode,
   [string]$Name,
+  [ValidateSet('open', 'closed', 'all')][string]$State = 'all',
   [string]$Repo = '{owner}/{repo}',
   [string]$ReleaseState = (Join-Path $PSScriptRoot '../../github-release/scripts/Get-ReleaseState.ps1')
 )
@@ -60,6 +65,20 @@ if ($Mode -eq 'create') {
   }
   [ordered]@{ created = $created; milestone = [ordered]@{ number = $existing.number; title = $existing.title; state = $existing.state; url = $existing.html_url } } |
     ConvertTo-Json -Depth 4
+  exit 0
+}
+
+if ($Mode -eq 'issues') {
+  if (-not $Name) { Fail 'issues needs -Name <milestone title>' }
+  $m = $milestones | Where-Object { $_.title -eq $Name -or $_.title -eq (Get-Bare $Name) } | Select-Object -First 1
+  if (-not $m) { Fail "milestone '$Name' not found" }
+  $list = @(Get-Paged "repos/$Repo/issues?milestone=$($m.number)&state=$State&per_page=100" | Where-Object { $null -eq $_.pull_request } | Sort-Object number | ForEach-Object {
+      [ordered]@{
+        number = $_.number; title = $_.title; state = $_.state; body = $_.body
+        labels = @($_.labels | ForEach-Object { $_.name }); assignees = @($_.assignees | ForEach-Object { $_.login })
+      }
+    })
+  [ordered]@{ milestone = [ordered]@{ number = $m.number; title = $m.title; state = $m.state }; issues = $list } | ConvertTo-Json -Depth 6
   exit 0
 }
 

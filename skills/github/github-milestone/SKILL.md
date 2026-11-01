@@ -13,6 +13,7 @@ Prerequisites: `gh` authenticated, run from the repository root. Usage: `/github
 
    ```powershell
    pwsh scripts/Get-Milestones.ps1 -Mode current            # or: -Mode list | -Mode show -Name <x.y.z> | -Mode create -Name <x.y.z>
+   pwsh scripts/Get-Milestones.ps1 -Mode issues -Name <title> [-State open|closed|all]   # all issues of a milestone in one REST call (deliver)
    ```
 
    Exit 1 with a message on stderr (not found, invalid name, `gh` failed): report the message and stop.

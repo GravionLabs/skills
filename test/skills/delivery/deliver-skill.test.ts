@@ -103,8 +103,9 @@ describe('deliver SKILL.md', () => {
     expect(body).toContain(
       '`/deliver <nr> [<nr> …] [--milestone <name>] [--unattended] [--max <n>]`',
     );
-    expect(body).toContain('gh issue list --milestone <name> --label pbi --state open');
-    expect(body).toContain('the same with `--label bug`');
+    expect(body).toContain('Get-Milestones.ps1 -Mode issues -Name <name> -State open');
+    expect(body).toContain('filter the returned list by label');
+    expect(body).not.toContain('gh issue list');
     expect(body).toContain('drop duplicates');
     expect(body).toContain('ties keep the order of the arguments');
     expect(body).toContain('#<nr> select: needs refinement, skipped');
@@ -151,8 +152,8 @@ describe('deliver SKILL.md', () => {
   it('ends a fully delivered milestone with the release PR for human review (#78)', () => {
     const release = body.slice(body.indexOf('**Release.**'), body.indexOf('## Pause rules'));
     expect(release).toContain('Only with `--milestone`');
-    expect(release).toContain('gh issue list --milestone <name> --label pbi --state open');
-    expect(release).toContain('the same with `--label bug`');
+    expect(release).toContain('the same read, filtered to `pbi` and `bug`, returns none');
+    expect(release).not.toContain('gh issue list');
     expect(release).toContain('`github-release` and run `finish`');
     expect(release).toContain('`auto_merge: false`');
     expect(release).toContain('never merge it');
@@ -164,6 +165,13 @@ describe('deliver SKILL.md', () => {
     const release = body.slice(body.indexOf('**Release.**'), body.indexOf('## Pause rules'));
     const ref = fs.readFileSync(path.join(skillDir, 'references/release-review.md'), 'utf8');
     const docs = fs.readFileSync(path.resolve(__dirname, '../../../docs/delivery.md'), 'utf8');
+
+    it('takes criteria and round markers from one batched milestone list (#127)', () => {
+      expect(ref).toContain('Get-Milestones.ps1 -Mode issues -Name <name> -State all');
+      expect(ref).toContain('Collect the criteria from that list');
+      expect(ref).not.toContain('gh issue list');
+      expect(ref).not.toContain('--search');
+    });
 
     it('reviews the release diff with a fresh subagent before github-release finish', () => {
       const review = release.indexOf('**Release review**');

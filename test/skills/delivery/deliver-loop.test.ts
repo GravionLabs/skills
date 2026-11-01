@@ -61,9 +61,16 @@ describe.skipIf(!hasPwsh || process.platform === 'win32')('Invoke-DeliverLoop.ps
           const i = get(m[1]);
           return { rest: { number: Number(m[1]), state: (i.state || 'OPEN').toLowerCase(), labels: (i.labels || []).map((name) => ({ name })) } };
         }
-        if (a[0] === 'issue' && a[1] === 'list') {
-          return { rest: (s.milestones[a[a.indexOf('--milestone') + 1]] || []).map((number) => ({ number })) };
+        // #127: the milestone is read over REST (Get-Milestones.ps1 -Mode issues), never with gh issue list
+        if (/\\/milestones\\?/.test(a[1] || '')) {
+          return { rest: [Object.keys(s.milestones).map((title, i) => ({ number: i + 1, title, state: 'open' }))] };
         }
+        m = /issues\\?milestone=(\\d+)&state=open/.exec(a[1] || '');
+        if (m) {
+          const nrs = s.milestones[Object.keys(s.milestones)[Number(m[1]) - 1]] || [];
+          return { rest: [nrs.filter((n) => (get(n).state || 'OPEN') === 'OPEN').map((number) => ({ number, title: 't', state: 'open', labels: (get(number).labels || []).map((name) => ({ name })), assignees: [] }))] };
+        }
+        if (a[0] === 'issue') throw new Error('GraphQL read: gh ' + a.join(' '));
         m = /issues\\/(\\d+)\\/sub_issues/.exec(a[1] || '');
         if (m) return { rest: (get(m[1]).children || []).map((number) => ({ number })) };
         m = /issues\\/(\\d+)\\/dependencies\\/blocked_by/.exec(a[1] || '');
@@ -157,6 +164,22 @@ fs.writeFileSync(f, JSON.stringify(s));`,
         '-p /deliver --milestone 0.13 --unattended --max 1 --model sonnet --permission-mode auto --output-format stream-json --verbose',
       ]);
       expect(r.stdout).toContain('loop result: max reached');
+    });
+
+    it('reads the milestone with one batched REST call, no gh issue list and no read per PBI (#127)', async () => {
+      const gh = setup({
+        issues: { 10: pbi(), 11: pbi(), 12: pbi() },
+        milestones: { '0.13': [10, 11, 12] },
+        effect: 'close-first',
+      });
+      await run(gh, ['-Milestone', '0.13', '-Max', '1']);
+      const paths = gh.calls().map((c) => c.args.join(' '));
+      expect(paths.filter((c) => c.includes('/issues?milestone='))).toHaveLength(2); // the state read before and after the one iteration
+      expect(
+        paths.filter((c) => c.includes('issues?milestone=1&state=open&per_page=100 --paginate')),
+      ).toHaveLength(2);
+      expect(paths.filter((c) => /^issue /.test(c))).toEqual([]);
+      expect(paths.filter((c) => /issues\/1\d$/.test(c))).toEqual([]);
     });
 
     it('passes targets and -Model on and runs until nothing is open (Feature expanded to its PBIs)', async () => {
