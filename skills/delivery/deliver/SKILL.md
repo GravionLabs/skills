@@ -10,6 +10,8 @@ Delivers the open PBIs and Bugs of an issue (a work item = open issue labelled `
 
 ## Input
 
+`help` (or `--help`, `-h`): print `references/help.md` unchanged, nothing else.
+
 `/deliver <nr> [<nr> …] [--milestone <name>] [--unattended] [--max <n>]`: each number is a PBI, Bug, Feature or Epic; `--milestone <name>` (a release) adds the open work items of that milestone (one batched read of the milestone (`pwsh <skill-dir>/../github-milestone/scripts/Get-Milestones.ps1 -Mode issues -Name <name> -State open`: REST, title to number, all pages, no PRs; filter the returned list by label: `pbi`, `bug`), plus the work items below the Features and Epics in it). Missing: ask once. `--max <n>` stops after `n` delivered, blocked or paused PBIs and prints the report (`scripts/Invoke-DeliverLoop.ps1` uses `--max 1` per fresh session, `references/loop.md`).
 
 - **Interactive** (default): a pause rule asks the user in the chat; a blocked PBI asks: retry, skip or an instruction.
