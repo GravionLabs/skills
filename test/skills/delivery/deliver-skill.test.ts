@@ -179,6 +179,13 @@ describe('deliver SKILL.md', () => {
       expect(release).toContain('`references/release-review.md`');
     });
 
+    it('skips the governance rules in the release review (#131)', () => {
+      expect(ref).toContain(
+        'Skip the governance rules (`references/governance.md` of `code-review`): do not run `Get-GovernanceMatches.ps1`, report no finding with `rule: "adr-missing"` or `rule: "spec-drift"`.',
+      );
+      expect(ref).toContain("Each PBI's own review (step 4) already applied the rules");
+    });
+
     it('writes the release review file next to the review file of #53', () => {
       expect(release).toContain('`<git-common-dir>/.agents/state/release-review-<milestone>.json`');
       expect(ref).toContain('schema/deliver-release-review.schema.json');
