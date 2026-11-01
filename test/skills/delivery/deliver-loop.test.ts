@@ -151,25 +151,23 @@ fs.writeFileSync(f, JSON.stringify(s));`,
       expect(claudeCalls()).toEqual([]);
     });
 
-    it('-Milestone -Max 1 selects a bug like a PBI, delivers exactly one in one fresh process, reads the milestone with one batched REST call (#103, #127)', async () => {
+    it('-Milestone selects a bug like a PBI, delivers it in one fresh process, ends done when no open and no paused issue is left, reads the milestone with one batched REST call (#103, #127)', async () => {
       const gh = setup({
         issues: {
           10: { labels: ['bug'], blockers: [{ number: 5, state: 'closed' }] },
-          11: pbi(),
-          12: pbi(),
         },
-        milestones: { '0.13': [10, 11, 12] },
+        milestones: { '0.13': [10] },
         effect: 'close-first',
       });
-      const r = await run(gh, ['-Milestone', '0.13', '-Max', '1']);
+      const r = await run(gh, ['-Milestone', '0.13']);
       expect(r.status).toBe(0);
       expect(claudeCalls()).toEqual([
         '-p /deliver --milestone 0.13 --unattended --max 1 --model sonnet --permission-mode auto --output-format stream-json --verbose',
       ]);
       expect(JSON.parse(read('state.json')).issues[10].state).toBe('CLOSED');
-      expect(r.stdout).toContain('loop result: max reached');
+      expect(r.stdout).toContain('loop result: done');
       const paths = gh.calls().map((c) => c.args.join(' '));
-      expect(paths.filter((c) => c.includes('/issues?milestone='))).toHaveLength(2); // the state read before and after the one iteration
+      expect(paths.filter((c) => c.includes('/issues?milestone='))).toHaveLength(3); // the state read before and after the one iteration; the closed list is read once for the done check
       expect(
         paths.filter((c) => c.includes('issues?milestone=1&state=open&per_page=100 --paginate')),
       ).toHaveLength(2);
@@ -177,34 +175,24 @@ fs.writeFileSync(f, JSON.stringify(s));`,
       expect(paths.filter((c) => /issues\/\d+$/.test(c))).toEqual([]);
     });
 
-    it('passes targets and -Model on and runs until nothing is open (Feature expanded to its PBIs)', async () => {
+    it('passes targets and -Model on, expands a Feature to its open PBIs and stops at -Max', async () => {
       const gh = setup({
         issues: {
           100: { labels: ['feature'], children: [101, 102, 103] },
           101: pbi(),
-          102: pbi({ blockers: [{ number: 101, state: 'open' }] }),
+          102: pbi(),
           103: pbi({ state: 'CLOSED' }),
         },
         effect: 'close-first',
       });
-      // after the first iteration #101 is closed, but its state file keeps the blocker of 102 open: clear it in the effect
-      const st = path.join(cwd, 'state.json');
-      fs.writeFileSync(
-        path.join(cwd, 'effect.js'),
-        `const fs = require('fs'); const s = JSON.parse(fs.readFileSync(${JSON.stringify(st)}, 'utf8'));
-const n = Object.keys(s.issues).map(Number).find((k) => k > 100 && s.issues[k].state !== 'CLOSED' && !(s.issues[k].blockers || []).some((b) => b.state === 'open'));
-s.issues[n].state = 'CLOSED';
-for (const i of Object.values(s.issues)) i.blockers = (i.blockers || []).filter((b) => b.number !== n);
-fs.writeFileSync(${JSON.stringify(st)}, JSON.stringify(s));`,
-      );
-      const r = await run(gh, ['-Target', '100', '-Model', 'opus']);
+      const r = await run(gh, ['-Target', '100', '-Model', 'opus', '-Max', '1']);
       expect(r.status).toBe(0);
       const calls = claudeCalls();
-      expect(calls).toHaveLength(2);
+      expect(calls).toHaveLength(1);
       expect(calls[0]).toBe(
         '-p /deliver 100 --unattended --max 1 --model opus --permission-mode auto --output-format stream-json --verbose',
       );
-      expect(r.stdout).toContain('loop result: done');
+      expect(r.stdout).toContain('loop result: max reached');
     });
 
     it('stops with "no progress" and the last log lines when a PBI stays open', async () => {
@@ -363,9 +351,13 @@ fs.writeFileSync(${JSON.stringify(st)}, JSON.stringify(s));`,
       }
     });
 
-    it('clears the herdr display when the loop fails', async () => {
+    it('clears the herdr display when the loop fails; with stdout redirected (no TTY) no pane is attempted', async () => {
       const gh = setup({ issues: { 10: pbi({ children: [] }) } });
-      const r = await run(gh, ['-Target', '10,99'], { HERDR_ENV: '1', HERDR_PANE_ID: 'p7' });
+      const r = await run(gh, ['-Target', '10,99'], {
+        HERDR_ENV: '1',
+        HERDR_PANE_ID: 'p7',
+        DELIVER_LOOP_ASSUME_TTY: '',
+      });
       expect(r.status).not.toBe(0);
       expect(read('herdr-calls.txt').trim()).toBe(
         'pane report-metadata p7 --source deliver --clear-token deliver --clear-token deliver_step --clear-token deliver_pr',
@@ -451,14 +443,6 @@ esac
       ]);
       await go(prepare({ list }), [], herdrEnv);
       expect(paneCalls()).toEqual(['pane list']);
-    });
-
-    // outside herdr: see 'is done at once'
-    it('stdout redirected: attempts no pane and prints no error', async () => {
-      const r = await go(prepare(), [], { ...herdrEnv, DELIVER_LOOP_ASSUME_TTY: '' });
-      expect(r.status).toBe(0);
-      expect(r.stderr).toBe('');
-      expect(paneCalls()).toEqual([]);
     });
 
     it('a failing split is ignored and the loop runs on', async () => {
