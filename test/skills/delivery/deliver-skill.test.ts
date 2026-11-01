@@ -181,7 +181,7 @@ describe('deliver SKILL.md', () => {
 
     it('skips the governance rules in the release review (#131)', () => {
       expect(ref).toContain(
-        'Skip the governance rules (`references/governance.md` of `code-review`): do not run `Get-GovernanceMatches.ps1`, report no `adr-missing` or `spec-drift`.',
+        'Skip the governance rules (`references/governance.md` of `code-review`): do not run `Get-GovernanceMatches.ps1`, report no finding with `rule: "adr-missing"` or `rule: "spec-drift"`.',
       );
       expect(ref).toContain("Each PBI's own review (step 4) already applied the rules");
     });
