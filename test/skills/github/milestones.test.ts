@@ -41,6 +41,7 @@ const issue = (number: number, extra: Record<string, unknown> = {}) => ({
   title: `issue ${number}`,
   labels: [],
   assignees: [],
+  repository_url: 'https://api.github.com/repos/o/r',
   ...extra,
 });
 
@@ -133,7 +134,18 @@ describe('Get-Milestones.ps1', () => {
           FAKE_BLOCKERS: {
             10: [{ number: 5, title: 'closed blocker', state: 'closed' }],
             12: [
-              { number: 10, title: 'issue 10', state: 'open' },
+              {
+                number: 10,
+                title: 'issue 10',
+                state: 'open',
+                repository_url: 'https://api.github.com/repos/o/r',
+              },
+              {
+                number: 117,
+                title: 'nightly sync',
+                state: 'open',
+                repository_url: 'https://api.github.com/repos/o/ci',
+              },
               { number: 6, title: 'gone', state: 'closed' },
             ],
           },
@@ -155,7 +167,11 @@ describe('Get-Milestones.ps1', () => {
           number: 12,
           title: 'issue 12',
           assignees: [],
-          blockers: [{ number: 10, title: 'issue 10' }],
+          // a blocker of another repository keeps owner/repo (o/ci#117 is not the local #117)
+          blockers: [
+            { number: 10, title: 'issue 10' },
+            { number: 117, title: 'nightly sync', repository: 'o/ci' },
+          ],
         },
       ]);
       expect(nrs(c.issues.needsDecision)).toEqual([13]);

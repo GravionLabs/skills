@@ -7,7 +7,7 @@
   ({ current: null, hint } when there is none). list: all milestones, open and closed, sorted by semver
   (non-semver titles last). show: one milestone by -Name. current and show group the open issues (pull
   requests filtered out) as needsDecision, needsRefinement, blocked (open blockers), claimed (assignee)
-  and ready, in that precedence, and add the release PR release/next -> default from Get-ReleaseState.ps1
+  and ready, in that precedence (a blocker from another repository carries repository owner/repo), and add the release PR release/next -> default from Get-ReleaseState.ps1
   of the github-release skill. create: creates milestone <x.y.z> when no milestone has that title; it
   never renames or closes one.
 .PARAMETER Mode
@@ -100,7 +100,12 @@ function Get-Detail($m) {
     $blockers = @()
     if ($null -eq $sum -or [int]$sum.blocked_by -gt 0) {
       $blockers = @(Get-Paged "repos/$Repo/issues/$($i.number)/dependencies/blocked_by" | Where-Object { $_.state -eq 'open' } |
-          ForEach-Object { [ordered]@{ number = $_.number; title = $_.title } })
+          ForEach-Object {
+            $b = [ordered]@{ number = $_.number; title = $_.title }
+            # a blocker in another repository keeps its owner/repo, so #n never names a local issue
+            if ($_.repository_url -and $_.repository_url -ne $i.repository_url) { $b.repository = $_.repository_url -replace '^.*/repos/', '' }
+            $b
+          })
     }
     $key = if ($labels -contains 'needs-decision') { 'needsDecision' }
     elseif ($labels -contains 'needs-refinement') { 'needsRefinement' }

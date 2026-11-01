@@ -80,7 +80,11 @@
           "items": {
             "type": "object",
             "required": ["number", "title"],
-            "properties": { "number": { "type": "integer" }, "title": { "type": "string" } }
+            "properties": {
+              "number": { "type": "integer" },
+              "title": { "type": "string" },
+              "repository": { "type": "string", "description": "owner/repo, only when the blocker is in another repository than the blocked issue." }
+            }
           }
         }
       }

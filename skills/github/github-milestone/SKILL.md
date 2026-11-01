@@ -20,15 +20,15 @@ Prerequisites: `gh` authenticated, run from the repository root. Usage: `/github
 2. `current` → the open milestone with the lowest semver title above `latestTag`. `current: null` → print `hint` and stop. Otherwise render it as in step 3.
 3. `current` and `<name>` (a milestone detail): one header line `<title> (<state>) · due <dueOn or —> · <closed>/<open + closed> closed (<progress> %)`, then one table of the open issues:
 
-   | Group            | Issue     | Note                |
-   | :--------------- | :-------- | :------------------ |
-   | ready            | #12 title |                     |
-   | blocked          | #13 title | blocked by #11, #10 |
-   | needs-decision   | #14 title |                     |
-   | needs-refinement | #15 title |                     |
-   | claimed          | #16 title | @login              |
+   | Group            | Issue     | Note                    |
+   | :--------------- | :-------- | :---------------------- |
+   | ready            | #12 title |                         |
+   | blocked          | #13 title | blocked by #11, o/ci#10 |
+   | needs-decision   | #14 title |                         |
+   | needs-refinement | #15 title |                         |
+   | claimed          | #16 title | @login                  |
 
-   Order the rows ready, blocked, needs-decision, needs-refinement, claimed; omit empty groups, and write `no open issues` instead of an empty table. `releasePr` set → end with `Release PR: #<number> <url>`.
+   Order the rows ready, blocked, needs-decision, needs-refinement, claimed; a blocker with `repository` is written `<repository>#<number>`, else `#<number>`; omit empty groups, and write `no open issues` instead of an empty table. `releasePr` set → end with `Release PR: #<number> <url>`.
 
 4. `list` → one table `Milestone | State | Open | Closed | Progress | Due | Tag`, in the script's order (semver ascending, other titles last); `Tag` is `v<title>` when `tagged`, else `—`. Below it `Latest release: <latestTag>`.
 5. `create <x.y.z>` → `created: true` reports `created milestone <title>`; `created: false` reports `milestone <title> exists (<state>)` and changes nothing.
