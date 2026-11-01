@@ -65,10 +65,10 @@ describe.skipIf(!hasPwsh || process.platform === 'win32')('Invoke-DeliverLoop.ps
         if (/\\/milestones\\?/.test(a[1] || '')) {
           return { rest: [Object.keys(s.milestones).map((title, i) => ({ number: i + 1, title, state: 'open' }))] };
         }
-        m = /issues\\?milestone=(\\d+)&state=open/.exec(a[1] || '');
+        m = /issues\\?milestone=(\\d+)&state=(open|closed|all)/.exec(a[1] || '');
         if (m) {
           const nrs = s.milestones[Object.keys(s.milestones)[Number(m[1]) - 1]] || [];
-          return { rest: [nrs.filter((n) => (get(n).state || 'OPEN') === 'OPEN').map((number) => ({ number, title: 't', state: 'open', labels: (get(number).labels || []).map((name) => ({ name })), assignees: [] }))] };
+          return { rest: [nrs.filter((n) => (m[2] === 'all' || (get(n).state || 'OPEN') === (m[2] === 'closed' ? 'CLOSED' : 'OPEN'))).map((number) => ({ number, title: 't', state: 'open', labels: (get(number).labels || []).map((name) => ({ name })), assignees: [] }))] };
         }
         if (a[0] === 'issue') throw new Error('GraphQL read: gh ' + a.join(' '));
         m = /issues\\/(\\d+)\\/sub_issues/.exec(a[1] || '');
@@ -149,6 +149,27 @@ fs.writeFileSync(f, JSON.stringify(s));`,
       const r = await run(gh, ['-Milestone', '0.13', '-Max', '1']);
       expect(r.status).toBe(0);
       expect(claudeCalls()).toHaveLength(1);
+      expect(r.stdout).toContain('loop result: done');
+    });
+
+    it('reports a milestone with a paused release review as blocked, not done', async () => {
+      const gh = setup({
+        issues: { 30: pbi({ state: 'CLOSED', labels: ['pbi', 'needs-decision'] }) },
+        milestones: { '0.13': [30] },
+      });
+      const r = await run(gh, ['-Milestone', '0.13']);
+      expect(r.status).toBe(2);
+      expect(r.stdout).toContain('loop result: blocked');
+      expect(claudeCalls()).toEqual([]);
+    });
+
+    it('reports done when the closed PBIs carry no needs-decision', async () => {
+      const gh = setup({
+        issues: { 30: pbi({ state: 'CLOSED' }) },
+        milestones: { '0.13': [30] },
+      });
+      const r = await run(gh, ['-Milestone', '0.13']);
+      expect(r.status).toBe(0);
       expect(r.stdout).toContain('loop result: done');
     });
 
