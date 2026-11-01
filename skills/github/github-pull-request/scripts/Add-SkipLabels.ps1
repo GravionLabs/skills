@@ -1,13 +1,15 @@
 <#
 .SYNOPSIS
-  Copies the governance skip labels of an issue onto its pull request (REST), as JSON { added, missing }.
+  Copies the governance skip labels of an issue onto its pull request (REST), as JSON { existing, added, missing, errors }.
 .DESCRIPTION
-  Reads governance.skipLabels of .agents/config.json (default ["skip-adr"] when the governance key exists;
+  Without -Pr it only looks up (no POST): `existing` are the labels to pass to `gh pr create --label`.
+  With -Pr it also POSTs the existing ones to the PR (fallback). Reads governance.skipLabels of .agents/config.json (default ["skip-adr"] when the governance key exists;
   no governance key or no config: nothing happens). Of the -IssueLabel values only those in skipLabels are
   copied. A label that does not exist in the repository is listed in `missing` and never created. The CI
-  check `adr` reads only the labels of the PR, so call this right after `gh pr create`.
+  check `adr` reads only the labels of the PR, so look up before `gh pr create` and pass `--label`.
+  Only a 404 counts as missing; other lookup failures are listed in `errors`.
 .PARAMETER Pr
-  Pull request number.
+  Pull request number; 0 (default) = lookup only.
 .PARAMETER IssueLabel
   Label names of the issue.
 .PARAMETER Config
@@ -16,7 +18,7 @@
   owner/name; default: the repository of the current directory ({owner}/{repo} of gh).
 #>
 param(
-  [Parameter(Mandatory)][int]$Pr,
+  [int]$Pr = 0,
   [string[]]$IssueLabel = @(),
   [string]$Config,
   [string]$Repo = '{owner}/{repo}'
@@ -37,15 +39,21 @@ if (Test-Path -LiteralPath $Config) {
   }
 }
 $wanted = @($IssueLabel | ForEach-Object { $_ -split ',' } | Where-Object { $_ -and ($skip -contains $_) } | Select-Object -Unique)
-$added = @()
+$existing = @()
 $missing = @()
+$errors = @()
 foreach ($l in $wanted) {
-  & gh api "repos/$Repo/labels/$([uri]::EscapeDataString($l))" 2>$null | Out-Null
-  if ($LASTEXITCODE -eq 0) { $added += $l } else { $missing += $l }
+  $out = & gh api "repos/$Repo/labels/$([uri]::EscapeDataString($l))" 2>&1
+  if ($LASTEXITCODE -eq 0) { $existing += $l }
+  elseif (($out | Out-String) -match '404|Not Found') { $missing += $l }
+  else { $errors += "skip label lookup failed: $l ($((($out | Out-String).Trim())))" }
 }
-if ($added.Count -gt 0) {
-  $ghArgs = @('api', '-X', 'POST', "repos/$Repo/issues/$Pr/labels") + @($added | ForEach-Object { '-f'; "labels[]=$_" })
+$added = @()
+if ($Pr -gt 0 -and $existing.Count -gt 0) {
+  $ghArgs = @('api', '-X', 'POST', "repos/$Repo/issues/$Pr/labels") + @($existing | ForEach-Object { '-f'; "labels[]=$_" })
   & gh @ghArgs 2>$null | Out-Null
-  if ($LASTEXITCODE -ne 0) { Write-Error "gh api POST labels of PR $Pr failed" -ErrorAction Continue; exit 1 }
+  if ($LASTEXITCODE -eq 0) { $added = $existing } else { $errors += "skip labels not added: POST labels of PR $Pr failed" }
 }
-[ordered]@{ added = $added; missing = $missing } | ConvertTo-Json -Compress
+if ($errors.Count -gt 0) { $errors | ForEach-Object { Write-Error $_ -ErrorAction Continue } }
+[ordered]@{ existing = $existing; added = $added; missing = $missing; errors = $errors } | ConvertTo-Json -Compress
+if ($errors.Count -gt 0) { exit 1 }
