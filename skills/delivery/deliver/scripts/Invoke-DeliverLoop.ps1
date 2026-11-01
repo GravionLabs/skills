@@ -113,9 +113,13 @@ function Set-Pane([string]$Nr = '', [string]$Step = '', [switch]$Clear) {
   try { & herdr pane report-metadata $Pane --source deliver @tokenArgs 2>$null | Out-Null } catch { Write-Verbose "herdr failed: $_" }
 }
 
-function Get-Json([string[]]$ghArgs) {
-  $out = & gh @ghArgs 2>$null
-  if ($LASTEXITCODE -ne 0) { throw "gh $($ghArgs -join ' ') failed" }
+# Get-Milestones.ps1 of github-milestone: sibling skill (installed) or skills/github (repository)
+$MilestoneScript = @('../../github-milestone', '../../../github/github-milestone' | ForEach-Object { Join-Path $PSScriptRoot "$_/scripts/Get-Milestones.ps1" }) |
+  Where-Object { Test-Path $_ } | Select-Object -First 1
+
+function Get-Json([string[]]$ghArgs, [switch]$Pwsh) {
+  $out = if ($Pwsh) { & pwsh -NoProfile @ghArgs 2>$null } else { & gh @ghArgs 2>$null }
+  if ($LASTEXITCODE -ne 0) { throw "$(if ($Pwsh) { 'pwsh' } else { 'gh' }) $($ghArgs -join ' ') failed" }
   if (-not $out) { return $null }
   return ($out -join "`n") | ConvertFrom-Json
 }
@@ -141,8 +145,14 @@ function Get-State {
   $found = [System.Collections.Generic.List[object]]::new()
   foreach ($nr in $Nrs) { Add-Pbis $nr $seen $found }
   if ($Milestone) {
-    $items = @(Get-Json @('issue', 'list', '--milestone', $Milestone, '--state', 'open', '--limit', '200', '--json', 'number'))
-    foreach ($item in $items) { if ($item) { Add-Pbis ([int]$item.number) $seen $found } }
+    # one REST call lists the milestone (Get-Milestones.ps1 -Mode issues); PBIs and Bugs need no read of their own (#127)
+    $list = Get-Json @('-File', $MilestoneScript, '-Mode', 'issues', '-Name', $Milestone, '-State', 'open') -Pwsh
+    foreach ($item in @($list.issues)) {
+      if (-not $item) { continue }
+      if ($item.labels -contains 'pbi' -or $item.labels -contains 'bug') {
+        if (-not $seen.ContainsKey([int]$item.number)) { $seen[[int]$item.number] = $true; $found.Add([pscustomobject]@{ Number = [int]$item.number; Labels = @($item.labels) }) }
+      } else { Add-Pbis ([int]$item.number) $seen $found }
+    }
   }
   $eligible = @($found | Where-Object { -not ($_.Labels | Where-Object { $Held -contains $_ }) })
   $ready = @($eligible | Where-Object {
