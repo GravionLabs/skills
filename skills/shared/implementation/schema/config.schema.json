@@ -59,6 +59,7 @@
             "fix": { "$ref": "#/$defs/tieredRole" },
             "gate": { "$ref": "#/$defs/role" },
             "review": { "$ref": "#/$defs/role" },
+            "release-review": { "$ref": "#/$defs/role" },
             "pr": { "$ref": "#/$defs/role" },
             "ci": { "$ref": "#/$defs/role" }
           }

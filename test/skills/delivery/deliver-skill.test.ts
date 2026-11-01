@@ -149,6 +149,85 @@ describe('deliver SKILL.md', () => {
     expect(body).toContain('the release PR of step 9');
   });
 
+  describe('release review (#100)', () => {
+    const release = body.slice(body.indexOf('**Release.**'), body.indexOf('## Pause rules'));
+    const ref = fs.readFileSync(path.join(skillDir, 'references/release-review.md'), 'utf8');
+    const docs = fs.readFileSync(path.resolve(__dirname, '../../../docs/delivery.md'), 'utf8');
+
+    it('reviews the release diff with a fresh subagent before github-release finish', () => {
+      const review = release.indexOf('**Release review**');
+      expect(review).toBeGreaterThan(-1);
+      expect(review).toBeLessThan(release.indexOf('`github-release` and run `finish`'));
+      expect(release).toContain(
+        'a subagent with a fresh context loads `code-review`, role `review`',
+      );
+      expect(release).toContain('`git diff origin/main...origin/release/next`');
+      expect(release).toContain("acceptance criteria of the milestone's closed PBIs and Bugs");
+      expect(release).toContain('consistency across PBIs');
+      expect(release).toContain('`review.schema.json`');
+      expect(release).toContain('`references/release-review.md`');
+    });
+
+    it('writes the release review file next to the review file of #53', () => {
+      expect(release).toContain('`<git-common-dir>/.agents/state/release-review-<milestone>.json`');
+      expect(ref).toContain('schema/deliver-release-review.schema.json');
+      expect(ref).toContain('git rev-parse --git-common-dir');
+    });
+
+    it('files one bug per blocking finding and opens no release PR', () => {
+      expect(release).toContain('one `[Bug] fix: …` issue per finding in the milestone');
+      expect(release).toContain('no release PR');
+      expect(release).toContain('`release: <n> blocking → #a, #b`');
+      for (const section of [
+        '## Description',
+        '## Reproduction',
+        '## Expected / Actual',
+        '## Acceptance Criteria',
+        'Related: #<PBI>',
+        'Found in release review round <round>',
+      ])
+        expect(ref).toContain(section);
+      expect(ref).toContain('--label bug --milestone <name>');
+      expect(ref).toContain('runs step 9 again');
+    });
+
+    it('caps the rounds at 2 by the marker in the bug bodies, a third pauses', () => {
+      expect(release).toContain('At most 2 release-review rounds per milestone');
+      expect(release).toContain('a third with blocking findings is a pause');
+      expect(ref).toContain(
+        '`round` = 1 + the highest `<n>` of a line `Found in release review round <n>`',
+      );
+      expect(ref).toContain('`round` ≤ 2: file one bug per finding');
+      expect(ref).toContain('`round` > 2: a pause instead of more bugs');
+      expect(ref).toContain("comment the findings on the milestone's last closed PBI");
+      expect(ref).toContain('add `needs-decision` to it');
+    });
+
+    it('asks before filing in interactive mode, files without asking unattended', () => {
+      expect(release).toContain('interactive: show them and ask first');
+      expect(ref).toContain('Interactive: show the findings first and ask');
+      expect(ref).toContain('Unattended: file them without asking');
+    });
+
+    it('passes up to 5 notes to the release PR when nothing blocks', () => {
+      expect(release).toContain('`finish` with `release_review_notes` (the `notes[]`, up to 5)');
+      expect(ref).toContain('`## Release review notes`');
+    });
+
+    it('uses the release-review role for the subagent', () => {
+      expect(body).toContain('`release-review` entries of `deliver.roles`');
+      expect(ref).toContain('role `release-review`');
+      expect(roles).toMatch(/\| `release-review` +\| opus +\| high +\|/);
+    });
+
+    it('docs/delivery.md describes the release review', () => {
+      expect(docs).toContain('## Release review');
+      expect(docs).toContain('`release-review`');
+      expect(docs).toContain('Found in release review round <n>');
+      expect(docs).toContain('`## Release review notes`');
+    });
+  });
+
   it('keeps CI watch output unbuffered', () => {
     const ci = body.slice(body.indexOf('**CI.**'), body.indexOf('**Merge.**'));
     expect(ci).toContain('without a pipe or output filter');
@@ -433,7 +512,18 @@ describe('config schema deliver key', () => {
 
   it('knows exactly the roles of references/roles.md', () => {
     expect(roleNames.sort()).toEqual(
-      ['ci', 'create', 'fix', 'gate', 'implement', 'plan', 'pr', 'review', 'select'].sort(),
+      [
+        'ci',
+        'create',
+        'fix',
+        'gate',
+        'implement',
+        'plan',
+        'pr',
+        'release-review',
+        'review',
+        'select',
+      ].sort(),
     );
   });
 

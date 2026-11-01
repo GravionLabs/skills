@@ -6,7 +6,7 @@ context: fork
 
 Owns the lifecycle of the rolling `release/next` branch (explicit `release/<x.y>` only in parallel lines). The model and the base-branch resolver are in the `github-issue` skill's `references/release-branches.md`. No dialogue, tool calls only; on Claude Code this runs in a forked context without the session history.
 
-Prerequisites: `gh` authenticated, repo root, clean `git status`. Mode: `cut [--feature <nr>]` or `finish [major] [release/next|release/<x.y>]`.
+Prerequisites: `gh` authenticated, repo root, clean `git status`. Mode: `cut [--feature <nr>]` or `finish [major] [release/next|release/<x.y>]`; `finish` takes optional `release_review_notes` (lines from the release review of `deliver`).
 
 ## Check the state first
 
@@ -37,7 +37,7 @@ The script is read-only and prints JSON: `default`, `branch`, `state`, `openPrs`
 
 1. `state` `unreleased`, `openPrs` empty: continue. Otherwise `action` already says stop; list `openPrs` when they block.
 2. Bump: minor by default, `major` only with the argument `major`; never ask in a fork. The version is determined on the default branch after the merge, where no branch config of `release/*` applies, so every release branch needs the commit: `git commit --allow-empty -m "chore: release minor|major" -m "+semver: minor|major"` and a push. Minor only when `hasSemverCommit` is false, major only when `hasMajorCommit` is false.
-3. `releasePr` set: CI keeps it current, report it. None: open it with `github-pull-request` in release mode (`branch`, `base_branch: <default>`, `title: release: <branch>`, `merged_prs` per its default, `feature_number` only when recorded, `auto_merge: false`). Never use a direct `gh pr create`; when `github-pull-request` stops, stop and report. Do not touch `CHANGELOG.md`: the release job on `main` regenerates it with git-cliff, tags, publishes and closes the issues the release's PRs reference.
+3. `releasePr` set: CI keeps it current, report it. None: open it with `github-pull-request` in release mode (`branch`, `base_branch: <default>`, `title: release: <branch>`, `merged_prs` per its default, `feature_number` only when recorded, `release_review_notes` when the caller passes them, `auto_merge: false`). Never use a direct `gh pr create`; when `github-pull-request` stops, stop and report. Do not touch `CHANGELOG.md`: the release job on `main` regenerates it with git-cliff, tags, publishes and closes the issues the release's PRs reference.
 4. Report the PR URL, `gh pr merge <nr> --merge` (merge commit, never squash) and the cleanup `git push origin --delete <branch>`, then stop; never wait for the merge. The cleanup after the merge is a later `finish` on the merged branch: `Get-ReleaseState.ps1` returns `delete-branch` and that run deletes `release/next`.
 
 ## Gotchas

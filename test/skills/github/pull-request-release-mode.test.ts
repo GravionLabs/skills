@@ -88,3 +88,17 @@ describe('github-pull-request spec_notes (#87)', () => {
     expect(prSkill.split('\n').length).toBeLessThanOrEqual(100);
   });
 });
+
+describe('release_review_notes (#100)', () => {
+  it('github-pull-request renders them as ## Release review notes in release mode only', () => {
+    expect(prSkill).toMatch(/`release_review_notes` \(release mode only, default: empty\)/);
+    expect(prAll).toMatch(/## Release review notes/);
+    expect(prAll).toMatch(
+      /`## Release review notes` only when `release_review_notes` is non-empty/,
+    );
+  });
+
+  it('github-release finish passes them on', () => {
+    expect(step8).toMatch(/`release_review_notes` when the caller passes them/);
+  });
+});
