@@ -2,7 +2,7 @@
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "https://github.com/GravionLabs/skills/skills/github/github-milestone/schema/milestones.schema.json",
   "title": "Get-Milestones.ps1 output",
-  "description": "One of four shapes, by -Mode: current, list, show (a milestone detail) or create.",
+  "description": "One of five shapes, by -Mode: current, list, show (a milestone detail), create or issues.",
   "oneOf": [
     {
       "title": "current",
@@ -30,6 +30,36 @@
       "additionalProperties": false
     },
     { "title": "show", "$ref": "#/$defs/detail" },
+    {
+      "title": "issues",
+      "type": "object",
+      "required": ["milestone", "issues"],
+      "properties": {
+        "milestone": {
+          "type": "object",
+          "required": ["number", "title", "state"],
+          "properties": { "number": { "type": "integer" }, "title": { "type": "string" }, "state": { "enum": ["open", "closed"] } }
+        },
+        "issues": {
+          "type": "array",
+          "description": "Issues of the milestone for -State, number ascending, pull requests excluded.",
+          "items": {
+            "type": "object",
+            "required": ["number", "title", "state", "body", "labels", "assignees"],
+            "properties": {
+              "number": { "type": "integer" },
+              "title": { "type": "string" },
+              "state": { "enum": ["open", "closed"] },
+              "closed_at": { "type": ["string", "null"], "description": "ISO 8601 close time, null while open." },
+              "body": { "type": ["string", "null"] },
+              "labels": { "type": "array", "items": { "type": "string" } },
+              "assignees": { "type": "array", "items": { "type": "string" } }
+            }
+          }
+        }
+      },
+      "additionalProperties": false
+    },
     {
       "title": "create",
       "type": "object",

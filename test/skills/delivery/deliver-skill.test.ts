@@ -2,6 +2,7 @@ import { describe, it, expect } from 'vitest';
 import * as fs from 'node:fs';
 import * as path from 'node:path';
 import { groupSkills } from '../../helpers/marketplace';
+import { expectSkillHelp } from '../../helpers/skill-help';
 
 const root = path.resolve(__dirname, '../../../skills');
 const skillDir = path.join(root, 'delivery/deliver');
@@ -103,8 +104,9 @@ describe('deliver SKILL.md', () => {
     expect(body).toContain(
       '`/deliver <nr> [<nr> …] [--milestone <name>] [--unattended] [--max <n>]`',
     );
-    expect(body).toContain('gh issue list --milestone <name> --label pbi --state open');
-    expect(body).toContain('the same with `--label bug`');
+    expect(body).toContain('Get-Milestones.ps1 -Mode issues -Name <name> -State open');
+    expect(body).toContain('filter the returned list by label');
+    expect(body).not.toContain('gh issue list');
     expect(body).toContain('drop duplicates');
     expect(body).toContain('ties keep the order of the arguments');
     expect(body).toContain('#<nr> select: needs refinement, skipped');
@@ -151,8 +153,8 @@ describe('deliver SKILL.md', () => {
   it('ends a fully delivered milestone with the release PR for human review (#78)', () => {
     const release = body.slice(body.indexOf('**Release.**'), body.indexOf('## Pause rules'));
     expect(release).toContain('Only with `--milestone`');
-    expect(release).toContain('gh issue list --milestone <name> --label pbi --state open');
-    expect(release).toContain('the same with `--label bug`');
+    expect(release).toContain('No open issue labeled `pbi` or `bug` in it');
+    expect(release).not.toContain('gh issue list');
     expect(release).toContain('`github-release` and run `finish`');
     expect(release).toContain('`auto_merge: false`');
     expect(release).toContain('never merge it');
@@ -164,6 +166,23 @@ describe('deliver SKILL.md', () => {
     const release = body.slice(body.indexOf('**Release.**'), body.indexOf('## Pause rules'));
     const ref = fs.readFileSync(path.join(skillDir, 'references/release-review.md'), 'utf8');
     const docs = fs.readFileSync(path.resolve(__dirname, '../../../docs/delivery.md'), 'utf8');
+
+    it('takes criteria and round markers from one batched milestone list (#127)', () => {
+      expect(ref).toContain('Get-Milestones.ps1 -Mode issues -Name <name> -State all');
+      expect(ref).toContain('Collect the criteria from that list');
+      expect(ref).not.toContain('gh issue list');
+      expect(ref).not.toContain('--search');
+    });
+
+    it('step 9 and the reference share one -State all read, marker picked by closed_at (#155)', () => {
+      const read = 'Get-Milestones.ps1 -Mode issues -Name <name> -State all';
+      expect(release).toContain(read);
+      expect(ref).toContain(read);
+      expect(ref).toContain('the one `-State all` read of the milestone');
+      expect(release).toContain('the marker, the round count and the criteria');
+      expect(ref).toContain('highest `closed_at`');
+      expect(ref).not.toContain('closedAt');
+    });
 
     it('reviews the release diff with a fresh subagent before github-release finish', () => {
       const review = release.indexOf('**Release review**');
@@ -228,8 +247,8 @@ describe('deliver SKILL.md', () => {
       );
       expect(ref).toContain('`round` ≤ 2: file one bug per finding');
       expect(ref).toContain('`round` > 2: a pause instead of more bugs');
-      expect(ref).toContain("comment the findings on the milestone's last closed PBI");
-      expect(ref).toContain('add `needs-decision` to it');
+      expect(ref).toContain("the milestone's last closed one");
+      expect(ref).toContain('`gh issue edit <nr> --add-label needs-decision`');
     });
 
     it('asks before filing in interactive mode, files without asking unattended', () => {
@@ -241,6 +260,22 @@ describe('deliver SKILL.md', () => {
     it('passes up to 5 notes to the release PR when nothing blocks', () => {
       expect(release).toContain('`finish` with `release_review_notes` (the `notes[]`, up to 5)');
       expect(ref).toContain('`## Release review notes`');
+    });
+
+    it('skips the release review when the needs-decision marker exists and names the two ways on in the pause comment', () => {
+      expect(release).toContain('release: paused in round 3, waits for a decision');
+      expect(release).toContain('labeled `needs-decision`');
+      expect(ref).toContain('## Pause marker');
+      expect(ref).toContain(
+        'skip the review, print `release: paused in round 3, waits for a decision`',
+      );
+      expect(ref).toContain(
+        'remove the marker (`gh issue edit <nr> --remove-label needs-decision`) and run `/deliver --milestone <name>`',
+      );
+      expect(ref).toContain('run `github-release` `finish` with them as `release_review_notes`');
+      expect(ref).toContain(
+        'Interactive: ask the user with the findings; the user defers the decision: record the pause',
+      );
     });
 
     it('uses the release-review role for the subagent', () => {
@@ -328,9 +363,12 @@ describe('deliver SKILL.md', () => {
     });
 
     it('documents a sidebar layout with the tokens without writing the config (#16)', () => {
-      expect(herdr).toContain(
-        'rows = [["state_icon", "agent", "state_text"], [{ token = "$deliver", bold = true }, { token = "$deliver_step", rules = [{ contains = "blocked", fg = "#f55" }, { contains = "merged", fg = "#5f5" }] }, "$deliver_pr"], ["workspace", "tab"]]',
-      );
+      expect(herdr).toContain('rows = [\n  ["state_icon", { token = "tab", bold = true }');
+      expect(herdr).toContain('["agent", "workspace"],');
+      for (const t of ['$deliver', '$deliver_step', '$deliver_pr']) expect(herdr).toContain(t);
+      for (const alt of ['compact two-line', '`deliver` line first', '`row_gap = 1`']) {
+        expect(herdr).toContain(alt);
+      }
       expect(herdr).toContain('propose it, never write it');
     });
 
@@ -619,5 +657,29 @@ describe('config schema deliver key', () => {
     it('stays within 100 lines', () => {
       expect(text.split('\n').length).toBeLessThanOrEqual(100);
     });
+  });
+});
+
+describe('deliver help', () => {
+  it('follows the help convention', () => {
+    expectSkillHelp(skillDir);
+  });
+
+  it('names the loop parameters and config keys', () => {
+    const help = fs.readFileSync(path.join(skillDir, 'references/help.md'), 'utf8');
+    for (const word of [
+      '-Target',
+      '-Milestone',
+      '-Max',
+      '-Model',
+      'deliver.roles',
+      'release-review',
+      'governance',
+      'needs-decision',
+      'needs-refinement',
+      'interactive',
+    ]) {
+      expect(help).toContain(word);
+    }
   });
 });

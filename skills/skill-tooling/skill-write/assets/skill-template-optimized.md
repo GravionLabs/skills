@@ -22,6 +22,12 @@ description: >
 
 3. {Action — use "If X → do Y; otherwise do Z" for decisions}
 
+## Optional: help (user-invoked skills with modes, arguments or flags; delete otherwise)
+
+Add `references/help.md` (see `skill-writing-rules.md`, Help convention) and this one line to `SKILL.md`:
+
+`help` (or `--help`, `-h`): print `references/help.md` unchanged, nothing else.
+
 ## Gotchas
 
 - {Non-obvious fact and how to handle it}

@@ -13,3 +13,5 @@ deliver: deliver-log
 adr: docs/adr
 # adr-missing is a review rule id of references/governance.md, not a skill
 code-review: adr-missing
+# references/help.md is the file a documented skill ships (help convention), not a file of skill-write
+skill-write: references/help.md

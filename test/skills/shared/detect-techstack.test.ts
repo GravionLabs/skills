@@ -10,6 +10,17 @@ const SCRIPT = path.resolve(
 );
 const hasPwsh = spawnSync('pwsh', ['-NoProfile', '-Command', '1']).status === 0;
 
+const hint =
+  'docs/adr or docs/specs found but no governance key in .agents/config.json; add it to opt in (docs/usage/project-config.md)';
+const noDocs = {
+  configured: false,
+  adrDir: 'docs/adr',
+  adrCount: 0,
+  specDir: 'docs/specs',
+  specCount: 0,
+  hint: null,
+};
+
 describe.skipIf(!hasPwsh)('Detect-TechStack.ps1', () => {
   let dir: string;
   // one pwsh worker for the describe runs the script in-process per call instead of one pwsh start per case
@@ -48,6 +59,7 @@ describe.skipIf(!hasPwsh)('Detect-TechStack.ps1', () => {
     expect(r.implementation).toEqual(['rust-implementation']);
     expect(r.packageManager).toEqual(['cargo']);
     expect(r.frameworks).toEqual([]);
+    expect(r.governance).toEqual(noDocs);
     expect(r).not.toHaveProperty('state_dir');
     expect(r).not.toHaveProperty('manifest_hash');
     expect(fs.existsSync(state)).toBe(false);
@@ -72,30 +84,6 @@ describe.skipIf(!hasPwsh)('Detect-TechStack.ps1', () => {
       'pytest',
       'cargo',
     ]);
-  });
-
-  it.each<[string, Record<string, string>, string[]]>([
-    [
-      'vite.config without a test block',
-      { 'vite.config.ts': 'export default { plugins: [] };' },
-      [],
-    ],
-    [
-      'a vite.config test block',
-      { 'vite.config.ts': 'export default { test: { globals: true } };' },
-      ['vitest'],
-    ],
-    [
-      'devDependencies and pyproject',
-      {
-        'package.json': '{"devDependencies":{"vitest":"^2"}}',
-        'pyproject.toml': '[tool.pytest.ini_options]\n',
-      },
-      ['vitest', 'pytest'],
-    ],
-  ])('detects vitest/pytest via %s', async (_n, files, expected) => {
-    for (const [rel, content] of Object.entries(files)) write(rel, content);
-    expect((await detect()).tools).toEqual(expected);
   });
 
   it('reports Tauri next to the TS frontend (Tauri 2, json and json5 once)', async () => {
@@ -145,14 +133,17 @@ describe.skipIf(!hasPwsh)('Detect-TechStack.ps1', () => {
     expect(r.frameworks).toEqual(['dotnet', 'aspire']);
   });
 
-  it('does not report aspire for a plain .NET project or an ordinary .cs file', async () => {
+  it('does not report aspire for a plain .NET project or an ordinary .cs file, hints at ADRs without a governance key', async () => {
     write('App.csproj', '<Project Sdk="Microsoft.NET.Sdk"></Project>');
     write('Program.cs', 'Console.WriteLine("hi");\n');
+    for (const f of ['0001-first.md', '0002-second.md', 'README.md']) write(`docs/adr/${f}`);
     const r = await detect();
     expect(r.frameworks).toEqual(['dotnet']);
+    // ADRs without the governance key: hint set, README is no ADR
+    expect(r.governance).toEqual({ ...noDocs, adrCount: 2, hint });
   });
 
-  it('reports react, next, vue and svelte from dependencies and devDependencies, skills stay ts', async () => {
+  it('reports react, next, vue and svelte from dependencies and devDependencies, skills stay ts, vitest via a vite.config test block', async () => {
     write(
       'package.json',
       JSON.stringify({
@@ -161,18 +152,24 @@ describe.skipIf(!hasPwsh)('Detect-TechStack.ps1', () => {
       }),
     );
     write('tsconfig.json', '{}');
+    write('vite.config.ts', 'export default { test: { globals: true } };');
     const r = await detect();
+    expect(r.tools).toEqual(['vitest']);
     expect(r.frameworks).toEqual(['react', 'next', 'vue', 'svelte']);
     expect(r.languages).toEqual(['ts']);
     expect(r.test).toEqual(['ts-test']);
     expect(r.implementation).toEqual(['ts-implementation']);
   });
 
-  it('reports react next to angular in a monorepo', async () => {
+  it('reports react next to angular in a monorepo, vitest and pytest via devDependencies and pyproject', async () => {
     write('apps/web/package.json', '{"dependencies":{"react":"^19"}}');
     write('apps/ng/angular.json', '{}');
     write('apps/ng/package.json', '{"dependencies":{"@angular/core":"^20"}}');
-    expect((await detect()).frameworks).toEqual(['react', 'angular']);
+    write('package.json', '{"devDependencies":{"vitest":"^2"}}');
+    write('pyproject.toml', '[tool.pytest.ini_options]\n');
+    const r = await detect();
+    expect(r.frameworks).toEqual(['react', 'angular']);
+    expect(r.tools).toEqual(['vitest', 'pytest']);
   });
 
   // vendored, build-output and too deep manifests do not make the project Go or Rust
@@ -185,89 +182,38 @@ describe.skipIf(!hasPwsh)('Detect-TechStack.ps1', () => {
     for (const d of ['target', 'vendor', 'node_modules'])
       write(`${d}/dep/Cargo.toml`, '[package]\n');
     write('a/b/c/d/e/f/go.mod', 'module x\n');
+    write('vite.config.ts', 'export default { plugins: [] };');
     const r = await detect();
+    expect(r.tools).toEqual([]);
     expect(r.languages).toEqual(['js']);
     expect(r.frameworks).toEqual([]);
   });
 
-  it('reports a Go project with the go package manager, go.mod found at depth 5', async () => {
-    write('a/b/c/d/e/go.mod', 'module example.com/x\n\ngo 1.22\n');
-    const r = await detect();
-    expect(r.languages).toEqual(['go']);
-    expect(r.test).toEqual(['go-test']);
-    expect(r.implementation).toEqual(['go-implementation']);
-    expect(r.packageManager).toEqual(['go']);
-  });
-
-  it('reports a Python + Rust + Go monorepo', async () => {
+  it('reports a Python + Rust + Go monorepo (go.mod at depth 5, custom governance adrDir)', async () => {
     write('crates/core/Cargo.toml', '[package]\n');
     write('py/pyproject.toml', '[project]\nname = "p"\n');
-    write('svc/go.mod', 'module x\n');
+    write('svc/a/b/c/d/go.mod', 'module example.com/x\n\ngo 1.22\n');
+    write('.agents/config.json', '{"governance":{"adrDir":"decisions"}}');
+    write('decisions/0001-x.md');
+    write('decisions/0002-y.md');
+    write('docs/adr/0009-ignored.md');
+    write('docs/specs/a.md');
     const r = await detect();
+    expect(r.governance).toEqual({
+      ...noDocs,
+      configured: true,
+      adrDir: 'decisions',
+      adrCount: 2,
+      specCount: 1,
+    });
     expect(r.languages).toEqual(['py', 'rust', 'go']);
     expect(r.test).toEqual(['py-test', 'rust-test', 'go-test']);
     expect(r.packageManager).toEqual(['cargo', 'go']);
   });
 
-  const hint =
-    'docs/adr or docs/specs found but no governance key in .agents/config.json; add it to opt in (docs/usage/project-config.md)';
-  it.each<[string, Record<string, string>, Record<string, unknown>]>([
-    [
-      'no docs',
-      {},
-      {
-        configured: false,
-        adrDir: 'docs/adr',
-        adrCount: 0,
-        specDir: 'docs/specs',
-        specCount: 0,
-        hint: null,
-      },
-    ],
-    [
-      'ADRs only without the key (hint set, README is no ADR)',
-      { 'docs/adr/0001-first.md': '', 'docs/adr/0002-second.md': '', 'docs/adr/README.md': '' },
-      {
-        configured: false,
-        adrDir: 'docs/adr',
-        adrCount: 2,
-        specDir: 'docs/specs',
-        specCount: 0,
-        hint,
-      },
-    ],
-    [
-      'ADRs and specs with the key and a custom adrDir (no hint)',
-      {
-        '.agents/config.json': '{"governance":{"adrDir":"decisions"}}',
-        'decisions/0001-x.md': '',
-        'decisions/0002-y.md': '',
-        'docs/adr/0009-ignored.md': '',
-        'docs/specs/a.md': '',
-      },
-      {
-        configured: true,
-        adrDir: 'decisions',
-        adrCount: 2,
-        specDir: 'docs/specs',
-        specCount: 1,
-        hint: null,
-      },
-    ],
-    [
-      'invalid config.json without failure (not configured, hint set)',
-      { '.agents/config.json': '{"governance": ', 'docs/adr/0001-a.md': '' },
-      {
-        configured: false,
-        adrDir: 'docs/adr',
-        adrCount: 1,
-        specDir: 'docs/specs',
-        specCount: 0,
-        hint,
-      },
-    ],
-  ])('reports governance for %s', async (_n, files, expected) => {
-    for (const [rel, content] of Object.entries(files)) write(rel, content);
-    expect((await detect()).governance).toEqual(expected);
+  it('reports governance as not configured for an invalid config.json without failing', async () => {
+    write('.agents/config.json', '{"governance": ');
+    write('docs/adr/0001-a.md');
+    expect((await detect()).governance).toEqual({ ...noDocs, adrCount: 1, hint });
   });
 });

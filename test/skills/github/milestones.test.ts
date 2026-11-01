@@ -21,6 +21,10 @@ const handler = `(call, ctx) => {
   let page;
   if (p.includes('/milestones?')) page = env('FAKE_MILESTONES', '[]');
   else if (p.includes('/tags?')) page = env('FAKE_TAGS', '[]').map((name) => ({ name }));
+  else if (p.includes('/issues?') && env('FAKE_ISSUE_PAGES', '{}')[/milestone=(\\d+)/.exec(p)[1]]) {
+    const wanted = /state=(\\w+)/.exec(p)[1];
+    return { rest: env('FAKE_ISSUE_PAGES', '{}')[/milestone=(\\d+)/.exec(p)[1]].map((pg) => pg.filter((i) => wanted === 'all' || i.state === wanted)) };
+  }
   else if (p.includes('/issues?')) page = env('FAKE_ISSUES', '{}')[/milestone=(\\d+)/.exec(p)[1]] || [];
   else if (p.includes('/dependencies/blocked_by')) page = env('FAKE_BLOCKERS', '{}')[/issues\\/(\\d+)\\//.exec(p)[1]] || [];
   else throw new Error('unexpected path ' + p);
@@ -224,6 +228,81 @@ describe('Get-Milestones.ps1', () => {
 
     it('unknown name: exit 1 with a message', async () => {
       const r = await run(['-Mode', 'show', '-Name', '9.9.9'], {
+        FAKE_MILESTONES: [ms(1, '1.0.0')],
+      });
+      expect(r.status).toBe(1);
+      expect(r.stderr).toContain("milestone '9.9.9' not found");
+    });
+  });
+
+  describe('issues (#127)', () => {
+    const full = (number: number, extra: Record<string, unknown> = {}) =>
+      issue(number, {
+        state: 'open',
+        body: `body ${number}`,
+        labels: [{ name: 'pbi' }],
+        assignees: [{ login: 'me' }],
+        ...extra,
+      });
+
+    it('resolves the title to its number and lists all pages in one paginated call, PRs filtered out', async () => {
+      const out = await json(['-Mode', 'issues', '-Name', '1.2.0'], {
+        FAKE_MILESTONES: [ms(1, '1.1.0'), ms(7, '1.2.0')],
+        FAKE_ISSUE_PAGES: {
+          7: [
+            [full(12), full(11, { pull_request: {} })],
+            [
+              full(13, {
+                state: 'closed',
+                closed_at: '2026-10-01T10:00:00Z',
+                labels: [{ name: 'bug' }],
+                assignees: [],
+              }),
+            ],
+          ],
+        },
+      });
+      expect(out.milestone).toEqual({ number: 7, title: '1.2.0', state: 'open' });
+      expect(out.issues).toEqual([
+        {
+          number: 12,
+          title: 'issue 12',
+          state: 'open',
+          closed_at: null,
+          body: 'body 12',
+          labels: ['pbi'],
+          assignees: ['me'],
+        },
+        {
+          number: 13,
+          title: 'issue 13',
+          state: 'closed',
+          closed_at: '2026-10-01T10:00:00Z',
+          body: 'body 13',
+          labels: ['bug'],
+          assignees: [],
+        },
+      ]);
+      const paths = fake.calls().map((c) => c.args[1]);
+      expect(paths.filter((q) => q.includes('/issues?'))).toContain(
+        'repos/{owner}/{repo}/issues?milestone=7&state=all&per_page=100',
+      );
+    });
+
+    it.each([
+      ['open', [12]],
+      ['closed', [13]],
+      ['all', [12, 13]],
+    ])('-State %s', async (state, expected) => {
+      const out = await json(['-Mode', 'issues', '-Name', '1.2.0', '-State', state], {
+        FAKE_MILESTONES: [ms(7, '1.2.0')],
+        FAKE_ISSUE_PAGES: { 7: [[full(12), full(13, { state: 'closed' })]] },
+      });
+      expect(out.issues.map((i: { number: number }) => i.number)).toEqual(expected);
+    });
+
+    it('unknown milestone: exit 1 with a message', async () => {
+      const r = await run(['-Mode', 'issues', '-Name', '9.9.9'], {
         FAKE_MILESTONES: [ms(1, '1.0.0')],
       });
       expect(r.status).toBe(1);

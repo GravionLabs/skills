@@ -20,7 +20,7 @@ from the [official statusLine docs](https://code.claude.com/docs/en/statusline) 
 pwsh <skill dir>/scripts/Install-Statusline.ps1 [-Force] [-Uninstall] [-WhatIf]
 ```
 
-Or run `/context-statusline`. The installer sets `statusLine` and `subagentStatusLine` in `~/.claude/settings.json` to
+Or run `/context-statusline` (`/context-statusline help` prints the usage). The installer sets `statusLine` and `subagentStatusLine` in `~/.claude/settings.json` to
 `node ~/.claude/skills/context-statusline/scripts/<file>.mjs`: the scripts of the installed skill itself, so `npx skills update`
 refreshes the status line and no copy is made. The directory is derived from where the installer runs (a project-scoped
 deployment gives that project's path); it refuses when the script is not there. Other keys stay untouched, a

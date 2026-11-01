@@ -32,12 +32,24 @@ herdr pane report-metadata <pane> --source deliver --clear-token deliver --clear
 
 ## Sidebar layout
 
-The Agent sidebar shows a token only where one of its rows names it as `$<name>`. A layout with the tokens in their own row, for the user's herdr config (propose it, never write it):
+The Agent sidebar shows a token only where one of its rows names it as `$<name>`. The proposed layout starts with the repo (`tab`) and its state, then the agent, and the `deliver` tokens last (propose it, never write it):
+
+```
+● herdr-plugins · idle
+  claude · Gravion
+  #121 · merged · #139
+```
 
 ```toml
 [ui.sidebar.agents]
-rows = [["state_icon", "agent", "state_text"], [{ token = "$deliver", bold = true }, { token = "$deliver_step", rules = [{ contains = "blocked", fg = "#f55" }, { contains = "merged", fg = "#5f5" }] }, "$deliver_pr"], ["workspace", "tab"]]
+rows = [
+  ["state_icon", { token = "tab", bold = true }, { token = "state_text", rules = [{ equals = "done", fg = "#5f5" }, { equals = "blocked", fg = "#f55" }] }],
+  ["agent", "workspace"],
+  [{ token = "$deliver", bold = true }, { token = "$deliver_step", rules = [{ contains = "blocked", fg = "#f55" }, { contains = "merged", fg = "#5f5" }] }, "$deliver_pr"],
+]
 ```
+
+Alternatives: a compact two-line layout (the `$deliver` tokens share row 2 with `agent`, no `workspace`), the `deliver` line first (move the third row to the top), or `row_gap = 1` under `[ui.sidebar.agents]` for air between the rows.
 
 A herdr plugin can filter panes on the `deliver` token of source `deliver`.
 

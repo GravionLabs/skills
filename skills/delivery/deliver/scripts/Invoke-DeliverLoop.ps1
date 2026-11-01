@@ -6,7 +6,7 @@
   `claude -p "/deliver <targets> --unattended --max 1"` once per PBI; deliver keeps all state in GitHub, so there is no
   queue file. Progress is read from GitHub before and after each iteration: the open PBIs of the targets without the
   labels needs-decision / needs-refinement / interactive (deliver skips interactive PBIs unattended). No change stops
-  the loop ("no progress"); nothing open means done; open PBIs that all wait on an open blocker or a label mean blocked.
+  the loop ("no progress"); nothing open means done (unless a closed PBI of the milestone carries needs-decision, the paused release review: blocked); open PBIs that all wait on an open blocker or a label mean blocked.
   Observability: every stream record goes to .agents/deliver-loop/<run>/<nr>.jsonl (<nr> is the first PBI that was ready
   at the start of the iteration), a summary line per step to .agents/deliver-loop.log (plain) and stdout, the same line
   with ANSI colors to .agents/deliver-loop.ansi.log, desktop notifications for the attention steps (macOS osascript,
@@ -113,9 +113,13 @@ function Set-Pane([string]$Nr = '', [string]$Step = '', [switch]$Clear) {
   try { & herdr pane report-metadata $Pane --source deliver @tokenArgs 2>$null | Out-Null } catch { Write-Verbose "herdr failed: $_" }
 }
 
-function Get-Json([string[]]$ghArgs) {
-  $out = & gh @ghArgs 2>$null
-  if ($LASTEXITCODE -ne 0) { throw "gh $($ghArgs -join ' ') failed" }
+# Get-Milestones.ps1 of github-milestone: sibling skill (installed) or skills/github (repository)
+$MilestoneScript = @('../../github-milestone', '../../../github/github-milestone' | ForEach-Object { Join-Path $PSScriptRoot "$_/scripts/Get-Milestones.ps1" }) |
+  Where-Object { Test-Path $_ } | Select-Object -First 1
+
+function Get-Json([string[]]$ghArgs, [switch]$Pwsh) {
+  $out = if ($Pwsh) { & pwsh -NoProfile @ghArgs 2>$null } else { & gh @ghArgs 2>$null }
+  if ($LASTEXITCODE -ne 0) { throw "$(if ($Pwsh) { 'pwsh' } else { 'gh' }) $($ghArgs -join ' ') failed" }
   if (-not $out) { return $null }
   return ($out -join "`n") | ConvertFrom-Json
 }
@@ -141,8 +145,20 @@ function Get-State {
   $found = [System.Collections.Generic.List[object]]::new()
   foreach ($nr in $Nrs) { Add-Pbis $nr $seen $found }
   if ($Milestone) {
-    $items = @(Get-Json @('issue', 'list', '--milestone', $Milestone, '--state', 'open', '--limit', '200', '--json', 'number'))
-    foreach ($item in $items) { if ($item) { Add-Pbis ([int]$item.number) $seen $found } }
+    # one REST call lists the milestone (Get-Milestones.ps1 -Mode issues); PBIs and Bugs need no read of their own (#127)
+    $list = Get-Json @('-File', $MilestoneScript, '-Mode', 'issues', '-Name', $Milestone, '-State', 'open') -Pwsh
+    foreach ($item in @($list.issues)) {
+      if (-not $item) { continue }
+      if ($item.labels -contains 'pbi' -or $item.labels -contains 'bug') {
+        if (-not $seen.ContainsKey([int]$item.number)) { $seen[[int]$item.number] = $true; $found.Add([pscustomobject]@{ Number = [int]$item.number; Labels = @($item.labels) }) }
+      } else { Add-Pbis ([int]$item.number) $seen $found }
+    }
+  }
+  # release-review pause (references/release-review.md): nothing open, but a closed PBI or Bug of the milestone carries needs-decision
+  $paused = $false
+  if ($Milestone -and $found.Count -eq 0) {
+    $closed = Get-Json @('-File', $MilestoneScript, '-Mode', 'issues', '-Name', $Milestone, '-State', 'closed') -Pwsh
+    $paused = [bool]@(@($closed.issues) | Where-Object { $_ -and $_.labels -contains 'needs-decision' -and ($_.labels -contains 'pbi' -or $_.labels -contains 'bug') })
   }
   $eligible = @($found | Where-Object { -not ($_.Labels | Where-Object { $Held -contains $_ }) })
   $ready = @($eligible | Where-Object {
@@ -151,13 +167,14 @@ function Get-State {
     })
   [pscustomobject]@{
     Open     = $found.Count
+    Paused   = $paused
     Eligible = @($eligible | ForEach-Object { $_.Number } | Sort-Object)
     Ready    = @($ready | ForEach-Object { $_.Number } | Sort-Object)
   }
 }
 
 function Get-StopReason($state) {
-  if ($state.Open -eq 0) { return 'done' }
+  if ($state.Open -eq 0) { return $(if ($state.Paused) { 'blocked' } else { 'done' }) }
   if ($state.Ready.Count -eq 0) { return 'blocked' }
   return $null
 }
