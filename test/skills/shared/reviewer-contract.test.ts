@@ -100,6 +100,7 @@ describe('governance rules of code-review', () => {
 
   it('states the adr-missing and spec-drift rules', () => {
     expect(rules).toContain('Get-GovernanceMatches.ps1');
+    expect(rules).toContain('[-Head <ref>]');
     expect(rules).toMatch(/## adr-missing[\s\S]*blocking[\s\S]*`skipLabels`/);
     expect(rules).toMatch(/## spec-drift[\s\S]*`specMode: require`[\s\S]*\*\*note\*\*/);
     expect(rules).toContain('no spec change needed: <that spec>');

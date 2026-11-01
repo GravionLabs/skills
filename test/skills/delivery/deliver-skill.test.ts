@@ -455,6 +455,12 @@ describe('config schema deliver key', () => {
       expect(gov).toMatch(/Loaded only when `\.agents\/config\.json` has the `governance` key/);
     });
 
+    it('the review prompt passes the branch as -Head (#98)', () => {
+      expect(sect('4. **Review.**', '5. **')).toContain(
+        '`Get-GovernanceMatches.ps1 -Head origin/<branch>`',
+      );
+    });
+
     it('the reference defines the decision PBI and the human steps', () => {
       expect(gov).toContain('`needs-decision`');
       expect(gov).toContain('ADR (the next free ADR number) with Status: Proposed');

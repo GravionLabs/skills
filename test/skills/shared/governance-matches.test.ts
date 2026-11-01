@@ -145,6 +145,16 @@ describe.skipIf(!hasPwsh)('Get-GovernanceMatches.ps1', () => {
     expect(bff.changedFiles).toEqual([]);
   });
 
+  it('diffs -Head against the base from a checkout other than the branch (#98)', async () => {
+    config({ governance: gov });
+    // main stays checked out: without -Head the diff main...HEAD is empty
+    const r = await worker.run(['-Base', 'main', '-Head', 'adr-no-file'], { cwd: repo });
+    expect(r.status).toBe(0);
+    expect(JSON.parse(r.stdout).adr.matched).toEqual(['infra/main.tf']);
+    const none = await worker.run(['-Base', 'main'], { cwd: repo });
+    expect(JSON.parse(none.stdout).adr.matched).toEqual([]);
+  });
+
   it.each(globCases.map((c) => [c.glob, c.path, c.match] as const))(
     'glob %s on %s matches: %s',
     async (glob, p, match) => {
