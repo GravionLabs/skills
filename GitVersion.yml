@@ -1,6 +1,6 @@
+# The bump comes from the Conventional Commits (determine-version of GravionLabs/ci, input conventional-commits,
+# default true): feat = minor, fix/perf/revert = patch, type! or BREAKING CHANGE = major; +semver: is the escape hatch.
 mode: ContinuousDeployment
-minor-version-bump-message: '\+semver:\s?(feature|minor)|^Merge pull request #\d+ from [^/]+/release/'
 branches:
   release:
     regex: ^release/next$
-    increment: Minor
