@@ -8,6 +8,8 @@ metadata:
 
 # context-statusline
 
+`help` (or `--help`, `-h`): print `references/help.md` unchanged, nothing else.
+
 Claude Code (status line and subagent line) and GitHub Copilot CLI (status line only, experimental). Two Node scripts (Node >= 22, no dependencies) and an installer (PowerShell 7+) that points the client settings at them.
 
 ## Install
