@@ -1,6 +1,6 @@
 <#
 .SYNOPSIS
-  Evaluates the `governance` key of `.agents/config.json` against the changed files of `git diff --name-status <Base>...HEAD`
+  Evaluates the `governance` key of `.agents/config.json` against the changed files of `git diff --name-status <Base>...<Head>`
   and prints JSON: `{ "governance": false }` without the key, else `governance`, `adr` (`matched`, `adrFiles`) and `spec`
   (one entry per `specMap` glob: `glob`, `spec`, `changedFiles`, `specChanged`). Rules: references/governance.md.
 .DESCRIPTION
@@ -9,9 +9,11 @@
   Renames count with their new path, deletions count as changed. Test files and `.md` files are not counted for `spec`.
 .PARAMETER Base
   Base ref of the diff (default origin/release/next).
+.PARAMETER Head
+  Head ref of the diff (default HEAD); pass `origin/<branch>` to check a branch that is not checked out.
 #>
 [CmdletBinding()]
-param([string]$Base = 'origin/release/next')
+param([string]$Base = 'origin/release/next', [string]$Head = 'HEAD')
 $ErrorActionPreference = 'Stop'
 Set-StrictMode -Version Latest
 
@@ -53,8 +55,8 @@ $adrDir = ([string](Get-Key 'adrDir' 'docs/adr')).Trim('/')
 $adrPaths = @(Get-Key 'adrPaths' @())
 $specMap = Get-Key 'specMap' @{}
 
-$lines = @(& git -C $top diff --name-status -M "$Base...HEAD")
-if ($LASTEXITCODE -ne 0) { throw "git diff $Base...HEAD failed" }
+$lines = @(& git -C $top diff --name-status -M "$Base...$Head")
+if ($LASTEXITCODE -ne 0) { throw "git diff $Base...$Head failed" }
 $changed = [System.Collections.Generic.List[string]]::new()
 $present = [System.Collections.Generic.List[string]]::new() # added, changed, renamed (not deleted)
 foreach ($l in $lines) {
