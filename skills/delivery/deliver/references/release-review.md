@@ -19,7 +19,7 @@ After the round this session writes `<git-common-dir>/.agents/state/release-revi
 - `round` ≤ 2: file one bug per finding. Interactive: show the findings first and ask: file them, or an instruction. Unattended: file them without asking.
 - `round` > 2: a pause instead of more bugs. Interactive: ask the user with the findings. Unattended: comment the findings on the milestone's last closed PBI (highest `closedAt` of the list above) and add `needs-decision` to it. No bug, no release PR.
 
-Per finding: `gh issue create --title "[Bug] fix: <title>" --label bug --milestone <name> --body-file <file>`. The PBI is the one whose squash commit last touched the file: `git log origin/main..origin/release/next -1 --format=%s -- <file>`, the `(#<nr>)` at the end of the subject. Body:
+Per finding: `gh issue create --title "[Bug] fix: <title>" --label bug --milestone <name> --body-file <file>`. The PBI is the one whose squash commit last touched the file: `git log origin/main..origin/release/next -1 --format=%s -- <file>`. A squash subject ends with the PBI and then the PR GitHub appends (`fix: x (#103) (#116)`): two or more `(#<nr>)` → the first of the last two is the PBI. Only one → it may be the PR: `gh api repos/{owner}/{repo}/pulls/<nr>` found → the PBI is the `(#<nr>)` of its title or the `Closes #<nr>` of its body; not found (404) → `<nr>` is the PBI. None → leave out the `Related:` line. Body:
 
 ```markdown
 ## Description

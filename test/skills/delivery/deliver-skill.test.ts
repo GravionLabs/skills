@@ -191,6 +191,17 @@ describe('deliver SKILL.md', () => {
       expect(ref).toContain('runs step 9 again');
     });
 
+    it('links the bug to the PBI, not the PR GitHub appends to the squash subject', () => {
+      expect(ref).toContain('`fix: x (#103) (#116)`');
+      expect(ref).toContain('the first of the last two is the PBI');
+      expect(ref).not.toContain('the `(#<nr>)` at the end of the subject');
+      expect(ref).toContain(
+        'Only one → it may be the PR: `gh api repos/{owner}/{repo}/pulls/<nr>`',
+      );
+      expect(ref).toContain('`Closes #<nr>` of its body');
+      expect(ref).toContain('not found (404) → `<nr>` is the PBI');
+    });
+
     it('caps the rounds at 2 by the marker in the bug bodies, a third pauses', () => {
       expect(release).toContain('At most 2 release-review rounds per milestone');
       expect(release).toContain('a third with blocking findings is a pause');
