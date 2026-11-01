@@ -190,3 +190,5 @@ jobs:
           changelog-file: CHANGELOG.md
           cliff-config: cliff.toml
           update-changelog: 'true'
+          # Merging the release PR deletes release/next (delete_branch_on_merge); recreated here at the released commit.
+          recreate-branch: release/next
