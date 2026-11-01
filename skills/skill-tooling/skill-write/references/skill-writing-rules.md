@@ -62,6 +62,14 @@ description: >
 - Compose, don't duplicate: if two skills share a workflow, one delegates to the other (`implementation` dispatches to `<lang>-implementation` instead of restating each language's conventions)
 - No content duplicated between body and references, or between two skills
 
+### Help convention
+
+A user-invoked skill with modes, arguments or flags answers the argument `help` (also `--help`, `-h`) by printing `references/help.md` unchanged and doing nothing else: no tool call besides reading the file, no GitHub or git call.
+
+- `references/help.md` (English, ≤ 60 lines): `# /<skill>`, then `## Usage` (synopsis), `## Arguments and flags`, `## Examples` (3-6), `## Config` (keys of `.agents/config.json`, or "none"), `## See also`
+- `SKILL.md` carries exactly one pointer line: `` `help` (or `--help`, `-h`): print `references/help.md` unchanged, nothing else. ``
+- Every `--flag` of the usage line in `SKILL.md` appears in `help.md`; `test/helpers/skill-help.ts` (`skillHelpProblems`, `expectSkillHelp`) asserts this
+
 ### CLI output
 
 - Prefer the smallest useful output (`--quiet`, `--nologo` and the like when they hide no useful failures)
