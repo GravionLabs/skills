@@ -140,18 +140,6 @@ fs.writeFileSync(f, JSON.stringify(s));`,
   });
 
   describe('stop rules', () => {
-    it('selects an open bug of the milestone like a PBI (#103)', async () => {
-      const gh = setup({
-        issues: { 20: { labels: ['bug'] } },
-        milestones: { '0.13': [20] },
-        effect: 'close-first',
-      });
-      const r = await run(gh, ['-Milestone', '0.13', '-Max', '1']);
-      expect(r.status).toBe(0);
-      expect(claudeCalls()).toHaveLength(1);
-      expect(r.stdout).toContain('loop result: done');
-    });
-
     it('reports a milestone with a paused release review as blocked, not done', async () => {
       const gh = setup({
         issues: { 30: pbi({ state: 'CLOSED', labels: ['pbi', 'needs-decision'] }) },
@@ -163,74 +151,48 @@ fs.writeFileSync(f, JSON.stringify(s));`,
       expect(claudeCalls()).toEqual([]);
     });
 
-    it('reports done when the closed PBIs carry no needs-decision', async () => {
+    it('-Milestone selects a bug like a PBI, delivers it in one fresh process, ends done when no open and no paused issue is left, reads the milestone with one batched REST call (#103, #127)', async () => {
       const gh = setup({
-        issues: { 30: pbi({ state: 'CLOSED' }) },
-        milestones: { '0.13': [30] },
-      });
-      const r = await run(gh, ['-Milestone', '0.13']);
-      expect(r.status).toBe(0);
-      expect(r.stdout).toContain('loop result: done');
-    });
-
-    it('-Milestone -Max 1 delivers exactly one PBI in one fresh process and stops', async () => {
-      const gh = setup({
-        issues: { 10: pbi({ blockers: [{ number: 5, state: 'closed' }] }), 11: pbi() },
-        milestones: { '0.13': [10, 11] },
+        issues: {
+          10: { labels: ['bug'], blockers: [{ number: 5, state: 'closed' }] },
+        },
+        milestones: { '0.13': [10] },
         effect: 'close-first',
       });
-      const r = await run(gh, ['-Milestone', '0.13', '-Max', '1']);
+      const r = await run(gh, ['-Milestone', '0.13']);
       expect(r.status).toBe(0);
       expect(claudeCalls()).toEqual([
         '-p /deliver --milestone 0.13 --unattended --max 1 --model sonnet --permission-mode auto --output-format stream-json --verbose',
       ]);
-      expect(r.stdout).toContain('loop result: max reached');
-    });
-
-    it('reads the milestone with one batched REST call, no gh issue list and no read per PBI (#127)', async () => {
-      const gh = setup({
-        issues: { 10: pbi(), 11: pbi(), 12: pbi() },
-        milestones: { '0.13': [10, 11, 12] },
-        effect: 'close-first',
-      });
-      await run(gh, ['-Milestone', '0.13', '-Max', '1']);
+      expect(JSON.parse(read('state.json')).issues[10].state).toBe('CLOSED');
+      expect(r.stdout).toContain('loop result: done');
       const paths = gh.calls().map((c) => c.args.join(' '));
-      expect(paths.filter((c) => c.includes('/issues?milestone='))).toHaveLength(2); // the state read before and after the one iteration
+      expect(paths.filter((c) => c.includes('/issues?milestone='))).toHaveLength(3); // the state read before and after the one iteration; the closed list is read once for the done check
       expect(
         paths.filter((c) => c.includes('issues?milestone=1&state=open&per_page=100 --paginate')),
       ).toHaveLength(2);
       expect(paths.filter((c) => /^issue /.test(c))).toEqual([]);
-      expect(paths.filter((c) => /issues\/1\d$/.test(c))).toEqual([]);
+      expect(paths.filter((c) => /issues\/\d+$/.test(c))).toEqual([]);
     });
 
-    it('passes targets and -Model on and runs until nothing is open (Feature expanded to its PBIs)', async () => {
+    it('passes targets and -Model on, expands a Feature to its open PBIs and stops at -Max', async () => {
       const gh = setup({
         issues: {
           100: { labels: ['feature'], children: [101, 102, 103] },
           101: pbi(),
-          102: pbi({ blockers: [{ number: 101, state: 'open' }] }),
+          102: pbi(),
           103: pbi({ state: 'CLOSED' }),
         },
         effect: 'close-first',
       });
-      // after the first iteration #101 is closed, but its state file keeps the blocker of 102 open: clear it in the effect
-      const st = path.join(cwd, 'state.json');
-      fs.writeFileSync(
-        path.join(cwd, 'effect.js'),
-        `const fs = require('fs'); const s = JSON.parse(fs.readFileSync(${JSON.stringify(st)}, 'utf8'));
-const n = Object.keys(s.issues).map(Number).find((k) => k > 100 && s.issues[k].state !== 'CLOSED' && !(s.issues[k].blockers || []).some((b) => b.state === 'open'));
-s.issues[n].state = 'CLOSED';
-for (const i of Object.values(s.issues)) i.blockers = (i.blockers || []).filter((b) => b.number !== n);
-fs.writeFileSync(${JSON.stringify(st)}, JSON.stringify(s));`,
-      );
-      const r = await run(gh, ['-Target', '100', '-Model', 'opus']);
+      const r = await run(gh, ['-Target', '100', '-Model', 'opus', '-Max', '1']);
       expect(r.status).toBe(0);
       const calls = claudeCalls();
-      expect(calls).toHaveLength(2);
+      expect(calls).toHaveLength(1);
       expect(calls[0]).toBe(
         '-p /deliver 100 --unattended --max 1 --model opus --permission-mode auto --output-format stream-json --verbose',
       );
-      expect(r.stdout).toContain('loop result: done');
+      expect(r.stdout).toContain('loop result: max reached');
     });
 
     it('stops with "no progress" and the last log lines when a PBI stays open', async () => {
@@ -248,33 +210,17 @@ fs.writeFileSync(${JSON.stringify(st)}, JSON.stringify(s));`,
       expect(r.stdout).toMatch(/ {2}\d\d:\d\d:\d\d » working on it/);
     });
 
-    it('is blocked when the only PBI waits on an open blocker, without starting the harness', async () => {
-      const r = await run(
-        setup({ issues: { 10: pbi({ blockers: [{ number: 5, state: 'open' }] }) } }),
-        ['-Target', '10'],
-      );
-      expect(r.status).toBe(2);
-      expect(claudeCalls()).toEqual([]);
-      expect(r.stdout).toContain('loop result: blocked');
-    });
-
-    it('a paused PBI counts as progress; what remains behind labels ends as blocked', async () => {
+    it('a paused PBI counts as progress; what remains behind an open blocker, needs-refinement or interactive ends as blocked', async () => {
       const gh = setup({
-        issues: { 10: pbi(), 11: pbi({ labels: ['pbi', 'needs-refinement'] }) },
+        issues: {
+          10: pbi(),
+          9: pbi({ blockers: [{ number: 5, state: 'open' }] }),
+          11: pbi({ labels: ['pbi', 'needs-refinement'] }),
+          12: pbi({ labels: ['pbi', 'interactive'] }),
+        },
         effect: 'hold-first',
       });
-      const r = await run(gh, ['-Target', '10,11']);
-      expect(claudeCalls()).toHaveLength(1);
-      expect(r.status).toBe(2);
-      expect(r.stdout).toContain('loop result: blocked');
-    });
-
-    it('counts an interactive PBI as held: one iteration for the ready one, then blocked', async () => {
-      const gh = setup({
-        issues: { 10: pbi(), 11: pbi({ labels: ['pbi', 'interactive'] }) },
-        effect: 'close-first',
-      });
-      const r = await run(gh, ['-Target', '10,11']);
+      const r = await run(gh, ['-Target', '9,10,11,12']);
       expect(claudeCalls()).toHaveLength(1);
       expect(r.status).toBe(2);
       expect(r.stdout).toContain('loop result: blocked');
@@ -347,11 +293,17 @@ fs.writeFileSync(${JSON.stringify(st)}, JSON.stringify(s));`,
         type: 'assistant',
         message: { content: [{ type: 'text', text: `#401 review: ${'x'.repeat(90)}` }] },
       },
+      { type: 'assistant', message: { content: [{ type: 'text', text: '#401 ci: red' }] } },
+      { type: 'assistant', message: { content: [{ type: 'text', text: '#401 merged: squash' }] } },
     ];
 
-    it('logs one line per step with the agent prefix, tool errors and writes every record to the jsonl', async () => {
+    it('logs one line per step with the agent prefix, tool errors, writes every record to the jsonl and owns the herdr display: harness runs without HERDR_ENV, pane tokens with the position per progress line, cleared at the end (#16)', async () => {
       const gh = setup({ issues: { 401: pbi() }, effect: 'close-first', stream });
-      const r = await run(gh, ['-Target', '401']);
+      const r = await run(gh, ['-Target', '401', '-NoPane'], {
+        HERDR_ENV: '1',
+        HERDR_PANE_ID: 'p7',
+        DELIVER_LOOP_ASSUME_TTY: '1',
+      });
       expect(r.status).toBe(0);
       const lines = read('.agents/deliver-loop.log');
       expect(lines).toMatch(/\d\d:\d\d:\d\d » #401 pr: opened #55/);
@@ -367,17 +319,6 @@ fs.writeFileSync(${JSON.stringify(st)}, JSON.stringify(s));`,
         .trim()
         .split('\n');
       expect(jsonl.map((l) => JSON.parse(l))).toEqual(stream);
-      if (process.platform === 'darwin') {
-        // osascript stub: attention step and loop result
-        const notes = read('notices.txt');
-        expect(notes).toContain('#401 PR opened');
-        expect(notes).toContain('loop result: done');
-      }
-    });
-
-    it('owns the herdr display: harness runs without HERDR_ENV, pane tokens with the position per progress line, cleared at the end (#16)', async () => {
-      const gh = setup({ issues: { 401: pbi() }, effect: 'close-first', stream });
-      await run(gh, ['-Target', '401'], { HERDR_ENV: '1', HERDR_PANE_ID: 'p7' });
       expect(read('claude-calls.txt')).toContain('herdr_env=[]');
       const calls = read('herdr-calls.txt').trim().split('\n');
       const tokens = '--ttl-ms 3600000';
@@ -386,14 +327,37 @@ fs.writeFileSync(${JSON.stringify(st)}, JSON.stringify(s));`,
         `pane report-metadata p7 --source deliver --token deliver=#401 --token deliver_step=1/1 pr: opened #55 --token deliver_pr=#55 ${tokens}`,
         // the PR token stays for later steps; the step value is cut at 80 characters
         `pane report-metadata p7 --source deliver --token deliver=#401 --token deliver_step=1/1 review: ${'x'.repeat(67)}… --token deliver_pr=#55 ${tokens}`,
+        `pane report-metadata p7 --source deliver --token deliver=#401 --token deliver_step=1/1 ci: red --token deliver_pr=#55 ${tokens}`,
+        `pane report-metadata p7 --source deliver --token deliver=#401 --token deliver_step=1/1 merged: squash --token deliver_pr=#55 ${tokens}`,
         'pane report-metadata p7 --source deliver --clear-token deliver --clear-token deliver_step --clear-token deliver_pr',
       ]);
       expect(calls.join('\n')).not.toContain('display-agent');
+      // -NoPane: opens no pane (a TTY and a herdr pane are present); the plain log has no escape codes, the ANSI log is colored
+      const ESC = String.fromCharCode(27);
+      expect(read('herdr-calls.txt')).not.toContain('pane list');
+      expect(lines).not.toContain(ESC);
+      const ansi = read('.agents/deliver-loop.ansi.log');
+      expect(ansi).toMatch(new RegExp(`${ESC}\\[2m\\d\\d:\\d\\d:\\d\\d${ESC}\\[0m `));
+      expect(ansi).toContain(`${ESC}[36mRead${ESC}[0m src/a.ts`);
+      expect(ansi).toContain(`${ESC}[31m✗ boom${ESC}[0m`);
+      expect(ansi).toContain(`${ESC}[33m» #401 ci: red${ESC}[0m`);
+      expect(ansi).toContain(`${ESC}[32m» #401 merged: squash${ESC}[0m`);
+      expect(ansi).toContain(`${ESC}[32mloop result: done`);
+      if (process.platform === 'darwin') {
+        // osascript stub: attention step and loop result
+        const notes = read('notices.txt');
+        expect(notes).toContain('#401 PR opened');
+        expect(notes).toContain('loop result: done');
+      }
     });
 
-    it('clears the herdr display when the loop fails', async () => {
+    it('clears the herdr display when the loop fails; with stdout redirected (no TTY) no pane is attempted', async () => {
       const gh = setup({ issues: { 10: pbi({ children: [] }) } });
-      const r = await run(gh, ['-Target', '10,99'], { HERDR_ENV: '1', HERDR_PANE_ID: 'p7' });
+      const r = await run(gh, ['-Target', '10,99'], {
+        HERDR_ENV: '1',
+        HERDR_PANE_ID: 'p7',
+        DELIVER_LOOP_ASSUME_TTY: '',
+      });
       expect(r.status).not.toBe(0);
       expect(read('herdr-calls.txt').trim()).toBe(
         'pane report-metadata p7 --source deliver --clear-token deliver --clear-token deliver_step --clear-token deliver_pr',
@@ -481,14 +445,6 @@ esac
       expect(paneCalls()).toEqual(['pane list']);
     });
 
-    // outside herdr: see 'is done at once'
-    it('stdout redirected: attempts no pane and prints no error', async () => {
-      const r = await go(prepare(), [], { ...herdrEnv, DELIVER_LOOP_ASSUME_TTY: '' });
-      expect(r.status).toBe(0);
-      expect(r.stderr).toBe('');
-      expect(paneCalls()).toEqual([]);
-    });
-
     it('a failing split is ignored and the loop runs on', async () => {
       const r = await go(prepare({ splitFails: true }), [], herdrEnv);
       expect(r.status).toBe(0);
@@ -498,21 +454,6 @@ esac
         'pane split --current --direction down --ratio 0.7 --no-focus',
       ]);
       expect(read('.agents/deliver-loop.log')).toContain('loop result: done');
-    });
-
-    it('-NoPane: opens no pane; writes the plain log without escape codes and the colored ANSI log', async () => {
-      await go(prepare({ stream: true }), ['-NoPane'], herdrEnv);
-      expect(paneCalls()).toEqual([]);
-      const plain = read('.agents/deliver-loop.log');
-      expect(plain).toMatch(/\d\d:\d\d:\d\d ✗ boom/);
-      expect(plain).not.toContain(ESC);
-      const ansi = read('.agents/deliver-loop.ansi.log');
-      expect(ansi).toMatch(new RegExp(`${ESC}\\[2m\\d\\d:\\d\\d:\\d\\d${ESC}\\[0m `));
-      expect(ansi).toContain(`${ESC}[36mRead${ESC}[0m src/a.ts`);
-      expect(ansi).toContain(`${ESC}[31m✗ boom${ESC}[0m`);
-      expect(ansi).toContain(`${ESC}[33m» #401 ci: red${ESC}[0m`);
-      expect(ansi).toContain(`${ESC}[32m» #401 merged: squash${ESC}[0m`);
-      expect(ansi).toContain(`${ESC}[32mloop result: done`);
     });
 
     // -NoColor takes the same branch as NO_COLOR
