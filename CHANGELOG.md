@@ -5,6 +5,43 @@ Versioning follows [Semantic Versioning](https://semver.org/).
 
 ---
 
+## [1.2.0] — 2026-11-01
+
+### Bug Fixes
+- Deliver must select PBIs and bugs (#103) (#116)
+- Deliver loses the implementer notes, spec notes never reach review and PR (#97) (#118)
+- Get-GovernanceMatches diffs HEAD instead of the reviewed branch (#98) (#119)
+- Governance spec check treats files like latest.ts as tests (#99) (#120)
+- Standalone issue merges into main with --squash (#130) (#134)
+- Release review runs governance on the wrong diff without waivers (#131) (#132)
+
+
+### Documentation
+- Roadmap records v1.1.0 and plans 1.2.0 (#85)
+- Overview, roadmap and governance page for 1.2.0 (#112) (#129)
+
+
+### Features
+- **shared**: Adr skill and the governance config key (#65) (#88)
+- **deliver**: Write the review result to a file (#53) (#89)
+- **shared**: Spec rules in implementation (#66) (#90)
+- **dotnet**: Dotnet-aspire skill for local orchestration (#61) (#91)
+- **shared**: Detect-techstack reports ADRs, specs and governance (#68) (#92)
+- **shared**: Code-review checks the ADR and spec rules (#67) (#93)
+- **delivery**: Planner applies the ADR and spec rules (#86) (#94)
+- **delivery**: Deliver handles decision PBIs and spec notes (#87) (#95)
+- **delivery**: Deliver reviews release/next with Opus before the release PR (#100) (#121)
+- **github**: Github-milestone skill shows the current and all milestones (#113) (#122)
+
+
+### Performance
+- **github**: Move hot gh reads and CI polling off GraphQL (#117) (#123)
+
+
+### Refactoring
+- **github-release**: Finish derives the bump from Conventional Commits (#101) (#124)
+
+
 ## [1.1.0] — 2026-10-31
 
 ### Bug Fixes
@@ -15,6 +52,7 @@ Versioning follows [Semantic Versioning](https://semver.org/).
 - Roadmap records v1.0.2 and plans 1.1.0 (#73) (#74)
 - Roadmap moves the herdr plugin of #17 to herdr-plugins (#17) (#75)
 - Roadmap plans Node.js 26 in 1.1.0 and lists the open issues (#72) (#76)
+- Update CHANGELOG.md for v1.1.0 [skip ci]
 
 
 ### Features
