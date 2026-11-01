@@ -14,8 +14,8 @@ Plans an issue one level down with blockers and sizes, grills the open decisions
 ## Arguments and flags
 
 - `<nr>`: issue number to plan; the input level decides the output level:
-  - Epic: Features
-  - Feature: PBIs
+  - Epic gives Features
+  - Feature gives PBIs
   - PBI or Bug that fits one session: no items (use `refine <nr>`); size L or more than one session: split into sibling PBIs under the same Feature
 - `<free description>`: internal steps only, no issues are created
 - `refine <nr>`: no plan, no new issues except an approved split; checks the issue against the readiness list of its level, grills the gaps, updates the body (`## Decisions`), sets labels (`needs-refinement` removed when ready, `needs-decision` when a question is open)
