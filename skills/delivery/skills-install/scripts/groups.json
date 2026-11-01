@@ -7,6 +7,7 @@
     "skills-install"
   ],
   "dotnet": [
+    "dotnet-aspire",
     "dotnet-create-solution",
     "dotnet-implementation",
     "dotnet-mcp-server-generator",
@@ -14,6 +15,7 @@
   ],
   "github": [
     "github-issue",
+    "github-milestone",
     "github-pull-request",
     "github-release"
   ],
@@ -37,6 +39,7 @@
     "rust-test"
   ],
   "shared": [
+    "adr",
     "check-prerequisites",
     "code-review",
     "detect-techstack",

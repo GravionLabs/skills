@@ -63,7 +63,7 @@ Public surface is everything a consumer can depend on: skill names (`npx skills 
 
 - Announce every rename in the PR body and in the release notes.
 - A renamed skill leaves a `skills-lock.json` entry behind in every consumer: `npx skills update` cannot follow a rename. Prefer keeping names; when a rename is unavoidable, batch it into a major release and describe the `npx skills remove <old>` / `add <new>` step in the release notes.
-- Batch breaking renames into one major release (empty `+semver: major` commit, see Releases). Only that dedicated empty release commit carries `+semver: major`; no other commit does, and none carries `BREAKING`.
+- Batch breaking renames into one major release (empty `+semver: major` commit, see Releases). Only that dedicated empty release commit carries `+semver: major`; no other commit does, and none uses `<type>!:` or `BREAKING CHANGE:` (both bump major too).
 
 Renamed when moving from GravionLabs/apm-hub:
 
@@ -81,10 +81,10 @@ The title of an issue starts with its level: `[Epic]`, `[Feature]`, `[PBI]` or `
 
 ## Releases
 
-Releases are cut from a single rolling branch, `release/next`. GitVersion increments the minor version by default on that branch (`GitVersion.yml`). A release is a git tag; consumers pin it with `npx skills add GravionLabs/skills#v<x.y.z>` or `skills-install -Ref v<x.y.z>`.
+Releases are cut from a single rolling branch, `release/next`. The version bump comes from the Conventional Commits on the branch: `fix:` → patch, `feat:` → minor, `<type>!:` or `BREAKING CHANGE:` → major; a release with only fixes is a patch release. `github-release finish` adds no bump commit. The release PR into `main` is merged with a merge commit, never squashed, so the `feat:`/`fix:` commits stay visible to GitVersion and git-cliff. A release is a git tag; consumers pin it with `npx skills add GravionLabs/skills#v<x.y.z>` or `skills-install -Ref v<x.y.z>`.
 
-- Major: add an empty commit with `+semver: major` in its message when finishing the release. Renames ship here, see [Public surface and renames](#public-surface-and-renames).
-- Patch: fix on `main` as a hotfix, then merge `main` into `release/next`.
+- Major on purpose: `github-release finish major` adds an empty commit with `+semver: major` in its message. Renames ship here, see [Public surface and renames](#public-surface-and-renames).
+- Hotfix: fix on `main` (merge commit, the `main` ruleset allows only merge), then merge `main` into `release/next`.
 - Parallel lines: use `release/<x.y>` branches.
 
 Details: `skills/github/github-issue/references/release-branches.md`.

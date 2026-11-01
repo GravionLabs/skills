@@ -25,11 +25,20 @@ describe('delivery and shared skills keep no state under .agents/', () => {
         fs
           .readFileSync(f, 'utf8')
           .replace(
-            /\.opencode\|\.agents\||~\/\.agents|\.agents\/(format|config)\.json|\.agents\/lessons[./*a-z]*|\.agents\/\*|\.agents\/deliver-loop[./<>a-z]*|subagents\.agents\.general-purpose\.model|ui\.sidebar\.agents/g,
+            /\.opencode\|\.agents\||~\/\.agents|\.agents\/(format|config)\.json|\.agents\/lessons[./*a-z]*|\.agents\/\*|\.agents\/state\/(release-)?review-<(nr|milestone)>\.json|\.agents\/deliver-loop[./<>a-z]*|subagents\.agents\.general-purpose\.model|ui\.sidebar\.agents/g,
             '',
           ),
       ),
     );
     expect(offenders).toEqual([]);
+  });
+});
+
+describe('state-dir allowlist (#53)', () => {
+  const allow = /\.agents\/state\/(release-)?review-<(nr|milestone)>\.json/;
+  it('admits only the review and release review result files under .agents/state (#100)', () => {
+    expect(allow.test('.agents/state/review-<nr>.json')).toBe(true);
+    expect(allow.test('.agents/state/release-review-<milestone>.json')).toBe(true);
+    expect(allow.test('.agents/state/other.json')).toBe(false);
   });
 });

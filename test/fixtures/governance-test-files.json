@@ -1,0 +1,14 @@
+[
+  { "path": "apps/bff/latest.ts", "counted": true },
+  { "path": "apps/bff/Contest.cs", "counted": true },
+  { "path": "apps/bff/contests/a.ts", "counted": true },
+  { "path": "apps/bff/OrderTests.cs", "counted": false },
+  { "path": "apps/bff/OrderTest.cs", "counted": false },
+  { "path": "apps/bff/foo.test.ts", "counted": false },
+  { "path": "apps/bff/foo.spec.ts", "counted": false },
+  { "path": "apps/bff/test_foo.py", "counted": false },
+  { "path": "apps/bff/tests/b.ts", "counted": false },
+  { "path": "apps/bff/__tests__/c.ts", "counted": false },
+  { "path": "apps/bff/Api.Tests/Order.cs", "counted": false },
+  { "path": "apps/bff/README.md", "counted": false }
+]

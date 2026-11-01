@@ -85,9 +85,9 @@ describe('Get-ReleaseState.ps1', () => {
     expect(cut).toMatchObject({
       state: 'unreleased',
       action: 'noop',
-      hasSemverCommit: false,
       hasMajorCommit: false,
     });
+    expect(cut).not.toHaveProperty('hasSemverCommit');
     expect(await state('finish', 'release/3.1')).toMatchObject({
       state: 'unreleased',
       action: 'release-pr',
@@ -95,13 +95,22 @@ describe('Get-ReleaseState.ps1', () => {
     });
   });
 
-  it('reports +semver commits and the CI release PR', async () => {
+  it('a feat:/fix: branch is no major; a +semver: minor commit is no major either', async () => {
+    setRef(
+      'release/3.2',
+      child(child('main', 'feat: x'), 'chore: release minor', '+semver: minor'),
+    );
+    const r = await state('finish', 'release/3.2');
+    expect(r).toMatchObject({ hasMajorCommit: false, action: 'release-pr' });
+    expect(r).not.toHaveProperty('hasSemverCommit');
+  });
+
+  it('reports a +semver: major commit and the CI release PR', async () => {
     setRef('release/3.2', child('main', 'chore: release major', '+semver: major'));
     const r = await state('finish', 'release/3.2', {
       FAKE_RELEASE_PR: '[{"number":9,"url":"https://x/9"}]',
     });
     expect(r).toMatchObject({
-      hasSemverCommit: true,
       hasMajorCommit: true,
       releasePr: { number: 9, url: 'https://x/9' },
     });

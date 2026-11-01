@@ -15,6 +15,7 @@
       "source": "./",
       "strict": false,
       "skills": [
+        "./skills/shared/adr",
         "./skills/shared/check-prerequisites",
         "./skills/shared/code-review",
         "./skills/shared/detect-techstack",
@@ -30,6 +31,7 @@
       "strict": false,
       "skills": [
         "./skills/github/github-issue",
+        "./skills/github/github-milestone",
         "./skills/github/github-pull-request",
         "./skills/github/github-release"
       ]
@@ -100,6 +102,7 @@
       "source": "./",
       "strict": false,
       "skills": [
+        "./skills/dotnet/dotnet-aspire",
         "./skills/dotnet/dotnet-create-solution",
         "./skills/dotnet/dotnet-implementation",
         "./skills/dotnet/dotnet-mcp-server-generator",

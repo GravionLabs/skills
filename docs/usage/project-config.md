@@ -8,7 +8,38 @@ By default `Format-Changed.ps1 -Language <lang>` runs the built-in commands of `
 
 ## Deliver roles
 
-`deliver.roles` sets `model` and `effort` per role: the `deliver` skill uses `implement`, `review` and `fix` for its subagents when the harness takes a model per call; the schema also knows `select`, `plan`, `create`, `gate`, `pr` and `ci`, which the skill does not use; `implement` and `fix` also take `tiers` (`fast`, `standard`, `strong`). Unset keys keep the defaults, see `references/roles.md` of the `deliver` skill.
+`deliver.roles` sets `model` and `effort` per role: the `deliver` skill uses `implement`, `review`, `fix` and `release-review` (the release review before the release PR, default opus/high) for its subagents when the harness takes a model per call; the schema also knows `select`, `plan`, `create`, `gate`, `pr` and `ci`, which the skill does not use; `implement` and `fix` also take `tiers` (`fast`, `standard`, `strong`). Unset keys keep the defaults, see `references/roles.md` of the `deliver` skill.
+
+## Governance
+
+`governance` names where ADRs and specs live and which changes need them. It is read by `adr`, `github-issue`, `planner`, `implementation`, `code-review`, `deliver` and `detect-techstack`, and the CI checks `adr` and `spec` of GravionLabs/ci read the same names. How they work together: [ADRs and specs](governance.md). Without the key, `adr` works on request with `docs/adr` and no change is held to an ADR or spec rule.
+
+- `adrDir`: ADR directory (default `docs/adr`).
+- `adrPaths`: globs whose change needs an ADR (default `[]`).
+- `specDir`: spec directory (default `docs/specs`).
+- `specMap`: glob of source paths to the spec file that describes them.
+- `specMode`: `warn` (default) or `require`.
+- `skipLabels`: labels that waive the ADR rule (default `["skip-adr"]`).
+
+```json
+{
+  "governance": {
+    "adrDir": "docs/adr",
+    "adrPaths": ["docker-compose.yml", "infra/**"],
+    "specDir": "docs/specs",
+    "specMap": {
+      "apps/bff/**": "docs/specs/bff.md",
+      "apps/business-backend/**": "docs/specs/business-backend.md",
+      "apps/frontend/**": "docs/specs/frontend.md",
+      "apps/frontend-canvas/**": "docs/specs/frontend.md",
+      "apps/gateway/**": "docs/specs/gateway.md",
+      "apps/realtime/**": "docs/specs/realtime.md"
+    },
+    "specMode": "warn",
+    "skipLabels": ["skip-adr"]
+  }
+}
+```
 
 ## Schema
 

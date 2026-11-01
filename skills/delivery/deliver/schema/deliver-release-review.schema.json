@@ -1,0 +1,15 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "deliver release review result",
+  "description": "Result of the last release-review round of a milestone, written by deliver to <git-common-dir>/.agents/state/release-review-<milestone>.json.",
+  "type": "object",
+  "required": ["milestone", "sha", "round", "review", "bugs"],
+  "additionalProperties": false,
+  "properties": {
+    "milestone": { "type": "string", "minLength": 1 },
+    "sha": { "type": "string", "pattern": "^[0-9a-f]{7,64}$" },
+    "round": { "type": "integer", "minimum": 1 },
+    "review": { "$ref": "../../../shared/code-review/schema/review.schema.json" },
+    "bugs": { "type": "array", "items": { "type": "integer", "minimum": 1 } }
+  }
+}

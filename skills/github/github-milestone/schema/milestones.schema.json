@@ -1,0 +1,123 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/GravionLabs/skills/skills/github/github-milestone/schema/milestones.schema.json",
+  "title": "Get-Milestones.ps1 output",
+  "description": "One of four shapes, by -Mode: current, list, show (a milestone detail) or create.",
+  "oneOf": [
+    {
+      "title": "current",
+      "type": "object",
+      "required": ["latestTag", "current"],
+      "properties": {
+        "latestTag": { "$ref": "#/$defs/tag" },
+        "current": { "oneOf": [{ "$ref": "#/$defs/detail" }, { "type": "null" }] },
+        "hint": { "type": "string", "description": "Only when current is null." }
+      },
+      "additionalProperties": false
+    },
+    {
+      "title": "list",
+      "type": "object",
+      "required": ["latestTag", "milestones"],
+      "properties": {
+        "latestTag": { "$ref": "#/$defs/tag" },
+        "milestones": {
+          "type": "array",
+          "description": "Open and closed, semver ascending, non-semver titles last.",
+          "items": { "$ref": "#/$defs/summary" }
+        }
+      },
+      "additionalProperties": false
+    },
+    { "title": "show", "$ref": "#/$defs/detail" },
+    {
+      "title": "create",
+      "type": "object",
+      "required": ["created", "milestone"],
+      "properties": {
+        "created": { "type": "boolean", "description": "false: a milestone with that title existed and was left as is." },
+        "milestone": {
+          "type": "object",
+          "required": ["number", "title", "state", "url"],
+          "properties": {
+            "number": { "type": "integer" },
+            "title": { "type": "string" },
+            "state": { "enum": ["open", "closed"] },
+            "url": { "type": ["string", "null"] }
+          }
+        }
+      },
+      "additionalProperties": false
+    }
+  ],
+  "$defs": {
+    "tag": { "type": ["string", "null"], "description": "Highest v<x.y.z> tag, null without one." },
+    "summary": {
+      "type": "object",
+      "required": ["number", "title", "state", "dueOn", "open", "closed", "progress", "tagged", "url"],
+      "properties": {
+        "number": { "type": "integer" },
+        "title": { "type": "string" },
+        "state": { "enum": ["open", "closed"] },
+        "dueOn": { "type": ["string", "null"] },
+        "open": { "type": "integer", "minimum": 0 },
+        "closed": { "type": "integer", "minimum": 0 },
+        "progress": { "type": "integer", "minimum": 0, "maximum": 100, "description": "closed / (open + closed) in %, 0 when empty." },
+        "tagged": { "type": "boolean", "description": "The tag v<title> exists." },
+        "url": { "type": ["string", "null"] }
+      }
+    },
+    "issue": {
+      "type": "object",
+      "required": ["number", "title", "assignees"],
+      "properties": {
+        "number": { "type": "integer" },
+        "title": { "type": "string" },
+        "assignees": { "type": "array", "items": { "type": "string" } },
+        "blockers": {
+          "type": "array",
+          "description": "Only in blocked: the open blockers.",
+          "items": {
+            "type": "object",
+            "required": ["number", "title"],
+            "properties": {
+              "number": { "type": "integer" },
+              "title": { "type": "string" },
+              "repository": { "type": "string", "description": "owner/repo, only when the blocker is in another repository than the blocked issue." }
+            }
+          }
+        }
+      }
+    },
+    "detail": {
+      "allOf": [{ "$ref": "#/$defs/summary" }],
+      "type": "object",
+      "required": ["issues", "releasePr"],
+      "properties": {
+        "issues": {
+          "type": "object",
+          "description": "Open issues, pull requests excluded; each in the first matching group: needsDecision, needsRefinement, blocked, claimed, ready.",
+          "required": ["ready", "blocked", "needsDecision", "needsRefinement", "claimed"],
+          "properties": {
+            "ready": { "type": "array", "items": { "$ref": "#/$defs/issue" } },
+            "blocked": { "type": "array", "items": { "$ref": "#/$defs/issue" } },
+            "needsDecision": { "type": "array", "items": { "$ref": "#/$defs/issue" } },
+            "needsRefinement": { "type": "array", "items": { "$ref": "#/$defs/issue" } },
+            "claimed": { "type": "array", "items": { "$ref": "#/$defs/issue" } }
+          }
+        },
+        "releasePr": {
+          "description": "Open release PR release/next -> default branch (Get-ReleaseState.ps1 of github-release), else null.",
+          "oneOf": [
+            {
+              "type": "object",
+              "required": ["number", "url"],
+              "properties": { "number": { "type": "integer" }, "url": { "type": "string" } }
+            },
+            { "type": "null" }
+          ]
+        }
+      }
+    }
+  }
+}

@@ -1,17 +1,17 @@
 # Roadmap
 
-Order of work and release assignment for the open issues. Written 2026-10-30 after the move from GravionLabs/apm-hub (archived by #21). Last release `v1.0.2` (2026-10-31). Work runs on `release/next`, the release PR into `main` is the human review point; each release has a GitHub milestone of the same name.
+Order of work and release assignment for the open issues. Written 2026-10-30 after the move from GravionLabs/apm-hub (archived by #21). Last release `v1.1.0` (2026-10-31). Work runs on `release/next`, the release PR into `main` is the human review point; each release has a GitHub milestone of the same name (`/github-milestone current` shows the one being worked on, `list` all of them).
 
 History: apm-hub 2.x and 3.x are in the [apm-hub roadmap](https://github.com/GravionLabs/apm-hub/blob/main/ROADMAP.md). A bare `#<n>` here is an issue of GravionLabs/skills.
 
 ## Where we are
 
-| Epic / Feature                                  | State                             | Note                              |
-| ----------------------------------------------- | --------------------------------- | --------------------------------- |
-| #1 deliver issues through Claude Code workflows | open for Feature #15              | Features #2 and #3 done in v1.0.2 |
-| #15 herdr integration of deliver                | open: #16, #12, #13               | milestone 1.1.0                   |
-| #8 stack packages (Feature #9)                  | open: #10 (`needs-decision`), #11 | out of 1.1.0 until #10 is decided |
-| #64 ADRs and specs in the skills                | open: #65, #66, #67, #68          | after 1.1.0                       |
+| Epic / Feature                                  | State                             | Note                                     |
+| ----------------------------------------------- | --------------------------------- | ---------------------------------------- |
+| #1 deliver issues through Claude Code workflows | all Features closed               | Features #2, #3 in v1.0.2, #15 in v1.1.0 |
+| #8 stack packages (Feature #9)                  | open: #10 (`needs-decision`), #11 | not scheduled until #10 is decided       |
+| #64 ADRs and specs in the skills                | closed                            | PBIs #65–#68, #86, #87 in 1.2.0          |
+| #104 help for user-invoked skills               | open: #105–#111                   | milestone 1.3.0                          |
 
 ## Done in 1.0.0 and 1.0.1
 
@@ -19,39 +19,50 @@ v1.0.0 is apm-hub 3.3.0 (released there as `v3.2.1`) plus its unreleased `releas
 
 ## Done in 1.0.2
 
-Planned as 1.1.0; the release PR #70 missed the `+semver: minor` commit, so GitVersion tagged `v1.0.2` (fixed by #73). Milestone 1.0.2 (renamed from 1.1.0): repository settings and ruleset on `release/next` (#19), trigger evals (#20), the lessons contract of Feature #3 (#23–#28, #43), the `deliver` trials in OpenCode (#4) and Copilot CLI (#5) with their fixes (#45, #47–#49), the retro (#6) and its follow-ups (#54–#57), the archive of GravionLabs/apm-hub (#21). Features #2, #3 and #18 are closed.
+Planned as 1.1.0; the release PR #70 carried no minor bump, so GitVersion tagged `v1.0.2` (worked around by #73, replaced by the Conventional Commit versioning of #102). Milestone 1.0.2 (renamed from 1.1.0): repository settings and ruleset on `release/next` (#19), trigger evals (#20), the lessons contract of Feature #3 (#23–#28, #43), the `deliver` trials in OpenCode (#4) and Copilot CLI (#5) with their fixes (#45, #47–#49), the retro (#6) and its follow-ups (#54–#57), the archive of GravionLabs/apm-hub (#21). Features #2, #3 and #18 are closed.
 
 Retro #6 (2026-10-31, 14 `deliver` runs: 12 Claude Code, 1 OpenCode, 1 Copilot CLI): red CI at the end 0 %, fix rounds 0.21 per PBI, median time per PBI about 8 min, human wait ≈ 0 except the Copilot allowlist pause (fixed by #49); cost not measured (agentlens not installed). **Decision: `deliver/workflow.js` is deleted** (#57); plain subagents sufficed on all three harnesses. The Claude Code runs loaded an outdated global `deliver`, hence #54.
 
-## 1.1.0 — herdr integration
+## Done in 1.1.0
 
-Milestone 1.1.0 (renamed from 1.2.0). `release/next` is cut from `v1.0.2`.
+Milestone 1.1.0: GitVersion bumps the minor version on a release merge into `main` (#73; since #101 and #102 the bump comes from the Conventional Commits, GravionLabs/ci#107), Node.js 26 (#72), `deliver` merges into `release/next` without asking (#78), the herdr integration of Feature #15: pane tokens (#16), the log pane of `Invoke-DeliverLoop` (#12) and its herdr key (#13). The herdr plugin of #17 moved to [GravionLabs/herdr-plugins](https://github.com/GravionLabs/herdr-plugins): GravionLabs/herdr-plugins#3 (`deliver-starter`), #5 (`agent-notify`), #22 (`deliver-view`) and #23 (`deliver-log`) there build on #16 and #13 here.
 
-| Order | Issue | Title                                                               | Size | Depends on / decision                        |
-| ----- | ----- | ------------------------------------------------------------------- | ---- | -------------------------------------------- |
-| 1     | #73   | GitVersion bumps the minor version on a release merge into `main`   | S    | — (first, so the release is tagged `v1.1.0`) |
-| 2     | #16   | `deliver` reports step, issue and PR as herdr pane tokens           | S    | Feature #15, refined                         |
-| 2     | #12   | `Invoke-DeliverLoop` shows its log in a herdr or WezTerm split pane | S    | Feature #15, refined                         |
-| 3     | #13   | toggle the `deliver` log pane with a herdr key                      | S    | #12                                          |
-| 2     | #72   | move to Node.js 26                                                  | S    | — (part of GravionLabs/ci#100)               |
+## 1.2.0 — review file, Aspire, ADRs and specs
 
-Feature #15 and Epic #1 close with #16, #12 and #13. The herdr plugin of #17 moved to [GravionLabs/herdr-plugins](https://github.com/GravionLabs/herdr-plugins): GravionLabs/herdr-plugins#3 (`deliver-starter`), #5 (`agent-notify`), #22 (`deliver-view`) and #23 (`deliver-log`) there build on #16 and #13 here.
+Milestone 1.2.0, `release/next` cut from `v1.1.0`; release PR #96. Delivered:
+
+| Issue   | Title                                                                                             | Note                                                            |
+| ------- | ------------------------------------------------------------------------------------------------- | --------------------------------------------------------------- |
+| #53     | `deliver` writes the review result to a file                                                      | GravionLabs/herdr-plugins#4 (`review-popup`) reads it           |
+| #61     | `dotnet-aspire` skill                                                                             |                                                                 |
+| #65     | `adr` skill and `governance` key                                                                  | Feature #64; the key names are read by GravionLabs/ci#94, ci#95 |
+| #66     | spec rules in `implementation`                                                                    | Feature #64                                                     |
+| #67     | `code-review` checks the ADR and spec rules                                                       | Feature #64                                                     |
+| #68     | `detect-techstack` reports ADRs, specs and governance                                             | Feature #64                                                     |
+| #86     | `planner` applies the ADR and spec rules                                                          | Feature #64                                                     |
+| #87     | `deliver` handles decision PBIs and spec notes                                                    | Feature #64                                                     |
+| #97–#99 | fixes: implementer notes in `deliver`, `Get-GovernanceMatches` base, test files in the spec check | found while delivering #64                                      |
+| #100    | `deliver` reviews `release/next` with Opus before the release PR                                  | [delivery](docs/delivery.md#release-review)                     |
+| #103    | `deliver` selects PBIs and Bugs                                                                   |                                                                 |
+| #113    | `github-milestone` skill                                                                          |                                                                 |
+| #117    | hot `gh` reads and CI polling over REST instead of GraphQL                                        |                                                                 |
+| #101    | `github-release finish` derives the bump from Conventional Commits                                |                                                                 |
+| #102    | Conventional Commit versioning and the PR title check                                             | GravionLabs/ci#107, ci#108 (ci v1.4.0)                          |
+
+Also in the milestone: #112 (these docs) and #115 (drop the hourly project-needs sync). How the ADR and spec rules work together: [ADRs and specs](docs/usage/governance.md).
+
+## 1.3.0 — help for user-invoked skills
+
+Milestone 1.3.0: Feature #104, `/<skill> help` for the user-invoked skills. #105 sets the help convention and the test helper; #106–#111 add `references/help.md` to `deliver`, `planner`, `skills-install`, `github-release`, `retro` and `context-statusline`.
 
 ## Later
 
-| Issue | Title                                                    | Why later                                                     |
-| ----- | -------------------------------------------------------- | ------------------------------------------------------------- |
-| #10   | jvm package for Java and Kotlin                          | `needs-decision`: one `jvm` group or two                      |
-| #11   | swift package                                            | blocked by #10                                                |
-| #71   | adopt the bundled pr-checks.yml                          | blocked by GravionLabs/ci#93 and ci#96                        |
-| #65   | `adr` skill and `governance` key                         | Feature #64; first, #66–#68 need the key                      |
-| #66   | spec rules in `implementation`                           | #65                                                           |
-| #67   | `planner` and `code-review` apply the ADR and spec rules | #65, #66; PRs pass the `pr-checks.yml` of #71                 |
-| #68   | `detect-techstack` reports ADRs, specs and governance    | #65                                                           |
-| #53   | `deliver` writes the review result to a file             | candidate for 1.1.0: GravionLabs/herdr-plugins#4 builds on it |
-| #61   | `dotnet-aspire` skill                                    | size M, no dependency; not yet scheduled                      |
+| Issue | Title                           | Why later                                                                            |
+| ----- | ------------------------------- | ------------------------------------------------------------------------------------ |
+| #10   | jvm package for Java and Kotlin | `needs-decision`: one `jvm` group or two                                             |
+| #11   | swift package                   | blocked by #10                                                                       |
+| #71   | adopt the bundled pr-checks.yml | no milestone; GravionLabs/ci#93 and ci#96 are done, every later PR needs `Closes #n` |
 
 ## Risks
 
-- Until #73 is merged, a release merge into `main` counts a patch unless `github-release` `finish` commits `+semver: minor`; check the computed version before merging.
 - The git guardrails hook of apm-hub is uninstalled locally; `release/next` and `main` are protected by their rulesets only.

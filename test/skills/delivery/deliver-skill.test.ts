@@ -70,6 +70,20 @@ describe('deliver SKILL.md', () => {
     expect(step('**Fix.**', '**PR.**')).toContain('loads `implementation` with role `fix`');
   });
 
+  it('asks the implementer for notes[] incl. the spec note in step 3 (#97)', () => {
+    const step3 = body.slice(body.indexOf('**Implement.**'), body.indexOf('**Review.**'));
+    expect(step3).toContain('`notes[]` (one per line)');
+    expect(step3).toContain('`no spec change needed: <spec> — <reason>`');
+    expect(step3).toContain('`specMap`');
+  });
+
+  it('writes the review result file per schema in step 4 (#53)', () => {
+    const step4 = body.slice(body.indexOf('**Review.**'), body.indexOf('**Fix.**'));
+    expect(step4).toContain('<git-common-dir>/.agents/state/review-<nr>.json');
+    expect(step4).toContain('schema/deliver-review.schema.json');
+    expect(step4).toContain('`review.schema.json`');
+  });
+
   it('puts Get-Lessons.ps1 on every allowlist (#25)', () => {
     expect(permissions).toContain('`pwsh` with `Get-Lessons.ps1` of the `lessons` skill');
     expect(permissions).toContain('"Bash(pwsh .claude/skills/lessons/scripts/Get-Lessons.ps1:*)"');
@@ -90,6 +104,7 @@ describe('deliver SKILL.md', () => {
       '`/deliver <nr> [<nr> …] [--milestone <name>] [--unattended] [--max <n>]`',
     );
     expect(body).toContain('gh issue list --milestone <name> --label pbi --state open');
+    expect(body).toContain('the same with `--label bug`');
     expect(body).toContain('drop duplicates');
     expect(body).toContain('ties keep the order of the arguments');
     expect(body).toContain('#<nr> select: needs refinement, skipped');
@@ -108,8 +123,19 @@ describe('deliver SKILL.md', () => {
     expect(body).toContain('never switches its own checkout');
   });
 
+  it('reads issues and the open PR of a branch over REST, not GraphQL (#117)', () => {
+    expect(body).toContain(
+      "`gh api repos/{owner}/{repo}/issues/<nr> --jq '{number,title,state,labels:[.labels[].name],body}'`",
+    );
+    expect(body).toContain(
+      '`gh api "repos/{owner}/{repo}/pulls?head=<owner>:<branch>&state=open" --jq \'.[].number\'`',
+    );
+    // a porcelain read with an argument (the rule text names them without one)
+    expect(body).not.toMatch(/gh (issue view|pr list|pr view) </);
+  });
+
   it('waits for the required checks and squash-merges', () => {
-    expect(body).toContain('`gh pr checks <pr> --watch --required`');
+    expect(body).toContain('`gh pr checks <pr> --watch --required --interval 60`');
     expect(body).toContain('gh pr merge <pr> --squash');
     expect(body).toContain('gh issue close <nr>');
   });
@@ -126,11 +152,109 @@ describe('deliver SKILL.md', () => {
     const release = body.slice(body.indexOf('**Release.**'), body.indexOf('## Pause rules'));
     expect(release).toContain('Only with `--milestone`');
     expect(release).toContain('gh issue list --milestone <name> --label pbi --state open');
+    expect(release).toContain('the same with `--label bug`');
     expect(release).toContain('`github-release` and run `finish`');
     expect(release).toContain('`auto_merge: false`');
     expect(release).toContain('never merge it');
     expect(body).toContain('Never merge the release PR into `main`');
     expect(body).toContain('the release PR of step 9');
+  });
+
+  describe('release review (#100)', () => {
+    const release = body.slice(body.indexOf('**Release.**'), body.indexOf('## Pause rules'));
+    const ref = fs.readFileSync(path.join(skillDir, 'references/release-review.md'), 'utf8');
+    const docs = fs.readFileSync(path.resolve(__dirname, '../../../docs/delivery.md'), 'utf8');
+
+    it('reviews the release diff with a fresh subagent before github-release finish', () => {
+      const review = release.indexOf('**Release review**');
+      expect(review).toBeGreaterThan(-1);
+      expect(review).toBeLessThan(release.indexOf('`github-release` and run `finish`'));
+      expect(release).toContain(
+        'a subagent with a fresh context loads `code-review`, role `review`',
+      );
+      expect(release).toContain('`git diff origin/main...origin/release/next`');
+      expect(release).toContain("acceptance criteria of the milestone's closed PBIs and Bugs");
+      expect(release).toContain('consistency across PBIs');
+      expect(release).toContain('`review.schema.json`');
+      expect(release).toContain('`references/release-review.md`');
+    });
+
+    it('skips the governance rules in the release review (#131)', () => {
+      expect(ref).toContain(
+        'Skip the governance rules (`references/governance.md` of `code-review`): do not run `Get-GovernanceMatches.ps1`, report no finding with `rule: "adr-missing"` or `rule: "spec-drift"`.',
+      );
+      expect(ref).toContain("Each PBI's own review (step 4) already applied the rules");
+    });
+
+    it('writes the release review file next to the review file of #53', () => {
+      expect(release).toContain('`<git-common-dir>/.agents/state/release-review-<milestone>.json`');
+      expect(ref).toContain('schema/deliver-release-review.schema.json');
+      expect(ref).toContain('git rev-parse --git-common-dir');
+    });
+
+    it('files one bug per blocking finding and opens no release PR', () => {
+      expect(release).toContain('one `[Bug] fix: …` issue per finding in the milestone');
+      expect(release).toContain('no release PR');
+      expect(release).toContain('`release: <n> blocking → #a, #b`');
+      for (const section of [
+        '## Description',
+        '## Reproduction',
+        '## Expected / Actual',
+        '## Acceptance Criteria',
+        'Related: #<PBI>',
+        'Found in release review round <round>',
+      ])
+        expect(ref).toContain(section);
+      expect(ref).toContain('--label bug --milestone <name>');
+      expect(ref).toContain('runs step 9 again');
+    });
+
+    it('links the bug to the PBI, not the PR GitHub appends to the squash subject', () => {
+      expect(ref).toContain('`fix: x (#103) (#116)`');
+      expect(ref).toContain('the first of the last two is the PBI');
+      expect(ref).not.toContain('the `(#<nr>)` at the end of the subject');
+      expect(ref).toContain(
+        'Only one → it may be the PR: `gh api repos/{owner}/{repo}/pulls/<nr>`',
+      );
+      expect(ref).toContain('`Closes #<nr>` of its body');
+      expect(ref).toContain('not found (404) → `<nr>` is the PBI');
+    });
+
+    it('caps the rounds at 2 by the marker in the bug bodies, a third pauses', () => {
+      expect(release).toContain('At most 2 release-review rounds per milestone');
+      expect(release).toContain('a third with blocking findings is a pause');
+      expect(ref).toContain(
+        '`round` = 1 + the highest `<n>` of a line `Found in release review round <n>`',
+      );
+      expect(ref).toContain('`round` ≤ 2: file one bug per finding');
+      expect(ref).toContain('`round` > 2: a pause instead of more bugs');
+      expect(ref).toContain("comment the findings on the milestone's last closed PBI");
+      expect(ref).toContain('add `needs-decision` to it');
+    });
+
+    it('asks before filing in interactive mode, files without asking unattended', () => {
+      expect(release).toContain('interactive: show them and ask first');
+      expect(ref).toContain('Interactive: show the findings first and ask');
+      expect(ref).toContain('Unattended: file them without asking');
+    });
+
+    it('passes up to 5 notes to the release PR when nothing blocks', () => {
+      expect(release).toContain('`finish` with `release_review_notes` (the `notes[]`, up to 5)');
+      expect(ref).toContain('`## Release review notes`');
+    });
+
+    it('uses the release-review role for the subagent', () => {
+      expect(body).toContain('`release-review` entries of `deliver.roles`');
+      expect(ref).toContain('role `release-review`');
+      expect(roles).toMatch(/\| `release-review` +\| opus +\| high +\|/);
+    });
+
+    it('docs/delivery.md describes the release review', () => {
+      expect(docs).toContain('## Release review');
+      expect(docs).toContain('`release-review`');
+      expect(docs).toContain('Found in release review round <n>');
+      expect(docs).toContain('`## Release review notes`');
+    });
   });
 
   it('keeps CI watch output unbuffered', () => {
@@ -265,7 +389,10 @@ describe('deliver SKILL.md', () => {
       expect(claim).toContain(
         'gh api repos/{owner}/{repo}/branches/<branch> --jq .commit.commit.committer.date',
       );
-      expect(claim).toContain('gh pr list --head <branch> --state open --json number,updatedAt');
+      expect(claim).toContain(
+        `gh api "repos/{owner}/{repo}/pulls?head=<owner>:<branch>&state=open" --jq '.[] | {number, updated_at}'`,
+      );
+      expect(claim).not.toContain('gh pr list --head');
     });
 
     it('continues a PBI named directly regardless of the claim', () => {
@@ -417,7 +544,18 @@ describe('config schema deliver key', () => {
 
   it('knows exactly the roles of references/roles.md', () => {
     expect(roleNames.sort()).toEqual(
-      ['ci', 'create', 'fix', 'gate', 'implement', 'plan', 'pr', 'review', 'select'].sort(),
+      [
+        'ci',
+        'create',
+        'fix',
+        'gate',
+        'implement',
+        'plan',
+        'pr',
+        'release-review',
+        'review',
+        'select',
+      ].sort(),
     );
   });
 
@@ -426,5 +564,60 @@ describe('config schema deliver key', () => {
       (r) => schema.properties.deliver.properties.roles.properties[r].$ref === '#/$defs/tieredRole',
     );
     expect(tiered.sort()).toEqual(['fix', 'implement']);
+  });
+
+  describe('governance (#87)', () => {
+    const gov = fs.readFileSync(path.join(skillDir, 'references/governance.md'), 'utf8');
+    const docs = fs.readFileSync(path.resolve(__dirname, '../../../docs/delivery.md'), 'utf8');
+    const body = text.slice(text.indexOf('\n---', 3) + 4);
+    const sect = (a: string, b: string) => body.slice(body.indexOf(a), body.indexOf(b));
+
+    it('points to the reference with one line', () => {
+      expect(body).toMatch(/has `governance`: load `references\/governance\.md`/);
+      expect(gov).toMatch(/Loaded only when `\.agents\/config\.json` has the `governance` key/);
+    });
+
+    it('the review prompt passes the branch as -Head (#98)', () => {
+      expect(sect('4. **Review.**', '5. **')).toContain(
+        '`Get-GovernanceMatches.ps1 -Head origin/<branch>`',
+      );
+    });
+
+    it('the reference defines the decision PBI and the human steps', () => {
+      expect(gov).toContain('`needs-decision`');
+      expect(gov).toContain('ADR (the next free ADR number) with Status: Proposed');
+      expect(gov).toMatch(/never writes the ADR/);
+      expect(gov).toMatch(
+        /writes the ADR with the `adr` skill, accepts it, removes `needs-decision` and merges/,
+      );
+      expect(gov).toContain('`gh issue close <nr> --comment "Decided in #<pr>"`');
+      expect(docs).toContain('`gh issue close <nr> --comment "Decided in #<pr>"`');
+      expect(gov).toContain('spec_notes');
+    });
+
+    it('Select reports the decision hint and the report lists it as paused', () => {
+      expect(sect('1. **Select.**', '2. **Resume.**')).toContain(
+        '`#<nr> select: decision, write the ADR with adr`',
+      );
+      expect(sect('## Report', '## Rules')).toContain('decision, write the ADR with adr');
+    });
+
+    it('step 4 passes labels and notes, step 6 passes spec_notes', () => {
+      const s4 = sect('4. **Review.**', '5. **Fix.**');
+      expect(s4).toMatch(/issue labels <labels> and implementer `notes\[\]`/);
+      const s6 = sect('6. **PR.**', '7. **CI.**');
+      expect(s6).toMatch(
+        /`spec_notes` \(the implementer `notes\[\]` lines starting with `no spec change needed:`\)/,
+      );
+    });
+
+    it('docs/delivery.md describes the decision PBI and the spec note', () => {
+      expect(docs).toContain('## Decision PBIs and spec notes');
+      expect(docs).toContain('`## Spec`');
+    });
+
+    it('stays within 100 lines', () => {
+      expect(text.split('\n').length).toBeLessThanOrEqual(100);
+    });
   });
 });

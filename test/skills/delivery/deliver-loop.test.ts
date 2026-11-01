@@ -56,14 +56,15 @@ describe.skipIf(!hasPwsh || process.platform === 'win32')('Invoke-DeliverLoop.ps
         const s = JSON.parse(fs.readFileSync(${JSON.stringify(state)}, 'utf8'));
         const a = call.args;
         const get = (n) => { if (!s.issues[n]) throw new Error('no issue ' + n); return s.issues[n]; };
-        if (a[0] === 'issue' && a[1] === 'view') {
-          const i = get(a[2]);
-          return { rest: { number: Number(a[2]), state: i.state || 'OPEN', labels: (i.labels || []).map((name) => ({ name })) } };
+        let m = /^repos\\/\\{owner\\}\\/\\{repo\\}\\/issues\\/(\\d+)$/.exec(a[1] || '');
+        if (a[0] === 'api' && m) {
+          const i = get(m[1]);
+          return { rest: { number: Number(m[1]), state: (i.state || 'OPEN').toLowerCase(), labels: (i.labels || []).map((name) => ({ name })) } };
         }
         if (a[0] === 'issue' && a[1] === 'list') {
           return { rest: (s.milestones[a[a.indexOf('--milestone') + 1]] || []).map((number) => ({ number })) };
         }
-        let m = /issues\\/(\\d+)\\/sub_issues/.exec(a[1] || '');
+        m = /issues\\/(\\d+)\\/sub_issues/.exec(a[1] || '');
         if (m) return { rest: (get(m[1]).children || []).map((number) => ({ number })) };
         m = /issues\\/(\\d+)\\/dependencies\\/blocked_by/.exec(a[1] || '');
         if (m) return { rest: get(m[1]).blockers || [] };
@@ -75,7 +76,7 @@ describe.skipIf(!hasPwsh || process.platform === 'win32')('Invoke-DeliverLoop.ps
       path.join(cwd, 'effect.js'),
       `const fs = require('fs'); const f = ${JSON.stringify(state)};
 const s = JSON.parse(fs.readFileSync(f, 'utf8'));
-const first = Object.keys(s.issues).map(Number).find((n) => (s.issues[n].state || 'OPEN') === 'OPEN' && !(s.issues[n].labels || []).some((l) => l.startsWith('needs-') || l === 'interactive') && !(s.issues[n].blockers || []).some((b) => b.state === 'open') && (s.issues[n].labels || []).includes('pbi'));
+const first = Object.keys(s.issues).map(Number).find((n) => (s.issues[n].state || 'OPEN') === 'OPEN' && !(s.issues[n].labels || []).some((l) => l.startsWith('needs-') || l === 'interactive') && !(s.issues[n].blockers || []).some((b) => b.state === 'open') && ['pbi', 'bug'].some((l) => (s.issues[n].labels || []).includes(l)));
 if (s.effect === 'close-first') s.issues[first].state = 'CLOSED';
 if (s.effect === 'hold-first') s.issues[first].labels.push('needs-decision');
 fs.writeFileSync(f, JSON.stringify(s));`,
@@ -132,6 +133,18 @@ fs.writeFileSync(f, JSON.stringify(s));`,
   });
 
   describe('stop rules', () => {
+    it('selects an open bug of the milestone like a PBI (#103)', async () => {
+      const gh = setup({
+        issues: { 20: { labels: ['bug'] } },
+        milestones: { '0.13': [20] },
+        effect: 'close-first',
+      });
+      const r = await run(gh, ['-Milestone', '0.13', '-Max', '1']);
+      expect(r.status).toBe(0);
+      expect(claudeCalls()).toHaveLength(1);
+      expect(r.stdout).toContain('loop result: done');
+    });
+
     it('-Milestone -Max 1 delivers exactly one PBI in one fresh process and stops', async () => {
       const gh = setup({
         issues: { 10: pbi({ blockers: [{ number: 5, state: 'closed' }] }), 11: pbi() },

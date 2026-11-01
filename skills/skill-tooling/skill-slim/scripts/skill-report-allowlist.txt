@@ -9,3 +9,7 @@ skills-install: dotnet-pinvoke
 ng-implementation: ng-template
 # deliver-log is the label of the herdr log pane of Invoke-DeliverLoop.ps1, not a skill
 deliver: deliver-log
+# docs/adr is the default ADR directory of the target repository, not a file of the skill
+adr: docs/adr
+# adr-missing is a review rule id of references/governance.md, not a skill
+code-review: adr-missing
