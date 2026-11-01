@@ -1,6 +1,7 @@
 import { describe, it, expect } from 'vitest';
 import * as fs from 'node:fs';
 import * as path from 'node:path';
+import { expectSkillHelp } from '../../helpers/skill-help';
 
 const text = fs.readFileSync(
   path.resolve(__dirname, '../../../skills/delivery/retro/SKILL.md'),
@@ -170,5 +171,21 @@ describe('retro SKILL.md', () => {
     for (const term of ['<state>', 'ledger', 'Get-RunMetrics']) {
       expect(text).not.toContain(term);
     }
+  });
+});
+
+describe('retro help', () => {
+  it('follows the help convention', () => {
+    expectSkillHelp(path.resolve(__dirname, '../../../skills/delivery/retro'));
+  });
+
+  it('covers drafts, proposed lessons and approval', () => {
+    const help = fs.readFileSync(
+      path.resolve(__dirname, '../../../skills/delivery/retro/references/help.md'),
+      'utf8',
+    );
+    expect(help).toContain('status: proposed');
+    expect(help).toContain('#<issue>');
+    expect(help).toContain('approve');
   });
 });

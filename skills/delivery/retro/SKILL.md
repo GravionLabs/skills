@@ -10,6 +10,8 @@ Retrospective on a finished run. You improve the agent **environment** (steering
 
 ## Input
 
+`help` (or `--help`, `-h`): print `references/help.md` unchanged, nothing else.
+
 Issue number (`retro 197`), session id, or nothing = the newest run.
 
 ## Steps
