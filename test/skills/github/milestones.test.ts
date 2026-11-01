@@ -251,7 +251,14 @@ describe('Get-Milestones.ps1', () => {
         FAKE_ISSUE_PAGES: {
           7: [
             [full(12), full(11, { pull_request: {} })],
-            [full(13, { state: 'closed', labels: [{ name: 'bug' }], assignees: [] })],
+            [
+              full(13, {
+                state: 'closed',
+                closed_at: '2026-10-01T10:00:00Z',
+                labels: [{ name: 'bug' }],
+                assignees: [],
+              }),
+            ],
           ],
         },
       });
@@ -261,6 +268,7 @@ describe('Get-Milestones.ps1', () => {
           number: 12,
           title: 'issue 12',
           state: 'open',
+          closed_at: null,
           body: 'body 12',
           labels: ['pbi'],
           assignees: ['me'],
@@ -269,6 +277,7 @@ describe('Get-Milestones.ps1', () => {
           number: 13,
           title: 'issue 13',
           state: 'closed',
+          closed_at: '2026-10-01T10:00:00Z',
           body: 'body 13',
           labels: ['bug'],
           assignees: [],

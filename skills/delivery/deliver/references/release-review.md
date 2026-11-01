@@ -23,7 +23,7 @@ After the round this session writes `<git-common-dir>/.agents/state/release-revi
 
 ## Pause marker
 
-The marker is state in GitHub: the label `needs-decision` on a closed PBI or Bug of the milestone (the milestone's last closed one, highest `closedAt` of the list above). Record it with a comment on that issue, then `gh issue edit <nr> --add-label needs-decision`. Comment:
+The marker is state in GitHub: the label `needs-decision` on a closed PBI or Bug of the milestone (the milestone's last closed one, highest `closed_at` of the list above). Record it with a comment on that issue, then `gh issue edit <nr> --add-label needs-decision`. Comment:
 
 ```markdown
 Release review of milestone <name> paused in round 3: <n> blocking findings (`file:line` title, one per line).
@@ -33,7 +33,7 @@ Two ways on:
 2. Accept the findings: run `github-release` `finish` with them as `release_review_notes`.
 ```
 
-Step 9 reads the marker from the list it already holds (`-State all`): a closed issue labeled `pbi` or `bug` and `needs-decision` → skip the review, print `release: paused in round 3, waits for a decision`, no comment, no release PR. Removing the label lifts the pause. `Invoke-DeliverLoop.ps1` reports such a milestone as `blocked`, not `done`.
+Step 9 reads the marker from the one `-State all` read of the milestone (`SKILL.md` step 9): a closed issue labeled `pbi` or `bug` and `needs-decision` → skip the review, print `release: paused in round 3, waits for a decision`, no comment, no release PR. Removing the label lifts the pause. `Invoke-DeliverLoop.ps1` reports such a milestone as `blocked`, not `done`.
 
 Per finding: `gh issue create --title "[Bug] fix: <title>" --label bug --milestone <name> --body-file <file>`. The PBI is the one whose squash commit last touched the file: `git log origin/main..origin/release/next -1 --format=%s -- <file>`. A squash subject ends with the PBI and then the PR GitHub appends (`fix: x (#103) (#116)`): two or more `(#<nr>)` → the first of the last two is the PBI. Only one → it may be the PR: `gh api repos/{owner}/{repo}/pulls/<nr>` found → the PBI is the `(#<nr>)` of its title or the `Closes #<nr>` of its body; not found (404) → `<nr>` is the PBI. None → leave out the `Related:` line. Body:
 

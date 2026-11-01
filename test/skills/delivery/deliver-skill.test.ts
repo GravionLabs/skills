@@ -153,7 +153,7 @@ describe('deliver SKILL.md', () => {
   it('ends a fully delivered milestone with the release PR for human review (#78)', () => {
     const release = body.slice(body.indexOf('**Release.**'), body.indexOf('## Pause rules'));
     expect(release).toContain('Only with `--milestone`');
-    expect(release).toContain('the same read, filtered to `pbi` and `bug`, returns none');
+    expect(release).toContain('No open issue labeled `pbi` or `bug` in it');
     expect(release).not.toContain('gh issue list');
     expect(release).toContain('`github-release` and run `finish`');
     expect(release).toContain('`auto_merge: false`');
@@ -172,6 +172,16 @@ describe('deliver SKILL.md', () => {
       expect(ref).toContain('Collect the criteria from that list');
       expect(ref).not.toContain('gh issue list');
       expect(ref).not.toContain('--search');
+    });
+
+    it('step 9 and the reference share one -State all read, marker picked by closed_at (#155)', () => {
+      const read = 'Get-Milestones.ps1 -Mode issues -Name <name> -State all';
+      expect(release).toContain(read);
+      expect(ref).toContain(read);
+      expect(ref).toContain('the one `-State all` read of the milestone');
+      expect(release).toContain('the marker, the round count and the criteria');
+      expect(ref).toContain('highest `closed_at`');
+      expect(ref).not.toContain('closedAt');
     });
 
     it('reviews the release diff with a fresh subagent before github-release finish', () => {
