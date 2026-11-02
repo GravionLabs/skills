@@ -166,6 +166,8 @@ fs.writeFileSync(f, JSON.stringify(s));`,
       ]);
       expect(JSON.parse(read('state.json')).issues[10].state).toBe('CLOSED');
       expect(r.stdout).toContain('loop result: done');
+      // redirected stdout stays plain text
+      expect(r.stdout).not.toContain(String.fromCharCode(27));
       const paths = gh.calls().map((c) => c.args.join(' '));
       expect(paths.filter((c) => c.includes('/issues?milestone='))).toHaveLength(3); // the state read before and after the one iteration; the closed list is read once for the done check
       expect(
@@ -311,7 +313,9 @@ fs.writeFileSync(f, JSON.stringify(s));`,
       expect(lines).toMatch(/\d\d:\d\d:\d\d \[Review PBI #401 diff\] Bash git diff/);
       expect(lines).toMatch(/\d\d:\d\d:\d\d Read src\/a\.ts/);
       expect(lines).toMatch(/\d\d:\d\d:\d\d ✗ boom/);
-      expect(r.stdout).toContain('[Review PBI #401 diff] Bash git diff');
+      // stdout is a terminal (DELIVER_LOOP_ASSUME_TTY): the colored line of the .ansi.log
+      const ESC = String.fromCharCode(27);
+      expect(r.stdout).toContain(`[Review PBI #401 diff] ${ESC}[36mBash${ESC}[0m git diff`);
       const runDirs = fs.readdirSync(path.join(cwd, '.agents/deliver-loop'));
       expect(runDirs).toHaveLength(1);
       const jsonl = fs
@@ -333,7 +337,6 @@ fs.writeFileSync(f, JSON.stringify(s));`,
       ]);
       expect(calls.join('\n')).not.toContain('display-agent');
       // -NoPane: opens no pane (a TTY and a herdr pane are present); the plain log has no escape codes, the ANSI log is colored
-      const ESC = String.fromCharCode(27);
       expect(read('herdr-calls.txt')).not.toContain('pane list');
       expect(lines).not.toContain(ESC);
       const ansi = read('.agents/deliver-loop.ansi.log');
