@@ -9,9 +9,14 @@ const skill = fs.readFileSync(
 const doc = fs.readFileSync(path.join(root, 'docs/usage/statusline.md'), 'utf-8');
 
 describe('context-statusline SKILL.md (#773)', () => {
-  it('stays within 37 lines and keeps install commands, "What you get" and Rules', () => {
-    expect(skill.trimEnd().split('\n').length).toBeLessThanOrEqual(37);
-    for (const k of ['Install-Statusline.ps1 -WhatIf', '## What you get', '## Rules']) {
+  it('stays within 45 lines and keeps install commands, "What you get" and Rules', () => {
+    expect(skill.trimEnd().split('\n').length).toBeLessThanOrEqual(45);
+    for (const k of [
+      'Install-Statusline.ps1 -WhatIf',
+      '## What you get',
+      '## Context warning hook',
+      '## Rules',
+    ]) {
       expect(skill).toContain(k);
     }
   });

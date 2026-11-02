@@ -51,7 +51,7 @@
     },
     {
       "name": "statusline",
-      "description": "Context status line and subagent status line for Claude Code and Copilot CLI (context-statusline).",
+      "description": "Context status line, subagent status line and context warning hook for Claude Code and Copilot CLI (context-statusline).",
       "source": "./",
       "strict": false,
       "skills": [

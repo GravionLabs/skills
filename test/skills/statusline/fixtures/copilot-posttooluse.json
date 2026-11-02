@@ -1,0 +1,19 @@
+{
+  "sessionId": "00000000-0000-4000-8000-000000000001",
+  "timestamp": 1791685064127,
+  "cwd": "/home/user/project",
+  "toolName": "bash",
+  "toolArgs": {
+    "command": "gh api repos/example/repo/branches --paginate --jq '.[].name'",
+    "description": "Check repository branches on GitHub"
+  },
+  "toolResult": {
+    "textResultForLlm": "main\nrelease/2.1\n",
+    "resultType": "success",
+    "sessionLog": "main\nrelease/2.1\n",
+    "toolTelemetry": {
+      "properties": { "executionMode": "sync" },
+      "metrics": { "commandTimeout": 30000.0 }
+    }
+  }
+}

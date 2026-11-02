@@ -31,7 +31,7 @@ A group is a folder `skills/<group>/` and a plugin in [`.claude-plugin/marketpla
 | `rust`          | `rust-implementation`, `rust-test`                                                                                                                                                                        |
 | `go`            | `go-implementation`, `go-test`                                                                                                                                                                            |
 | `ng`            | `ng-implementation`, `ng-test`, `ng-create-project`, `ng-ag-grid-developer`; `skills-install` adds `angular/skills` (`angular-developer`)                                                                 |
-| `statusline`    | `context-statusline`: status line and subagent status line                                                                                                                                                |
+| `statusline`    | `context-statusline`: status line, subagent line, warning hook                                                                                                                                            |
 | `skill-tooling` | `skill-write`, `skill-audit`, `skill-slim` (contributor tooling)                                                                                                                                          |
 
 Presets of `skills-install`: `core` (`shared`, `github`, `delivery`, `statusline`) and `all` (every group except `skill-tooling`).

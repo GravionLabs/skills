@@ -325,7 +325,12 @@ const cmdPath = (dir: string) => (/\s/.test(dir) ? `"${dir}"` : dir);
 const deploy = (root: string, clientDir: string) => {
   const dst = path.join(root, clientDir, 'skills', 'context-statusline', 'scripts');
   fs.mkdirSync(dst, { recursive: true });
-  for (const f of ['statusline.mjs', 'subagent-statusline.mjs', 'Install-Statusline.ps1'])
+  for (const f of [
+    'statusline.mjs',
+    'subagent-statusline.mjs',
+    'context-warning.sh',
+    'Install-Statusline.ps1',
+  ])
     fs.copyFileSync(path.join(DIR, f), path.join(dst, f));
   return path.join(dst, 'Install-Statusline.ps1');
 };
@@ -382,6 +387,10 @@ describe.skipIf(!hasPwsh || !posix)('Install-Statusline.ps1', () => {
     const backups = () =>
       fs.readdirSync(path.dirname(settings)).filter((f) => f.startsWith('settings.json.bak-'));
     const ours = (f: string) => ({ type: 'command', command: `node ${cmdPath(DIR)}/${f}` });
+    const hookCmd = `bash ${cmdPath(DIR)}/context-warning.sh`;
+    const hook = (command = hookCmd) => ({
+      UserPromptSubmit: [{ hooks: [{ type: 'command', command, timeout: 5 }] }],
+    });
     const old = (f: string) => ({
       type: 'command',
       command: `node ~/.claude/apm-hub/statusline/${f}`,
@@ -394,6 +403,7 @@ describe.skipIf(!hasPwsh || !posix)('Install-Statusline.ps1', () => {
       expect(read()).toEqual({
         statusLine: ours('statusline.mjs'),
         subagentStatusLine: ours('subagent-statusline.mjs'),
+        hooks: hook(),
       });
       expect(fs.existsSync(oldCopy)).toBe(false);
       expect(fs.readdirSync(path.join(home, '.claude'))).toEqual(['settings.json']);
@@ -412,6 +422,7 @@ describe.skipIf(!hasPwsh || !posix)('Install-Statusline.ps1', () => {
           type: 'command',
           command: 'node ~/.claude/skills/context-statusline/scripts/subagent-statusline.mjs',
         },
+        hooks: hook('bash ~/.claude/skills/context-statusline/scripts/context-warning.sh'),
       });
     });
 
@@ -466,6 +477,7 @@ describe.skipIf(!hasPwsh || !posix)('Install-Statusline.ps1', () => {
         statusLine: ours('statusline.mjs'),
         x: 1,
         subagentStatusLine: ours('subagent-statusline.mjs'),
+        hooks: hook(),
       });
       expect(fs.existsSync(oldCopy)).toBe(false);
       expect((await install()).stdout).toContain('Up to date');
@@ -487,7 +499,52 @@ describe.skipIf(!hasPwsh || !posix)('Install-Statusline.ps1', () => {
         statusLine: ours('statusline.mjs'),
         x: 1,
         subagentStatusLine: ours('subagent-statusline.mjs'),
+        hooks: hook(),
       });
+    });
+
+    it('registers the UserPromptSubmit hook next to foreign hooks and keeps them on uninstall', async () => {
+      const foreign = { hooks: [{ type: 'command', command: 'bash ~/mine.sh' }] };
+      const stop = [{ hooks: [{ type: 'command', command: 'echo stop' }] }];
+      fs.writeFileSync(
+        settings,
+        JSON.stringify({ hooks: { UserPromptSubmit: [foreign], Stop: stop } }),
+      );
+      expect((await install()).status).toBe(0);
+      expect(read().hooks).toEqual({
+        UserPromptSubmit: [foreign, hook().UserPromptSubmit[0]],
+        Stop: stop,
+      });
+      expect((await install()).stdout).toContain('Up to date');
+      expect((await install('-Uninstall')).status).toBe(0);
+      expect(read()).toEqual({ hooks: { UserPromptSubmit: [foreign], Stop: stop } });
+    });
+
+    it('rewrites a hook command that points elsewhere instead of adding a second entry', async () => {
+      fs.writeFileSync(
+        settings,
+        JSON.stringify({
+          hooks: hook('bash /elsewhere/context-statusline/scripts/context-warning.sh'),
+        }),
+      );
+      expect((await install()).status).toBe(0);
+      expect(read().hooks).toEqual(hook());
+    });
+
+    it('-NoContextWarning installs the status lines without the hook', async () => {
+      expect((await install('-NoContextWarning')).status).toBe(0);
+      expect(read()).toEqual({
+        statusLine: ours('statusline.mjs'),
+        subagentStatusLine: ours('subagent-statusline.mjs'),
+      });
+    });
+
+    it('fails when hooks has the wrong shape, without touching the file', async () => {
+      fs.writeFileSync(settings, '{"hooks":{"UserPromptSubmit":"x"}}');
+      const r = await install();
+      expect(r.status).not.toBe(0);
+      expect(r.stderr).toContain('not an array');
+      expect(fs.readFileSync(settings, 'utf8')).toBe('{"hooks":{"UserPromptSubmit":"x"}}');
     });
 
     it('fails on invalid JSON without touching the file', async () => {
@@ -554,6 +611,9 @@ describe.skipIf(!hasPwsh || !posix)('Install-Statusline.ps1', () => {
     const sp = (base: string) => path.join(base, 'settings.json');
     const read = (base: string) => JSON.parse(fs.readFileSync(sp(base), 'utf8'));
     const entry = { type: 'command', command: `node ${cmdPath(DIR)}/statusline.mjs`, padding: 1 };
+    const hooks = (bash = `bash ${cmdPath(DIR)}/context-warning.sh`) => ({
+      postToolUse: [{ type: 'command', bash, timeoutSec: 5 }],
+    });
 
     it('installs under ~/.copilot with the feature flag, no subagent entry and no copy', async () => {
       const r = await install({});
@@ -562,6 +622,7 @@ describe.skipIf(!hasPwsh || !posix)('Install-Statusline.ps1', () => {
       expect(read(base)).toEqual({
         statusLine: entry,
         feature_flags: { enabled: ['STATUS_LINE'] },
+        hooks: hooks(),
       });
       expect(fs.readdirSync(base)).toEqual(['settings.json']);
       expect(fs.existsSync(path.join(home, '.claude'))).toBe(false);
@@ -603,6 +664,7 @@ describe.skipIf(!hasPwsh || !posix)('Install-Statusline.ps1', () => {
         model: 'x',
         feature_flags: { enabled: ['OTHER', 'STATUS_LINE'], disabled: ['D'] },
         statusLine: entry,
+        hooks: hooks(),
       });
       const r = await install({ COPILOT_HOME: chome });
       expect(r.stdout).toContain('Up to date');
@@ -647,6 +709,19 @@ describe.skipIf(!hasPwsh || !posix)('Install-Statusline.ps1', () => {
       expect(read(chome).statusLine).toEqual(entry);
     });
 
+    it('keeps foreign postToolUse hooks, honors -NoContextWarning and uninstalls only ours', async () => {
+      fs.mkdirSync(chome);
+      const foreign = { type: 'command', bash: 'echo hi' };
+      fs.writeFileSync(sp(chome), JSON.stringify({ hooks: { postToolUse: [foreign] } }));
+      expect((await install({ COPILOT_HOME: chome }, '-NoContextWarning')).status).toBe(0);
+      expect(read(chome).hooks).toEqual({ postToolUse: [foreign] });
+      expect((await install({ COPILOT_HOME: chome })).status).toBe(0);
+      expect(read(chome).hooks.postToolUse).toEqual([foreign, hooks().postToolUse[0]]);
+      expect((await install({ COPILOT_HOME: chome })).stdout).toContain('Up to date');
+      expect((await install({ COPILOT_HOME: chome }, '-Uninstall')).status).toBe(0);
+      expect(read(chome).hooks).toEqual({ postToolUse: [foreign] });
+    });
+
     it('-WhatIf changes nothing', async () => {
       expect((await install({ COPILOT_HOME: chome }, '-WhatIf')).status).toBe(0);
       expect(fs.existsSync(chome)).toBe(false);
@@ -659,6 +734,7 @@ describe.skipIf(!hasPwsh || !posix)('Install-Statusline.ps1', () => {
       await install({ COPILOT_HOME: chome });
       expect((await install({ COPILOT_HOME: chome }, '-Uninstall')).status).toBe(0);
       expect(read(chome)).toEqual({ keep: 1, feature_flags: { enabled: ['STATUS_LINE'] } });
+      expect(read(chome).hooks).toBeUndefined();
       expect(fs.existsSync(path.join(chome, 'apm-hub'))).toBe(false);
     });
 
@@ -671,8 +747,18 @@ describe.skipIf(!hasPwsh || !posix)('Install-Statusline.ps1', () => {
           type: 'command',
           command: `node ${cmdPath(DIR)}/subagent-statusline.mjs`,
         },
+        hooks: {
+          UserPromptSubmit: [
+            {
+              hooks: [
+                { type: 'command', command: `bash ${cmdPath(DIR)}/context-warning.sh`, timeout: 5 },
+              ],
+            },
+          ],
+        },
       });
       expect(read(chome).statusLine).toEqual(entry);
+      expect(read(chome).hooks).toEqual(hooks());
     });
 
     it("-Client all from a ~/.claude deployment uses each client's own deployment", () => {
