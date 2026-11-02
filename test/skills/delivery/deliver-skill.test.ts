@@ -363,8 +363,9 @@ describe('deliver SKILL.md', () => {
     });
 
     it('documents a sidebar layout with the tokens without writing the config (#16)', () => {
-      expect(herdr).toContain('rows = [\n  ["state_icon", { token = "tab", bold = true }');
-      expect(herdr).toContain('["agent", "workspace"],');
+      expect(herdr).toContain('rows = [\n  ["state_icon", { token = "workspace", bold = true }');
+      expect(herdr).toContain('[{ token = "agent", dim = true }, "terminal_title_stripped"],');
+      expect(herdr).not.toContain('{ token = "tab", bold = true }');
       for (const t of ['$deliver', '$deliver_step', '$deliver_pr']) expect(herdr).toContain(t);
       for (const alt of ['compact two-line', '`deliver` line first', '`row_gap = 1`']) {
         expect(herdr).toContain(alt);
