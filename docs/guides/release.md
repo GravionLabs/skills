@@ -87,10 +87,10 @@ Settings, in the UI under **Settings > Rules > Rulesets > New ruleset > New bran
 
 - Name `release/next`, enforcement **Active**.
 - **Bypass list**: empty (no bypass for admins, apps or roles).
-- **Target branches**: add target, include by pattern `release/**` (or exactly `release/next`).
+- **Target branches**: add target, include exactly `refs/heads/release/next` (a `release/**` pattern would also cover `release/<x.y>` maintenance branches).
 - **Require a pull request before merging**, allowed merge methods **Squash** only (PBI branches squash into the release branch).
 - **Require status checks to pass**: add your CI checks by name; leave "Require branches to be up to date" off unless you want a rebase per PBI.
-- **Block force pushes** and **Restrict deletions** on. Deleting the branch after a release is done by the owner (`git push origin --delete release/next`) or by `cut` with a bypass-free delete rule check, so lift the deletion rule only if you want `cut` to recreate it unattended.
+- **Block force pushes** on. Leave **Restrict deletions** off: `github-release cut` (recreate) and `finish` (delete branch) run `git push origin --delete release/next`, and with an empty bypass list a deletion rule would reject them.
 
 The same through the API (replace `build` with your check names; `integration_id` is optional):
 
@@ -101,7 +101,7 @@ gh api repos/{owner}/{repo}/rulesets --method POST --input - <<'JSON'
   "target": "branch",
   "enforcement": "active",
   "bypass_actors": [],
-  "conditions": { "ref_name": { "include": ["refs/heads/release/**"], "exclude": [] } },
+  "conditions": { "ref_name": { "include": ["refs/heads/release/next"], "exclude": [] } },
   "rules": [
     { "type": "non_fast_forward" },
     { "type": "pull_request",
