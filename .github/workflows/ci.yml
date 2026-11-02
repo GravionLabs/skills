@@ -34,7 +34,7 @@ jobs:
         run: echo "version=$(cat .nvmrc)" >> "$GITHUB_OUTPUT"
 
       - name: Set up Node and pnpm
-        uses: GravionLabs/ci/node/setup@6fea556f186018034aa4144a9aa3968b256f1579 # v1.5.0
+        uses: GravionLabs/ci/node/setup@v1
         with:
           node-version: ${{ steps.node.outputs.version }}
           package-manager: pnpm
@@ -69,7 +69,7 @@ jobs:
       - name: Build docs site
         run: pnpm --filter site build
 
-  # One Vitest project, one job. GravionLabs/ci/node/test@main is not used: its artifact and check names are fixed.
+  # One Vitest project, one job. GravionLabs/ci/node/test@v1 is not used: its artifact and check names are fixed.
   test:
     name: Test
     runs-on: ubuntu-latest
@@ -90,7 +90,7 @@ jobs:
         run: echo "version=$(cat .nvmrc)" >> "$GITHUB_OUTPUT"
 
       - name: Set up Node and pnpm
-        uses: GravionLabs/ci/node/setup@6fea556f186018034aa4144a9aa3968b256f1579 # v1.5.0
+        uses: GravionLabs/ci/node/setup@v1
         with:
           node-version: ${{ steps.node.outputs.version }}
           package-manager: pnpm
@@ -159,7 +159,7 @@ jobs:
       # Conventional Commit bump (input conventional-commits, default true since GravionLabs/ci v1.4.0, ci#107)
       - name: Determine version
         id: version
-        uses: GravionLabs/ci/versioning/determine-version@v1.5.0
+        uses: GravionLabs/ci/versioning/determine-version@v1
         with:
           gitversion-config-file: GitVersion.yml
 
@@ -183,7 +183,7 @@ jobs:
           token: ${{ secrets.GH_PAT || github.token }}
 
       - name: Create GitHub Release
-        uses: GravionLabs/ci/versioning/gh-release@main
+        uses: GravionLabs/ci/versioning/gh-release@v1
         with:
           token: ${{ secrets.GH_PAT || github.token }}
           version: ${{ needs.determine-version.outputs.semver }}
