@@ -8,8 +8,9 @@
   labels needs-decision / needs-refinement / interactive (deliver skips interactive PBIs unattended). No change stops
   the loop ("no progress"); nothing open means done (unless a closed PBI of the milestone carries needs-decision, the paused release review: blocked); open PBIs that all wait on an open blocker or a label mean blocked.
   Observability: every stream record goes to .agents/deliver-loop/<run>/<nr>.jsonl (<nr> is the first PBI that was ready
-  at the start of the iteration), a summary line per step to .agents/deliver-loop.log (plain) and stdout, the same line
-  with ANSI colors to .agents/deliver-loop.ansi.log, desktop notifications for the attention steps (macOS osascript,
+  at the start of the iteration), a summary line per step to .agents/deliver-loop.log (plain), the same line with ANSI
+  colors to .agents/deliver-loop.ansi.log and to stdout (plain when stdout is redirected; long text is cut to the
+  terminal width, 120 characters when redirected), desktop notifications for the attention steps (macOS osascript,
   Windows toast), the herdr pane tokens deliver, deliver_step, deliver_pr when HERDR_ENV=1 and, in herdr on a terminal, a split pane labeled deliver-log
   below the session that tails the log (LogPane.ps1; never closed by the loop).
   Run it from the repository root. Exit code: 0 done or max reached, 1 no progress, 2 blocked, 64 bad arguments.
@@ -27,7 +28,7 @@
 .PARAMETER NoPane
   Opens no herdr log pane.
 .PARAMETER NoColor
-  Writes no .ansi.log (as does a non-empty NO_COLOR); the pane tails the plain log.
+  Writes no .ansi.log and plain stdout (as does a non-empty NO_COLOR); the pane tails the plain log.
 #>
 [CmdletBinding()]
 param(
@@ -54,6 +55,8 @@ $LogFile = Join-Path (Get-Location) '.agents/deliver-loop.log'
 $AnsiFile = if ($NoColor -or $env:NO_COLOR) { '' } else { Join-Path (Get-Location) '.agents/deliver-loop.ansi.log' }
 $Esc = [char]27
 $Ansi = @{ dim = "$Esc[2m"; cyan = "$Esc[36m"; red = "$Esc[31m"; yellow = "$Esc[33m"; green = "$Esc[32m"; reset = "$Esc[0m" }
+# stdout gets the colors of the .ansi.log when it is a terminal (DELIVER_LOOP_ASSUME_TTY=1: tests only).
+$ColorStdout = $AnsiFile -and ((-not [Console]::IsOutputRedirected) -or $env:DELIVER_LOOP_ASSUME_TTY -eq '1')
 $RunDir = Join-Path (Get-Location) ".agents/deliver-loop/$((Get-Date).ToString('yyyyMMdd-HHmmss'))"
 $Recent = [System.Collections.Generic.List[string]]::new()
 $AgentNames = @{}
@@ -61,20 +64,22 @@ $Pane = if ($env:HERDR_ENV -eq '1') { $env:HERDR_PANE_ID } else { '' }
 
 . (Join-Path $PSScriptRoot 'LogPane.ps1')
 
-# One step: plain to the log and stdout; colored to the .ansi.log (time dim, $Tool cyan, the rest in $Color).
+# One step: plain to the log; colored to the .ansi.log and a terminal stdout (time dim, $Tool cyan, the rest in $Color).
 # $Tool is looked up from $ToolAt on (after the subagent prefix).
 function Write-Step([string]$text, [string]$Color = '', [string]$Tool = '', [int]$ToolAt = 0) {
   $time = (Get-Date).ToString('HH:mm:ss')
   $line = "$time $text"
   New-Item -ItemType Directory -Force -Path (Split-Path $LogFile) | Out-Null
   [IO.File]::AppendAllText($LogFile, $line + "`n")
+  $colored = $line
   if ($AnsiFile) {
     $body = if ($Color) { "$($Ansi[$Color])$text$($Ansi.reset)" } else { $text }
     $at = if ($Tool) { $text.IndexOf($Tool, $ToolAt) } else { -1 }
     if ($at -ge 0 -and -not $Color) { $body = $text.Substring(0, $at) + "$($Ansi.cyan)$Tool$($Ansi.reset)" + $text.Substring($at + $Tool.Length) }
-    [IO.File]::AppendAllText($AnsiFile, "$($Ansi.dim)$time$($Ansi.reset) $body`n")
+    $colored = "$($Ansi.dim)$time$($Ansi.reset) $body"
+    [IO.File]::AppendAllText($AnsiFile, $colored + "`n")
   }
-  Write-Host $line
+  Write-Host $(if ($ColorStdout) { $colored } else { $line })
   $Recent.Add($line)
   if ($Recent.Count -gt 10) { $Recent.RemoveAt(0) }
 }
@@ -179,7 +184,15 @@ function Get-StopReason($state) {
   return $null
 }
 
-function Get-Short([string]$s, [int]$n = 120) {
+# Room for a cut text: the terminal width minus time, agent prefix and tool name (40); 120 when stdout is redirected.
+function Get-LineWidth {
+  if ([Console]::IsOutputRedirected) { return 120 }
+  $w = try { [Console]::WindowWidth } catch { 0 }
+  return [Math]::Max(120, $w - 40)
+}
+
+function Get-Short([string]$s, [int]$n = 0) {
+  if ($n -le 0) { $n = Get-LineWidth }
   $first = (($s -split "`r?`n") | Where-Object { $_.Trim() } | Select-Object -First 1)
   if (-not $first) { return '' }
   if ($first.Length -gt $n) { return $first.Substring(0, $n) + '…' }
