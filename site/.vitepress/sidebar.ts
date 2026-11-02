@@ -28,6 +28,7 @@ export const sidebar: SidebarGroup[] = [
       { text: 'Release a milestone', link: '/guides/release' },
       { text: 'Work an issue by hand', link: '/guides/work-an-issue-by-hand' },
       { text: 'Fix a bug', link: '/guides/fix-a-bug' },
+      { text: 'Learn from runs', link: '/guides/learn-from-runs' },
       { text: 'Stack setups', link: '/guides/stack-setups' },
       { text: 'Delivery', link: '/delivery' },
     ],

@@ -37,6 +37,7 @@ Skills delegate by name instead of repeating each other. One skill owns a workfl
 - [Skill composition](concepts/composition.md) and [issue model](concepts/issue-model.md): how the skills call each other, and the Epic, Feature, PBI and Bug hierarchy with its labels
 - [Skill frontmatter convention](concepts/skill-frontmatter.md): the restricted frontmatter that keeps skills portable
 - [Stack setups](guides/stack-setups.md), [work an issue by hand](guides/work-an-issue-by-hand.md) and [fix a bug](guides/fix-a-bug.md): end-to-end examples with the installed skills
+- [Learn from runs](guides/learn-from-runs.md): `retro`, lessons and the flow diagram
 - [ADRs and specs](usage/governance.md): how the `governance` key ties `adr`, `planner`, `implementation`, `code-review`, `deliver` and CI together
 - [Skill companion directories](usage/skill-companion-dirs.md): `scripts/`, `references/`, `templates/`, `assets/`
 - [Plan an issue](guides/plan-an-issue.md), [work an issue by hand](guides/work-an-issue-by-hand.md) and [delivery](delivery.md): one issue per session, and delivery through `/deliver`
