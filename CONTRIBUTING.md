@@ -38,6 +38,8 @@ The repo uses pnpm (`pnpm-lock.yaml`) only.
 5. Update the group `description` in `.claude-plugin/marketplace.json` when the group scope changed, and the group table in AGENTS.md and README.md.
 6. Open a PR with a conventional-commit title (`feat(py): …`, `fix(github): …`). The changelog is generated from commit messages with git-cliff.
 
+   Every PR closes an issue (`Closes #n` in the body), also docs, roadmap and sync PRs; only release PRs from `release/**` are exempt. The required check `PR checks` (`.github/workflows/pr-checks.yml`, readiness job of GravionLabs/ci) fails a PR that closes no issue or closes one labelled `needs-decision` or `needs-refinement` or blocked by an open issue. Open an issue first when there is none.
+
 ## Dogfooding: project skills
 
 Project skills take precedence over global ones. Without them, a `deliver` run in this repository loads the global copy (`~/.claude/skills/deliver`) instead of `skills/delivery/deliver/`. Link the repository skills as project skills before `deliver` runs here:
