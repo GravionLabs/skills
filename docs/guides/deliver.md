@@ -118,4 +118,4 @@ Pause, skipped PBI, missing ruleset or red check: see [troubleshooting](../refer
 
 ## Next
 
-After a run, [learn from it](learn-from-runs.md) with `retro` and lessons. [Delivery reference](../delivery.md): review file, release review, decision PBIs, parallel runs, herdr and roles. Options: `/deliver help`.
+[Delivery reference](../delivery.md): review file, release review, decision PBIs, parallel runs, herdr and roles. Options: `/deliver help`. In herdr: [herdr with the skills](herdr.md).

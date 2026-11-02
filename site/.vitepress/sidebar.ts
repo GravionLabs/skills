@@ -30,6 +30,7 @@ export const sidebar: SidebarGroup[] = [
       { text: 'Fix a bug', link: '/guides/fix-a-bug' },
       { text: 'Learn from runs', link: '/guides/learn-from-runs' },
       { text: 'Stack setups', link: '/guides/stack-setups' },
+      { text: 'herdr with the skills', link: '/guides/herdr' },
       { text: 'Delivery', link: '/delivery' },
     ],
   },
