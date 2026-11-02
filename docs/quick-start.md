@@ -51,3 +51,5 @@ Plan issue #42.
 `Plan issue #42.` makes `planner` split the issue one level down; `/deliver 42` implements, reviews and merges the open PBIs of issue 42 ([delivery](delivery.md)). More examples: [stack setups](guides/stack-setups.md).
 
 To ship a milestone (cut `release/next`, deliver, release PR, ruleset): [release a milestone](guides/release.md).
+
+Something stuck (a pause, a skipped PBI, a red check)? See [troubleshooting](reference/troubleshooting.md).

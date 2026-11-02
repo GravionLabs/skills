@@ -52,7 +52,10 @@ export const sidebar: SidebarGroup[] = [
   },
   {
     text: 'Reference',
-    items: [{ text: 'Skills', link: '/skill-list' }],
+    items: [
+      { text: 'Skills', link: '/skill-list' },
+      { text: 'Troubleshooting', link: '/reference/troubleshooting' },
+    ],
   },
   {
     text: 'Contributing',
