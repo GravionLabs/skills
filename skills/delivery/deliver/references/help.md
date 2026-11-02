@@ -32,7 +32,7 @@ pwsh scripts/Invoke-DeliverLoop.ps1 -Milestone 1.3.0 -Harness copilot -Model gpt
 - `-Max <n>`: stop after `n` iterations
 - `-Model <name>`: model of the orchestrating session (default `sonnet`)
 - Shell command `deliver-loop` (offered by `skills-install`) runs the installed script from any directory with the same flags, e.g. `deliver-loop -Milestone 1.3.0 -Max 5`. In herdr it opens the workspace `<repo> · deliver` (tab `deliver-loop`).
-- Also `-NoPane` (no herdr log pane) and `-NoColor` (no `.ansi.log`). Exit 0 done or max reached, 1 no progress, 2 blocked, 64 bad arguments.
+- Also `-LogPane` (opens the herdr log pane; off by default, `-NoPane` is a deprecated no-op) and `-NoColor` (no `.ansi.log`, plain stdout). Stdout is colored on a terminal. Exit 0 done or max reached, 1 no progress, 2 blocked, 64 bad arguments.
 
 ## Examples
 

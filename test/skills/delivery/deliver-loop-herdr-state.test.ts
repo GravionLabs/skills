@@ -98,7 +98,7 @@ fs.writeFileSync(f, JSON.stringify(s));`,
       args: string[],
       env: NodeJS.ProcessEnv = {},
     ) =>
-      worker.run([...args, '-NoPane'], {
+      worker.run(args, {
         cwd,
         env: { ...gh.env(), HERDR_ENV: '1', HERDR_PANE_ID: 'p7', NO_COLOR: '', ...env },
       });
