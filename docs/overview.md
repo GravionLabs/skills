@@ -35,7 +35,7 @@ Skills delegate by name instead of repeating each other. One skill owns a workfl
 
 ## Where to go next
 
-- [Quick start and installation](../README.md#quick-start)
+- [Quick start](quick-start.md): install the skills and run a first prompt
 - [Skills](concepts/skills.md): how skills load on each platform and how they are structured
 - [Skill frontmatter convention](concepts/skill-frontmatter.md): the restricted frontmatter that keeps skills portable
 - [Common workflows](usage/common-workflows.md): end-to-end examples with the installed skills

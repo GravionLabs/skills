@@ -16,6 +16,7 @@ export const sidebar: SidebarGroup[] = [
     text: 'Start here',
     items: [
       { text: 'Overview', link: '/overview' },
+      { text: 'Quick start', link: '/quick-start' },
       { text: 'Prerequisites', link: '/prerequisites' },
     ],
   },
