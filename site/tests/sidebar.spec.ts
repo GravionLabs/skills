@@ -22,6 +22,17 @@ const listed = sidebar.flatMap((g) => g.items.map((i) => i.link));
 const homePage = '/index';
 
 describe('the sidebar of the docs site', () => {
+  it('has the groups in the order Start here, Guides, Configuration, Concepts, Reference, Contributing', () => {
+    expect(sidebar.map((g) => g.text)).toEqual([
+      'Start here',
+      'Guides',
+      'Configuration',
+      'Concepts',
+      'Reference',
+      'Contributing',
+    ]);
+  });
+
   it('lists every existing docs page in some group, except the home page', () => {
     expect(pagesOnDisk().filter((p) => p !== homePage && !listed.includes(p))).toEqual([]);
   });
