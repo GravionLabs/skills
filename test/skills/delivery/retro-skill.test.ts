@@ -188,4 +188,26 @@ describe('retro help', () => {
     expect(help).toContain('#<issue>');
     expect(help).toContain('approve');
   });
+
+  it('has a flow diagram step with a conditional load line and a 40-line statement', () => {
+    const flow = fs.readFileSync(
+      path.resolve(__dirname, '../../../skills/delivery/retro/references/flow.md'),
+      'utf8',
+    );
+    expect(text).toContain('references/flow.md');
+    expect(text).toContain('flow not measured');
+    expect(text).toMatch(/does not count towards the 40 lines/);
+    expect(flow).toContain('sequenceDiagram');
+    expect(flow).toMatch(/At most 5 PBIs/);
+    const sources = fs.readFileSync(
+      path.resolve(__dirname, '../../../skills/delivery/retro/references/metrics-sources.md'),
+      'utf8',
+    );
+    expect(sources).toContain('Flow of agent calls');
+    const help = fs.readFileSync(
+      path.resolve(__dirname, '../../../skills/delivery/retro/references/help.md'),
+      'utf8',
+    );
+    expect(help).toContain('flow diagram');
+  });
 });
