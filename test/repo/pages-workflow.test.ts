@@ -7,16 +7,23 @@ const text = fs.readFileSync(file, 'utf-8');
 const wf = parse(text);
 
 describe('pages.yml workflow guard (#272)', () => {
-  it('pins every action to a 40-hex SHA followed by a comment', () => {
+  it('pins every third-party action to a 40-hex SHA followed by a comment, GravionLabs/ci at @v1', () => {
     const steps = Object.values(wf.jobs).flatMap(
       (j) => (j as { steps: { uses?: string }[] }).steps,
     );
     const usesSteps = steps.filter((s) => s.uses);
     expect(usesSteps.length).toBeGreaterThan(0);
-    for (const s of usesSteps) expect(s.uses).toMatch(/^[\w./-]+@[0-9a-f]{40}$/);
+    const isCi = (uses: string) => uses.startsWith('GravionLabs/ci/');
+    expect(usesSteps.some((s) => isCi(s.uses as string))).toBe(true);
+    for (const s of usesSteps) {
+      const uses = s.uses as string;
+      expect(uses).toMatch(isCi(uses) ? /^[\w./-]+@v1$/ : /^[\w./-]+@[0-9a-f]{40}$/);
+    }
     const lines = text.split('\n').filter((l) => /^\s*-?\s*uses:/.test(l));
     expect(lines.length).toBe(usesSteps.length);
-    for (const line of lines) expect(line).toMatch(/@[0-9a-f]{40} # \S+/);
+    for (const line of lines.filter((l) => !l.includes('GravionLabs/ci/'))) {
+      expect(line).toMatch(/@[0-9a-f]{40} # \S+/);
+    }
   });
 
   it('triggers on main, site-related pull requests and manual runs', () => {

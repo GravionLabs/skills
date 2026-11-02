@@ -26,7 +26,7 @@ describe.each(Object.entries(files))('release-branch caller %s (#358)', (_name, 
   });
 
   it('calls the reusable release-branch.yml of GravionLabs/ci with explicit secrets and a project', () => {
-    expect(job.uses).toBe('GravionLabs/ci/.github/workflows/release-branch.yml@main');
+    expect(job.uses).toBe('GravionLabs/ci/.github/workflows/release-branch.yml@v1');
     expect(job.with['project-url']).toMatch(/^https:\/\/github\.com\/users\//);
     expect(job.secrets).toEqual({
       GH_PAT: '${{ secrets.GH_PAT }}',
@@ -41,7 +41,7 @@ describe('issue-events.yml (#358)', () => {
   const job = wf.jobs.issues;
 
   it('calls issues.yml of GravionLabs/ci with the Needs sync and explicit secrets', () => {
-    expect(job.uses).toBe('GravionLabs/ci/.github/workflows/issues.yml@main');
+    expect(job.uses).toBe('GravionLabs/ci/.github/workflows/issues.yml@v1');
     expect(job.with.needs).toBe(true);
     expect(job.permissions).toEqual({ issues: 'write' });
     expect(job.secrets).toEqual({

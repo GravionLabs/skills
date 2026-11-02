@@ -19,7 +19,7 @@ describe('pr-checks.yml', () => {
 
   it('calls pr-checks.yml of a GravionLabs/ci release under the job id pr-checks', () => {
     expect(Object.keys(wf.jobs)).toEqual(['pr-checks']);
-    expect(job.uses).toBe('GravionLabs/ci/.github/workflows/pr-checks.yml@v1.5.0');
+    expect(job.uses).toBe('GravionLabs/ci/.github/workflows/pr-checks.yml@v1');
     expect(job.steps).toBeUndefined();
   });
 
@@ -43,15 +43,13 @@ describe('pr-checks.yml', () => {
 
 describe('GravionLabs/ci node/setup pin', () => {
   it.each(['.github/workflows/ci.yml', '.github/workflows/pages.yml'])(
-    '%s pins node/setup to the commit of ci v1.5.0',
+    '%s follows node/setup on the major tag v1, without a SHA pin',
     (rel) => {
       const wfText = fs.readFileSync(path.join(root, rel), 'utf-8');
-      const pins = wfText.match(/GravionLabs\/ci\/node\/setup@\S+ # \S+/g) ?? [];
-      expect(pins.length).toBeGreaterThan(0);
-      for (const pin of pins) {
-        expect(pin).toBe(
-          'GravionLabs/ci/node/setup@6fea556f186018034aa4144a9aa3968b256f1579 # v1.5.0',
-        );
+      const refs = wfText.match(/GravionLabs\/ci\/node\/setup@.*/g) ?? [];
+      expect(refs.length).toBeGreaterThan(0);
+      for (const ref of refs) {
+        expect(ref).toBe('GravionLabs/ci/node/setup@v1');
       }
     },
   );

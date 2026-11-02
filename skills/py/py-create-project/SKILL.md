@@ -45,7 +45,7 @@ Parameters: `-ProjectName` (required), `-ProjectType` (library/app/workspace), `
 | `src/__init__.py`          | Minimal package init                                                                                                                                     |
 | `tests/conftest.py`        | Empty conftest                                                                                                                                           |
 | `.python-version`          | Pins Python 3.14 for reproducible environments                                                                                                           |
-| `.github/workflows/ci.yml` | GitHub Actions CI via `GravionLabs/ci/.github/workflows/python.yml`                                                                                      |
+| `.github/workflows/ci.yml` | GitHub Actions CI via `GravionLabs/ci/.github/workflows/python-package.yml`                                                                              |
 | `.gitignore`               | Python standard ignores (dist/, .venv/, **pycache**/)                                                                                                    |
 
 ## Constraints
@@ -55,5 +55,6 @@ Parameters: `-ProjectName` (required), `-ProjectType` (library/app/workspace), `
 - Keep `asyncio_mode = "auto"` in the pytest config
 - Commit `uv.lock` to version control
 - CI: `uv run pytest` and `uv build` must work from a clean checkout
+- Workflows reference `GravionLabs/ci` at the major tag `@v<major>` (today `@v1`), never `@main` or a commit SHA; third-party actions stay SHA-pinned where the repository requires it
 
 Report: summary, files created, verify commands.

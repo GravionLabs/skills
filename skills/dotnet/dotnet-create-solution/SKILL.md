@@ -47,5 +47,6 @@ Parameters: `-SolutionName` (required), `-ProjectType` (classlib/console/webapi/
 - Generated `.csproj` files must not repeat properties already in `Directory.Build.props`
 - Libraries multi-target; applications use a single target framework
 - The solution must build cleanly before the task is complete
+- Workflows reference `GravionLabs/ci` at the major tag `@v<major>` (today `@v1`), never `@main` or a commit SHA; third-party actions stay SHA-pinned where the repository requires it
 
 Report: summary, files created, verify command (`dotnet build`).
