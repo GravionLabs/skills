@@ -5,10 +5,34 @@ Versioning follows [Semantic Versioning](https://semver.org/).
 
 ---
 
+## [1.4.0] — 2026-11-02
+
+### Documentation
+- **site**: Remove apm-hub leftovers from the site package and skills concept page (#163) (#183)
+- **site**: Reorder the sidebar, guides before concepts (#170) (#184)
+- **site**: Quick start page on the site (#171) (#185)
+- Guide for planning an issue with planner and grill-me (#172) (#188)
+- Step-by-step guide for /deliver (#173) (#189)
+- Split common workflows into stack setup, manual issue and bug-fix guides (#174) (#192)
+- Guide for releasing a milestone, including the release/next ruleset (#175) (#194)
+- Concept pages for the issue model and skill composition (#178) (#195)
+- Troubleshooting page (#179) (#196)
+- Guide for learning from runs with retro and lessons (#176) (#198)
+
+
+### Features
+- **site**: Logo and favicon for the documentation site (#162) (#182)
+- **retro**: Flow diagram of the agent calls of a run (#181) (#197)
+
+
 ## [1.3.2] — 2026-11-02
 
 ### Bug Fixes
 - **deliver**: Name PRs and issues as full URLs (#199)
+
+
+### Documentation
+- Update CHANGELOG.md for v1.3.2 [skip ci]
 
 
 ## [1.3.1] — 2026-11-02
