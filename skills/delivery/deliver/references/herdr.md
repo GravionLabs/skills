@@ -59,7 +59,7 @@ Besides the tokens, `Invoke-DeliverLoop.ps1` reports the pane state (`herdr pane
 
 ## Log pane toggle
 
-`scripts/Switch-LogPane.ps1` toggles the `deliver-log` pane of the active tab. herdr has no hide, so it closes the pane, and opens it again below the active pane (last 40 lines of `.agents/deliver-loop.ansi.log` under the pane's cwd, else `.agents/deliver-loop.log`). Never two in one tab; no log or outside herdr: no pane, exit 0. A keybinding for the user's herdr config (propose it, never write it; `<skill dir>` is the installed `deliver` skill):
+`scripts/Switch-LogPane.ps1` toggles the `deliver-log` pane of the active tab. The loop opens that pane itself only with `-LogPane`; by default it colors its own console output, and this toggle shows the log from another pane. herdr has no hide, so it closes the pane, and opens it again below the active pane (last 40 lines of `.agents/deliver-loop.ansi.log` under the pane's cwd, else `.agents/deliver-loop.log`). Never two in one tab; no log or outside herdr: no pane, exit 0. A keybinding for the user's herdr config (propose it, never write it; `<skill dir>` is the installed `deliver` skill):
 
 ```toml
 [[keys.command]]

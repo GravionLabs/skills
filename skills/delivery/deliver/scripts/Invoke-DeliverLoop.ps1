@@ -10,8 +10,9 @@
   Observability: every stream record goes to .agents/deliver-loop/<run>/<nr>.jsonl (<nr> is the first PBI that was ready
   at the start of the iteration), a summary line per step to .agents/deliver-loop.log (plain) and stdout, the same line
   with ANSI colors to .agents/deliver-loop.ansi.log, desktop notifications for the attention steps (macOS osascript,
-  Windows toast), the herdr pane tokens deliver, deliver_step, deliver_pr when HERDR_ENV=1 and, in herdr on a terminal, a split pane labeled deliver-log
-  below the session that tails the log (LogPane.ps1; never closed by the loop).
+  Windows toast), the herdr pane tokens deliver, deliver_step, deliver_pr when HERDR_ENV=1 and, with -LogPane in herdr on a terminal,
+  a split pane labeled deliver-log below the session that tails the log (LogPane.ps1; never closed by the loop).
+  Stdout carries the colors of the .ansi.log when it is a terminal and neither -NoColor nor NO_COLOR is set; otherwise it is plain.
   Run it from the repository root. Exit code: 0 done or max reached, 1 no progress, 2 blocked, 64 bad arguments.
 .PARAMETER Target
   Issue numbers (PBI, Feature or Epic), as for `/deliver`: `-Target 12,14` or `-Target 12 14` (a comma list also works
@@ -25,10 +26,12 @@
 .PARAMETER Harness
   claude (Claude Code, default) or copilot (GitHub Copilot CLI: `copilot -p … --model <model> --allow-all-tools
   --no-ask-user --output-format json`). Any other value fails before the first iteration.
+.PARAMETER LogPane
+  Opens the herdr log pane `deliver-log` (herdr, stdout a terminal). Off by default: toggle it with Switch-LogPane.ps1.
 .PARAMETER NoPane
-  Opens no herdr log pane.
+  Deprecated no-op (the pane is off by default); use -LogPane to open it.
 .PARAMETER NoColor
-  Writes no .ansi.log (as does a non-empty NO_COLOR); the pane tails the plain log.
+  Writes no .ansi.log and colors no stdout (as does a non-empty NO_COLOR); the pane tails the plain log.
 #>
 [CmdletBinding()]
 param(
@@ -37,6 +40,7 @@ param(
   [ValidateRange(1, 10000)][int]$Max = 0,
   [string]$Model = 'sonnet',
   [string]$Harness = 'claude',
+  [switch]$LogPane,
   [switch]$NoPane,
   [switch]$NoColor,
   [Parameter(ValueFromRemainingArguments)][string[]]$MoreTargets = @()
@@ -61,6 +65,8 @@ $LogFile = Join-Path (Get-Location) '.agents/deliver-loop.log'
 $AnsiFile = if ($NoColor -or $env:NO_COLOR) { '' } else { Join-Path (Get-Location) '.agents/deliver-loop.ansi.log' }
 $Esc = [char]27
 $Ansi = @{ dim = "$Esc[2m"; cyan = "$Esc[36m"; red = "$Esc[31m"; yellow = "$Esc[33m"; green = "$Esc[32m"; reset = "$Esc[0m" }
+# Colored stdout: a terminal (DELIVER_LOOP_ASSUME_TTY=1 stands in for one in tests) and the ANSI log is on.
+$ColorOut = [bool]$AnsiFile -and ((-not [Console]::IsOutputRedirected) -or $env:DELIVER_LOOP_ASSUME_TTY -eq '1')
 $RunDir = Join-Path (Get-Location) ".agents/deliver-loop/$((Get-Date).ToString('yyyyMMdd-HHmmss'))"
 $Recent = [System.Collections.Generic.List[string]]::new()
 $AgentNames = @{}
@@ -75,13 +81,16 @@ function Write-Step([string]$text, [string]$Color = '', [string]$Tool = '', [int
   $line = "$time $text"
   New-Item -ItemType Directory -Force -Path (Split-Path $LogFile) | Out-Null
   [IO.File]::AppendAllText($LogFile, $line + "`n")
+  $body = $text
   if ($AnsiFile) {
     $body = if ($Color) { "$($Ansi[$Color])$text$($Ansi.reset)" } else { $text }
     $at = if ($Tool) { $text.IndexOf($Tool, $ToolAt) } else { -1 }
     if ($at -ge 0 -and -not $Color) { $body = $text.Substring(0, $at) + "$($Ansi.cyan)$Tool$($Ansi.reset)" + $text.Substring($at + $Tool.Length) }
     [IO.File]::AppendAllText($AnsiFile, "$($Ansi.dim)$time$($Ansi.reset) $body`n")
   }
-  Write-Host $line
+  if ($ColorOut) {
+    Write-Host "$($Ansi.dim)$time$($Ansi.reset) $body"
+  } else { Write-Host $line }
   $Recent.Add($line)
   if ($Recent.Count -gt 10) { $Recent.RemoveAt(0) }
 }
@@ -322,7 +331,7 @@ $result = 'done'
 $code = 0
 $i = 0
 try {
-  if (-not $NoPane) { Open-LogPane -LogFile $(if ($AnsiFile) { $AnsiFile } else { $LogFile }) }
+  if ($LogPane) { Open-LogPane -LogFile $(if ($AnsiFile) { $AnsiFile } else { $LogFile }) }
   $state = Get-State
   $result = Get-StopReason $state
   $total = if ($Max -gt 0) { [Math]::Min($Max, $state.Eligible.Count) } else { $state.Eligible.Count }
