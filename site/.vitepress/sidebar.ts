@@ -24,6 +24,7 @@ export const sidebar: SidebarGroup[] = [
     text: 'Guides',
     items: [
       { text: 'Plan an issue', link: '/guides/plan-an-issue' },
+      { text: 'Deliver issues', link: '/guides/deliver' },
       { text: 'Working mode', link: '/working-mode' },
       { text: 'Delivery', link: '/delivery' },
       { text: 'Common workflows', link: '/usage/common-workflows' },
