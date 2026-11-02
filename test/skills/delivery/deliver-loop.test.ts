@@ -99,6 +99,10 @@ fs.writeFileSync(f, JSON.stringify(s));`,
       'claude',
       `echo "$*" >> ${cwd}/claude-calls.txt\necho "herdr_env=[$HERDR_ENV]" >> ${cwd}/claude-calls.txt\ncat ${cwd}/stream.jsonl\nnode ${cwd}/effect.js`,
     );
+    stub(
+      'copilot',
+      `echo "$*" >> ${cwd}/claude-calls.txt\necho "herdr_env=[$HERDR_ENV]" >> ${cwd}/claude-calls.txt\ncat ${cwd}/stream.jsonl\nnode ${cwd}/effect.js`,
+    );
     stub('herdr', `echo "$*" >> ${cwd}/herdr-calls.txt`);
     stub('osascript', `echo "$*" >> ${cwd}/notices.txt`);
     void bin;
@@ -126,16 +130,75 @@ fs.writeFileSync(f, JSON.stringify(s));`,
       });
       expect(r.status).toBe(64);
       expect(r.stderr).toContain('-Target');
+      // unknown harness: fails before the first iteration with the supported list
+      const h = spawnSync(
+        'pwsh',
+        ['-NoProfile', '-File', SCRIPT, '-Target', '1', '-Harness', 'opencode'],
+        {
+          cwd,
+          encoding: 'utf8',
+          env: gh.env(),
+        },
+      );
+      expect(h.status).toBe(64);
+      expect(h.stderr).toContain('Supported: claude, copilot');
+      expect(claudeCalls()).toEqual([]);
     });
 
-    it.each([
-      [['-Target', '1', '-Harness', 'opencode']],
-      [['-Target', '1', '-Max', '0']],
-      [['-Target', 'abc']],
-    ])('rejects %j', async (args) => {
+    it.each([[['-Target', '1', '-Max', '0']], [['-Target', 'abc']]])('rejects %j', async (args) => {
       const r = await run(setup({ issues: { 1: pbi() } }), args);
       expect(r.status).not.toBe(0);
       expect(claudeCalls()).toEqual([]);
+    });
+  });
+
+  describe('harness', () => {
+    const events = [
+      { type: 'assistant.message', data: { content: '#7 pr: opened #55\nmore' } },
+      {
+        type: 'tool.execution_start',
+        data: { toolCallId: 'c1', toolName: 'bash', arguments: { command: 'ls -la' } },
+      },
+      {
+        type: 'tool.execution_start',
+        data: {
+          toolCallId: 'c2',
+          toolName: 'view',
+          parentToolCallId: 'c0',
+          arguments: { path: 'src/a.ts' },
+        },
+      },
+      {
+        type: 'tool.execution_complete',
+        data: { toolCallId: 'c1', success: false, error: { message: 'boom\nsecond' } },
+      },
+      { type: 'tool.execution_complete', data: { toolCallId: 'c2', success: true } },
+      { type: 'assistant.message', data: { content: '#7 ci: red' } },
+      { type: 'session.idle', data: {} },
+    ];
+
+    it('starts copilot -p per PBI with model and non-interactive permissions, logs steps, notices and herdr tokens; stop rules and exit code as for claude', async () => {
+      const gh = setup({ issues: { 7: pbi() }, effect: 'close-first', stream: events });
+      const r = await run(
+        gh,
+        ['-Target', '7', '-Harness', 'copilot', '-Model', 'gpt-5', '-NoPane'],
+        { HERDR_ENV: '1', HERDR_PANE_ID: 'p7' },
+      );
+      expect(r.status).toBe(0);
+      expect(claudeCalls()).toEqual([
+        '-p /deliver 7 --unattended --max 1 --model gpt-5 --allow-all-tools --no-ask-user --output-format json',
+      ]);
+      expect(read('claude-calls.txt')).toContain('herdr_env=[]');
+      const lines = read('.agents/deliver-loop.log');
+      expect(lines).toMatch(/\d\d:\d\d:\d\d » #7 pr: opened #55/);
+      expect(lines).toMatch(/\d\d:\d\d:\d\d bash ls -la/);
+      expect(lines).toMatch(/\d\d:\d\d:\d\d \[subagent\] view src\/a\.ts/);
+      expect(lines).toMatch(/\d\d:\d\d:\d\d ✗ boom/);
+      expect(read('.agents/deliver-loop.ansi.log')).toContain('\u001b[36mbash\u001b[0m');
+      expect(read('herdr-calls.txt')).toContain('deliver_step=1/1 ci: red --token deliver_pr=#55');
+      expect(read('notices.txt')).toContain('#7 PR opened');
+      expect(read('notices.txt')).toContain('#7 CI red');
+      expect(r.stdout).toContain('loop result: done');
     });
   });
 
