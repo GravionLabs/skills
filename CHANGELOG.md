@@ -12,6 +12,10 @@ Versioning follows [Semantic Versioning](https://semver.org/).
 - **deliver**: Loop console output is cut at 120 characters and uncolored (#202)
 
 
+### Documentation
+- Update CHANGELOG.md for v1.4.1 [skip ci]
+
+
 ## [1.4.0] — 2026-11-02
 
 ### Documentation
