@@ -20,6 +20,13 @@ describe('deliver SKILL.md', () => {
     expect(text).toContain("opencode/autoinvoke: 'false'");
   });
 
+  it('names PRs and issues as full URLs, the release PR included', () => {
+    expect(body).toContain('full URL');
+    expect(body).toContain('not as a bare `#<n>`');
+    const report = body.slice(body.indexOf('## Report'));
+    expect(report).toContain('the release PR of step 9 as a full URL');
+  });
+
   it('stays under 100 lines', () => {
     expect(text.split('\n').length).toBeLessThan(100);
   });
