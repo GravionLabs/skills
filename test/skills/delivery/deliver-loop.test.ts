@@ -386,7 +386,10 @@ fs.writeFileSync(f, JSON.stringify(s));`,
         .split('\n');
       expect(jsonl.map((l) => JSON.parse(l))).toEqual(stream);
       expect(read('claude-calls.txt')).toContain('herdr_env=[]');
-      const calls = read('herdr-calls.txt').trim().split('\n');
+      const calls = read('herdr-calls.txt')
+        .trim()
+        .split('\n')
+        .filter((l) => l.includes('report-metadata'));
       const tokens = '--ttl-ms 3600000';
       expect(calls).toEqual([
         `pane report-metadata p7 --source deliver --token deliver=#401 --token deliver_step=1/1 starting ${tokens}`,
@@ -425,7 +428,13 @@ fs.writeFileSync(f, JSON.stringify(s));`,
         DELIVER_LOOP_ASSUME_TTY: '',
       });
       expect(r.status).not.toBe(0);
-      expect(read('herdr-calls.txt').trim()).toBe(
+      expect(
+        read('herdr-calls.txt')
+          .trim()
+          .split('\n')
+          .filter((l) => l.includes('report-metadata'))
+          .join('\n'),
+      ).toBe(
         'pane report-metadata p7 --source deliver --clear-token deliver --clear-token deliver_step --clear-token deliver_pr',
       );
     });
@@ -485,7 +494,7 @@ esac
     const paneCalls = () =>
       read('herdr-calls.txt')
         .split('\n')
-        .filter((l) => l && !l.startsWith('pane report-metadata'));
+        .filter((l) => l && !/^pane (report-metadata|report-agent|release-agent)/.test(l));
 
     it('opens one pane below that tails the ANSI log, labels it deliver-log and leaves it open', async () => {
       // a deliver-log pane of another tab does not count

@@ -120,6 +120,15 @@ function Set-Pane([string]$Nr = '', [string]$Step = '', [switch]$Clear) {
   try { & herdr pane report-metadata $Pane --source deliver @tokenArgs 2>$null | Out-Null } catch { Write-Verbose "herdr failed: $_" }
 }
 
+# herdr agent state (#191): the loop reports its own lifecycle (source deliver-loop, agent deliver); herdr tracks only the pane's agent, not the claude -p children.
+# working per iteration, blocked on a pause/blocked step or when the loop ends blocked / no progress, idle at the end, then release. Any herdr failure is ignored.
+$Paused = $false
+function Set-AgentState([string]$State = '', [switch]$Release) {
+  if (-not $Pane) { return }
+  [string[]]$a = if ($Release) { 'release-agent' } else { 'report-agent', '--state', $State }
+  try { & herdr pane $a[0] @($a | Select-Object -Skip 1) --source deliver-loop --agent deliver $Pane 2>$null | Out-Null } catch { Write-Verbose "herdr failed: $_" }
+}
+
 # Get-Milestones.ps1 of github-milestone: sibling skill (installed) or skills/github (repository)
 $MilestoneScript = @('../../github-milestone', '../../../github/github-milestone' | ForEach-Object { Join-Path $PSScriptRoot "$_/scripts/Get-Milestones.ps1" }) |
   Where-Object { Test-Path $_ } | Select-Object -First 1
@@ -234,6 +243,7 @@ function Write-TextStep([string]$prefix, [string]$text, [int]$position, [int]$to
     if ($l -match '^#(\d+) ([\w-]+): (.*)$') {
       Set-Pane $Matches[1] "$position/$total $($Matches[2]): $($Matches[3])"
       $why = Get-Attention $Matches[2] $Matches[3]
+      if ($why -in 'paused', 'blocked') { $script:Paused = $true; Set-AgentState 'blocked' }
       if ($why) { Send-Notice "#$($Matches[1]) $why" }
     }
   }
@@ -287,6 +297,8 @@ function Invoke-Iteration([int]$n, [int]$total, $state) {
   if ($Milestone) { $targets += @('--milestone', $Milestone) }
   $prompt = "/deliver $($targets -join ' ') --unattended --max 1"
   Write-Step "iteration $n/$total start: $prompt"
+  $script:Paused = $false
+  Set-AgentState 'working'
   Set-Pane "$($state.Ready[0])" "$n/$total starting"
   $saved = $env:HERDR_ENV
   $env:HERDR_ENV = ''
@@ -332,7 +344,9 @@ try {
   $color = if ($result -in 'done', 'max reached') { 'green' } else { 'yellow' }
   Write-Step "loop result: $result ($i iteration(s), $($state.Open) PBI(s) open)" $color
   Send-Notice "loop result: $result"
+  Set-AgentState $(if (($result -in 'blocked','no progress') -or $Paused) { 'blocked' } else { 'idle' })
 } finally {
   Set-Pane -Clear
+  Set-AgentState -Release
 }
 exit $code
