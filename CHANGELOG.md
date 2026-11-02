@@ -5,6 +5,12 @@ Versioning follows [Semantic Versioning](https://semver.org/).
 
 ---
 
+## [1.3.1] — 2026-11-02
+
+### Bug Fixes
+- **deliver**: Propose a space-first herdr sidebar layout (#158)
+
+
 ## [1.3.0] — 2026-11-01
 
 ### Bug Fixes
@@ -14,6 +20,7 @@ Versioning follows [Semantic Versioning](https://semver.org/).
 
 ### Documentation
 - **delivery**: Herdr sidebar layout starts with the repo (#149) (#150)
+- Update CHANGELOG.md for v1.3.0 [skip ci]
 
 
 ### Features
