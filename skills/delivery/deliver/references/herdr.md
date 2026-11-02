@@ -32,24 +32,24 @@ herdr pane report-metadata <pane> --source deliver --clear-token deliver --clear
 
 ## Sidebar layout
 
-The Agent sidebar shows a token only where one of its rows names it as `$<name>`. The proposed layout starts with the repo (`tab`) and its state, then the agent, and the `deliver` tokens last (propose it, never write it):
+The Agent sidebar shows a token only where one of its rows names it as `$<name>`. Every repository is its own herdr space (`workspace`) with the tabs `agent` and `terminal`. The proposed layout starts with the space and its state, then the agent and its terminal title (Claude Code writes its current topic there), and the `deliver` tokens last (propose it, never write it):
 
 ```
 ● herdr-plugins · idle
-  claude · Gravion
+  claude · Fix login race
   #121 · merged · #139
 ```
 
 ```toml
 [ui.sidebar.agents]
 rows = [
-  ["state_icon", { token = "tab", bold = true }, { token = "state_text", rules = [{ equals = "done", fg = "#5f5" }, { equals = "blocked", fg = "#f55" }] }],
-  ["agent", "workspace"],
+  ["state_icon", { token = "workspace", bold = true }, { token = "state_text", rules = [{ equals = "done", fg = "#5f5" }, { equals = "blocked", fg = "#f55" }] }],
+  [{ token = "agent", dim = true }, "terminal_title_stripped"],
   [{ token = "$deliver", bold = true }, { token = "$deliver_step", rules = [{ contains = "blocked", fg = "#f55" }, { contains = "merged", fg = "#5f5" }] }, "$deliver_pr"],
 ]
 ```
 
-Alternatives: a compact two-line layout (the `$deliver` tokens share row 2 with `agent`, no `workspace`), the `deliver` line first (move the third row to the top), or `row_gap = 1` under `[ui.sidebar.agents]` for air between the rows.
+Alternatives: `["agent", "pane"]` in row 2 when a space holds several agent panes, a compact two-line layout (the `$deliver` tokens share row 2 with `agent`, no terminal title), the `deliver` line first (move the third row to the top), or `row_gap = 1` under `[ui.sidebar.agents]` for air between the rows.
 
 A herdr plugin can filter panes on the `deliver` token of source `deliver`.
 
