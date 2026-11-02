@@ -1,6 +1,6 @@
 # Skills
 
-A **skill** is a directory with a `SKILL.md` file and optional companion files (`scripts/`, `references/`, `templates/`, `assets/`). It packages a procedure, a convention or a tool contract so an AI coding agent can load it on demand. Skills follow the open [Agent Skills specification](https://agentskills.io/specification) and are the main artifact apm-hub ships; the separate `agents` package adds a few agents that skills cannot replace.
+A **skill** is a directory with a `SKILL.md` file and optional companion files (`scripts/`, `references/`, `templates/`, `assets/`). It packages a procedure, a convention or a tool contract so an AI coding agent can load it on demand. Skills follow the open [Agent Skills specification](https://agentskills.io/specification) and are the artifact GravionLabs/skills ships.
 
 ## How a skill is loaded
 
@@ -65,12 +65,7 @@ The complete rule set is in `skills/skill-tooling/skill-write/references/skill-w
 
 ## How the skills compose
 
-- `detect-techstack` returns a JSON report naming the `<lang>-implementation` and `<lang>-test` skills for the project.
-- `implementation` enforces "every change has tests" and dispatches to the language skill from that report.
-- `code-review` reads the `## Review rules` section of each detected `<lang>-implementation` skill and reports blocking findings and notes.
-- `diagnose` is loaded for bug fixes: it builds a red-capable feedback loop (commands from `<lang>-test`) before any hypothesis.
-- `planner` plans an issue one level down; `/deliver` ([delivery](../delivery.md)) chains the skills PBI by PBI, interactive or `--unattended`.
-- `github-issue` routes issue work by label and sub-issue shape; `github-pull-request` opens the PR.
+Language skills, shared skills, issue skills and the `planner` and `deliver` workflows delegate to each other by name. The diagram and the roles are on [skill composition](composition.md).
 
 ## Slash commands
 
@@ -78,9 +73,14 @@ A skill with `disable-model-invocation: true` is started by name only (`/deliver
 
 ## Related
 
+- [Skill composition](composition.md)
+- [Issue model](issue-model.md)
 - [Skill frontmatter convention](skill-frontmatter.md)
 - [Skill companion directories](../usage/skill-companion-dirs.md)
-- [Common workflows](../usage/common-workflows.md)
+- [Stack setups](../guides/stack-setups.md)
+- [Work an issue by hand](../guides/work-an-issue-by-hand.md)
+- [Fix a bug](../guides/fix-a-bug.md)
+- [Learn from runs](../guides/learn-from-runs.md)
 - [All skills](../skill-list.md) (generated)
 - [agentskills.io specification](https://agentskills.io/specification)
 - [GitHub Copilot: about agent skills](https://docs.github.com/en/copilot/concepts/agents/about-agent-skills)

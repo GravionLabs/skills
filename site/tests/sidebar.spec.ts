@@ -22,6 +22,23 @@ const listed = sidebar.flatMap((g) => g.items.map((i) => i.link));
 const homePage = '/index';
 
 describe('the sidebar of the docs site', () => {
+  it('has the groups in the order Start here, Guides, Configuration, Concepts, Reference, Contributing', () => {
+    expect(sidebar.map((g) => g.text)).toEqual([
+      'Start here',
+      'Guides',
+      'Configuration',
+      'Concepts',
+      'Reference',
+      'Contributing',
+    ]);
+  });
+
+  it('puts the quick start in Start here right after the overview', () => {
+    const start = sidebar.find((g) => g.text === 'Start here');
+    const links = start?.items.map((i) => i.link) ?? [];
+    expect(links.indexOf('/quick-start')).toBe(links.indexOf('/overview') + 1);
+  });
+
   it('lists every existing docs page in some group, except the home page', () => {
     expect(pagesOnDisk().filter((p) => p !== homePage && !listed.includes(p))).toEqual([]);
   });
@@ -39,9 +56,12 @@ describe('the sidebar of the docs site', () => {
     expect(missing).toEqual([]);
   });
 
-  it('lists the four generated pages in the Reference group', () => {
+  it('lists the generated pages and the troubleshooting page in the Reference group', () => {
     const reference = sidebar.find((g) => g.text === 'Reference');
-    expect(reference?.items.map((i) => i.link)).toEqual(generatedPages);
+    expect(reference?.items.map((i) => i.link)).toEqual([
+      ...generatedPages,
+      '/reference/troubleshooting',
+    ]);
   });
 
   it('has no page twice and no empty group', () => {

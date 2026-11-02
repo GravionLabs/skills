@@ -107,7 +107,7 @@ describe('Get-ReleaseState.ps1', () => {
     fs.mkdirSync(wf, { recursive: true });
     fs.writeFileSync(
       path.join(wf, 'rb.yml'),
-      'uses: GravionLabs/ci/.github/workflows/release-branch.yml@main\n',
+      'uses: GravionLabs/ci/.github/workflows/release-branch.yml@v1\n',
     );
     try {
       expect((await state('cut', 'release/next')).releaseWorkflow).toBe(true);

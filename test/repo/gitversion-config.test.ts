@@ -36,7 +36,7 @@ describe('determine-version in ci.yml', () => {
   const step = ci.jobs['determine-version'].steps.find((s: { id?: string }) => s.id === 'version');
 
   it('uses the GravionLabs/ci release with the Conventional Commit versioning and this config', () => {
-    expect(step.uses).toBe('GravionLabs/ci/versioning/determine-version@v1.5.0');
+    expect(step.uses).toBe('GravionLabs/ci/versioning/determine-version@v1');
     expect(step.with['gitversion-config-file']).toBe('GitVersion.yml');
   });
 

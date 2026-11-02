@@ -8,6 +8,9 @@ hero:
   tagline: Skills in the agentskills.io format, installed with npx skills, that load unchanged on Claude Code, OpenCode and GitHub Copilot.
   actions:
     - theme: brand
+      text: Get started
+      link: /quick-start
+    - theme: alt
       text: Read the overview
       link: /overview
     - theme: alt

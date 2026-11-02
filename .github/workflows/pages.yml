@@ -45,7 +45,7 @@ jobs:
       # node/setup has no node-version-file input: the version comes from .nvmrc
       - id: node
         run: echo "version=$(cat .nvmrc)" >> "$GITHUB_OUTPUT"
-      - uses: GravionLabs/ci/node/setup@6fea556f186018034aa4144a9aa3968b256f1579 # v1.5.0
+      - uses: GravionLabs/ci/node/setup@v1
         with:
           node-version: ${{ steps.node.outputs.version }}
           package-manager: pnpm

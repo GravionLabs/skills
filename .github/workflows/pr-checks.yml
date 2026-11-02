@@ -1,17 +1,20 @@
-# Pull request checks, handled by the reusable workflow pr-checks.yml of GravionLabs/ci. Only the title job runs: the PR
-# title is a Conventional Commit and agrees with the commits (feat commit -> feat title, breaking commit -> "!"), because
-# the squash merge into release/next takes the PR title and the version bump reads it (#102). Release PRs from
-# release/** into main are exempt from the title rule. readiness, adr and spec stay off (readiness: #71).
+# Pull request checks, handled by the reusable workflow pr-checks.yml of GravionLabs/ci, all inputs at their defaults.
+# - readiness (#71): the PR body closes an issue (Closes|Fixes|Resolves #n, require-issue: true) and each closed issue is
+#   ready (no needs-decision or needs-refinement label, no open "blocked by" issue). Release PRs from release/** are
+#   exempt. labeled, unlabeled and ready_for_review rerun it when an issue or PR label or the draft state changes.
+# - title (#102): the PR title is a Conventional Commit and agrees with the commits (feat commit -> feat title, breaking
+#   commit -> "!"), because the squash merge into release/next takes the PR title and the version bump reads it.
+# - adr and spec: skipped green, the repository has no governance key in .agents/config.json.
 # The job id `pr-checks` makes the required status check "pr-checks / PR checks" (rulesets main and release).
-# No secrets, no checkout: pr-checks.yml reads the title and commits through the API with the GITHUB_TOKEN.
-# The job grants the union of what the jobs of pr-checks.yml request (readiness, adr, title): GitHub validates the
-# permissions of every called job at startup, skipped ones included, so less ends in startup_failure.
+# No secrets, no checkout: pr-checks.yml reads the PR and the issues through the API with the GITHUB_TOKEN.
+# The job grants the union of what the jobs of pr-checks.yml request (readiness, adr, spec, title): GitHub validates
+# the permissions of every called job at startup, skipped ones included, so less ends in startup_failure.
 name: PR checks
 
 on:
   pull_request:
     branches: [main, 'release/**']
-    types: [opened, edited, synchronize, reopened]
+    types: [opened, edited, synchronize, reopened, labeled, unlabeled, ready_for_review]
 
 permissions: {}
 
@@ -21,9 +24,4 @@ jobs:
       contents: read
       issues: read
       pull-requests: read
-    uses: GravionLabs/ci/.github/workflows/pr-checks.yml@v1.5.0
-    with:
-      readiness: false
-      adr: false
-      spec: false
-      title: true
+    uses: GravionLabs/ci/.github/workflows/pr-checks.yml@v1

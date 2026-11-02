@@ -14,7 +14,7 @@ describe('project Needs sync (#115)', () => {
   it('keeps the event-driven needs sync in issues.yml', () => {
     const job = wf.jobs.issues;
     expect(wf.on.schedule).toBeUndefined();
-    expect(job.uses).toBe('GravionLabs/ci/.github/workflows/issues.yml@main');
+    expect(job.uses).toBe('GravionLabs/ci/.github/workflows/issues.yml@v1');
     expect(job.with['project-url']).toBe('https://github.com/users/GravionLabs/projects/17');
     expect(job.with.needs).toBe(true);
     expect(job.with.mode).toBeUndefined();

@@ -47,6 +47,7 @@ The script is read-only and prints JSON: `default`, `branch`, `state`, `openPrs`
 - Never merge the release PR yourself; the push to `main` builds, regenerates the changelog and closes the delivered issues.
 - The `merged` label lifecycle: `references/merged-label.md`. A repo without `cliff.toml` gets no changelog from CI: `references/cliff-setup.md`.
 - Hotfixes bypass this skill (`fix/<nr>-<slug>` from `main`, merge commit into `main`); afterwards merge `main` into `release/next`.
+- Workflows reference `GravionLabs/ci` at the major tag `@v<major>` (today `@v1`, as `templates/release-branch.yml`), never `@main` or a commit SHA; third-party actions stay SHA-pinned where the repository requires it.
 - A release branch is never continued after its merge. The CI release PR title may show the branch name, not the version (`release-branches.md`).
 
 Report: mode, branch, PR URL (finish) or the Feature issue updated (cut).

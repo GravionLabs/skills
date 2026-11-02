@@ -7,7 +7,14 @@ on:
 
 jobs:
   build:
-    uses: GravionLabs/ci/.github/workflows/python.yml@main
+    uses: GravionLabs/ci/.github/workflows/python-package.yml@v1
+    permissions:
+      contents: write
+      checks: write
+      pull-requests: write
+      id-token: write
+      issues: write
     with:
       python-version: '3.14'
-    secrets: inherit
+    secrets:
+      publish-api-key: ${{ secrets.PYPI_TOKEN }}

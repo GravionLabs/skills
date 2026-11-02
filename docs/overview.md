@@ -26,22 +26,21 @@ Presets of `/skills-install`: `core` (`shared`, `github`, `delivery`, `statuslin
 
 ## How the skills fit together
 
-- Every language group has a `<lang>-implementation` skill (conventions plus a `## Review rules` section) and a `<lang>-test` skill.
-- `detect-techstack` inspects the project and returns the names of those skills, so `implementation` and `code-review` dispatch to the right language without hard-coded lists.
-- You compose the rest in one session: plan with `planner`, implement with `implementation`, review with `code-review`, open the PR with `github-pull-request`.
-- `github-issue` is the entry point for issue work. It reads the issue labels and sub-issues and routes to the matching reference workflow.
+`detect-techstack` names the language skills, `implementation` and `code-review` dispatch to them, and `planner` and `deliver` sit on top; `github-issue` is the entry point for issue work. The diagram is on [skill composition](concepts/composition.md), the issue hierarchy and labels on the [issue model](concepts/issue-model.md).
 
 Skills delegate by name instead of repeating each other. One skill owns a workflow; the others call it.
 
 ## Where to go next
 
-- [Quick start and installation](../README.md#quick-start)
+- [Quick start](quick-start.md): install the skills and run a first prompt
 - [Skills](concepts/skills.md): how skills load on each platform and how they are structured
+- [Skill composition](concepts/composition.md) and [issue model](concepts/issue-model.md): how the skills call each other, and the Epic, Feature, PBI and Bug hierarchy with its labels
 - [Skill frontmatter convention](concepts/skill-frontmatter.md): the restricted frontmatter that keeps skills portable
-- [Common workflows](usage/common-workflows.md): end-to-end examples with the installed skills
+- [Stack setups](guides/stack-setups.md), [work an issue by hand](guides/work-an-issue-by-hand.md) and [fix a bug](guides/fix-a-bug.md): end-to-end examples with the installed skills
+- [Learn from runs](guides/learn-from-runs.md): `retro`, lessons and the flow diagram
 - [ADRs and specs](usage/governance.md): how the `governance` key ties `adr`, `planner`, `implementation`, `code-review`, `deliver` and CI together
 - [Skill companion directories](usage/skill-companion-dirs.md): `scripts/`, `references/`, `templates/`, `assets/`
-- [Working mode](working-mode.md) and [delivery](delivery.md): one issue per session, and delivery through `/deliver`
+- [Plan an issue](guides/plan-an-issue.md), [work an issue by hand](guides/work-an-issue-by-hand.md) and [delivery](delivery.md): one issue per session, and delivery through `/deliver`
 - [Prerequisites](prerequisites.md): tools the skill scripts depend on
 - [LSP configuration](lsp-configuration.md): language servers for Copilot CLI
 - [CONTRIBUTING.md](../CONTRIBUTING.md) and [AGENTS.md](../AGENTS.md): adding or changing skills

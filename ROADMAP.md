@@ -57,11 +57,11 @@ Milestone 1.3.0: Feature #104, `/<skill> help` for the user-invoked skills. #105
 
 ## Later
 
-| Issue | Title                           | Why later                                                                            |
-| ----- | ------------------------------- | ------------------------------------------------------------------------------------ |
-| #10   | jvm package for Java and Kotlin | `needs-decision`: one `jvm` group or two                                             |
-| #11   | swift package                   | blocked by #10                                                                       |
-| #71   | adopt the bundled pr-checks.yml | no milestone; GravionLabs/ci#93 and ci#96 are done, every later PR needs `Closes #n` |
+| Issue | Title                           | Why later                                                                                                             |
+| ----- | ------------------------------- | --------------------------------------------------------------------------------------------------------------------- |
+| #10   | jvm package for Java and Kotlin | `needs-decision`: one `jvm` group or two                                                                              |
+| #11   | swift package                   | blocked by #10                                                                                                        |
+| #71   | adopt the bundled pr-checks.yml | no milestone; readiness is on: every PR closes an issue, also docs, roadmap and sync PRs; only release PRs are exempt |
 
 ## Risks
 

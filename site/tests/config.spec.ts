@@ -33,6 +33,22 @@ describe('the VitePress config', () => {
     expect((await loadConfig()).base).toBe('/skills/');
   });
 
+  it('sets the favicon with the SITE_BASE prefix and the logo', async () => {
+    vi.stubEnv('SITE_BASE', '/skills/');
+    const config = await loadConfig();
+    expect(config.head).toEqual([
+      ['link', { rel: 'icon', type: 'image/svg+xml', href: '/skills/icon.svg' }],
+    ]);
+    expect(config.themeConfig?.logo).toBe('/icon.svg');
+    expect(existsSync(resolve(repoRoot, 'docs/public/icon.svg'))).toBe(true);
+  });
+
+  it('sets the favicon at the root when SITE_BASE is not set', async () => {
+    vi.stubEnv('SITE_BASE', undefined);
+    const [[, attrs]] = (await loadConfig()).head as [string, Record<string, string>][];
+    expect(attrs.href).toBe('/icon.svg');
+  });
+
   it('exempts localhost addresses from the dead-link check', async () => {
     const ignore = (await loadConfig()).ignoreDeadLinks;
     expect(ignore).toHaveLength(1);

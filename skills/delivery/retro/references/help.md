@@ -18,7 +18,7 @@ Retrospective on a finished run: measures it, ranks improvements to the agent en
 
 What it measures (seven columns, `n/a` when there is no source, never estimated; `~` stays an estimate): cost, main peak (context), requests, roles by cost, review rounds, fix rounds, CI / duration. Sources: `agentlens` and `gh`.
 
-Output: a report of at most 40 lines (metrics table, candidates ranked by severity with evidence, escalation lines), then on request:
+Output: a report of at most 40 lines (metrics table, candidates ranked by severity with evidence, escalation lines) plus a separate Mermaid flow diagram of the agent calls per PBI (order, round numbers, results; "flow not measured" without a source; it does not count towards the 40 lines), then on request:
 
 - draft PBIs in the `github-issue` format, each naming the skill file and rule to change;
 - lesson drafts with `status: proposed` for repository-, language- or role-specific candidates;
