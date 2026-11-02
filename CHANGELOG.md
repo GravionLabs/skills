@@ -5,6 +5,13 @@ Versioning follows [Semantic Versioning](https://semver.org/).
 
 ---
 
+## [1.4.1] — 2026-11-02
+
+### Bug Fixes
+- **site**: Dev server shows a blank page (#201)
+- **deliver**: Loop console output is cut at 120 characters and uncolored (#202)
+
+
 ## [1.4.0] — 2026-11-02
 
 ### Documentation
@@ -18,6 +25,7 @@ Versioning follows [Semantic Versioning](https://semver.org/).
 - Concept pages for the issue model and skill composition (#178) (#195)
 - Troubleshooting page (#179) (#196)
 - Guide for learning from runs with retro and lessons (#176) (#198)
+- Update CHANGELOG.md for v1.4.0 [skip ci]
 
 
 ### Features
