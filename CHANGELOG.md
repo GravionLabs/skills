@@ -5,10 +5,20 @@ Versioning follows [Semantic Versioning](https://semver.org/).
 
 ---
 
+## [1.3.2] — 2026-11-02
+
+### Bug Fixes
+- **deliver**: Name PRs and issues as full URLs (#199)
+
+
 ## [1.3.1] — 2026-11-02
 
 ### Bug Fixes
 - **deliver**: Propose a space-first herdr sidebar layout (#158)
+
+
+### Documentation
+- Update CHANGELOG.md for v1.3.1 [skip ci]
 
 
 ## [1.3.0] — 2026-11-01
