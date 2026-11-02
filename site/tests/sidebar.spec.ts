@@ -56,9 +56,12 @@ describe('the sidebar of the docs site', () => {
     expect(missing).toEqual([]);
   });
 
-  it('lists the four generated pages in the Reference group', () => {
+  it('lists the generated pages and the troubleshooting page in the Reference group', () => {
     const reference = sidebar.find((g) => g.text === 'Reference');
-    expect(reference?.items.map((i) => i.link)).toEqual(generatedPages);
+    expect(reference?.items.map((i) => i.link)).toEqual([
+      ...generatedPages,
+      '/reference/troubleshooting',
+    ]);
   });
 
   it('has no page twice and no empty group', () => {

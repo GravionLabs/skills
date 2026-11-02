@@ -112,6 +112,10 @@ pwsh .claude/skills/deliver/scripts/Invoke-DeliverLoop.ps1 -Milestone 1.3.0 -Max
 
 It stops when everything is done or `-Max` is reached (exit 0), when no progress is made (1) or a PBI is blocked (2). The stream log is in `.agents/deliver-loop/`. Details: `references/loop.md` of the `deliver` skill.
 
+## Troubleshooting
+
+Pause, skipped PBI, missing ruleset or red check: see [troubleshooting](../reference/troubleshooting.md).
+
 ## Next
 
 [Delivery reference](../delivery.md): review file, release review, decision PBIs, parallel runs, herdr and roles. Options: `/deliver help`.
