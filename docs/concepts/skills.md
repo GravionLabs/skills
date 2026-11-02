@@ -1,6 +1,6 @@
 # Skills
 
-A **skill** is a directory with a `SKILL.md` file and optional companion files (`scripts/`, `references/`, `templates/`, `assets/`). It packages a procedure, a convention or a tool contract so an AI coding agent can load it on demand. Skills follow the open [Agent Skills specification](https://agentskills.io/specification) and are the main artifact apm-hub ships; the separate `agents` package adds a few agents that skills cannot replace.
+A **skill** is a directory with a `SKILL.md` file and optional companion files (`scripts/`, `references/`, `templates/`, `assets/`). It packages a procedure, a convention or a tool contract so an AI coding agent can load it on demand. Skills follow the open [Agent Skills specification](https://agentskills.io/specification) and are the artifact GravionLabs/skills ships.
 
 ## How a skill is loaded
 

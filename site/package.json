@@ -2,7 +2,7 @@
   "name": "site",
   "version": "0.0.0",
   "private": true,
-  "description": "The apm-hub documentation site (VitePress).",
+  "description": "The GravionLabs skills documentation site (VitePress).",
   "type": "module",
   "scripts": {
     "dev": "vitepress dev",

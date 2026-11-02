@@ -51,3 +51,28 @@ describe('skill descriptions', () => {
     );
   });
 });
+
+describe('apm-hub leftovers (#163)', () => {
+  it('site/ and docs/concepts/ do not mention apm-hub', () => {
+    const files = [
+      ...walk(path.join(root, 'site')),
+      ...walk(path.join(root, 'docs/concepts')),
+    ].filter(
+      (f) => /\.(md|json|ts|mts|js|mjs|vue|css)$/.test(f) && !/[\\/](dist|cache)[\\/]/.test(f),
+    );
+    const hits = files
+      .filter((f) => fs.readFileSync(f, 'utf-8').includes('apm-hub'))
+      .map((f) => path.relative(root, f));
+    expect(hits).toEqual([]);
+  });
+
+  it('the site package names the GravionLabs skills documentation site', () => {
+    expect(JSON.parse(read('site/package.json')).description).toBe(
+      'The GravionLabs skills documentation site (VitePress).',
+    );
+  });
+
+  it('the skills concept page names no agents package', () => {
+    expect(read('docs/concepts/skills.md')).not.toContain('`agents` package');
+  });
+});
