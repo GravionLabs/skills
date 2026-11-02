@@ -15,3 +15,7 @@ adr: docs/adr
 code-review: adr-missing
 # references/help.md is the file a documented skill ships (help convention), not a file of skill-write
 skill-write: references/help.md
+# deliver-loop is the shell command that wraps Invoke-DeliverLoop.ps1, not a skill
+deliver: deliver-loop
+# deliver-loop is the shell command of the deliver skill, not a skill
+skills-install: deliver-loop

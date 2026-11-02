@@ -5,6 +5,8 @@ pwsh <skill-dir>/scripts/Invoke-DeliverLoop.ps1 -Milestone 0.13 -Max 5
 pwsh <skill-dir>/scripts/Invoke-DeliverLoop.ps1 -Target 860,870 -Model opus
 ```
 
+Or with the shell command `deliver-loop` (`skills-install` offers it after the `delivery` group): `deliver-loop -Milestone 0.13 -Max 5`. It resolves the installed script (project, `~/.claude/skills`, `~/.agents/skills`), passes all arguments through and exits 1 with a message when none is installed. In herdr (`HERDR_ENV=1`) it starts the loop in its own workspace `<repo> · deliver` (tab `deliver-loop`, `scripts/Start-LoopWorkspace.ps1`), because the herdr sidebar shows one state per workspace by the selected tab; outside herdr it runs in the current terminal.
+
 Run it from the repository root. It starts `claude -p "/deliver <targets> --unattended --max 1" --model <model> --permission-mode auto --output-format stream-json --verbose` once per PBI (`-Model` default `sonnet`, `-Harness claude` is the default). The allowlist is `references/permissions.md`; the script checks nothing more.
 
 ## Harness
