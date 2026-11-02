@@ -196,8 +196,11 @@ fs.writeFileSync(f, JSON.stringify(s));`,
       expect(lines).toMatch(/\d\d:\d\d:\d\d ✗ boom/);
       expect(read('.agents/deliver-loop.ansi.log')).toContain('\u001b[36mbash\u001b[0m');
       expect(read('herdr-calls.txt')).toContain('deliver_step=1/1 ci: red --token deliver_pr=#55');
-      expect(read('notices.txt')).toContain('#7 PR opened');
-      expect(read('notices.txt')).toContain('#7 CI red');
+      if (process.platform === 'darwin') {
+        // osascript stub: notifications exist only on macOS
+        expect(read('notices.txt')).toContain('#7 PR opened');
+        expect(read('notices.txt')).toContain('#7 CI red');
+      }
       expect(r.stdout).toContain('loop result: done');
     });
   });
