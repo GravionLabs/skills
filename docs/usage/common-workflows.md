@@ -1,6 +1,6 @@
 # Common Workflows
 
-End-to-end scenarios with the GravionLabs skills. Each one starts from a repository with Node.js 22+ (for `npx skills`) and PowerShell 7+ (see the [README](../../README.md#quick-start)). Prompts are shown as you would type them in Copilot, Claude Code or OpenCode; the agent selects the skills by their descriptions, so naming them is optional.
+End-to-end scenarios with the GravionLabs skills. Each one starts from a repository with Node.js 22+ (for `npx skills`) and PowerShell 7+ (see the [README](../quick-start.md)). Prompts are shown as you would type them in Copilot, Claude Code or OpenCode; the agent selects the skills by their descriptions, so naming them is optional.
 
 ---
 
