@@ -8,6 +8,8 @@ import { stripHtmlComments } from './strip-comments';
 
 const repoRoot = resolve(fileURLToPath(new URL('../..', import.meta.url)));
 const files = repoFilesOnDisk(repoRoot);
+// `/<repository>/` on GitHub Pages; the workflow sets SITE_BASE.
+const base = process.env['SITE_BASE'] ?? '/';
 
 export default withMermaid(
   defineConfig({
@@ -15,8 +17,9 @@ export default withMermaid(
     description:
       'Agent skills for Claude Code, OpenCode and GitHub Copilot, installed with npx skills.',
     lang: 'en',
-    // `/<repository>/` on GitHub Pages; the workflow sets SITE_BASE.
-    base: process.env['SITE_BASE'] ?? '/',
+    base,
+    // VitePress does not prefix `head` with the base: the favicon (docs/public/icon.svg) adds it itself.
+    head: [['link', { rel: 'icon', type: 'image/svg+xml', href: `${base}icon.svg` }]],
     // The site is the documentation of the repository: its pages are the files of `docs`.
     // The home page `docs/index.md` includes the README at the repository root (see site/README.md).
     srcDir: '../docs',
@@ -45,6 +48,8 @@ export default withMermaid(
     },
     themeConfig: {
       siteTitle: 'GravionLabs skills',
+      // VitePress prefixes the logo with the base.
+      logo: '/icon.svg',
       nav: [
         { text: 'Overview', link: '/overview' },
         { text: 'Skills', link: '/skill-list' },
