@@ -23,7 +23,8 @@
 .PARAMETER Model
   Model of the orchestrating session.
 .PARAMETER Harness
-  Only claude (Claude Code) for now.
+  claude (Claude Code, default) or copilot (GitHub Copilot CLI: `copilot -p … --model <model> --allow-all-tools
+  --no-ask-user --output-format json`). Any other value fails before the first iteration.
 .PARAMETER NoPane
   Opens no herdr log pane.
 .PARAMETER NoColor
@@ -35,12 +36,18 @@ param(
   [string]$Milestone = '',
   [ValidateRange(1, 10000)][int]$Max = 0,
   [string]$Model = 'sonnet',
-  [ValidateSet('claude')][string]$Harness = 'claude',
+  [string]$Harness = 'claude',
   [switch]$NoPane,
   [switch]$NoColor,
   [Parameter(ValueFromRemainingArguments)][string[]]$MoreTargets = @()
 )
 $ErrorActionPreference = 'Stop'
+
+$Harnesses = @('claude', 'copilot')
+if ($Harness -notin $Harnesses) {
+  [Console]::Error.WriteLine("Unknown -Harness '$Harness'. Supported: $($Harnesses -join ', ').")
+  exit 64
+}
 
 $Nrs = @(($Target + $MoreTargets) | ForEach-Object { $_ -split '[,\s]+' } | Where-Object { $_ })
 if (($Nrs | Where-Object { $_ -notmatch '^\d+$' }) -or ($Nrs.Count -eq 0 -and -not $Milestone)) {
@@ -207,7 +214,32 @@ function Get-StepColor([string]$step, [string]$result) {
   return ''
 }
 
-# One stream-json record: summary line, progress lines of deliver (top level only), tool errors.
+# Steps shared by both harnesses: a tool call, assistant text (with progress lines of deliver), a tool error.
+function Write-ToolStep([string]$prefix, [string]$name, $in) {
+  $what = ''
+  foreach ($k in 'description', 'file_path', 'command', 'pattern', 'path') {
+    if ($in.$k) { $what = Get-Short ([string]$in.$k); break }
+  }
+  Write-Step "$prefix$name $what" -Tool $name -ToolAt $prefix.Length
+}
+
+function Write-TextStep([string]$prefix, [string]$text, [int]$position, [int]$total) {
+  $color = ''
+  if (-not $prefix) {
+    foreach ($l in ($text -split "`r?`n")) { if ($l -match '^#\d+ ([\w-]+): (.*)$') { $color = Get-StepColor $Matches[1] $Matches[2]; if ($color) { break } } }
+  }
+  Write-Step "$prefix» $(Get-Short $text)" $color
+  if ($prefix) { return }
+  foreach ($l in ($text -split "`r?`n")) {
+    if ($l -match '^#(\d+) ([\w-]+): (.*)$') {
+      Set-Pane $Matches[1] "$position/$total $($Matches[2]): $($Matches[3])"
+      $why = Get-Attention $Matches[2] $Matches[3]
+      if ($why) { Send-Notice "#$($Matches[1]) $why" }
+    }
+  }
+}
+
+# One stream-json record of Claude Code: summary line, progress lines of deliver (top level only), tool errors.
 function Read-Record([string]$line, [int]$position, [int]$total) {
   try { $rec = $line | ConvertFrom-Json } catch { Write-Step "? $(Get-Short $line)"; return }
   $parent = $rec.parent_tool_use_id
@@ -215,30 +247,35 @@ function Read-Record([string]$line, [int]$position, [int]$total) {
   foreach ($c in @($rec.message.content)) {
     if (-not $c) { continue }
     if ($rec.type -eq 'assistant' -and $c.type -eq 'tool_use') {
-      $in = $c.input
-      $what = ''
-      foreach ($k in 'description', 'file_path', 'command', 'pattern', 'path') {
-        if ($in.$k) { $what = Get-Short ([string]$in.$k); break }
-      }
-      if ($c.name -in 'Agent', 'Task') { $AgentNames[$c.id] = Get-Short ([string]$in.description) 60 }
-      Write-Step "$prefix$($c.name) $what" -Tool $c.name -ToolAt $prefix.Length
+      if ($c.name -in 'Agent', 'Task') { $AgentNames[$c.id] = Get-Short ([string]$c.input.description) 60 }
+      Write-ToolStep $prefix $c.name $c.input
     } elseif ($rec.type -eq 'assistant' -and $c.type -eq 'text') {
-      $color = ''
-      if (-not $prefix) {
-        foreach ($l in ($c.text -split "`r?`n")) { if ($l -match '^#\d+ ([\w-]+): (.*)$') { $color = Get-StepColor $Matches[1] $Matches[2]; if ($color) { break } } }
-      }
-      Write-Step "$prefix» $(Get-Short $c.text)" $color
-      if ($prefix) { continue }
-      foreach ($l in ($c.text -split "`r?`n")) {
-        if ($l -match '^#(\d+) ([\w-]+): (.*)$') {
-          Set-Pane $Matches[1] "$position/$total $($Matches[2]): $($Matches[3])"
-          $why = Get-Attention $Matches[2] $Matches[3]
-          if ($why) { Send-Notice "#$($Matches[1]) $why" }
-        }
-      }
+      Write-TextStep $prefix $c.text $position $total
     } elseif ($rec.type -eq 'user' -and $c.type -eq 'tool_result' -and $c.is_error) {
       $body = if ($c.content -is [string]) { $c.content } else { ($c.content | ForEach-Object { $_.text }) -join "`n" }
       Write-Step "$prefix✗ $(Get-Short $body)" 'red'
+    }
+  }
+}
+
+# One JSONL event of Copilot CLI (--output-format json): {type, data}. Tool calls come as tool.execution_start,
+# failures as tool.execution_complete with success=false, text as assistant.message. Subagent steps get a
+# [subagent] prefix when the event carries a parentToolCallId. Unknown event types are ignored (only logged to the jsonl).
+function Read-CopilotRecord([string]$line, [int]$position, [int]$total) {
+  try { $rec = $line | ConvertFrom-Json } catch { Write-Step "? $(Get-Short $line)"; return }
+  $d = $rec.data
+  $prefix = if ($d.parentToolCallId) { '[subagent] ' } else { '' }
+  switch ($rec.type) {
+    'tool.execution_start' {
+      if ($d.toolCallId) { $script:AgentNames[$d.toolCallId] = $d.toolName }
+      Write-ToolStep $prefix $d.toolName $d.arguments
+    }
+    'assistant.message' { if ($d.content) { Write-TextStep $prefix ([string]$d.content) $position $total } }
+    'tool.execution_complete' {
+      if ($d.success -eq $false) {
+        $body = if ($d.error.message) { [string]$d.error.message } elseif ($d.result.content) { [string]$d.result.content } else { 'tool failed' }
+        Write-Step "$prefix✗ $(Get-Short $body)" 'red'
+      }
     }
   }
 }
@@ -254,13 +291,18 @@ function Invoke-Iteration([int]$n, [int]$total, $state) {
   $saved = $env:HERDR_ENV
   $env:HERDR_ENV = ''
   try {
-    & claude -p $prompt --model $Model --permission-mode auto --output-format stream-json --verbose 2>&1 | ForEach-Object {
+    $cli = if ($Harness -eq 'copilot') {
+      @('-p', $prompt, '--model', $Model, '--allow-all-tools', '--no-ask-user', '--output-format', 'json')
+    } else {
+      @('-p', $prompt, '--model', $Model, '--permission-mode', 'auto', '--output-format', 'stream-json', '--verbose')
+    }
+    & $Harness @cli 2>&1 | ForEach-Object {
       $line = "$_"
       if ($_ -is [System.Management.Automation.ErrorRecord]) { Write-Step "stderr $(Get-Short $line)" 'red'; return }
       [IO.File]::AppendAllText($jsonl, $line + "`n")
-      Read-Record $line $n $total
+      if ($Harness -eq 'copilot') { Read-CopilotRecord $line $n $total } else { Read-Record $line $n $total }
     }
-    if ($LASTEXITCODE -ne 0) { Write-Step "claude exited with $LASTEXITCODE" 'red' }
+    if ($LASTEXITCODE -ne 0) { Write-Step "$Harness exited with $LASTEXITCODE" 'red' }
   } finally { $env:HERDR_ENV = $saved }
 }
 

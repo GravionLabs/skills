@@ -20,10 +20,11 @@ Delivers the open PBIs and Bugs of the given issues in dependency order: a subag
 
 ### Loop script
 
-One fresh `claude -p "/deliver … --unattended --max 1"` per PBI:
+One fresh `claude -p "/deliver … --unattended --max 1"` (`copilot -p …` with `-Harness copilot`) per PBI:
 
 ```powershell
 pwsh scripts/Invoke-DeliverLoop.ps1 -Target 12,14 -Milestone 1.3.0 -Max 5 -Model sonnet
+pwsh scripts/Invoke-DeliverLoop.ps1 -Milestone 1.3.0 -Harness copilot -Model gpt-5
 ```
 
 - `-Target <nr…>`: issue numbers, as `<nr>` above

@@ -5,7 +5,18 @@ pwsh <skill-dir>/scripts/Invoke-DeliverLoop.ps1 -Milestone 0.13 -Max 5
 pwsh <skill-dir>/scripts/Invoke-DeliverLoop.ps1 -Target 860,870 -Model opus
 ```
 
-Run it from the repository root. It starts `claude -p "/deliver <targets> --unattended --max 1" --model <model> --permission-mode auto --output-format stream-json --verbose` once per PBI (`-Model` default `sonnet`, `-Harness claude` is the only harness). The allowlist is `references/permissions.md`; the script checks nothing more.
+Run it from the repository root. It starts `claude -p "/deliver <targets> --unattended --max 1" --model <model> --permission-mode auto --output-format stream-json --verbose` once per PBI (`-Model` default `sonnet`, `-Harness claude` is the default). The allowlist is `references/permissions.md`; the script checks nothing more.
+
+## Harness
+
+| `-Harness`         | Command per PBI                                                                                                                                         |
+| :----------------- | :------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| `claude` (default) | `claude -p "/deliver <targets> --unattended --max 1" --model <model> --permission-mode auto --output-format stream-json --verbose`                      |
+| `copilot`          | `copilot -p "/deliver <targets> --unattended --max 1" --model <model> --allow-all-tools --no-ask-user --output-format json` (JSONL, one event per line) |
+
+Any other value fails with exit 64 and the list of supported harnesses before the first iteration. Stop rules and exit codes read GitHub only and are the same for both. `-Model` is passed as given: `sonnet` is a Claude name, so pass a Copilot model such as `gpt-5` with `-Harness copilot`. For long runs set `COPILOT_TASK_WAIT_TIMEOUT_SECONDS=3600` (`references/permissions.md`, Copilot CLI).
+
+Copilot's JSONL feeds the step log, the colored log, the herdr tokens and the notifications from `tool.execution_start` (tool step), `assistant.message` (text and the `#<nr> <step>: <result>` progress lines) and `tool.execution_complete` with `success: false` (`✗`). What it cannot provide: subagent steps carry only the prefix `[subagent]` (no agent description, and only when the event has `parentToolCallId`); other event types are written to the jsonl but not to the log; `--allow-all-tools` replaces the per-tool allowlist of `references/permissions.md`.
 
 ## Loop or one session
 
