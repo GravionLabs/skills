@@ -45,8 +45,4 @@ The skills ship no git guardrail hook. Guard destructive git commands (force pus
 
 `github-release cut` creates the rolling `release/next` branch, PBI pull requests target it, and `github-release finish` opens the release PR into `main` with the changelog.
 
-```text
-Finish the release with an updated changelog.
-```
-
-On first use `finish` installs git-cliff, creates `cliff.toml` from its template and adds a `changelog` script (see its `references/cliff-setup.md`). `/github-release help` prints the usage. Commit titles produced by `github-issue` and `github-pull-request` already follow the conventional-commit format it expects.
+The walkthrough with prompts, the changelog setup and the ruleset on `release/next` are in the [release guide](release.md).
