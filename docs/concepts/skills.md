@@ -80,7 +80,9 @@ A skill with `disable-model-invocation: true` is started by name only (`/deliver
 
 - [Skill frontmatter convention](skill-frontmatter.md)
 - [Skill companion directories](../usage/skill-companion-dirs.md)
-- [Common workflows](../usage/common-workflows.md)
+- [Stack setups](../guides/stack-setups.md)
+- [Work an issue by hand](../guides/work-an-issue-by-hand.md)
+- [Fix a bug](../guides/fix-a-bug.md)
 - [All skills](../skill-list.md) (generated)
 - [agentskills.io specification](https://agentskills.io/specification)
 - [GitHub Copilot: about agent skills](https://docs.github.com/en/copilot/concepts/agents/about-agent-skills)
