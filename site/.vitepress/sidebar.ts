@@ -17,8 +17,23 @@ export const sidebar: SidebarGroup[] = [
     items: [
       { text: 'Overview', link: '/overview' },
       { text: 'Prerequisites', link: '/prerequisites' },
+    ],
+  },
+  {
+    text: 'Guides',
+    items: [
       { text: 'Working mode', link: '/working-mode' },
       { text: 'Delivery', link: '/delivery' },
+      { text: 'Common workflows', link: '/usage/common-workflows' },
+    ],
+  },
+  {
+    text: 'Configuration',
+    items: [
+      { text: 'Project config', link: '/usage/project-config' },
+      { text: 'ADRs and specs', link: '/usage/governance' },
+      { text: 'Status lines', link: '/usage/statusline' },
+      { text: 'LSP configuration', link: '/lsp-configuration' },
     ],
   },
   {
@@ -29,29 +44,16 @@ export const sidebar: SidebarGroup[] = [
     ],
   },
   {
-    text: 'Usage',
-    items: [
-      { text: 'Common workflows', link: '/usage/common-workflows' },
-      { text: 'Project config', link: '/usage/project-config' },
-      { text: 'ADRs and specs', link: '/usage/governance' },
-      { text: 'Status lines', link: '/usage/statusline' },
-      { text: 'Skill companion directories', link: '/usage/skill-companion-dirs' },
-      { text: 'Skill trigger evals', link: '/usage/trigger-evals' },
-    ],
-  },
-  {
-    text: 'Integrations',
-    items: [
-      { text: 'External frameworks', link: '/frameworks' },
-      { text: 'LSP configuration', link: '/lsp-configuration' },
-    ],
-  },
-  {
-    text: 'Spikes',
-    items: [{ text: 'Deliver capabilities', link: '/spikes/deliver' }],
-  },
-  {
     text: 'Reference',
     items: [{ text: 'Skills', link: '/skill-list' }],
+  },
+  {
+    text: 'Contributing',
+    items: [
+      { text: 'Skill companion directories', link: '/usage/skill-companion-dirs' },
+      { text: 'Skill trigger evals', link: '/usage/trigger-evals' },
+      { text: 'External frameworks', link: '/frameworks' },
+      { text: 'Spikes: deliver capabilities', link: '/spikes/deliver' },
+    ],
   },
 ];
