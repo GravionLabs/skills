@@ -33,6 +33,12 @@ describe('the sidebar of the docs site', () => {
     ]);
   });
 
+  it('puts the quick start in Start here right after the overview', () => {
+    const start = sidebar.find((g) => g.text === 'Start here');
+    const links = start?.items.map((i) => i.link) ?? [];
+    expect(links.indexOf('/quick-start')).toBe(links.indexOf('/overview') + 1);
+  });
+
   it('lists every existing docs page in some group, except the home page', () => {
     expect(pagesOnDisk().filter((p) => p !== homePage && !listed.includes(p))).toEqual([]);
   });

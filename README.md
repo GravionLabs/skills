@@ -8,6 +8,8 @@ Successor of [GravionLabs/apm-hub](https://github.com/GravionLabs/apm-hub) (arch
 
 ## Quick start
 
+Details on the [documentation site](https://gravionlabs.github.io/skills/quick-start) ([source](docs/quick-start.md)).
+
 Requirements: Node.js 22+ (for `npx`), PowerShell 7+ (`pwsh`) for the skill scripts, `gh` for the GitHub and delivery skills. Check them with `check-prerequisites` ([prerequisites](docs/prerequisites.md)).
 
 1. Install the installer skill once per machine:
