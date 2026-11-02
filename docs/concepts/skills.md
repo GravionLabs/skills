@@ -65,12 +65,7 @@ The complete rule set is in `skills/skill-tooling/skill-write/references/skill-w
 
 ## How the skills compose
 
-- `detect-techstack` returns a JSON report naming the `<lang>-implementation` and `<lang>-test` skills for the project.
-- `implementation` enforces "every change has tests" and dispatches to the language skill from that report.
-- `code-review` reads the `## Review rules` section of each detected `<lang>-implementation` skill and reports blocking findings and notes.
-- `diagnose` is loaded for bug fixes: it builds a red-capable feedback loop (commands from `<lang>-test`) before any hypothesis.
-- `planner` plans an issue one level down; `/deliver` ([delivery](../delivery.md)) chains the skills PBI by PBI, interactive or `--unattended`.
-- `github-issue` routes issue work by label and sub-issue shape; `github-pull-request` opens the PR.
+Language skills, shared skills, issue skills and the `planner` and `deliver` workflows delegate to each other by name. The diagram and the roles are on [skill composition](composition.md).
 
 ## Slash commands
 
@@ -78,6 +73,8 @@ A skill with `disable-model-invocation: true` is started by name only (`/deliver
 
 ## Related
 
+- [Skill composition](composition.md)
+- [Issue model](issue-model.md)
 - [Skill frontmatter convention](skill-frontmatter.md)
 - [Skill companion directories](../usage/skill-companion-dirs.md)
 - [Stack setups](../guides/stack-setups.md)

@@ -63,7 +63,7 @@ refine 42
 - Is an existing file overwritten? — No, fail with a clear error
 ```
 
-Labels follow the result: a ready issue loses `needs-refinement`; with an open decision it gets `needs-decision` and the question as a comment. A size L PBI gets a proposed split into sibling PBIs, created only after approval. `/deliver` skips issues labelled `needs-refinement`.
+Labels ([issue model](../concepts/issue-model.md#labels)) follow the result: a ready issue loses `needs-refinement`; with an open decision it gets `needs-decision` and the question as a comment. A size L PBI gets a proposed split into sibling PBIs, created only after approval. `/deliver` skips issues labelled `needs-refinement`.
 
 ## Decision PBIs with governance
 

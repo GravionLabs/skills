@@ -45,6 +45,8 @@ export const sidebar: SidebarGroup[] = [
     text: 'Concepts',
     items: [
       { text: 'Skills', link: '/concepts/skills' },
+      { text: 'Skill composition', link: '/concepts/composition' },
+      { text: 'Issue model', link: '/concepts/issue-model' },
       { text: 'Skill frontmatter', link: '/concepts/skill-frontmatter' },
     ],
   },

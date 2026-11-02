@@ -63,7 +63,7 @@ A blocked PBI (a red check unrelated to the change, for example) is listed with 
 /deliver 9 11 14
 ```
 
-A Feature or Epic expands to its open PBIs and Bugs. They are ordered by their blocked-by links and each is delivered once. `needs-refinement` is skipped (hint `planner refine <nr>`). A Feature without PBIs is planned in the same session with `planner` and `grill-me` ([plan an issue](plan-an-issue.md)).
+A Feature or Epic expands to its open PBIs and Bugs. They are ordered by their blocked-by links and each is delivered once. Issues with a blocking label are skipped (labels: [issue model](../concepts/issue-model.md#labels); hint `planner refine <nr>`). A Feature without PBIs is planned in the same session with `planner` and `grill-me` ([plan an issue](plan-an-issue.md)).
 
 ## Deliver a milestone
 
