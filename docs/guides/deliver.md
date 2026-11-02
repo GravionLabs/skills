@@ -7,7 +7,7 @@
 - The branch `release/next` exists (`github-release` `cut` creates it).
 - A GitHub ruleset on `release/next` with required checks and no bypass. It is the hard gate: a red check blocks the merge whatever the session does. `/deliver` warns at the start when there is none.
 - Unattended runs need `git`, `gh` and your verify commands on the harness allowlist (`references/permissions.md` of the `deliver` skill).
-- The release guide (`docs/guides/release.md`, planned) will cover the branch and the ruleset; until it exists, see the `github-release` skill.
+- The [release guide](release.md) covers the branch, the milestone and the ruleset.
   :::
 
 ## The loop
