@@ -8,14 +8,21 @@
   (non-semver titles last). show: one milestone by -Name. current and show group the open issues (pull
   requests filtered out) as needsDecision, needsRefinement, blocked (open blockers), claimed (assignee)
   and ready, in that precedence (a blocker from another repository carries repository owner/repo), and add the release PR release/next -> default from Get-ReleaseState.ps1
-  of the github-release skill. create: creates milestone <x.y.z> when no milestone has that title; it
+  of the github-release skill. close: closes milestone <x.y.z> after its release tag v<x.y.z> exists; see below. create: creates milestone <x.y.z> when no milestone has that title; it
   never renames or closes one. issues: resolves the milestone title -Name to its number and lists its issues
   (body, labels, assignees, state; pull requests filtered out) in one paginated REST call, for the batched
   reads of deliver; unknown milestone: exit 1.
+  close: closes the milestone titled -Name (state=closed via PATCH). Exit 1 when the name is not x.y.z, the milestone
+  does not exist or the tag v<x.y.z> does not exist. Already closed: changes nothing ({ closed: false }). Open issues
+  (pull requests are ignored and never moved): without -MoveTo nothing is closed and they are listed in openIssues;
+  with -MoveTo <x.y.z> they are moved to that existing open milestone first (never created), then it is closed.
+  Never renames, edits the due date or deletes a milestone.
 .PARAMETER Mode
-  current, list, show, create or issues.
+  current, list, show, create, issues or close.
 .PARAMETER Name
-  show and create: the milestone title, a bare version x.y.z (a leading v is dropped).
+  show, create and close: the milestone title, a bare version x.y.z (a leading v is dropped).
+.PARAMETER MoveTo
+  close: title x.y.z of an existing open milestone that receives the open issues.
 .PARAMETER State
   issues: open, closed or all (default).
 .PARAMETER Repo
@@ -24,8 +31,9 @@
   Path of Get-ReleaseState.ps1; default: the sibling github-release skill. Missing: releasePr is null.
 #>
 param(
-  [Parameter(Mandatory)][ValidateSet('current', 'list', 'show', 'create', 'issues')][string]$Mode,
+  [Parameter(Mandatory)][ValidateSet('current', 'list', 'show', 'create', 'issues', 'close')][string]$Mode,
   [string]$Name,
+  [string]$MoveTo,
   [ValidateSet('open', 'closed', 'all')][string]$State = 'all',
   [string]$Repo = '{owner}/{repo}',
   [string]$ReleaseState = (Join-Path $PSScriptRoot '../../github-release/scripts/Get-ReleaseState.ps1')
@@ -65,6 +73,44 @@ if ($Mode -eq 'create') {
   }
   [ordered]@{ created = $created; milestone = [ordered]@{ number = $existing.number; title = $existing.title; state = $existing.state; url = $existing.html_url } } |
     ConvertTo-Json -Depth 4
+  exit 0
+}
+
+if ($Mode -eq 'close') {
+  $title = Get-Bare $Name
+  if (-not (ConvertTo-Version $title)) { Fail "invalid milestone name '$Name': expected x.y.z" }
+  $m = $milestones | Where-Object { (Get-Bare $_.title) -eq $title } | Select-Object -First 1
+  if (-not $m) { Fail "milestone '$title' not found" }
+  $ref = [ordered]@{ number = $m.number; title = $m.title; state = $m.state; url = $m.html_url }
+  $result = [ordered]@{ closed = $false; milestone = $ref; moved = @(); openIssues = @() }
+  if ($m.state -eq 'closed') { $result | ConvertTo-Json -Depth 5; exit 0 }
+  $null = & gh api "repos/$Repo/git/ref/tags/v$title" 2>$null
+  if ($LASTEXITCODE -ne 0) { Fail "tag v$title does not exist: release first, then close the milestone" }
+  $open = @(Get-Paged "repos/$Repo/issues?milestone=$($m.number)&state=open&per_page=100" | Where-Object { $null -eq $_.pull_request } | Sort-Object number |
+      ForEach-Object { [ordered]@{ number = $_.number; title = $_.title } })
+  if ($open.Count -and $MoveTo) {
+    $target = Get-Bare $MoveTo
+    if (-not (ConvertTo-Version $target)) { Fail "invalid -MoveTo '$MoveTo': expected x.y.z" }
+    $t = $milestones | Where-Object { (Get-Bare $_.title) -eq $target } | Select-Object -First 1
+    if (-not $t) { Fail "target milestone '$target' not found; create it with /github-milestone create $target" }
+    if ($t.state -ne 'open') { Fail "target milestone '$target' is closed" }
+    if ($t.number -eq $m.number) { Fail 'target milestone is the milestone to close' }
+    $repoArgs = if ($Repo -eq '{owner}/{repo}') { @() } else { @('--repo', $Repo) }
+    $moved = [System.Collections.Generic.List[object]]::new()
+    foreach ($i in $open) {
+      $null = & gh issue edit $i.number --milestone $t.title @repoArgs 2>$null
+      if ($LASTEXITCODE -ne 0) { Fail "moving #$($i.number) to milestone $target failed (moved so far: $(($moved | ForEach-Object { "#$($_.number)" }) -join ', '))" }
+      $moved.Add($i)
+    }
+    $result.moved = $moved.ToArray()
+    $open = @()
+  }
+  if ($open.Count) { $result.openIssues = $open; $result | ConvertTo-Json -Depth 5; exit 0 }
+  $null = & gh api -X PATCH "repos/$Repo/milestones/$($m.number)" -f state=closed 2>$null
+  if ($LASTEXITCODE -ne 0) { Fail "closing milestone $title failed" }
+  $ref.state = 'closed'
+  $result.closed = $true
+  $result | ConvertTo-Json -Depth 5
   exit 0
 }
 

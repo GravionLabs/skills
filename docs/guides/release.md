@@ -126,3 +126,14 @@ The `main` branch has its own ruleset that allows merge commits only, for the re
 ## Next
 
 [Deliver issues](deliver.md), [delivery reference](../delivery.md).
+
+## 7. Close the milestone
+
+Once the release job has tagged `v1.3.0`, close the milestone and create the next one:
+
+```text
+/github-milestone close 1.3.0 --move-to 1.4.0
+/github-milestone create 1.4.0
+```
+
+`close` needs the tag. Open issues stay and nothing is closed unless you pass `--move-to <x.y.z>`, an existing open milestone that receives them (create it first). Pull requests are not moved. A milestone that is already closed is left as is. `close` never renames, edits the due date or deletes a milestone.
