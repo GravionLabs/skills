@@ -71,4 +71,4 @@ When `.agents/config.json` has `governance` ([ADRs and specs](../usage/governanc
 
 ## Next
 
-Deliver the planned PBIs with `/deliver 42` ([delivery](../delivery.md)) and see [working mode](../working-mode.md) for the session routine.
+Deliver the planned PBIs with `/deliver 42` ([delivery](../delivery.md)) and see [work an issue by hand](work-an-issue-by-hand.md) for the session routine.

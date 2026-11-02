@@ -1,7 +1,7 @@
 # Status line and subagent status line
 
 The `context-statusline` skill of the `statusline` package (Claude Code; the status line also on GitHub Copilot CLI) shows how full the context is, in the status line
-of the main session and per subagent in the agent panel. It keeps the [working mode](../working-mode.md) honest: you see the
+of the main session and per subagent in the agent panel. It keeps the [work an issue by hand](../guides/work-an-issue-by-hand.md) honest: you see the
 context grow before the 150k warning fires.
 
 ```text

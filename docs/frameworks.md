@@ -33,7 +33,7 @@ approximate.
   before any action, including clarifying questions. That collides with gated skills, and two mandatory process layers produce two review seats and two planning
   artifacts per change.
 - Cost: its own strict-cost spec reports ~13 USD and ~150 controller turns per plan run on Opus and
-  proposes a mid-tier orchestrator subagent as the remedy. [Working mode](working-mode.md) keeps one
+  proposes a mid-tier orchestrator subagent as the remedy. [Work an issue by hand](guides/work-an-issue-by-hand.md) keeps one
   issue per session instead.
 - A second distribution channel (a plugin per harness) next to `npx skills`.
 
