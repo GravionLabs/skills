@@ -8,7 +8,7 @@ Runs `pwsh scripts/Install-Statusline.ps1` with the given parameters. Without ar
 
 ## Arguments and flags
 
-- `-Client claude|copilot|all`: client to configure (default `claude`). Copilot CLI gets the status line only.
+- `-Client claude|copilot|all`: client to configure (default `claude`). Copilot CLI gets the status line and, unless `-NoContextWarning`, the `postToolUse` context warning hook.
 - `-Force`: replace a `statusLine` / `subagentStatusLine` you set yourself.
 - `-NoContextWarning`: do not register the context warning hook.
 - `-Uninstall`: remove only the entries of this skill (status lines, hook, copies of older versions).
