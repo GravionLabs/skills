@@ -2,7 +2,7 @@
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "https://github.com/GravionLabs/skills/skills/github/github-milestone/schema/milestones.schema.json",
   "title": "Get-Milestones.ps1 output",
-  "description": "One of six shapes, by -Mode: current, list, show (a milestone detail), create, issues or close.",
+  "description": "Milestone titles: M<n> (open), M<n> (x.y.z) (closed, released) or legacy x.y.z; others are listed, never current. One of six shapes, by -Mode: current, list, show (a milestone detail), create, issues or close.",
   "oneOf": [
     {
       "title": "current",
@@ -23,7 +23,7 @@
         "latestTag": { "$ref": "#/$defs/tag" },
         "milestones": {
           "type": "array",
-          "description": "Open and closed, semver ascending, non-semver titles last.",
+          "description": "Open and closed: legacy x.y.z by semver, then M<n> by number, other titles last.",
           "items": { "$ref": "#/$defs/summary" }
         }
       },
@@ -65,8 +65,9 @@
       "type": "object",
       "required": ["closed", "milestone", "moved", "openIssues"],
       "properties": {
+        "version": { "type": "string", "description": "Only for M<n> closed by this run: the x.y.z of the new title M<n> (x.y.z)." },
         "closed": { "type": "boolean", "description": "true: this run closed the milestone. false: it was already closed, or open issues remain (see openIssues)." },
-        "milestone": { "$ref": "#/$defs/milestoneRef" },
+        "milestone": { "$ref": "#/$defs/milestoneRef", "description": "title is the new M<n> (x.y.z) once renamed." },
         "moved": {
           "type": "array",
           "description": "Open issues moved to -MoveTo before closing.",
@@ -128,7 +129,7 @@
         "open": { "type": "integer", "minimum": 0 },
         "closed": { "type": "integer", "minimum": 0 },
         "progress": { "type": "integer", "minimum": 0, "maximum": 100, "description": "closed / (open + closed) in %, 0 when empty." },
-        "tagged": { "type": "boolean", "description": "The tag v<title> exists." },
+        "tagged": { "type": "boolean", "description": "The tag v<version> exists: version of the parentheses in M<n> (x.y.z), the title for legacy x.y.z; false for M<n> without version." },
         "url": { "type": ["string", "null"] }
       }
     },
