@@ -10,7 +10,7 @@ metadata:
 
 `help` (or `--help`, `-h`): print `references/help.md` unchanged, nothing else.
 
-Claude Code (status line and subagent line) and GitHub Copilot CLI (status line only, experimental). Two Node scripts (Node >= 22, no dependencies) and an installer (PowerShell 7+) that points the client settings at them.
+Claude Code (status line and subagent line) and GitHub Copilot CLI (status line and context warning hook, experimental). Two Node scripts (Node >= 22, no dependencies) and an installer (PowerShell 7+) that points the client settings at them.
 
 ## Install
 
@@ -23,7 +23,7 @@ pwsh scripts/Install-Statusline.ps1 -Force      # replace a statusLine / subagen
 pwsh scripts/Install-Statusline.ps1 -Uninstall  # remove only our entries (and copies of older versions)
 ```
 
-The installer points `statusLine` and `subagentStatusLine` at the skill's own scripts and registers the context warning hook (`UserPromptSubmit` for Claude Code, `postToolUse` for Copilot CLI; `npx skills` installs no hooks) (no copy, so `npx skills update` refreshes them), keeps every other settings key, writes a backup first and is idempotent. A foreign entry is refused without `-Force`. Restart Claude Code to see the lines. Details (paths, `-Client copilot`, migration, `-Uninstall`): https://github.com/GravionLabs/skills/blob/main/docs/usage/statusline.md.
+The installer points `statusLine` and `subagentStatusLine` at the skill's own scripts and registers the context warning hook (`UserPromptSubmit` for Claude Code, `postToolUse` for Copilot CLI with `-Client copilot|all`; `npx skills` installs no hooks), with no copy, so `npx skills update` refreshes them, keeps every other settings key, writes a backup first and is idempotent. A foreign entry is refused without `-Force`. Restart Claude Code to see the lines. Details (paths, `-Client copilot`, migration, `-Uninstall`): https://github.com/GravionLabs/skills/blob/main/docs/usage/statusline.md.
 
 ## What you get
 

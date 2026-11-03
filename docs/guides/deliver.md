@@ -104,13 +104,25 @@ State lives in GitHub only (issue, branch, PR, checks). After a crash, a closed 
 
 ## A release in fresh sessions
 
-One session over a whole release grows large. `Invoke-DeliverLoop.ps1` starts a fresh `claude -p "/deliver … --unattended --max 1"` per PBI and reads the progress from GitHub:
+One session over a whole release grows large. `Invoke-DeliverLoop.ps1` starts a fresh `claude -p "/deliver … --unattended --max 1"` per PBI and reads the progress from GitHub. `skills-install` offers the `deliver-loop` shim (`Install-LoopShim.ps1`), so you start it from any shell:
+
+```powershell
+deliver-loop -Milestone 1.3.0 -Max 5 -Model sonnet
+```
+
+Without the shim, call the script by its full path:
 
 ```powershell
 pwsh .claude/skills/deliver/scripts/Invoke-DeliverLoop.ps1 -Milestone 1.3.0 -Max 5 -Model sonnet
 ```
 
-It stops when everything is done or `-Max` is reached (exit 0), when no progress is made (1) or a PBI is blocked (2). The stream log is in `.agents/deliver-loop/`. Details: `references/loop.md` of the `deliver` skill.
+It stops when everything is done or `-Max` is reached (exit 0), when no progress is made (1) or a PBI is blocked (2). The stream log is in `.agents/deliver-loop/`.
+
+- `-Harness copilot` runs `copilot -p … --unattended --max 1` instead. `-Model` is passed as given, and the default `sonnet` is a Claude name, so pass a Copilot model such as `gpt-5`.
+- Console: stdout is colored on a terminal (`-NoColor` or `NO_COLOR` turn it off) and lines are cut to the terminal width (at least 120). The herdr log pane is opt-in with `-LogPane`.
+- In herdr the shim opens its own workspace and reports the loop as an agent: [herdr with the skills](herdr.md#the-loop-in-herdr).
+
+Details: `references/loop.md` of the `deliver` skill.
 
 ## Troubleshooting
 
@@ -118,4 +130,4 @@ Pause, skipped PBI, missing ruleset or red check: see [troubleshooting](../refer
 
 ## Next
 
-[Delivery reference](../delivery.md): review file, release review, decision PBIs, parallel runs, herdr and roles. Options: `/deliver help`. In herdr: [herdr with the skills](herdr.md).
+[Delivery reference](../delivery.md): review file, release review, decision PBIs, parallel runs, herdr and roles. After a run, learn from it with `retro` and lessons: [learn from runs](learn-from-runs.md). Options: `/deliver help`. In herdr: [herdr with the skills](herdr.md).
