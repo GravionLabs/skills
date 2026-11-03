@@ -68,10 +68,12 @@ A Feature or Epic expands to its open PBIs and Bugs. They are ordered by their b
 ## Deliver a milestone
 
 ```text
-/deliver --milestone 1.3.0
+/deliver --milestone M4
 ```
 
-Delivers every open PBI and Bug of the milestone. When none is left, `deliver` runs a release review of the whole release diff. Without blocking findings it opens the release PR into `main` and stops: you review and merge that one. With blocking findings it files one Bug per finding in the milestone; run the command again to deliver them.
+Name the milestone `M<n>`: `M4` finds the open `M4` and, after `/github-milestone close M4` renamed it, `M4 (0.2.0)`, so the same command and the same release-review state work before and after the rename. A legacy title such as `1.3.0` works as before.
+
+Delivers every open PBI and Bug of the milestone. When none is left, `deliver` runs a release review of the whole release diff. Without blocking findings it opens the release PR into `main` and stops: you review and merge that one. With blocking findings it files one Bug per finding in the milestone; run the command again to deliver them. With the release PR `deliver` ends with the hint to run `/github-milestone close M4` once that PR is merged and tagged.
 
 ## Interactive or unattended
 
@@ -97,7 +99,7 @@ State lives in GitHub only (issue, branch, PR, checks). After a crash, a closed 
 ## Limit a run with --max
 
 ```text
-/deliver --milestone 1.3.0 --max 3
+/deliver --milestone M4 --max 3
 ```
 
 `--max <n>` stops after `n` delivered, blocked or paused PBIs and prints the report. Run it again for the next batch.
@@ -107,13 +109,13 @@ State lives in GitHub only (issue, branch, PR, checks). After a crash, a closed 
 One session over a whole release grows large. `Invoke-DeliverLoop.ps1` starts a fresh `claude -p "/deliver … --unattended --max 1"` per PBI and reads the progress from GitHub. `skills-install` offers the `deliver-loop` shim (`Install-LoopShim.ps1`), so you start it from any shell:
 
 ```powershell
-deliver-loop -Milestone 1.3.0 -Max 5 -Model sonnet
+deliver-loop -Milestone M4 -Max 5 -Model sonnet
 ```
 
 Without the shim, call the script by its full path:
 
 ```powershell
-pwsh .claude/skills/deliver/scripts/Invoke-DeliverLoop.ps1 -Milestone 1.3.0 -Max 5 -Model sonnet
+pwsh .claude/skills/deliver/scripts/Invoke-DeliverLoop.ps1 -Milestone M4 -Max 5 -Model sonnet
 ```
 
 It stops when everything is done or `-Max` is reached (exit 0), when no progress is made (1) or a PBI is blocked (2). The stream log is in `.agents/deliver-loop/`.
