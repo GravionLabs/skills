@@ -205,29 +205,33 @@ fs.writeFileSync(f, JSON.stringify(s));`,
   });
 
   describe('stop rules', () => {
-    it('reports a milestone with a paused release review as blocked, not done', async () => {
+    // #235: -Milestone M4 also finds the title M4 (0.2.0) that close gave it (the plain title M4: next case)
+    it('reports a milestone with a paused release review as blocked, not done, found by M<n> after the rename', async () => {
       const gh = setup({
         issues: { 30: pbi({ state: 'CLOSED', labels: ['pbi', 'needs-decision'] }) },
-        milestones: { '0.13': [30] },
+        milestones: { M3: [], 'M4 (0.2.0)': [30] },
       });
-      const r = await run(gh, ['-Milestone', '0.13']);
+      const r = await run(gh, ['-Milestone', 'M4']);
       expect(r.status).toBe(2);
       expect(r.stdout).toContain('loop result: blocked');
       expect(claudeCalls()).toEqual([]);
+      const paths = gh.calls().map((c) => c.args.join(' '));
+      expect(paths.filter((c) => c.includes('issues?milestone=2&state=closed'))).toHaveLength(1);
+      expect(paths.filter((c) => c.includes('issues?milestone=1&'))).toEqual([]);
     });
 
-    it('-Milestone selects a bug like a PBI, delivers it in one fresh process, ends done when no open and no paused issue is left, reads the milestone with one batched REST call (#103, #127)', async () => {
+    it('-Milestone selects a bug like a PBI, delivers it in one fresh process, ends done when no open and no paused issue is left, reads the milestone M4 with one batched REST call (#103, #127, #235)', async () => {
       const gh = setup({
         issues: {
           10: { labels: ['bug'], blockers: [{ number: 5, state: 'closed' }] },
         },
-        milestones: { '0.13': [10] },
+        milestones: { M4: [10] },
         effect: 'close-first',
       });
-      const r = await run(gh, ['-Milestone', '0.13']);
+      const r = await run(gh, ['-Milestone', 'M4']);
       expect(r.status).toBe(0);
       expect(claudeCalls()).toEqual([
-        '-p /deliver --milestone 0.13 --unattended --max 1 --model sonnet --permission-mode auto --output-format stream-json --verbose',
+        '-p /deliver --milestone M4 --unattended --max 1 --model sonnet --permission-mode auto --output-format stream-json --verbose',
       ]);
       expect(JSON.parse(read('state.json')).issues[10].state).toBe('CLOSED');
       expect(r.stdout).toContain('loop result: done');

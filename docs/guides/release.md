@@ -40,14 +40,14 @@ Milestones are the releases. Name them `M<n>` (a number, no version); on close t
 ## 3. Deliver the milestone
 
 ```text
-/deliver --milestone 1.3.0
+/deliver --milestone M3
 ```
 
 Every open PBI and Bug of the milestone is delivered into `release/next` ([deliver guide](deliver.md#deliver-a-milestone)). For long milestones use fresh sessions per PBI ([loop](deliver.md#a-release-in-fresh-sessions)).
 
 ## 4. Release review
 
-When nothing is left, `deliver` reviews the whole diff `origin/main...origin/release/next` against the criteria of the closed issues. Blocking findings become Bug issues in the milestone and no release PR is opened: run `/deliver --milestone 1.3.0` again. Without blocking findings, up to five notes go into the release PR. Details: [delivery reference](../delivery.md#release-review).
+When nothing is left, `deliver` reviews the whole diff `origin/main...origin/release/next` against the criteria of the closed issues. Blocking findings become Bug issues in the milestone and no release PR is opened: run `/deliver --milestone M3` again. Without blocking findings, up to five notes go into the release PR. Details: [delivery reference](../delivery.md#release-review).
 
 ## 5. Finish: release PR and changelog
 

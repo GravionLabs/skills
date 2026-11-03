@@ -18,7 +18,7 @@
   Issue numbers (PBI, Feature or Epic), as for `/deliver`: `-Target 12,14` or `-Target 12 14` (a comma list also works
   under `pwsh -File`, which does not split it itself).
 .PARAMETER Milestone
-  Adds the open PBIs and bugs of this milestone (as `/deliver --milestone`).
+  Adds the open PBIs and bugs of this milestone (as `/deliver --milestone`): M<n> (also after close renamed it M<n> (x.y.z)) or a legacy title.
 .PARAMETER Max
   Stop after this many iterations (PBIs delivered, blocked or paused in total).
 .PARAMETER Model
