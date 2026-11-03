@@ -5,6 +5,27 @@ Versioning follows [Semantic Versioning](https://semver.org/).
 
 ---
 
+## [1.5.0] — 2026-11-03
+
+### Bug Fixes
+- **deliver**: Merge main (v1.4.1 hotfixes #201, #202) back into release/next (#216) (#217)
+
+
+### Documentation
+- Herdr page with the GravionLabs herdr plugins (#177) (#208)
+- Update CHANGELOG.md for v1.4.1 [skip ci]
+- Guides and AGENTS.md mention the loop features of 1.5.0 (#219) (#225)
+
+
+### Features
+- **delivery**: Invoke-DeliverLoop.ps1 supports -Harness copilot (#186) (#210)
+- **delivery**: Deliver-loop shell shim offered by skills-install (#187) (#211)
+- **delivery**: Deliver loop reports its lifecycle state to herdr (#191) (#212)
+- **delivery**: Deliver loop colors its console output, log pane is opt-in (#193) (#213)
+- **statusline**: Context-statusline installs a context warning hook (#205) (#214)
+- **github**: Github-milestone closes a milestone after its release tag (#206) (#215)
+
+
 ## [1.4.1] — 2026-11-02
 
 ### Bug Fixes
