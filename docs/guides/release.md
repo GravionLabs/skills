@@ -11,7 +11,7 @@ From a milestone to a release on `main`: cut `release/next`, collect the work in
 
 ```mermaid
 flowchart LR
-  C[cut release/next] --> M[milestone x.y.z]
+  C[cut release/next] --> M[milestone M3]
   M --> D["/deliver --milestone"]
   D --> RR[release review]
   RR --> F[finish: release PR]
@@ -129,11 +129,13 @@ The `main` branch has its own ruleset that allows merge commits only, for the re
 
 ## 7. Close the milestone
 
-Once the release job has tagged `v1.3.0`, close the milestone and create the next one:
+Once the release job has tagged `v1.3.0`, close the milestone and create the next one. The next `github-release finish` (the run that deletes the merged `release/next`) prints this hint for the lowest open `M<n>`, with the version taken from the tag:
 
 ```text
-/github-milestone close M3 --move-to M4
+/github-milestone close M3
 /github-milestone create M4
 ```
+
+With open issues left, create the next milestone first and move them: `/github-milestone create M4`, then `/github-milestone close M3 --move-to M4`. Legacy repositories whose open milestone is named `x.y.z` get the old hint: `/github-milestone close 1.3.0 [--move-to <next>]`, then `create` the next `x.y.z` milestone.
 
 `close` needs the release tag: without `--version <x.y.z>` it takes the newest tag not yet assigned to a milestone, and renames `M3` to `M3 (1.3.0)` while closing it. Open issues stay, and nothing is renamed or closed, unless you pass `--move-to M<m>`, an existing open milestone that receives them (create it first). Pull requests are not moved. A milestone that is already closed is left as is. `close` renames only to add the version, never edits the due date or deletes a milestone.

@@ -15,6 +15,7 @@ Cuts the rolling `release/next` branch, or finishes it with the release PR into 
 - `cut`: creates `release/next` from the default branch when absent, recreates it after a release (only when deletion is allowed), reports stale `release/<x.y>` lines; offers the `release-branch.yml` caller workflow when the repo has none.
 - `--feature <nr>`: with `cut`, records `Release branch: release/next` as the second line of that Feature issue.
 - `finish`: opens (or reports) the release PR with `github-pull-request` in release mode; once merged, a later `finish` deletes the branch.
+- Milestone hint: once the release PR is merged and tagged `v<x.y.z>`, the later `finish` points to `/github-milestone close M<n>` (version from the tag, the title becomes `M<n> (x.y.z)`) and `/github-milestone create` for the next `M<n+1>`; with open issues left, `create` first, then `close M<n> --move-to M<n+1>`. Legacy repositories with an open `x.y.z` milestone get `/github-milestone close <x.y.z> [--move-to <next>]` and `create` of the next `x.y.z`.
 - `major`: with `finish`, adds one empty commit with `+semver: major` (not again when one exists).
 - `release/next` or `release/<x.y>`: the branch to finish; default is the current release branch, else `release/next` on origin.
 - Read-only state checks, JSON on stdout: `pwsh scripts/Get-ReleaseState.ps1 -Mode cut|finish|base [-Branch <b>] [-Issue <nr>]`. `cut` and `finish` report `state`, `openPrs`, `action` (`stop: ...` means change nothing); `base` resolves the integration branch.
