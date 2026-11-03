@@ -46,7 +46,7 @@ Several sessions can run `/deliver` at the same time, one worktree per session (
 
 ## herdr
 
-In a [herdr](https://herdr.dev) pane, `deliver` (and `Invoke-DeliverLoop.ps1`) reports its progress as pane tokens of source `deliver`: `deliver` (issue), `deliver_step` (step and result) and `deliver_pr` (PR), cleared at the end. The agent name in the sidebar stays the harness. herdr shows a token only where a row of `[ui.sidebar.agents]` names it (`$deliver_step`); the skill's `references/herdr.md` has a layout to copy into your herdr config: the space (`workspace`, one per repository) and its state first, then the agent and its terminal title, then the `$deliver`, `$deliver_step` and `$deliver_pr` row (alternatives there: compact two-line layout, `deliver` line first, `row_gap = 1`). herdr detects whether the agent waits for you by itself; no bus or daemon is involved.
+`deliver` reports its progress as pane tokens in a [herdr](https://herdr.dev) sidebar. Tokens, layout and plugins: [herdr with the skills](guides/herdr.md).
 
 Without `/deliver` you work interactively, see [Work an issue by hand](guides/work-an-issue-by-hand.md).
 

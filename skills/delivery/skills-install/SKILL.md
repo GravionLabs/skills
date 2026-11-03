@@ -30,6 +30,8 @@ metadata:
 3. Run the same command without `-DryRun`. The result lists `installed`, `skipped` (already present in the target scope), `failed`, `dependencies` (`angular/skills` for `ng`, `dotnet/skills` for `dotnet`) and `notes`. Tell the user what was installed, which dependencies came along, and any failure.
 4. Relay the `notes` and follow [after install](references/after-install.md): what to commit, and the allowlist of the harness with the verify commands of the repository's `AGENTS.md` for `/deliver`.
 
+5. After the `delivery` group was installed (project or global): offer the `deliver-loop` shell command. Ask first; show `pwsh scripts/Install-LoopShim.ps1 -DryRun` (profile and block), then run it without `-DryRun` on a yes. A second run reports `unchanged`. It never touches a profile unasked; `-Shell zsh|bash|pwsh`, `-ProfilePath <file>`.
+
 ## Script inputs and output
 
 - Inputs: `-Groups` (comma-separated; skips detection), `-Global`, `-DryRun`, `-Ref <tag|sha>` (installs `GravionLabs/skills#<ref>`; without it the default branch), `-Agents` (default `claude-code,opencode,github-copilot`), `-Copy` (on by default on Windows), `-TrustProject`.

@@ -17,7 +17,7 @@ from the [official statusLine docs](https://code.claude.com/docs/en/statusline) 
 ## Install
 
 ```powershell
-pwsh <skill dir>/scripts/Install-Statusline.ps1 [-Force] [-Uninstall] [-WhatIf]
+pwsh <skill dir>/scripts/Install-Statusline.ps1 [-Force] [-Uninstall] [-NoContextWarning] [-WhatIf]
 ```
 
 Or run `/context-statusline` (`/context-statusline help` prints the usage). The installer sets `statusLine` and `subagentStatusLine` in `~/.claude/settings.json` to
@@ -35,6 +35,24 @@ only with `-Force`; `-Uninstall` removes only the entries this installer wrote a
 - Every other settings key is kept, `settings.json.bak-<timestamp>` is written before a change, indent is 2 spaces.
 - Idempotent; entries of older versions (`apm-hub/statusline/` copies) are migrated and their copies removed; a foreign entry is refused without `-Force`.
 - Restart Claude Code (or open a new session) to see the lines.
+
+## Context warning hook
+
+`npx skills` installs no hooks, so the installer registers `scripts/context-warning.sh` of the skill (no copy) unless you pass `-NoContextWarning`:
+
+- Claude Code: `hooks.UserPromptSubmit` in `~/.claude/settings.json`, `{"hooks":[{"type":"command","command":"bash <scripts>/context-warning.sh","timeout":5}]}`.
+- Copilot CLI (`-Client copilot|all`): `hooks.postToolUse` in `<copilot home>/settings.json`, `{"type":"command","bash":"bash <scripts>/context-warning.sh","timeoutSec":5}`. The hook reads `${COPILOT_HOME:-~/.copilot}/session-state/<sessionId>/events.jsonl`.
+- Idempotent, foreign hooks are kept, the same backup and `-WhatIf` rules apply; `-Uninstall` removes only our hook entry (and an emptied `hooks` key).
+
+The context size is `input_tokens + cache_read_input_tokens + cache_creation_input_tokens` of the last usage line in the last 2 MB of the transcript (Copilot: the last `session.usage_record`, `inputTokens`). At or above the threshold the hook prints `systemMessage` (the user sees it) and `hookSpecificOutput.additionalContext` (the model sees it): finish the step, write a short hand-off, then `/clear` (or `/compact`).
+
+| Variable              | Default  | Meaning                                                               |
+| :-------------------- | :------- | :-------------------------------------------------------------------- |
+| `CONTEXT_WARN_TOKENS` | `150000` | Context size from which the hook warns                                |
+| `CONTEXT_WARN_STEP`   | `100000` | Growth before the next warning; the state resets below the threshold  |
+| `CONTEXT_WARN_DEBUG`  | unset    | `1` prints a note on stderr when payload or transcript cannot be read |
+
+Invalid values (non-numeric, empty, more than 9 digits) fall back to the defaults. State lives in `$TMPDIR/<host>-context-warning-<session>`. jq is optional (a bash scanner parses the payload without it); every path exits 0 and nothing touches the network.
 
 ## GitHub Copilot CLI
 

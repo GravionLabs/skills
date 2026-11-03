@@ -1,0 +1,8 @@
+{
+  "sessionId": "00000000-0000-4000-8000-000000000002",
+  "transcriptPath": "__TRANSCRIPT__",
+  "stopReason": "end_turn",
+  "stop_hook_active": false,
+  "timestamp": 1791685100000,
+  "cwd": "/home/user/project"
+}

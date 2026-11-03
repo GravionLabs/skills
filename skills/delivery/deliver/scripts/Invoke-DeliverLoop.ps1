@@ -8,11 +8,11 @@
   labels needs-decision / needs-refinement / interactive (deliver skips interactive PBIs unattended). No change stops
   the loop ("no progress"); nothing open means done (unless a closed PBI of the milestone carries needs-decision, the paused release review: blocked); open PBIs that all wait on an open blocker or a label mean blocked.
   Observability: every stream record goes to .agents/deliver-loop/<run>/<nr>.jsonl (<nr> is the first PBI that was ready
-  at the start of the iteration), a summary line per step to .agents/deliver-loop.log (plain), the same line with ANSI
-  colors to .agents/deliver-loop.ansi.log and to stdout (plain when stdout is redirected; long text is cut to the
-  terminal width, 120 characters when redirected), desktop notifications for the attention steps (macOS osascript,
-  Windows toast), the herdr pane tokens deliver, deliver_step, deliver_pr when HERDR_ENV=1 and, in herdr on a terminal, a split pane labeled deliver-log
-  below the session that tails the log (LogPane.ps1; never closed by the loop).
+  at the start of the iteration), a summary line per step to .agents/deliver-loop.log (plain) and stdout, the same line
+  with ANSI colors to .agents/deliver-loop.ansi.log (long text is cut to the terminal width, 120 characters when redirected), desktop notifications for the attention steps (macOS osascript,
+  Windows toast), the herdr pane tokens deliver, deliver_step, deliver_pr when HERDR_ENV=1 and, with -LogPane in herdr on a terminal,
+  a split pane labeled deliver-log below the session that tails the log (LogPane.ps1; never closed by the loop).
+  Stdout carries the colors of the .ansi.log when it is a terminal and neither -NoColor nor NO_COLOR is set; otherwise it is plain.
   Run it from the repository root. Exit code: 0 done or max reached, 1 no progress, 2 blocked, 64 bad arguments.
 .PARAMETER Target
   Issue numbers (PBI, Feature or Epic), as for `/deliver`: `-Target 12,14` or `-Target 12 14` (a comma list also works
@@ -24,11 +24,14 @@
 .PARAMETER Model
   Model of the orchestrating session.
 .PARAMETER Harness
-  Only claude (Claude Code) for now.
+  claude (Claude Code, default) or copilot (GitHub Copilot CLI: `copilot -p … --model <model> --allow-all-tools
+  --no-ask-user --output-format json`). Any other value fails before the first iteration.
+.PARAMETER LogPane
+  Opens the herdr log pane `deliver-log` (herdr, stdout a terminal). Off by default: toggle it with Switch-LogPane.ps1.
 .PARAMETER NoPane
-  Opens no herdr log pane.
+  Deprecated no-op (the pane is off by default); use -LogPane to open it.
 .PARAMETER NoColor
-  Writes no .ansi.log and plain stdout (as does a non-empty NO_COLOR); the pane tails the plain log.
+  Writes no .ansi.log and colors no stdout (as does a non-empty NO_COLOR); the pane tails the plain log.
 #>
 [CmdletBinding()]
 param(
@@ -36,12 +39,19 @@ param(
   [string]$Milestone = '',
   [ValidateRange(1, 10000)][int]$Max = 0,
   [string]$Model = 'sonnet',
-  [ValidateSet('claude')][string]$Harness = 'claude',
+  [string]$Harness = 'claude',
+  [switch]$LogPane,
   [switch]$NoPane,
   [switch]$NoColor,
   [Parameter(ValueFromRemainingArguments)][string[]]$MoreTargets = @()
 )
 $ErrorActionPreference = 'Stop'
+
+$Harnesses = @('claude', 'copilot')
+if ($Harness -notin $Harnesses) {
+  [Console]::Error.WriteLine("Unknown -Harness '$Harness'. Supported: $($Harnesses -join ', ').")
+  exit 64
+}
 
 $Nrs = @(($Target + $MoreTargets) | ForEach-Object { $_ -split '[,\s]+' } | Where-Object { $_ })
 if (($Nrs | Where-Object { $_ -notmatch '^\d+$' }) -or ($Nrs.Count -eq 0 -and -not $Milestone)) {
@@ -56,7 +66,7 @@ $AnsiFile = if ($NoColor -or $env:NO_COLOR) { '' } else { Join-Path (Get-Locatio
 $Esc = [char]27
 $Ansi = @{ dim = "$Esc[2m"; cyan = "$Esc[36m"; red = "$Esc[31m"; yellow = "$Esc[33m"; green = "$Esc[32m"; reset = "$Esc[0m" }
 # stdout gets the colors of the .ansi.log when it is a terminal (DELIVER_LOOP_ASSUME_TTY=1: tests only).
-$ColorStdout = $AnsiFile -and ((-not [Console]::IsOutputRedirected) -or $env:DELIVER_LOOP_ASSUME_TTY -eq '1')
+$ColorStdout = [bool]$AnsiFile -and ((-not [Console]::IsOutputRedirected) -or $env:DELIVER_LOOP_ASSUME_TTY -eq '1')
 $RunDir = Join-Path (Get-Location) ".agents/deliver-loop/$((Get-Date).ToString('yyyyMMdd-HHmmss'))"
 $Recent = [System.Collections.Generic.List[string]]::new()
 $AgentNames = @{}
@@ -116,6 +126,15 @@ function Set-Pane([string]$Nr = '', [string]$Step = '', [switch]$Clear) {
     $tokenArgs += @('--ttl-ms', '3600000')
   }
   try { & herdr pane report-metadata $Pane --source deliver @tokenArgs 2>$null | Out-Null } catch { Write-Verbose "herdr failed: $_" }
+}
+
+# herdr agent state (#191): the loop reports its own lifecycle (source deliver-loop, agent deliver); herdr tracks only the pane's agent, not the claude -p children.
+# working per iteration, blocked on a pause/blocked step or when the loop ends blocked / no progress, idle at the end, then release. Any herdr failure is ignored.
+$Paused = $false
+function Set-AgentState([string]$State = '', [switch]$Release) {
+  if (-not $Pane) { return }
+  [string[]]$a = if ($Release) { 'release-agent' } else { 'report-agent', '--state', $State }
+  try { & herdr pane $a[0] @($a | Select-Object -Skip 1) --source deliver-loop --agent deliver $Pane 2>$null | Out-Null } catch { Write-Verbose "herdr failed: $_" }
 }
 
 # Get-Milestones.ps1 of github-milestone: sibling skill (installed) or skills/github (repository)
@@ -220,7 +239,33 @@ function Get-StepColor([string]$step, [string]$result) {
   return ''
 }
 
-# One stream-json record: summary line, progress lines of deliver (top level only), tool errors.
+# Steps shared by both harnesses: a tool call, assistant text (with progress lines of deliver), a tool error.
+function Write-ToolStep([string]$prefix, [string]$name, $in) {
+  $what = ''
+  foreach ($k in 'description', 'file_path', 'command', 'pattern', 'path') {
+    if ($in.$k) { $what = Get-Short ([string]$in.$k); break }
+  }
+  Write-Step "$prefix$name $what" -Tool $name -ToolAt $prefix.Length
+}
+
+function Write-TextStep([string]$prefix, [string]$text, [int]$position, [int]$total) {
+  $color = ''
+  if (-not $prefix) {
+    foreach ($l in ($text -split "`r?`n")) { if ($l -match '^#\d+ ([\w-]+): (.*)$') { $color = Get-StepColor $Matches[1] $Matches[2]; if ($color) { break } } }
+  }
+  Write-Step "$prefix» $(Get-Short $text)" $color
+  if ($prefix) { return }
+  foreach ($l in ($text -split "`r?`n")) {
+    if ($l -match '^#(\d+) ([\w-]+): (.*)$') {
+      Set-Pane $Matches[1] "$position/$total $($Matches[2]): $($Matches[3])"
+      $why = Get-Attention $Matches[2] $Matches[3]
+      if ($why -in 'paused', 'blocked') { $script:Paused = $true; Set-AgentState 'blocked' }
+      if ($why) { Send-Notice "#$($Matches[1]) $why" }
+    }
+  }
+}
+
+# One stream-json record of Claude Code: summary line, progress lines of deliver (top level only), tool errors.
 function Read-Record([string]$line, [int]$position, [int]$total) {
   try { $rec = $line | ConvertFrom-Json } catch { Write-Step "? $(Get-Short $line)"; return }
   $parent = $rec.parent_tool_use_id
@@ -228,30 +273,35 @@ function Read-Record([string]$line, [int]$position, [int]$total) {
   foreach ($c in @($rec.message.content)) {
     if (-not $c) { continue }
     if ($rec.type -eq 'assistant' -and $c.type -eq 'tool_use') {
-      $in = $c.input
-      $what = ''
-      foreach ($k in 'description', 'file_path', 'command', 'pattern', 'path') {
-        if ($in.$k) { $what = Get-Short ([string]$in.$k); break }
-      }
-      if ($c.name -in 'Agent', 'Task') { $AgentNames[$c.id] = Get-Short ([string]$in.description) 60 }
-      Write-Step "$prefix$($c.name) $what" -Tool $c.name -ToolAt $prefix.Length
+      if ($c.name -in 'Agent', 'Task') { $AgentNames[$c.id] = Get-Short ([string]$c.input.description) 60 }
+      Write-ToolStep $prefix $c.name $c.input
     } elseif ($rec.type -eq 'assistant' -and $c.type -eq 'text') {
-      $color = ''
-      if (-not $prefix) {
-        foreach ($l in ($c.text -split "`r?`n")) { if ($l -match '^#\d+ ([\w-]+): (.*)$') { $color = Get-StepColor $Matches[1] $Matches[2]; if ($color) { break } } }
-      }
-      Write-Step "$prefix» $(Get-Short $c.text)" $color
-      if ($prefix) { continue }
-      foreach ($l in ($c.text -split "`r?`n")) {
-        if ($l -match '^#(\d+) ([\w-]+): (.*)$') {
-          Set-Pane $Matches[1] "$position/$total $($Matches[2]): $($Matches[3])"
-          $why = Get-Attention $Matches[2] $Matches[3]
-          if ($why) { Send-Notice "#$($Matches[1]) $why" }
-        }
-      }
+      Write-TextStep $prefix $c.text $position $total
     } elseif ($rec.type -eq 'user' -and $c.type -eq 'tool_result' -and $c.is_error) {
       $body = if ($c.content -is [string]) { $c.content } else { ($c.content | ForEach-Object { $_.text }) -join "`n" }
       Write-Step "$prefix✗ $(Get-Short $body)" 'red'
+    }
+  }
+}
+
+# One JSONL event of Copilot CLI (--output-format json): {type, data}. Tool calls come as tool.execution_start,
+# failures as tool.execution_complete with success=false, text as assistant.message. Subagent steps get a
+# [subagent] prefix when the event carries a parentToolCallId. Unknown event types are ignored (only logged to the jsonl).
+function Read-CopilotRecord([string]$line, [int]$position, [int]$total) {
+  try { $rec = $line | ConvertFrom-Json } catch { Write-Step "? $(Get-Short $line)"; return }
+  $d = $rec.data
+  $prefix = if ($d.parentToolCallId) { '[subagent] ' } else { '' }
+  switch ($rec.type) {
+    'tool.execution_start' {
+      if ($d.toolCallId) { $script:AgentNames[$d.toolCallId] = $d.toolName }
+      Write-ToolStep $prefix $d.toolName $d.arguments
+    }
+    'assistant.message' { if ($d.content) { Write-TextStep $prefix ([string]$d.content) $position $total } }
+    'tool.execution_complete' {
+      if ($d.success -eq $false) {
+        $body = if ($d.error.message) { [string]$d.error.message } elseif ($d.result.content) { [string]$d.result.content } else { 'tool failed' }
+        Write-Step "$prefix✗ $(Get-Short $body)" 'red'
+      }
     }
   }
 }
@@ -263,17 +313,24 @@ function Invoke-Iteration([int]$n, [int]$total, $state) {
   if ($Milestone) { $targets += @('--milestone', $Milestone) }
   $prompt = "/deliver $($targets -join ' ') --unattended --max 1"
   Write-Step "iteration $n/$total start: $prompt"
+  $script:Paused = $false
+  Set-AgentState 'working'
   Set-Pane "$($state.Ready[0])" "$n/$total starting"
   $saved = $env:HERDR_ENV
   $env:HERDR_ENV = ''
   try {
-    & claude -p $prompt --model $Model --permission-mode auto --output-format stream-json --verbose 2>&1 | ForEach-Object {
+    $cli = if ($Harness -eq 'copilot') {
+      @('-p', $prompt, '--model', $Model, '--allow-all-tools', '--no-ask-user', '--output-format', 'json')
+    } else {
+      @('-p', $prompt, '--model', $Model, '--permission-mode', 'auto', '--output-format', 'stream-json', '--verbose')
+    }
+    & $Harness @cli 2>&1 | ForEach-Object {
       $line = "$_"
       if ($_ -is [System.Management.Automation.ErrorRecord]) { Write-Step "stderr $(Get-Short $line)" 'red'; return }
       [IO.File]::AppendAllText($jsonl, $line + "`n")
-      Read-Record $line $n $total
+      if ($Harness -eq 'copilot') { Read-CopilotRecord $line $n $total } else { Read-Record $line $n $total }
     }
-    if ($LASTEXITCODE -ne 0) { Write-Step "claude exited with $LASTEXITCODE" 'red' }
+    if ($LASTEXITCODE -ne 0) { Write-Step "$Harness exited with $LASTEXITCODE" 'red' }
   } finally { $env:HERDR_ENV = $saved }
 }
 
@@ -281,7 +338,7 @@ $result = 'done'
 $code = 0
 $i = 0
 try {
-  if (-not $NoPane) { Open-LogPane -LogFile $(if ($AnsiFile) { $AnsiFile } else { $LogFile }) }
+  if ($LogPane) { Open-LogPane -LogFile $(if ($AnsiFile) { $AnsiFile } else { $LogFile }) }
   $state = Get-State
   $result = Get-StopReason $state
   $total = if ($Max -gt 0) { [Math]::Min($Max, $state.Eligible.Count) } else { $state.Eligible.Count }
@@ -303,7 +360,9 @@ try {
   $color = if ($result -in 'done', 'max reached') { 'green' } else { 'yellow' }
   Write-Step "loop result: $result ($i iteration(s), $($state.Open) PBI(s) open)" $color
   Send-Notice "loop result: $result"
+  Set-AgentState $(if (($result -in 'blocked','no progress') -or $Paused) { 'blocked' } else { 'idle' })
 } finally {
   Set-Pane -Clear
+  Set-AgentState -Release
 }
 exit $code

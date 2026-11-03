@@ -20,6 +20,17 @@ Delivery runs through the `deliver` skill (`/deliver <nr>`, harness-neutral), no
 
 Before the first `/deliver <nr> --unattended`, propose the shell allowlist of the harness and let the user confirm it (never write it unasked): `.claude/settings.json` (`permissions.allow`) for Claude Code, `opencode.json` (`permission.bash`) for OpenCode, `--allow-tool 'shell(…)'` flags for Copilot CLI. The entries are `git`, `gh`, `herdr pane report-metadata`, `pwsh` for the cleanup script of `deliver` and the verify commands of the repository's `AGENTS.md` (build, test, format, lint): read them from its `## Commands` section and name them. The templates per harness are in `permissions.md` in the references of the `deliver` skill; without them an unattended run stops at the first prompt. The per-project settings the skills read live in `.agents/config.json`.
 
+## deliver-loop shell command
+
+`scripts/Install-LoopShim.ps1` (offered after the `delivery` group, asks first) adds the function `deliver-loop` to `~/.zshrc`, `~/.bashrc` or the PowerShell profile, between `# >>> deliver-loop >>>` markers (a second run changes nothing, an outdated block is replaced). It finds the installed script in `.claude/skills/deliver`, `.agents/skills/deliver` (project), `~/.claude/skills/deliver`, `~/.agents/skills/deliver` and passes all arguments through; no copy, so `npx skills update` keeps it current. Nothing found: message and exit 1.
+
+```powershell
+deliver-loop -Milestone 1.3.0 -Max 5 -Model sonnet
+deliver-loop -Target 12,14 -Harness copilot -Model gpt-5
+```
+
+In herdr (`HERDR_ENV=1`) it starts the loop in its own workspace `<repo> · deliver` (tab `deliver-loop`); elsewhere in the current terminal.
+
 ## Coming from apm-hub
 
 GravionLabs/skills replaces GravionLabs/apm-hub (archived; its last release `v3.3.x` stays installable with apm). The skills keep their names; `apm-install` is now `skills-install`.
