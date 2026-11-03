@@ -342,4 +342,135 @@ describe('Get-Milestones.ps1', () => {
       ).toBe(false);
     });
   });
+
+  describe('numbered milestones (#234)', () => {
+    it('list: legacy semver first, then M number, other titles last; tagged from the parentheses', async () => {
+      const out = await json(['-Mode', 'list'], {
+        FAKE_TAGS: ['v1.0.0', 'v1.1.0'],
+        FAKE_MILESTONES: [
+          ms(1, 'M10'),
+          ms(2, 'Backlog'),
+          ms(3, 'M2', 'closed'),
+          ms(4, 'M1 (1.1.0)', 'closed'),
+          ms(5, '1.0.0', 'closed'),
+          ms(6, 'M3 (9.9.9)', 'closed'),
+          ms(7, 'M 4'),
+        ],
+      });
+      expect(
+        out.milestones.map((m: { title: string; tagged: boolean }) => [m.title, m.tagged]),
+      ).toEqual([
+        ['1.0.0', true],
+        ['M1 (1.1.0)', true],
+        ['M2', false],
+        ['M3 (9.9.9)', false],
+        ['M10', false],
+        ['Backlog', false],
+        ['M 4', false],
+      ]);
+    });
+
+    it.each([
+      {
+        case: 'lowest open M, numeric not lexical',
+        milestones: [ms(1, 'M10'), ms(2, 'M2'), ms(3, 'M1', 'closed')],
+        expected: 'M2',
+      },
+      {
+        case: 'closed M with version is skipped',
+        milestones: [ms(1, 'M1 (1.0.0)', 'closed'), ms(2, 'M2')],
+        expected: 'M2',
+      },
+      {
+        case: 'legacy open above the latest tag keeps priority',
+        milestones: [ms(1, 'M1'), ms(2, '1.2.0')],
+        expected: '1.2.0',
+      },
+    ])('current: $case', async ({ milestones, expected }) => {
+      const out = await json(['-Mode', 'current'], {
+        FAKE_TAGS: ['v1.1.0'],
+        FAKE_MILESTONES: milestones,
+      });
+      expect(out.current.title).toBe(expected);
+    });
+
+    it('current: invalid titles are never current', async () => {
+      const out = await json(['-Mode', 'current'], {
+        FAKE_TAGS: [],
+        FAKE_MILESTONES: [ms(1, 'm1'), ms(2, 'M1 (1.0)'), ms(3, 'M')],
+      });
+      expect(out.current).toBeNull();
+    });
+
+    it.each([
+      { name: 'M2', expected: 'M2 (1.2.0)' },
+      { name: 'M2 (1.2.0)', expected: 'M2 (1.2.0)' },
+      { name: '1.2.0', expected: 'M2 (1.2.0)' },
+      { name: 'v1.2.0', expected: 'M2 (1.2.0)' },
+      { name: 'M3', expected: 'M3' },
+    ])('show -Name $name finds $expected', async ({ name, expected }) => {
+      const out = await json(['-Mode', 'show', '-Name', name], {
+        FAKE_TAGS: ['v1.2.0'],
+        FAKE_MILESTONES: [ms(2, 'M2 (1.2.0)', 'closed'), ms(3, 'M3')],
+      });
+      expect(out.title).toBe(expected);
+    });
+
+    it('show: tagged comes from the version in the parentheses', async () => {
+      const out = await json(['-Mode', 'show', '-Name', 'M2'], {
+        FAKE_TAGS: ['v1.2.0'],
+        FAKE_MILESTONES: [ms(2, 'M2 (1.2.0)', 'closed')],
+      });
+      expect(out.tagged).toBe(true);
+    });
+
+    it('issues: M<n> finds the milestone whose title has the parentheses', async () => {
+      const out = await json(['-Mode', 'issues', '-Name', 'M2'], {
+        FAKE_MILESTONES: [ms(2, 'M2 (1.2.0)', 'closed')],
+        FAKE_ISSUES: { 2: [issue(20)] },
+      });
+      expect(out.milestone).toMatchObject({ number: 2, title: 'M2 (1.2.0)' });
+    });
+
+    const posts = (before: number) =>
+      fake
+        .calls()
+        .slice(before)
+        .filter((c) => c.args.includes('-X'))
+        .map((c) => c.args);
+
+    it('create M<n>; without a name the next free number', async () => {
+      let before = fake.calls().length;
+      await json(['-Mode', 'create', '-Name', 'M4'], { FAKE_MILESTONES: [] });
+      expect(posts(before)).toEqual([
+        ['api', '-X', 'POST', 'repos/{owner}/{repo}/milestones', '-f', 'title=M4'],
+      ]);
+      before = fake.calls().length;
+      const out = await json(['-Mode', 'create'], {
+        FAKE_MILESTONES: [ms(1, 'M1 (1.0.0)', 'closed'), ms(2, 'M7'), ms(3, '1.0.0', 'closed')],
+      });
+      expect(out.created).toBe(true);
+      expect(posts(before)).toEqual([
+        ['api', '-X', 'POST', 'repos/{owner}/{repo}/milestones', '-f', 'title=M8'],
+      ]);
+      before = fake.calls().length;
+      await json(['-Mode', 'create'], { FAKE_MILESTONES: [] });
+      expect(posts(before)[0]).toContain('title=M1');
+    });
+
+    it('create M<n> that exists (also with the version in the title): left as is', async () => {
+      const before = fake.calls().length;
+      const out = await json(['-Mode', 'create', '-Name', 'M1'], {
+        FAKE_MILESTONES: [ms(5, 'M1 (1.0.0)', 'closed')],
+      });
+      expect(out).toMatchObject({ created: false, milestone: { number: 5 } });
+      expect(posts(before)).toEqual([]);
+    });
+
+    it('create with a title that carries a version: exit 1', async () => {
+      const r = await run(['-Mode', 'create', '-Name', 'M1 (1.0.0)'], { FAKE_MILESTONES: [] });
+      expect(r.status).toBe(1);
+      expect(r.stderr).toContain('invalid milestone name');
+    });
+  });
 });

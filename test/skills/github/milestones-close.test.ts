@@ -19,6 +19,7 @@ const handler = `(call) => {
     if (!env('FAKE_TAGS', '[]').includes(tag)) throw new Error('Not Found (HTTP 404)');
     return { rest: { ref: 'refs/tags/' + tag } };
   }
+  if (p.includes('/tags?')) return { rest: [env('FAKE_TAGS', '[]').map((name) => ({ name }))] };
   if (!a.includes('--paginate') || !a.includes('--slurp')) throw new Error('not paginated: ' + p);
   if (p.includes('/milestones?')) return { rest: [env('FAKE_MILESTONES', '[]')] };
   if (p.includes('/issues?')) return { rest: [env('FAKE_ISSUES', '{}')[/milestone=(\\d+)/.exec(p)[1]] || []] };
@@ -168,5 +169,115 @@ describe('Get-Milestones.ps1 -Mode close', () => {
     expect(r.status).toBe(1);
     expect(r.stderr).toContain(msg);
     expect(writes).toEqual([]);
+  });
+
+  describe('numbered milestones (#234)', () => {
+    const numbered = {
+      FAKE_TAGS: ['v1.0.0', 'v1.1.0', 'v1.2.0'],
+      FAKE_MILESTONES: [
+        ms(7, 'M1 (1.0.0)', 'closed'),
+        ms(8, 'M2'),
+        ms(9, 'M3'),
+        ms(10, '1.1.0', 'closed'),
+      ],
+    };
+    const patchM = (n: number, title: string) => [
+      'api',
+      '-X',
+      'PATCH',
+      `repos/{owner}/{repo}/milestones/${n}`,
+      '-f',
+      'state=closed',
+      '-f',
+      `title=${title}`,
+    ];
+
+    it('without -Version: the newest release tag without a milestone, renamed and closed in one PATCH', async () => {
+      const { out, writes } = await ok(['-Name', 'M2'], numbered);
+      expect(out).toMatchObject({
+        closed: true,
+        version: '1.2.0',
+        milestone: { number: 8, title: 'M2 (1.2.0)', state: 'closed' },
+      });
+      expect(writes).toEqual([patchM(8, 'M2 (1.2.0)')]);
+    });
+
+    it('with -Version: that tag is used even when a newer one exists', async () => {
+      const { out, writes } = await ok(['-Name', 'M2', '-Version', 'v1.2.0'], {
+        ...numbered,
+        FAKE_TAGS: ['v1.2.0', 'v1.3.0'],
+      });
+      expect(out).toMatchObject({ closed: true, version: '1.2.0' });
+      expect(writes).toEqual([patchM(8, 'M2 (1.2.0)')]);
+    });
+
+    it('open issues moved to M<m>, then renamed and closed', async () => {
+      const { out, writes } = await ok(['-Name', 'M2', '-MoveTo', 'M3'], {
+        ...numbered,
+        FAKE_ISSUES: { 8: [issue(21)] },
+      });
+      expect(out).toMatchObject({ closed: true, moved: [{ number: 21 }] });
+      expect(writes).toEqual([
+        ['issue', 'edit', '21', '--milestone', 'M3'],
+        patchM(8, 'M2 (1.2.0)'),
+      ]);
+    });
+
+    it('open issues without -MoveTo: no rename, no close', async () => {
+      const { out, writes } = await ok(['-Name', 'M2'], {
+        ...numbered,
+        FAKE_ISSUES: { 8: [issue(21)] },
+      });
+      expect(out).toMatchObject({
+        closed: false,
+        milestone: { title: 'M2' },
+        openIssues: [{ number: 21 }],
+      });
+      expect(writes).toEqual([]);
+    });
+
+    it('already closed (found by M<n> although the title has the version): unchanged', async () => {
+      const { out, writes } = await ok(['-Name', 'M1'], numbered);
+      expect(out).toMatchObject({ closed: false, milestone: { number: 7, state: 'closed' } });
+      expect(writes).toEqual([]);
+    });
+
+    it.each([
+      {
+        case: 'no unassigned release tag',
+        args: ['-Name', 'M2'],
+        env: { FAKE_TAGS: ['v1.0.0', 'v1.1.0'] },
+        msg: 'no release tag without a milestone',
+      },
+      {
+        case: '-Version tag missing',
+        args: ['-Name', 'M2', '-Version', '9.0.0'],
+        env: {},
+        msg: 'tag v9.0.0 does not exist',
+      },
+      {
+        case: '-Version already assigned',
+        args: ['-Name', 'M2', '-Version', '1.0.0'],
+        env: {},
+        msg: 'already assigned to another milestone',
+      },
+      {
+        case: '-Version not x.y.z',
+        args: ['-Name', 'M2', '-Version', 'soon'],
+        env: {},
+        msg: "invalid -Version 'soon'",
+      },
+      {
+        case: 'milestone missing',
+        args: ['-Name', 'M9'],
+        env: {},
+        msg: "milestone 'M9' not found",
+      },
+    ])('$case: exit 1, no write', async ({ args, env, msg }) => {
+      const { r, writes } = await close(args, { ...numbered, ...env });
+      expect(r.status).toBe(1);
+      expect(r.stderr).toContain(msg);
+      expect(writes).toEqual([]);
+    });
   });
 });

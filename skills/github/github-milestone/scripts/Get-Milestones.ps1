@@ -2,27 +2,37 @@
 .SYNOPSIS
   Milestones of a repository as JSON (schema/milestones.schema.json) for the github-milestone skill.
 .DESCRIPTION
-  current, list and show are read-only and use only `gh api` GET calls (REST). create is the one write.
-  current: the open milestone with the lowest semver title above the latest release tag v<x.y.z>
-  ({ current: null, hint } when there is none). list: all milestones, open and closed, sorted by semver
-  (non-semver titles last). show: one milestone by -Name. current and show group the open issues (pull
-  requests filtered out) as needsDecision, needsRefinement, blocked (open blockers), claimed (assignee)
-  and ready, in that precedence (a blocker from another repository carries repository owner/repo), and add the release PR release/next -> default from Get-ReleaseState.ps1
-  of the github-release skill. close: closes milestone <x.y.z> after its release tag v<x.y.z> exists; see below. create: creates milestone <x.y.z> when no milestone has that title; it
-  never renames or closes one. issues: resolves the milestone title -Name to its number and lists its issues
-  (body, labels, assignees, state; pull requests filtered out) in one paginated REST call, for the batched
-  reads of deliver; unknown milestone: exit 1.
-  close: closes the milestone titled -Name (state=closed via PATCH). Exit 1 when the name is not x.y.z, the milestone
-  does not exist or the tag v<x.y.z> does not exist. Already closed: changes nothing ({ closed: false }). Open issues
-  (pull requests are ignored and never moved): without -MoveTo nothing is closed and they are listed in openIssues;
-  with -MoveTo <x.y.z> they are moved to that existing open milestone first (never created), then it is closed.
-  Never renames, edits the due date or deletes a milestone.
+  Milestone titles: `M<n>` while open, `M<n> (x.y.z)` after close (the version of the release), and the legacy
+  bare `x.y.z` (still valid, no flag day). Other titles are listed but never current.
+  current, list and show are read-only and use only `gh api` GET calls (REST). create and close are the writes.
+  current: the open milestone with the lowest M number; legacy rule unchanged: an open x.y.z title above the latest
+  release tag v<x.y.z> comes first ({ current: null, hint } when there is none). list: all milestones, open and
+  closed, sorted legacy semver first, then M number, other titles last. show: one milestone by -Name: exact title,
+  M<n> (also when the title has the parentheses) or the version in the parentheses. current and show group the open
+  issues (pull requests filtered out) as needsDecision, needsRefinement, blocked (open blockers), claimed (assignee)
+  and ready, in that precedence (a blocker from another repository carries repository owner/repo), and add the release
+  PR release/next -> default from Get-ReleaseState.ps1 of the github-release skill. tagged: the tag v<version> of the
+  parentheses exists (legacy: v<title>; M<n> without version: false).
+  create: creates milestone -Name (M<n>, or legacy x.y.z) when none matches; without -Name the next free M number.
+  It never renames or closes one.
+  issues: resolves the milestone -Name (any form above) to its number and lists its issues (body, labels, assignees,
+  state; pull requests filtered out) in one paginated REST call, for the batched reads of deliver; unknown milestone: exit 1.
+  close: closes the milestone -Name. M<n>: takes the version from -Version, else the newest release tag v<x.y.z> not yet
+  assigned to a milestone; that tag must exist; the title becomes `M<n> (x.y.z)` in the same PATCH that closes it.
+  Legacy x.y.z: needs the tag v<x.y.z>, closes without renaming. Exit 1 when the name is not valid, the milestone
+  does not exist, or no tag fits. Already closed: changes nothing ({ closed: false }). Open issues (pull requests are
+  ignored and never moved): without -MoveTo nothing is renamed or closed and they are listed in openIssues;
+  with -MoveTo <M<m>|x.y.z> they are moved to that existing open milestone first (never created), then it is closed.
+  Never edits the due date or deletes a milestone.
 .PARAMETER Mode
   current, list, show, create, issues or close.
 .PARAMETER Name
-  show, create and close: the milestone title, a bare version x.y.z (a leading v is dropped).
+  show, create, close, issues: M<n>, the full title, the version x.y.z (a leading v is dropped) or the title of a legacy milestone.
+  create: M<n> or x.y.z; empty: the next free M number.
+.PARAMETER Version
+  close M<n>: the release version x.y.z for the new title; default the newest release tag not yet assigned to a milestone.
 .PARAMETER MoveTo
-  close: title x.y.z of an existing open milestone that receives the open issues.
+  close: M<m> (or legacy x.y.z) of an existing open milestone that receives the open issues.
 .PARAMETER State
   issues: open, closed or all (default).
 .PARAMETER Repo
@@ -34,6 +44,7 @@ param(
   [Parameter(Mandatory)][ValidateSet('current', 'list', 'show', 'create', 'issues', 'close')][string]$Mode,
   [string]$Name,
   [string]$MoveTo,
+  [string]$Version,
   [ValidateSet('open', 'closed', 'all')][string]$State = 'all',
   [string]$Repo = '{owner}/{repo}',
   [string]$ReleaseState = (Join-Path $PSScriptRoot '../../github-release/scripts/Get-ReleaseState.ps1')
@@ -58,13 +69,40 @@ function Add-Leaf($list, $x) {
 $semverRx = '^([0-9]+)\.([0-9]+)\.([0-9]+)$'
 function ConvertTo-Version([string]$t) { if ($t -match $semverRx) { [version]"$($Matches[1]).$($Matches[2]).$($Matches[3])" } else { $null } }
 function Get-Bare([string]$n) { $n -replace '^v(?=[0-9])', '' }
+$numberedRx = '^M([0-9]+)( \(([0-9]+\.[0-9]+\.[0-9]+)\))?$'
+# title -> @{ kind = 'numbered'|'legacy'|$null; n; version } (version: of the parentheses, or the legacy title)
+function Get-Title([string]$t) {
+  if ($t -cmatch $numberedRx) { @{ kind = 'numbered'; n = [int]$Matches[1]; version = $Matches[3] } }
+  elseif ($t -match $semverRx) { @{ kind = 'legacy'; n = 0; version = $t } }
+  else { @{ kind = $null; n = 0; version = $null } }
+}
+# lookup: exact title, M<n>, the version in the parentheses (a leading v is dropped)
+function Find-Milestone($all, [string]$name) {
+  $bare = Get-Bare $name
+  $hit = $all | Where-Object { $_.title -eq $name -or $_.title -eq $bare } | Select-Object -First 1
+  if (-not $hit -and $name -cmatch '^M([0-9]+)$') {
+    $n = [int]$Matches[1]
+    $hit = $all | Where-Object { $p = Get-Title $_.title; $p.kind -eq 'numbered' -and $p.n -eq $n } | Select-Object -First 1
+  }
+  if (-not $hit -and $bare -match $semverRx) {
+    $hit = $all | Where-Object { $p = Get-Title $_.title; $p.kind -eq 'numbered' -and $p.version -eq $bare } | Select-Object -First 1
+  }
+  $hit
+}
 
 $milestones = @(Get-Paged "repos/$Repo/milestones?state=all&per_page=100")
 
 if ($Mode -eq 'create') {
-  $title = Get-Bare $Name
-  if (-not (ConvertTo-Version $title)) { Fail "invalid milestone name '$Name': expected x.y.z" }
-  $existing = $milestones | Where-Object { (Get-Bare $_.title) -eq $title } | Select-Object -First 1
+  if ($Name) {
+    $title = Get-Bare $Name
+    if (-not (Get-Title $title).kind -or $title -cmatch '^M[0-9]+ \(') { Fail "invalid milestone name '$Name': expected M<n> or x.y.z" }
+  }
+  else {
+    $max = 0
+    foreach ($x in $milestones) { $p = Get-Title $x.title; if ($p.kind -eq 'numbered' -and $p.n -gt $max) { $max = $p.n } }
+    $title = "M$($max + 1)"
+  }
+  $existing = Find-Milestone $milestones $title
   $created = -not $existing
   if ($created) {
     $raw = & gh api -X POST "repos/$Repo/milestones" -f "title=$title" 2>$null
@@ -77,21 +115,45 @@ if ($Mode -eq 'create') {
 }
 
 if ($Mode -eq 'close') {
+  if (-not $Name) { Fail 'close needs -Name <M<n>|x.y.z>' }
   $title = Get-Bare $Name
-  if (-not (ConvertTo-Version $title)) { Fail "invalid milestone name '$Name': expected x.y.z" }
-  $m = $milestones | Where-Object { (Get-Bare $_.title) -eq $title } | Select-Object -First 1
+  $kind = (Get-Title $title).kind
+  if (-not $kind -and $title -cnotmatch '^M[0-9]+ \(') { Fail "invalid milestone name '$Name': expected M<n> or x.y.z" }
+  $m = Find-Milestone $milestones $title
   if (-not $m) { Fail "milestone '$title' not found" }
+  $mk = (Get-Title $m.title).kind
   $ref = [ordered]@{ number = $m.number; title = $m.title; state = $m.state; url = $m.html_url }
   $result = [ordered]@{ closed = $false; milestone = $ref; moved = @(); openIssues = @() }
   if ($m.state -eq 'closed') { $result | ConvertTo-Json -Depth 5; exit 0 }
-  $null = & gh api "repos/$Repo/git/ref/tags/v$title" 2>$null
-  if ($LASTEXITCODE -ne 0) { Fail "tag v$title does not exist: release first, then close the milestone" }
+  $newTitle = $null
+  if ($mk -eq 'numbered') {
+    $ver = if ($Version) { Get-Bare $Version } else { $null }
+    if ($ver -and -not (ConvertTo-Version $ver)) { Fail "invalid -Version '$Version': expected x.y.z" }
+    $assigned = @($milestones | Where-Object { $_.number -ne $m.number } | ForEach-Object { (Get-Title $_.title).version } | Where-Object { $_ })
+    if ($ver) {
+      if ($assigned -contains $ver) { Fail "version $ver is already assigned to another milestone" }
+      $null = & gh api "repos/$Repo/git/ref/tags/v$ver" 2>$null
+      if ($LASTEXITCODE -ne 0) { Fail "tag v$ver does not exist: release first, then close the milestone" }
+    }
+    else {
+      $cand = @((Get-Paged "repos/$Repo/tags?per_page=100") | ForEach-Object { $_.name } | Where-Object { $_ -match '^v[0-9]+\.[0-9]+\.[0-9]+$' -and $assigned -notcontains $_.Substring(1) } |
+          Sort-Object { [version]($_.Substring(1)) })
+      if (-not $cand.Count) { Fail "no release tag without a milestone: release first, or pass -Version x.y.z" }
+      $ver = $cand[-1].Substring(1)
+    }
+    $newTitle = "M$((Get-Title $m.title).n) ($ver)"
+  }
+  else {
+    $title = $m.title
+    $null = & gh api "repos/$Repo/git/ref/tags/v$title" 2>$null
+    if ($LASTEXITCODE -ne 0) { Fail "tag v$title does not exist: release first, then close the milestone" }
+  }
   $open = @(Get-Paged "repos/$Repo/issues?milestone=$($m.number)&state=open&per_page=100" | Where-Object { $null -eq $_.pull_request } | Sort-Object number |
       ForEach-Object { [ordered]@{ number = $_.number; title = $_.title } })
   if ($open.Count -and $MoveTo) {
     $target = Get-Bare $MoveTo
-    if (-not (ConvertTo-Version $target)) { Fail "invalid -MoveTo '$MoveTo': expected x.y.z" }
-    $t = $milestones | Where-Object { (Get-Bare $_.title) -eq $target } | Select-Object -First 1
+    if (-not (Get-Title $target).kind) { Fail "invalid -MoveTo '$MoveTo': expected M<n> or x.y.z" }
+    $t = Find-Milestone $milestones $target
     if (-not $t) { Fail "target milestone '$target' not found; create it with /github-milestone create $target" }
     if ($t.state -ne 'open') { Fail "target milestone '$target' is closed" }
     if ($t.number -eq $m.number) { Fail 'target milestone is the milestone to close' }
@@ -106,9 +168,12 @@ if ($Mode -eq 'close') {
     $open = @()
   }
   if ($open.Count) { $result.openIssues = $open; $result | ConvertTo-Json -Depth 5; exit 0 }
-  $null = & gh api -X PATCH "repos/$Repo/milestones/$($m.number)" -f state=closed 2>$null
-  if ($LASTEXITCODE -ne 0) { Fail "closing milestone $title failed" }
+  $patch = @('-f', 'state=closed')
+  if ($newTitle) { $patch += @('-f', "title=$newTitle") }
+  $null = & gh api -X PATCH "repos/$Repo/milestones/$($m.number)" @patch 2>$null
+  if ($LASTEXITCODE -ne 0) { Fail "closing milestone $($m.title) failed" }
   $ref.state = 'closed'
+  if ($newTitle) { $ref.title = $newTitle; $result.version = $ver }
   $result.closed = $true
   $result | ConvertTo-Json -Depth 5
   exit 0
@@ -116,7 +181,7 @@ if ($Mode -eq 'close') {
 
 if ($Mode -eq 'issues') {
   if (-not $Name) { Fail 'issues needs -Name <milestone title>' }
-  $m = $milestones | Where-Object { $_.title -eq $Name -or $_.title -eq (Get-Bare $Name) } | Select-Object -First 1
+  $m = Find-Milestone $milestones $Name
   if (-not $m) { Fail "milestone '$Name' not found" }
   $list = @(Get-Paged "repos/$Repo/issues?milestone=$($m.number)&state=$State&per_page=100" | Where-Object { $null -eq $_.pull_request } | Sort-Object number | ForEach-Object {
       [ordered]@{
@@ -138,7 +203,10 @@ function Get-Summary($m) {
     number = $m.number; title = $m.title; state = $m.state; dueOn = $m.due_on
     open = [int]$m.open_issues; closed = [int]$m.closed_issues
     progress = if ($total) { [int][math]::Round(100 * [int]$m.closed_issues / $total) } else { 0 }
-    tagged = $tags -contains "v$($m.title)"; url = $m.html_url
+    tagged = $(
+      $v = (Get-Title $m.title).version
+      [bool]($v -and $tags -contains "v$v")
+    ); url = $m.html_url
   }
 }
 
@@ -187,21 +255,23 @@ function Get-Detail($m) {
 
 switch ($Mode) {
   'list' {
-    $sorted = @($milestones | Sort-Object @{ e = { if (ConvertTo-Version $_.title) { 0 } else { 1 } } }, @{ e = { ConvertTo-Version $_.title } }, @{ e = { $_.title } })
+    $rank = @{ legacy = 0; numbered = 1 }
+    $sorted = @($milestones | Sort-Object @{ e = { $k = (Get-Title $_.title).kind; if ($k) { $rank[$k] } else { 2 } } }, @{ e = { (Get-Title $_.title).n } }, @{ e = { ConvertTo-Version $_.title } }, @{ e = { $_.title } })
     [ordered]@{ latestTag = $latestTag; milestones = @($sorted | ForEach-Object { Get-Summary $_ }) } | ConvertTo-Json -Depth 6
   }
   'show' {
-    if (-not $Name) { Fail 'show needs -Name <x.y.z>' }
-    $m = $milestones | Where-Object { $_.title -eq $Name -or $_.title -eq (Get-Bare $Name) } | Select-Object -First 1
+    if (-not $Name) { Fail 'show needs -Name <M<n>|x.y.z>' }
+    $m = Find-Milestone $milestones $Name
     if (-not $m) { Fail "milestone '$Name' not found" }
     Get-Detail $m | ConvertTo-Json -Depth 8
   }
   'current' {
     $floor = if ($latestTag) { [version]$latestTag.Substring(1) } else { [version]'0.0.0' }
     $m = @($milestones | Where-Object { $_.state -eq 'open' -and (ConvertTo-Version $_.title) -gt $floor } | Sort-Object { ConvertTo-Version $_.title }) | Select-Object -First 1
+    if (-not $m) { $m = @($milestones | Where-Object { $_.state -eq 'open' -and (Get-Title $_.title).kind -eq 'numbered' } | Sort-Object { (Get-Title $_.title).n }) | Select-Object -First 1 }
     if ($m) { [ordered]@{ latestTag = $latestTag; current = Get-Detail $m } | ConvertTo-Json -Depth 8 }
     else {
-      $hint = "no open milestone above $(if ($latestTag) { $latestTag } else { 'the first release' }); create one with /github-milestone create <x.y.z>"
+      $hint = "no open milestone M<n> (or x.y.z above $(if ($latestTag) { $latestTag } else { 'the first release' })); create one with /github-milestone create"
       [ordered]@{ latestTag = $latestTag; current = $null; hint = $hint } | ConvertTo-Json -Depth 4
     }
   }
