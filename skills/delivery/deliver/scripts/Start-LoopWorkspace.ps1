@@ -10,11 +10,17 @@
   Repository directory; the workspace and the loop start there.
 .PARAMETER ShimScript
   Full path of the installed Invoke-DeliverLoop.ps1.
+.PARAMETER PaneShell
+  Shell of the new pane, which decides the quoting of the command line: sh, bash, zsh, dash, ksh, fish (POSIX single
+  quotes) or pwsh, powershell (doubled single quotes). Default: DELIVER_LOOP_PANE_SHELL, else the name of $env:SHELL,
+  else pwsh on Windows and sh elsewhere. Any other shell (cmd, nu, ...) exits 1 with a message before herdr is called, so the shim runs
+  the loop in the current terminal.
 #>
 [CmdletBinding()]
 param(
   [Parameter(Mandatory)][string]$ShimCwd,
   [Parameter(Mandatory)][string]$ShimScript,
+  [string]$PaneShell = '',
   [Parameter(ValueFromRemainingArguments)][string[]]$LoopArgs = @()
 )
 
@@ -25,9 +31,23 @@ function Get-Id($o, [string]$name) {
   return [string]$o
 }
 
-function ConvertTo-ShellWord([string]$s) { "'" + ($s -replace "'", "'\''") + "'" }
+function Get-QuoteStyle([string]$shell) {
+  if (-not $shell) { $shell = $env:DELIVER_LOOP_PANE_SHELL }
+  if (-not $shell) { $shell = if ($env:SHELL) { $env:SHELL } elseif ($IsWindows) { 'pwsh' } else { 'sh' } }
+  $name = [IO.Path]::GetFileNameWithoutExtension(($shell -replace '\\', '/').TrimEnd('/').Split('/')[-1]).ToLowerInvariant()
+  if ($name -in 'sh', 'bash', 'zsh', 'dash', 'ksh', 'fish') { return 'posix' }
+  if ($name -in 'pwsh', 'powershell') { return 'pwsh' }
+  throw "unsupported pane shell '$shell' (supported: sh, bash, zsh, dash, ksh, fish, pwsh, powershell; set DELIVER_LOOP_PANE_SHELL or -PaneShell)"
+}
+
+# one word for the pane shell: POSIX 'it'\''s' or pwsh 'it''s'
+function ConvertTo-ShellWord([string]$s, [string]$style) {
+  if ($style -eq 'pwsh') { return "'" + ($s -replace "'", "''") + "'" }
+  return "'" + ($s -replace "'", "'\''") + "'"
+}
 
 try {
+  $style = Get-QuoteStyle $PaneShell
   $top = (& git -C $ShimCwd rev-parse --show-toplevel 2>$null)
   $repo = Split-Path -Leaf $(if ($top) { $top } else { $ShimCwd })
   $label = "$repo $([char]0xB7) deliver"
@@ -37,7 +57,7 @@ try {
   $pane = Get-Id $r.root_pane 'pane'
   & herdr tab rename $tab 'deliver-loop' | Out-Null
 
-  $words = @('pwsh', '-NoProfile', '-File', (ConvertTo-ShellWord $ShimScript)) + @($LoopArgs | ForEach-Object { ConvertTo-ShellWord $_ })
+  $words = @('pwsh', '-NoProfile', '-File', (ConvertTo-ShellWord $ShimScript $style)) + @($LoopArgs | ForEach-Object { ConvertTo-ShellWord $_ $style })
   & herdr pane run $pane ($words -join ' ') | Out-Null
   Write-Host "deliver-loop started in herdr workspace '$label' (tab deliver-loop)."
   exit 0

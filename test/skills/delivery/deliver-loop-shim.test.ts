@@ -9,6 +9,7 @@ const delivery = path.resolve(__dirname, '../../../skills/delivery');
 const shimSh = path.join(delivery, 'skills-install/templates/deliver-loop.sh');
 const installScript = path.join(delivery, 'skills-install/scripts/Install-LoopShim.ps1');
 const startScript = path.join(delivery, 'deliver/scripts/Start-LoopWorkspace.ps1');
+const shimPs1 = path.join(delivery, 'skills-install/templates/deliver-loop.ps1');
 const posix = process.platform !== 'win32';
 
 let tmp: string;
@@ -99,6 +100,72 @@ describe.skipIf(!posix)('deliver-loop shell function', () => {
     expect(calls[1]).toBe('tab rename w9:t1 deliver-loop');
     expect(calls[2]).toContain('pane run w9:p1 pwsh -NoProfile -File');
     expect(calls[2]).toContain("Invoke-DeliverLoop.ps1' '-Milestone' 'it'\\''s'");
+  });
+
+  // a fake herdr that logs its calls and answers workspace create
+  const fakeHerdr = (bin: string, log: string) =>
+    fs.writeFileSync(
+      path.join(bin, 'herdr'),
+      `#!/bin/sh\necho "$@" >> "${log}"\n` +
+        `if [ "$1 $2" = "workspace create" ]; then echo '{"result":{"workspace":{"workspace_id":"w9"},"tab":{"tab_id":"w9:t1"},"root_pane":{"pane_id":"w9:p1"}}}'; fi\n`,
+      { mode: 0o755 },
+    );
+  const herdrEnv = (bin: string, extra: NodeJS.ProcessEnv = {}) => ({
+    HERDR_ENV: '1',
+    PATH: `${bin}${path.delimiter}${process.env.PATH}`,
+    ...extra,
+  });
+  const paneRun = (log: string) =>
+    fs
+      .readFileSync(log, 'utf8')
+      .split('\n')
+      .find((l) => l.startsWith('pane run'));
+
+  it('sends -Target 12,14 -Max 1 as one value to the herdr pane (bash/zsh shim)', () => {
+    const home = mk('h7');
+    fakeSkill('h7/.claude/skills', 'x');
+    const bin = mk('bin7');
+    const log = path.join(tmp, 'herdr7.log');
+    fakeHerdr(bin, log);
+    const r = runShim(mk('p7'), home, ['-Target', '12,14', '-Max', '1'], herdrEnv(bin));
+    expect(r.status).toBe(0);
+    expect(paneRun(log)).toContain("Invoke-DeliverLoop.ps1' '-Target' '12,14' '-Max' '1'");
+  });
+
+  it('sends -Target 12,14 -Max 1 as one value to the herdr pane (PowerShell shim)', () => {
+    const home = mk('h8');
+    fakeSkill('h8/.claude/skills', 'x');
+    const bin = mk('bin8');
+    const log = path.join(tmp, 'herdr8.log');
+    fakeHerdr(bin, log);
+    const r = spawnSync(
+      'pwsh',
+      ['-NoProfile', '-Command', `. '${shimPs1}'; deliver-loop -Target 12,14 -Max 1`],
+      { cwd: mk('p8'), encoding: 'utf8', env: { HOME: home, ...herdrEnv(bin) } },
+    );
+    expect(r.status).toBe(0);
+    expect(paneRun(log)).toContain("Invoke-DeliverLoop.ps1' '-Target' '12,14' '-Max' '1'");
+  });
+
+  it('quotes for the shell of the pane: pwsh doubles quotes, POSIX shells escape them, others are refused', () => {
+    const home = mk('h9');
+    fakeSkill('h9/.claude/skills', 'global-claude');
+    const bin = mk('bin9');
+    const log = path.join(tmp, 'herdr9.log');
+    fakeHerdr(bin, log);
+    const runWith = (shell: string) => {
+      fs.rmSync(log, { force: true });
+      return runShim(mk('p9'), home, ['-Milestone', "it's"], herdrEnv(bin, { SHELL: shell }));
+    };
+    expect(runWith('/usr/local/bin/pwsh').status).toBe(0);
+    expect(paneRun(log)).toContain("'-Milestone' 'it''s'");
+    expect(runWith('/opt/homebrew/bin/fish').status).toBe(0);
+    expect(paneRun(log)).toContain("'-Milestone' 'it'\\''s'");
+    fs.rmSync(log, { force: true });
+    const nu = runWith('/bin/nu');
+    expect(fs.existsSync(log)).toBe(false); // herdr not called
+    expect(nu.stdout.trim()).toBe("global-claude|-Milestone,it's"); // loop runs in the current terminal
+    expect(nu.stderr).toContain('unsupported pane shell');
   });
 
   it('runs in the current terminal when herdr fails', () => {
