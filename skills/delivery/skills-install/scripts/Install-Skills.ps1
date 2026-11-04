@@ -39,6 +39,13 @@
 .PARAMETER TrustProject
   Allow running a project-local Detect-TechStack.ps1 (repository code). Off by default.
 
+.PARAMETER Update
+  Update the installed skills instead of installing: runs `npx skills check` (-g with -Global), reports its
+  output as `check`, and (without -DryRun) `npx skills update`. Afterwards the script starts itself again in a
+  new process, so the refreshed groups.json counts, for the groups with an installed member (or -Groups) and
+  reports the skills that are new in them as `newMembers` with their `newMemberCommands` (a dry run, nothing
+  installed). Install them with the same command without -Update.
+
 .PARAMETER DryRun
   Print the commands in the JSON result, run nothing. The result lists `wouldInstall`, not `installed`.
 
@@ -53,7 +60,8 @@ param(
   [string[]]$Agents = @('claude-code', 'opencode', 'github-copilot'),
   [switch]$Copy,
   [switch]$TrustProject,
-  [switch]$DryRun
+  [switch]$DryRun,
+  [switch]$Update
 )
 
 $ErrorActionPreference = 'Stop'
@@ -62,7 +70,7 @@ if ($PSVersionTable.PSVersion.Major -lt 7) {
   [Console]::Error.WriteLine('PowerShell 7+ is required (https://aka.ms/powershell).')
   exit 1
 }
-if (-not $DryRun -and -not (Get-Command npx -ErrorAction SilentlyContinue)) {
+if (($Update -or -not $DryRun) -and -not (Get-Command npx -ErrorAction SilentlyContinue)) {
   [Console]::Error.WriteLine('npx not found on PATH. Install Node.js 22+ (https://nodejs.org), which brings npx.')
   exit 1
 }
@@ -121,6 +129,38 @@ function Find-Detect {
     }
   }
   return $null
+}
+
+if ($Update) {
+  $scopeArgs = @(if ($Global) { '-g' })
+  $checkOut = @(& npx -y skills check @scopeArgs 2>&1 | ForEach-Object { "$_" })
+  $checkExit = $LASTEXITCODE
+  if ($checkExit -ne 0) { $notes.Add("npx skills check failed (exit $checkExit)") }
+  $updateArgs = @('-y', 'skills', 'update') + $scopeArgs
+  $uResult = [ordered]@{ dryRun = [bool]$DryRun; scope = $(if ($Global) { 'global' } else { 'project' }); check = $checkOut; updated = $false }
+  $uResult.commands = @('npx ' + ($updateArgs -join ' '))
+  $newMembers = @(); $newCmds = @(); $uFailed = $checkExit -ne 0
+  if (-not $DryRun -and -not $uFailed) {
+    & npx @updateArgs 2>&1 | ForEach-Object { [Console]::Error.WriteLine("$_") }
+    if ($LASTEXITCODE -ne 0) { $uFailed = $true; $notes.Add("npx skills update failed (exit $LASTEXITCODE)") } else { $uResult.updated = $true }
+    if (-not $uFailed) {
+      # new process: the updated skills-install ships the refreshed groups.json
+      $g = if ($Groups) { $Groups } else { @($groupMap.Keys | Where-Object { $_ -ne 'skill-tooling' } | Where-Object { $gn = $_; @($groupMap[$gn] | Where-Object { Test-Installed $_ $scopeBase $scopeDirs }).Count -gt 0 } | Sort-Object) }
+      if ($g.Count -gt 0) {
+        $cArgs = @('-NoProfile', '-File', $PSCommandPath, '-DryRun', '-Groups', ($g -join ','), '-Agents', ($Agents -join ','))
+        if ($Global) { $cArgs += '-Global' }
+        if ($Ref) { $cArgs += @('-Ref', $Ref) }
+        $child = (& pwsh @cArgs 2>$null | Out-String | ConvertFrom-Json)
+        $newMembers = @($child.wouldInstall); $newCmds = @($child.commands)
+      }
+    }
+  } elseif ($DryRun) { $notes.Add('Dry run: new group members are proposed after the update, with the refreshed group definition.') }
+  $uResult.newMembers = $newMembers
+  $uResult.newMemberCommands = $newCmds
+  $uResult.notes = @($notes)
+  $uResult | ConvertTo-Json -Depth 4
+  if ($uFailed) { exit 1 }
+  exit 0
 }
 
 $wanted = [System.Collections.Generic.List[string]]::new()
