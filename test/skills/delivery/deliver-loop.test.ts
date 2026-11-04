@@ -97,11 +97,11 @@ fs.writeFileSync(f, JSON.stringify(s));`,
       fs.writeFileSync(path.join(gh.bin, name), `#!/bin/sh\n${body}\n`, { mode: 0o755 });
     stub(
       'claude',
-      `echo "$*" >> ${cwd}/claude-calls.txt\necho "herdr_env=[$HERDR_ENV]" >> ${cwd}/claude-calls.txt\ncat ${cwd}/stream.jsonl\nnode ${cwd}/effect.js`,
+      `echo "$*" >> ${cwd}/harness-calls.txt\necho "herdr_env=[$HERDR_ENV]" >> ${cwd}/harness-calls.txt\ncat ${cwd}/stream.jsonl\nnode ${cwd}/effect.js`,
     );
     stub(
       'copilot',
-      `echo "$*" >> ${cwd}/claude-calls.txt\necho "herdr_env=[$HERDR_ENV]" >> ${cwd}/claude-calls.txt\ncat ${cwd}/stream.jsonl\nnode ${cwd}/effect.js`,
+      `echo "$*" >> ${cwd}/harness-calls.txt\necho "herdr_env=[$HERDR_ENV]" >> ${cwd}/harness-calls.txt\ncat ${cwd}/stream.jsonl\nnode ${cwd}/effect.js`,
     );
     stub('herdr', `echo "$*" >> ${cwd}/herdr-calls.txt`);
     stub('osascript', `echo "$*" >> ${cwd}/notices.txt`);
@@ -112,8 +112,8 @@ fs.writeFileSync(f, JSON.stringify(s));`,
     const p = path.join(cwd, f);
     return fs.existsSync(p) ? fs.readFileSync(p, 'utf8') : '';
   };
-  const claudeCalls = () =>
-    read('claude-calls.txt')
+  const harnessCalls = () =>
+    read('harness-calls.txt')
       .split('\n')
       .filter((l) => l.startsWith('-p'));
   const run = (gh: ReturnType<typeof createFakeGh>, args: string[], env: NodeJS.ProcessEnv = {}) =>
@@ -142,13 +142,13 @@ fs.writeFileSync(f, JSON.stringify(s));`,
       );
       expect(h.status).toBe(64);
       expect(h.stderr).toContain('Supported: claude, copilot');
-      expect(claudeCalls()).toEqual([]);
+      expect(harnessCalls()).toEqual([]);
     });
 
     it.each([[['-Target', '1', '-Max', '0']], [['-Target', 'abc']]])('rejects %j', async (args) => {
       const r = await run(setup({ issues: { 1: pbi() } }), args);
       expect(r.status).not.toBe(0);
-      expect(claudeCalls()).toEqual([]);
+      expect(harnessCalls()).toEqual([]);
     });
   });
 
@@ -184,10 +184,10 @@ fs.writeFileSync(f, JSON.stringify(s));`,
         HERDR_PANE_ID: 'p7',
       });
       expect(r.status).toBe(0);
-      expect(claudeCalls()).toEqual([
-        '-p /deliver 7 --unattended --max 1 --model gpt-5 --allow-all-tools --no-ask-user --output-format json',
+      expect(harnessCalls()).toEqual([
+        '-p /deliver 7 --unattended --max 1 --model gpt-5 --allow-all-tools --allow-all-paths --allow-all-urls --no-ask-user --output-format json',
       ]);
-      expect(read('claude-calls.txt')).toContain('herdr_env=[]');
+      expect(read('harness-calls.txt')).toContain('herdr_env=[]');
       const lines = read('.agents/deliver-loop.log');
       expect(lines).toMatch(/\d\d:\d\d:\d\d » #7 pr: opened #55/);
       expect(lines).toMatch(/\d\d:\d\d:\d\d bash ls -la/);
@@ -202,6 +202,29 @@ fs.writeFileSync(f, JSON.stringify(s));`,
       }
       expect(r.stdout).toContain('loop result: done');
     });
+
+    it('takes model auto for copilot without -Model, but sonnet for claude', async () => {
+      const gh = setup({ issues: { 7: pbi() }, effect: 'close-first', stream: events });
+      const r = await run(gh, ['-Target', '7', '-Harness', 'copilot']);
+      expect(r.status).toBe(0);
+      expect(harnessCalls()[0]).toContain('--model auto ');
+    });
+
+    // fixture: real output of copilot 1.0.105 (-p … --output-format json), trimmed to the event types the parser reads
+    it('reads a recorded live Copilot session: tool step, failed tool call, subagent name as prefix, progress line', async () => {
+      const live = fs
+        .readFileSync(path.resolve(__dirname, 'fixtures/copilot-cli-1.0.105.jsonl'), 'utf8')
+        .trim()
+        .split('\n')
+        .map((l) => JSON.parse(l));
+      const gh = setup({ issues: { 7: pbi() }, effect: 'close-first', stream: live });
+      const r = await run(gh, ['-Target', '7', '-Harness', 'copilot']);
+      expect(r.status).toBe(0);
+      const lines = read('.agents/deliver-loop.log');
+      expect(lines).toMatch(/\d\d:\d\d:\d\d bash Run requested echo command/);
+      expect(lines).toMatch(/✗ Path does not exist/);
+      expect(lines).toMatch(/\[List cx-out files\] bash List files/);
+    });
   });
 
   describe('stop rules', () => {
@@ -214,7 +237,7 @@ fs.writeFileSync(f, JSON.stringify(s));`,
       const r = await run(gh, ['-Milestone', 'M4']);
       expect(r.status).toBe(2);
       expect(r.stdout).toContain('loop result: blocked');
-      expect(claudeCalls()).toEqual([]);
+      expect(harnessCalls()).toEqual([]);
       const paths = gh.calls().map((c) => c.args.join(' '));
       expect(paths.filter((c) => c.includes('issues?milestone=2&state=closed'))).toHaveLength(1);
       expect(paths.filter((c) => c.includes('issues?milestone=1&'))).toEqual([]);
@@ -230,7 +253,7 @@ fs.writeFileSync(f, JSON.stringify(s));`,
       });
       const r = await run(gh, ['-Milestone', 'M4']);
       expect(r.status).toBe(0);
-      expect(claudeCalls()).toEqual([
+      expect(harnessCalls()).toEqual([
         '-p /deliver --milestone M4 --unattended --max 1 --model sonnet --permission-mode auto --output-format stream-json --verbose',
       ]);
       expect(JSON.parse(read('state.json')).issues[10].state).toBe('CLOSED');
@@ -258,7 +281,7 @@ fs.writeFileSync(f, JSON.stringify(s));`,
       });
       const r = await run(gh, ['-Target', '100', '-Model', 'opus', '-Max', '1']);
       expect(r.status).toBe(0);
-      const calls = claudeCalls();
+      const calls = harnessCalls();
       expect(calls).toHaveLength(1);
       expect(calls[0]).toBe(
         '-p /deliver 100 --unattended --max 1 --model opus --permission-mode auto --output-format stream-json --verbose',
@@ -276,7 +299,7 @@ fs.writeFileSync(f, JSON.stringify(s));`,
       });
       const r = await run(gh, ['-Target', '10']);
       expect(r.status).toBe(1);
-      expect(claudeCalls()).toHaveLength(1);
+      expect(harnessCalls()).toHaveLength(1);
       expect(r.stdout).toContain('no progress');
       expect(r.stdout).toMatch(/ {2}\d\d:\d\d:\d\d » working on it/);
     });
@@ -292,7 +315,7 @@ fs.writeFileSync(f, JSON.stringify(s));`,
         effect: 'hold-first',
       });
       const r = await run(gh, ['-Target', '9,10,11,12']);
-      expect(claudeCalls()).toHaveLength(1);
+      expect(harnessCalls()).toHaveLength(1);
       expect(r.status).toBe(2);
       expect(r.stdout).toContain('loop result: blocked');
     });
@@ -307,7 +330,7 @@ fs.writeFileSync(f, JSON.stringify(s));`,
       expect(r.stderr).toBe('');
       expect(read('herdr-calls.txt')).toBe('');
       expect(r.stdout).toContain('loop result: done');
-      expect(claudeCalls()).toEqual([]);
+      expect(harnessCalls()).toEqual([]);
       const files = fs.readdirSync(cwd, { recursive: true }).map(String);
       expect(files.filter((f) => /queue/i.test(f))).toEqual([]);
     });
@@ -392,7 +415,7 @@ fs.writeFileSync(f, JSON.stringify(s));`,
         .trim()
         .split('\n');
       expect(jsonl.map((l) => JSON.parse(l))).toEqual(stream);
-      expect(read('claude-calls.txt')).toContain('herdr_env=[]');
+      expect(read('harness-calls.txt')).toContain('herdr_env=[]');
       const calls = read('herdr-calls.txt')
         .trim()
         .split('\n')
