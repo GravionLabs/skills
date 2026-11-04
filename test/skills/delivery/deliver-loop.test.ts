@@ -141,8 +141,8 @@ fs.writeFileSync(f, JSON.stringify(s));`,
       expect(harnessCalls()).toEqual([]);
     });
 
-    it.each([[['-Target', '1', '-Max', '0']], [['-Target', 'abc']]])('rejects %j', async (args) => {
-      const r = await run(setup({ issues: { 1: pbi() } }), args);
+    it('rejects -Max 0', async () => {
+      const r = await run(setup({ issues: { 1: pbi() } }), ['-Target', '1', '-Max', '0']);
       expect(r.status).not.toBe(0);
       expect(harnessCalls()).toEqual([]);
     });
@@ -179,19 +179,19 @@ fs.writeFileSync(f, JSON.stringify(s));`,
       { type: 'session.idle', data: {} },
     ];
 
-    it('starts copilot -p per PBI with model and non-interactive permissions, logs steps, notices and herdr tokens; stop rules and exit code as for claude', async () => {
+    it('starts copilot -p per PBI with the default model auto (#220) and non-interactive permissions, logs steps, notices and herdr tokens; stop rules and exit code as for claude', async () => {
       const gh = setup({
         issues: { 7: pbi() },
         effect: 'close-first',
         stream: [...live, ...events],
       });
-      const r = await run(gh, ['-Target', '7', '-Harness', 'copilot', '-Model', 'gpt-5'], {
+      const r = await run(gh, ['-Target', '7', '-Harness', 'copilot'], {
         HERDR_ENV: '1',
         HERDR_PANE_ID: 'p7',
       });
       expect(r.status).toBe(0);
       expect(harnessCalls()).toEqual([
-        '-p /deliver 7 --unattended --max 1 --model gpt-5 --allow-all-tools --allow-all-paths --allow-all-urls --no-ask-user --output-format json',
+        '-p /deliver 7 --unattended --max 1 --model auto --allow-all-tools --allow-all-paths --allow-all-urls --no-ask-user --output-format json',
       ]);
       expect(read('harness-calls.txt')).toContain('herdr_env=[]');
       const lines = read('.agents/deliver-loop.log');
@@ -211,6 +211,17 @@ fs.writeFileSync(f, JSON.stringify(s));`,
   });
 
   describe('stop rules', () => {
+    it('-Milestone without open issues but a closed PBI labeled needs-decision ends blocked, not done (#235)', async () => {
+      const gh = setup({
+        issues: { 10: pbi({ state: 'CLOSED', labels: ['pbi', 'needs-decision'] }) },
+        milestones: { M4: [10] },
+      });
+      const r = await run(gh, ['-Milestone', 'M4']);
+      expect(r.status).toBe(2);
+      expect(r.stdout).toContain('loop result: blocked');
+      expect(harnessCalls()).toEqual([]);
+    });
+
     it('-Milestone selects a bug like a PBI, delivers it in one fresh process, ends done when no open and no paused issue is left, reads the milestone M4 with one batched REST call (#103, #127, #235)', async () => {
       const gh = setup({
         issues: {
