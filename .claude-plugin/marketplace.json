@@ -46,6 +46,7 @@
         "./skills/delivery/grill-me",
         "./skills/delivery/planner",
         "./skills/delivery/retro",
+        "./skills/delivery/roadmap",
         "./skills/delivery/skills-install"
       ]
     },
