@@ -3,7 +3,7 @@
   Runs `/deliver` in a fresh harness process per PBI until the targets are done, blocked, stalled or -Max is reached.
 .DESCRIPTION
   A long unattended run in one session grows its context and dies with it. This loop starts
-  `claude -p "/deliver <targets> --unattended --max 1"` once per PBI; deliver keeps all state in GitHub, so there is no
+  `claude -p "/deliver <targets> --unattended --max 1"` (`-Harness claude`, the default) or `copilot -p` (`-Harness copilot`) once per PBI; deliver keeps all state in GitHub, so there is no
   queue file. Progress is read from GitHub before and after each iteration: the open PBIs of the targets without the
   labels needs-decision / needs-refinement / interactive (deliver skips interactive PBIs unattended). No change stops
   the loop ("no progress"); nothing open means done (unless a closed PBI of the milestone carries needs-decision, the paused release review: blocked); open PBIs that all wait on an open blocker or a label mean blocked.
