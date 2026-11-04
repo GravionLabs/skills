@@ -5,6 +5,12 @@ Versioning follows [Semantic Versioning](https://semver.org/).
 
 ---
 
+## [2.0.1] — 2026-11-04
+
+### Documentation
+- **skills-install**: After-install.md names the ng-ag-grid rename (#279) (#280)
+
+
 ## [2.0.0] — 2026-11-04
 
 ### Bug Fixes
@@ -24,6 +30,7 @@ Versioning follows [Semantic Versioning](https://semver.org/).
 - Stale loop and milestone wording, group table cell test (#229) (#260)
 - Migrating legacy x.y.z milestones to M<n>, tamias as example (#243) (#263)
 - Refresh ROADMAP.md to M<n> and 1.6.0 with the roadmap skill (#248) (#268)
+- Update CHANGELOG.md for v2.0.0 [skip ci]
 
 
 ### Features
