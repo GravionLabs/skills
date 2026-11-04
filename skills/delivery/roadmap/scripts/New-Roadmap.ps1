@@ -67,7 +67,7 @@ function Get-Table([string[]]$head, $rows) {
 function Get-Why($i) {
   $w = @()
   if (@($i.labels) -contains 'needs-decision') { $w += '`needs-decision`' }
-  if (@($i.blockedBy).Count) { $w += 'blocked by ' + ((@($i.blockedBy) | ForEach-Object { "#$_" }) -join ', ') }
+  if (@($i.blockedBy).Count) { $w += 'blocked by ' + ((@($i.blockedBy) | ForEach-Object { if ($_ -is [string]) { $_ } else { "#$_" } }) -join ', ') }
   $w -join '; '
 }
 
@@ -99,7 +99,7 @@ function Get-PlanOrder($items) {
   $done = @{}
   $out = @()
   while ($left.Count) {
-    $next = $left | Where-Object { -not (@($_.blockedBy) | Where-Object { $nums -contains [int]$_ -and -not $done.ContainsKey([int]$_) }) } | Select-Object -First 1
+    $next = $left | Where-Object { -not (@($_.blockedBy) | Where-Object { $_ -isnot [string] -and $nums -contains [int]$_ -and -not $done.ContainsKey([int]$_) }) } | Select-Object -First 1
     if (-not $next) { $next = $left[0] }
     $out += $next
     $done[[int]$next.number] = $true

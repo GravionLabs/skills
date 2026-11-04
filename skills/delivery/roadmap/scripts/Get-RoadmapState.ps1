@@ -4,7 +4,7 @@
 .DESCRIPTION
   Read-only: only `gh api` GET calls (REST). Issues: one paginated read of the open issues (pull requests filtered out); the level
   comes from the label epic, feature, pbi or bug (issues without one are left out). parent: the native sub-issue parent
-  (GET issues/<nr>/parent, none: null). blockedBy: numbers of the open native blockers (GET issues/<nr>/dependencies/blocked_by).
+  (GET issues/<nr>/parent, none: null). blockedBy: the open native blockers, a number per local blocker and a string `owner/repo#n` per blocker in another repository (GET issues/<nr>/dependencies/blocked_by).
   size: S, M or L from a body line `Size: <S|M|L>` or a label `size:<S|M|L>`, otherwise null. milestone: the title or null.
   milestones: Get-Milestones.ps1 -Mode list of the sibling github-milestone skill (M<n>, M<n> (x.y.z) and legacy x.y.z titles).
   Closed milestones also carry issues[] (number, title) of their closed issues (one more GET per closed milestone), for the Done sections of ROADMAP.md.
@@ -52,7 +52,11 @@ $issues = foreach ($i in (Get-Paged "repos/$Repo/issues?state=open&per_page=100"
   $raw = & gh api "repos/$Repo/issues/$($i.number)/dependencies/blocked_by" 2>$null
   $blocked = @()
   if ($LASTEXITCODE -eq 0 -and $raw) {
-    $blocked = @(($raw | Out-String | ConvertFrom-Json) | Where-Object { $_.state -eq 'open' } | ForEach-Object { [int]$_.number })
+    $blocked = @(($raw | Out-String | ConvertFrom-Json) | Where-Object { $_.state -eq 'open' } | ForEach-Object {
+        # a blocker in another repository keeps its repository (owner/repo#n), so #n never names a local issue
+        if ($_.repository_url -and $i.repository_url -and $_.repository_url -ne $i.repository_url) { ($_.repository_url -replace '^.*/repos/', '') + "#$([int]$_.number)" }
+        else { [int]$_.number }
+      })
   }
 
   [ordered]@{
