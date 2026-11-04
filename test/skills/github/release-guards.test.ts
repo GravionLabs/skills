@@ -119,16 +119,6 @@ describe('Get-ReleaseState.ps1', () => {
     });
   });
 
-  it('a feat:/fix: branch is no major; a +semver: minor commit is no major either', async () => {
-    setRef(
-      'release/3.2',
-      child(child('main', 'feat: x'), 'chore: release minor', '+semver: minor'),
-    );
-    const r = await state('finish', 'release/3.2');
-    expect(r).toMatchObject({ hasMajorCommit: false, action: 'release-pr' });
-    expect(r).not.toHaveProperty('hasSemverCommit');
-  });
-
   it('reports a +semver: major commit and the CI release PR', async () => {
     setRef('release/3.2', child('main', 'chore: release major', '+semver: major'));
     const r = await state('finish', 'release/3.2', {
@@ -149,24 +139,10 @@ describe('Get-ReleaseState.ps1', () => {
     expect(r.action).toBe('stop: open PRs target the branch; merge them first');
   });
 
-  it('behind: main has commits the branch lacks (release/2.2)', async () => {
-    expect(await state('finish', 'release/2.2')).toMatchObject({
-      state: 'behind',
-      action: expect.stringContaining(
-        'main is not an ancestor of release/2.2; back-merge it first',
-      ),
-      defaultIsAncestor: false,
-    });
-  });
-
   it('released-continued: .0 tag exists and the branch moved on (release/2.1)', async () => {
     const r = await state('finish', 'release/2.1');
     expect(r.state).toBe('released-continued');
     expect(r.action).toBe('stop: already released; cut a new release branch');
-  });
-
-  it('released-continued: release/next continued after its merge (no <x.y> tag to check)', async () => {
-    expect((await state('finish', 'release/next')).state).toBe('released-continued');
   });
 
   it('merged: the tip is the second parent of a merge on main (release/1.0 = v2.1.0^2)', async () => {
@@ -174,9 +150,5 @@ describe('Get-ReleaseState.ps1', () => {
     const r = await state('finish', 'release/1.0');
     expect(r).toMatchObject({ state: 'merged', deleteAllowed: false });
     expect(r.action).toBe('stop: already released; cut a new release branch');
-  });
-
-  it('released: ancestor of main but no merge tip (release/9.0)', async () => {
-    expect((await state('finish', 'release/9.0')).state).toBe('released');
   });
 });

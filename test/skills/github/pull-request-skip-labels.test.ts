@@ -130,6 +130,19 @@ describe('Add-SkipLabels.ps1', () => {
     expect(out.errors[0]).toContain('skip label lookup failed: boom');
     expect(posts).toHaveLength(0);
   });
+
+  // #224: a broken config never prints help text, only stderr and a non-zero exit
+  it('exits non-zero with stderr and no stdout when the config is invalid', async () => {
+    const cfg = path.join(tmp, 'bad.json');
+    fs.writeFileSync(cfg, '{ not json');
+    const r = await worker.run(['-IssueLabel', 'skip-adr', '-Config', cfg, '-Repo', 'o/r'], {
+      cwd: tmp,
+      env: fake.env(),
+    });
+    expect(r.status).not.toBe(0);
+    expect(r.stderr).toContain('Add-SkipLabels failed');
+    expect(r.stdout.trim()).toBe('');
+  });
 });
 
 describe('github-pull-request skip label docs', () => {
