@@ -23,6 +23,8 @@ describe.skipIf(!hasPwsh || process.platform === 'win32')('Install-Skills.ps1 -U
     groups.delivery = groups.delivery.filter((s: string) => s !== 'roadmap');
     fs.writeFileSync(path.join(scripts, 'groups.json'), JSON.stringify(groups));
     fs.writeFileSync(path.join(tmp, 'new-groups.json'), withRoadmap);
+    const { delivery: _removed, ...withoutDelivery } = JSON.parse(withRoadmap);
+    fs.writeFileSync(path.join(tmp, 'no-delivery-groups.json'), JSON.stringify(withoutDelivery));
     const home = path.join(tmp, 'home');
     for (const s of ['deliver', 'github-issue']) {
       fs.mkdirSync(path.join(home, '.claude', 'skills', s), { recursive: true });
@@ -37,7 +39,7 @@ describe.skipIf(!hasPwsh || process.platform === 'win32')('Install-Skills.ps1 -U
 echo "$*" >> "${log}"
 case "$*" in
   *"skills check"*) echo "deliver  update available"; exit \${FAKE_CHECK_EXIT:-1};;
-  *"skills update"*) cp "${tmp}/new-groups.json" "${scripts}/groups.json";;
+  *"skills update"*) cp "${tmp}/\${FAKE_NEW_GROUPS:-new-groups.json}" "${scripts}/groups.json";;
 esac
 exit \${FAKE_UPDATE_EXIT:-0}
 `,
@@ -91,5 +93,17 @@ exit \${FAKE_UPDATE_EXIT:-0}
     expect(fs.readFileSync(log, 'utf8')).toContain('-y skills update -g');
     expect(j.newMembers).toContain('roadmap');
     expect(j.newMemberCommands[0]).toContain('--skill roadmap');
+  });
+
+  it('fails with a note (exit code, stderr) and no null entries when the new-member child fails', () => {
+    // the refreshed groups.json no longer has `delivery`, which the parent still derives from the old map
+    const r = run(['-Global'], { FAKE_NEW_GROUPS: 'no-delivery-groups.json' });
+    expect(r.status).toBe(1);
+    const j = JSON.parse(r.stdout);
+    expect(j.notes.join('\n')).toMatch(
+      /new-member check after the update failed \(exit 1\): .*delivery/s,
+    );
+    expect(j.newMembers).toEqual([]);
+    expect(j.newMemberCommands).toEqual([]);
   });
 });
