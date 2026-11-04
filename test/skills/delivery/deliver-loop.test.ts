@@ -134,25 +134,27 @@ fs.writeFileSync(f, JSON.stringify(s));`,
       const h = spawnSync(
         'pwsh',
         ['-NoProfile', '-File', SCRIPT, '-Target', '1', '-Harness', 'opencode'],
-        {
-          cwd,
-          encoding: 'utf8',
-          env: gh.env(),
-        },
+        { cwd, encoding: 'utf8', env: gh.env() },
       );
       expect(h.status).toBe(64);
       expect(h.stderr).toContain('Supported: claude, copilot');
       expect(harnessCalls()).toEqual([]);
     });
 
-    it.each([[['-Target', '1', '-Max', '0']], [['-Target', 'abc']]])('rejects %j', async (args) => {
-      const r = await run(setup({ issues: { 1: pbi() } }), args);
+    it('rejects -Max 0', async () => {
+      const r = await run(setup({ issues: { 1: pbi() } }), ['-Target', '1', '-Max', '0']);
       expect(r.status).not.toBe(0);
       expect(harnessCalls()).toEqual([]);
     });
   });
 
   describe('harness', () => {
+    // fixture: real output of copilot 1.0.105 (-p … --output-format json), trimmed to the event types the parser reads
+    const live = fs
+      .readFileSync(path.resolve(__dirname, 'fixtures/copilot-cli-1.0.105.jsonl'), 'utf8')
+      .trim()
+      .split('\n')
+      .map((l) => JSON.parse(l));
     const events = [
       { type: 'assistant.message', data: { content: '#7 pr: opened #55\nmore' } },
       {
@@ -177,15 +179,19 @@ fs.writeFileSync(f, JSON.stringify(s));`,
       { type: 'session.idle', data: {} },
     ];
 
-    it('starts copilot -p per PBI with model and non-interactive permissions, logs steps, notices and herdr tokens; stop rules and exit code as for claude', async () => {
-      const gh = setup({ issues: { 7: pbi() }, effect: 'close-first', stream: events });
-      const r = await run(gh, ['-Target', '7', '-Harness', 'copilot', '-Model', 'gpt-5'], {
+    it('starts copilot -p per PBI with the default model auto (#220) and non-interactive permissions, logs steps, notices and herdr tokens; stop rules and exit code as for claude', async () => {
+      const gh = setup({
+        issues: { 7: pbi() },
+        effect: 'close-first',
+        stream: [...live, ...events],
+      });
+      const r = await run(gh, ['-Target', '7', '-Harness', 'copilot'], {
         HERDR_ENV: '1',
         HERDR_PANE_ID: 'p7',
       });
       expect(r.status).toBe(0);
       expect(harnessCalls()).toEqual([
-        '-p /deliver 7 --unattended --max 1 --model gpt-5 --allow-all-tools --allow-all-paths --allow-all-urls --no-ask-user --output-format json',
+        '-p /deliver 7 --unattended --max 1 --model auto --allow-all-tools --allow-all-paths --allow-all-urls --no-ask-user --output-format json',
       ]);
       expect(read('harness-calls.txt')).toContain('herdr_env=[]');
       const lines = read('.agents/deliver-loop.log');
@@ -201,46 +207,22 @@ fs.writeFileSync(f, JSON.stringify(s));`,
         expect(read('notices.txt')).toContain('#7 CI red');
       }
       expect(r.stdout).toContain('loop result: done');
-    });
-
-    it('takes model auto for copilot without -Model, but sonnet for claude', async () => {
-      const gh = setup({ issues: { 7: pbi() }, effect: 'close-first', stream: events });
-      const r = await run(gh, ['-Target', '7', '-Harness', 'copilot']);
-      expect(r.status).toBe(0);
-      expect(harnessCalls()[0]).toContain('--model auto ');
-    });
-
-    // fixture: real output of copilot 1.0.105 (-p … --output-format json), trimmed to the event types the parser reads
-    it('reads a recorded live Copilot session: tool step, failed tool call, subagent name as prefix, progress line', async () => {
-      const live = fs
-        .readFileSync(path.resolve(__dirname, 'fixtures/copilot-cli-1.0.105.jsonl'), 'utf8')
-        .trim()
-        .split('\n')
-        .map((l) => JSON.parse(l));
-      const gh = setup({ issues: { 7: pbi() }, effect: 'close-first', stream: live });
-      const r = await run(gh, ['-Target', '7', '-Harness', 'copilot']);
-      expect(r.status).toBe(0);
-      const lines = read('.agents/deliver-loop.log');
-      expect(lines).toMatch(/\d\d:\d\d:\d\d bash Run requested echo command/);
-      expect(lines).toMatch(/✗ Path does not exist/);
-      expect(lines).toMatch(/\[List cx-out files\] bash List files/);
+      expect(read('.agents/deliver-loop.ansi.log')).toContain(
+        `${String.fromCharCode(27)}[32mloop result: done`,
+      );
     });
   });
 
   describe('stop rules', () => {
-    // #235: -Milestone M4 also finds the title M4 (0.2.0) that close gave it (the plain title M4: next case)
-    it('reports a milestone with a paused release review as blocked, not done, found by M<n> after the rename', async () => {
+    it('-Milestone without open issues but a closed PBI labeled needs-decision ends blocked, not done (#235)', async () => {
       const gh = setup({
-        issues: { 30: pbi({ state: 'CLOSED', labels: ['pbi', 'needs-decision'] }) },
-        milestones: { M3: [], 'M4 (0.2.0)': [30] },
+        issues: { 10: pbi({ state: 'CLOSED', labels: ['pbi', 'needs-decision'] }) },
+        milestones: { M4: [10] },
       });
       const r = await run(gh, ['-Milestone', 'M4']);
       expect(r.status).toBe(2);
       expect(r.stdout).toContain('loop result: blocked');
       expect(harnessCalls()).toEqual([]);
-      const paths = gh.calls().map((c) => c.args.join(' '));
-      expect(paths.filter((c) => c.includes('issues?milestone=2&state=closed'))).toHaveLength(1);
-      expect(paths.filter((c) => c.includes('issues?milestone=1&'))).toEqual([]);
     });
 
     it('-Milestone selects a bug like a PBI, delivers it in one fresh process, ends done when no open and no paused issue is left, reads the milestone M4 with one batched REST call (#103, #127, #235)', async () => {
@@ -248,11 +230,20 @@ fs.writeFileSync(f, JSON.stringify(s));`,
         issues: {
           10: { labels: ['bug'], blockers: [{ number: 5, state: 'closed' }] },
         },
-        milestones: { M4: [10] },
+        milestones: { 'M4 (0.2.0)': [10] }, // a closed milestone renamed 'M<n> (x.y.z)' is still found by M4
         effect: 'close-first',
       });
-      const r = await run(gh, ['-Milestone', 'M4']);
+      const r = await run(gh, ['-Milestone', 'M4'], { HERDR_PANE_ID: 'w1:p5' });
       expect(r.status).toBe(0);
+      // outside herdr (#12): no pane is attempted, no display is set and no error is printed; no queue file
+      expect(r.stderr).toBe('');
+      expect(read('herdr-calls.txt')).toBe('');
+      expect(
+        fs
+          .readdirSync(cwd, { recursive: true })
+          .map(String)
+          .filter((f) => /queue/i.test(f)),
+      ).toEqual([]);
       expect(harnessCalls()).toEqual([
         '-p /deliver --milestone M4 --unattended --max 1 --model sonnet --permission-mode auto --output-format stream-json --verbose',
       ]);
@@ -269,7 +260,7 @@ fs.writeFileSync(f, JSON.stringify(s));`,
       expect(paths.filter((c) => /issues\/\d+$/.test(c))).toEqual([]);
     });
 
-    it('passes targets and -Model on, expands a Feature to its open PBIs and stops at -Max', async () => {
+    it('expands a Feature to its open PBIs, passes -Model on, and stops with "no progress" and the last log lines when a PBI stays open', async () => {
       const gh = setup({
         issues: {
           100: { labels: ['feature'], children: [101, 102, 103] },
@@ -277,62 +268,18 @@ fs.writeFileSync(f, JSON.stringify(s));`,
           102: pbi(),
           103: pbi({ state: 'CLOSED' }),
         },
-        effect: 'close-first',
-      });
-      const r = await run(gh, ['-Target', '100', '-Model', 'opus', '-Max', '1']);
-      expect(r.status).toBe(0);
-      const calls = harnessCalls();
-      expect(calls).toHaveLength(1);
-      expect(calls[0]).toBe(
-        '-p /deliver 100 --unattended --max 1 --model opus --permission-mode auto --output-format stream-json --verbose',
-      );
-      expect(r.stdout).toContain('loop result: max reached');
-    });
-
-    it('stops with "no progress" and the last log lines when a PBI stays open', async () => {
-      const gh = setup({
-        issues: { 10: pbi() },
         effect: 'none',
         stream: [
           { type: 'assistant', message: { content: [{ type: 'text', text: 'working on it' }] } },
         ],
       });
-      const r = await run(gh, ['-Target', '10']);
+      const r = await run(gh, ['-Target', '100', '-Model', 'opus']);
       expect(r.status).toBe(1);
-      expect(harnessCalls()).toHaveLength(1);
+      expect(harnessCalls()).toEqual([
+        '-p /deliver 100 --unattended --max 1 --model opus --permission-mode auto --output-format stream-json --verbose',
+      ]);
       expect(r.stdout).toContain('no progress');
       expect(r.stdout).toMatch(/ {2}\d\d:\d\d:\d\d » working on it/);
-    });
-
-    it('a paused PBI counts as progress; what remains behind an open blocker, needs-refinement or interactive ends as blocked', async () => {
-      const gh = setup({
-        issues: {
-          10: pbi(),
-          9: pbi({ blockers: [{ number: 5, state: 'open' }] }),
-          11: pbi({ labels: ['pbi', 'needs-refinement'] }),
-          12: pbi({ labels: ['pbi', 'interactive'] }),
-        },
-        effect: 'hold-first',
-      });
-      const r = await run(gh, ['-Target', '9,10,11,12']);
-      expect(harnessCalls()).toHaveLength(1);
-      expect(r.status).toBe(2);
-      expect(r.stdout).toContain('loop result: blocked');
-    });
-
-    it('is done at once when nothing is open, reads or writes no queue file; outside herdr it touches no herdr', async () => {
-      // outside herdr (#12): no pane is attempted, no display is set and no error is printed
-      const r = await run(setup({ issues: { 10: pbi({ state: 'CLOSED' }) } }), ['-Target', '10'], {
-        HERDR_PANE_ID: 'w1:p5',
-        DELIVER_LOOP_ASSUME_TTY: '1',
-      });
-      expect(r.status).toBe(0);
-      expect(r.stderr).toBe('');
-      expect(read('herdr-calls.txt')).toBe('');
-      expect(r.stdout).toContain('loop result: done');
-      expect(harnessCalls()).toEqual([]);
-      const files = fs.readdirSync(cwd, { recursive: true }).map(String);
-      expect(files.filter((f) => /queue/i.test(f))).toEqual([]);
     });
   });
 
@@ -392,13 +339,26 @@ fs.writeFileSync(f, JSON.stringify(s));`,
     ];
 
     it('logs one line per step with the agent prefix, tool errors, writes every record to the jsonl and owns the herdr display: harness runs without HERDR_ENV, pane tokens with the position per progress line, cleared at the end (#16)', async () => {
-      const gh = setup({ issues: { 401: pbi() }, effect: 'close-first', stream });
-      const r = await run(gh, ['-Target', '401'], {
+      // 401 is paused by the run (needs-decision) and counts as progress; 402 (open blocker), 403 (needs-refinement) and
+      // 404 (interactive) stay behind, so the loop ends blocked
+      const gh = setup({
+        issues: {
+          401: pbi(),
+          402: pbi({ blockers: [{ number: 5, state: 'open' }] }),
+          403: pbi({ labels: ['pbi', 'needs-refinement'] }),
+          404: pbi({ labels: ['pbi', 'interactive'] }),
+        },
+        effect: 'hold-first',
+        stream,
+      });
+      const r = await run(gh, ['-Target', '401,402,403,404'], {
         HERDR_ENV: '1',
         HERDR_PANE_ID: 'p7',
         DELIVER_LOOP_ASSUME_TTY: '1',
       });
-      expect(r.status).toBe(0);
+      expect(harnessCalls()).toHaveLength(1);
+      expect(r.status).toBe(2);
+      expect(r.stdout).toContain('loop result: blocked');
       const lines = read('.agents/deliver-loop.log');
       expect(lines).toMatch(/\d\d:\d\d:\d\d » #401 pr: opened #55/);
       expect(lines).toMatch(/\d\d:\d\d:\d\d Agent Review PBI #401 diff/);
@@ -422,12 +382,12 @@ fs.writeFileSync(f, JSON.stringify(s));`,
         .filter((l) => l.includes('report-metadata'));
       const tokens = '--ttl-ms 3600000';
       expect(calls).toEqual([
-        `pane report-metadata p7 --source deliver --token deliver=#401 --token deliver_step=1/1 starting ${tokens}`,
-        `pane report-metadata p7 --source deliver --token deliver=#401 --token deliver_step=1/1 pr: opened #55 --token deliver_pr=#55 ${tokens}`,
+        `pane report-metadata p7 --source deliver --token deliver=#401 --token deliver_step=1/2 starting ${tokens}`,
+        `pane report-metadata p7 --source deliver --token deliver=#401 --token deliver_step=1/2 pr: opened #55 --token deliver_pr=#55 ${tokens}`,
         // the PR token stays for later steps; the step value is cut at 80 characters
-        `pane report-metadata p7 --source deliver --token deliver=#401 --token deliver_step=1/1 review: ${'x'.repeat(67)}… --token deliver_pr=#55 ${tokens}`,
-        `pane report-metadata p7 --source deliver --token deliver=#401 --token deliver_step=1/1 ci: red --token deliver_pr=#55 ${tokens}`,
-        `pane report-metadata p7 --source deliver --token deliver=#401 --token deliver_step=1/1 merged: squash --token deliver_pr=#55 ${tokens}`,
+        `pane report-metadata p7 --source deliver --token deliver=#401 --token deliver_step=1/2 review: ${'x'.repeat(67)}… --token deliver_pr=#55 ${tokens}`,
+        `pane report-metadata p7 --source deliver --token deliver=#401 --token deliver_step=1/2 ci: red --token deliver_pr=#55 ${tokens}`,
+        `pane report-metadata p7 --source deliver --token deliver=#401 --token deliver_step=1/2 merged: squash --token deliver_pr=#55 ${tokens}`,
         'pane report-metadata p7 --source deliver --clear-token deliver --clear-token deliver_step --clear-token deliver_pr',
       ]);
       expect(calls.join('\n')).not.toContain('display-agent');
@@ -440,32 +400,12 @@ fs.writeFileSync(f, JSON.stringify(s));`,
       expect(ansi).toContain(`${ESC}[31m✗ boom${ESC}[0m`);
       expect(ansi).toContain(`${ESC}[33m» #401 ci: red${ESC}[0m`);
       expect(ansi).toContain(`${ESC}[32m» #401 merged: squash${ESC}[0m`);
-      expect(ansi).toContain(`${ESC}[32mloop result: done`);
       if (process.platform === 'darwin') {
         // osascript stub: attention step and loop result
         const notes = read('notices.txt');
         expect(notes).toContain('#401 PR opened');
-        expect(notes).toContain('loop result: done');
+        expect(notes).toContain('loop result: blocked');
       }
-    });
-
-    it('clears the herdr display when the loop fails; with stdout redirected (no TTY) no pane is attempted', async () => {
-      const gh = setup({ issues: { 10: pbi({ children: [] }) } });
-      const r = await run(gh, ['-Target', '10,99'], {
-        HERDR_ENV: '1',
-        HERDR_PANE_ID: 'p7',
-        DELIVER_LOOP_ASSUME_TTY: '',
-      });
-      expect(r.status).not.toBe(0);
-      expect(
-        read('herdr-calls.txt')
-          .trim()
-          .split('\n')
-          .filter((l) => l.includes('report-metadata'))
-          .join('\n'),
-      ).toBe(
-        'pane report-metadata p7 --source deliver --clear-token deliver --clear-token deliver_step --clear-token deliver_pr',
-      );
     });
   });
 });

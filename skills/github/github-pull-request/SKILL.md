@@ -13,7 +13,7 @@ Create a PR from the current branch. No dialogue — tool calls only. On Claude 
 - `merged_prs` (release mode: `#<n> <title>` lines merged into the release branch; default: `gh pr list --base <branch> --state merged --limit 200 --search "merged:>=<date of the last tag on origin/<base>>" --json number,title`, so already released PRs are left out)
 - `feature_number` (release mode only, optional)
 - `release_review_notes` (release mode only, default: empty): note lines of the release review
-- `branch` (default: `git branch --show-current`). Passed and not the current branch (a caller whose work sits in another worktree): `<head>` below is `origin/<branch>`, otherwise `HEAD`
+- `branch` (default: `git branch --show-current`). Passed: `<head>` below is `origin/<branch>` (after `git fetch origin <branch>`) and the local HEAD, the working tree and uncommitted changes are ignored, even when the current branch has the same name (a caller's work sits in another worktree; a detached HEAD or dirty tree is no reason to refuse). Not passed: `<head>` is `HEAD`
 - `base_branch` (default: the integration branch per the `github-issue` skill's `references/release-branches.md`, `pwsh <github-release dir>/scripts/Get-ReleaseState.ps1 -Mode base -Issue <nr>`: `release/next`, or `main` only when the head is `release/*` or the user asked for a hotfix; `<base>` below)
 - `not_delivered` (default: empty): acceptance-criterion text this PR leaves open; the PR body lists no task numbers
 - `review_notes` (default: empty): lines `file:line title — <why>` for findings not fixed (declined, deferred, advisory)
@@ -55,8 +55,8 @@ Active when the head matches `^release/(next|[0-9]+\.[0-9]+)$` and `<base>` is t
 
 ## Rules
 
-- Never create an empty PR (no commits beyond the base branch, also in release mode)
+- Never create an empty PR (no commits in `origin/<base>..<head>`, also in release mode); diff, commits and tests come from `<head>`, never from the local working tree
 - `<base>` is `main` but the head is not `release/*` and no hotfix was requested → stop and report; the work belongs on `release/next`
-- Branch must be pushed: if `<head>` is `HEAD` and `git log origin/<branch>..HEAD` is non-empty, run `git push -u origin HEAD` first; with `<head>` = `origin/<branch>` the caller has pushed
+- Branch must be pushed: if `<head>` is `HEAD` and `git log origin/<branch>..HEAD` is non-empty, run `git push -u origin HEAD` first; with `<head>` = `origin/<branch>` the caller has pushed; a missing `origin/<branch>` is the only reason to stop
 - Never write `Closes` for an issue with an undelivered acceptance criterion; that is `Refs` plus `## Not delivered`
 - Never claim verification that was not run; if nothing was run, say so in the body

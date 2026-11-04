@@ -740,4 +740,19 @@ describe('M<n> milestones (#235)', () => {
     expect(guide).toContain('deliver-loop -Milestone M4');
     expect(guide).toContain('`/github-milestone close M4`');
   });
+
+  // #224: reviewers must not touch the user's checkouts
+  it('review prompts of step 4, step 9 and the release review are read-only', () => {
+    const ref = fs.readFileSync(path.join(skillDir, 'references/release-review.md'), 'utf8');
+    const step4 = body.slice(body.indexOf('4. **Review.**'), body.indexOf('5. **Fix.**'));
+    const step9 = body.slice(
+      body.indexOf('9. **Release.**'),
+      body.indexOf('After every step read'),
+    );
+    for (const t of [step4, step9, ref]) {
+      expect(t).toMatch(/[Rr]ead-only/);
+      expect(t).toContain('no stash, checkout, switch or commit in any existing checkout');
+      expect(t).toContain('temporary worktree');
+    }
+  });
 });
