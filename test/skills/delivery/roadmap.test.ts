@@ -20,6 +20,8 @@ const handler = `(call) => {
     return { rest: { number: parent } };
   }
   if (m) return { rest: env('FAKE_BLOCKERS', '{}')[m[1]] || [] };
+  const cm = /issues\\?milestone=(\\d+)&state=closed/.exec(p);
+  if (cm) return { rest: [env('FAKE_CLOSED', '{}')[cm[1]] || []] };
   if (p.includes('/issues?')) return { rest: [env('FAKE_ISSUES', '[]'), env('FAKE_ISSUES_PAGE2', '[]')] };
   if (p.includes('/milestones?')) return { rest: [env('FAKE_MILESTONES', '[]')] };
   if (p.includes('/tags?')) return { rest: [env('FAKE_TAGS', '[]').map((name) => ({ name }))] };
@@ -95,6 +97,25 @@ describe('Get-RoadmapState.ps1', () => {
       ['M2 (1.0.0)', 100],
     ]);
     expect(out.latestTag).toBe('v1.0.0');
+  });
+
+  it('gives a closed milestone its closed issues and leaves open ones without', async () => {
+    const out = await state({
+      FAKE_ISSUES: [],
+      FAKE_MILESTONES: [ms(1, 'M1', 1, 0), ms(2, 'M2 (1.0.0)', 0, 3, 'closed')],
+      FAKE_CLOSED: {
+        2: [
+          { number: 9, title: '[PBI] nine' },
+          { number: 4, title: '[PBI] four' },
+          { number: 5, title: 'a pull request', pull_request: {} },
+        ],
+      },
+    });
+    expect(out.milestones[0].issues).toBeUndefined();
+    expect(out.milestones[1].issues).toEqual([
+      { number: 4, title: '[PBI] four' },
+      { number: 9, title: '[PBI] nine' },
+    ]);
   });
 
   it('collects issues from every page of the paginated response', async () => {

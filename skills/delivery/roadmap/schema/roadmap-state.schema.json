@@ -41,6 +41,15 @@
           "closed": { "type": "integer", "minimum": 0 },
           "progress": { "type": "integer", "minimum": 0, "maximum": 100 },
           "tagged": { "type": "boolean" },
+          "issues": {
+            "type": "array",
+            "description": "Closed milestones only: their closed issues (pull requests excluded), number ascending.",
+            "items": {
+              "type": "object",
+              "required": ["number", "title"],
+              "properties": { "number": { "type": "integer" }, "title": { "type": "string" } }
+            }
+          },
           "url": { "type": ["string", "null"] }
         }
       }

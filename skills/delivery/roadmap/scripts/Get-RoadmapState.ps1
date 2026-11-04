@@ -7,6 +7,7 @@
   (GET issues/<nr>/parent, none: null). blockedBy: numbers of the open native blockers (GET issues/<nr>/dependencies/blocked_by).
   size: S, M or L from a body line `Size: <S|M|L>` or a label `size:<S|M|L>`, otherwise null. milestone: the title or null.
   milestones: Get-Milestones.ps1 -Mode list of the sibling github-milestone skill (M<n>, M<n> (x.y.z) and legacy x.y.z titles).
+  Closed milestones also carry issues[] (number, title) of their closed issues (one more GET per closed milestone), for the Done sections of ROADMAP.md.
 .PARAMETER Repo
   owner/name; default: the repository of the current directory.
 .PARAMETER MilestoneScript
@@ -71,8 +72,16 @@ $listRaw = & pwsh -NoProfile -File $MilestoneScript -Mode list -Repo $Repo
 if ($LASTEXITCODE -ne 0) { Fail 'Get-Milestones.ps1 -Mode list failed' }
 $list = $listRaw | Out-String | ConvertFrom-Json
 
+$milestones = foreach ($m in @($list.milestones)) {
+  if ($m.state -ne 'closed') { $m; continue }
+  $done = @(Get-Paged "repos/$Repo/issues?milestone=$($m.number)&state=closed&per_page=100" |
+      Where-Object { $null -eq $_.pull_request } | Sort-Object number |
+      ForEach-Object { [ordered]@{ number = [int]$_.number; title = $_.title } })
+  $m | Add-Member -NotePropertyName issues -NotePropertyValue $done -Force -PassThru
+}
+
 [ordered]@{
   issues     = @($issues | Sort-Object { $_.number })
-  milestones = @($list.milestones)
+  milestones = @($milestones)
   latestTag  = $list.latestTag
 } | ConvertTo-Json -Depth 8
