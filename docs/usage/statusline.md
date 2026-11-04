@@ -25,12 +25,12 @@ Or run `/context-statusline` (`/context-statusline help` prints the usage). The 
 refreshes the status line and no copy is made. The directory is derived from where the installer runs (a project-scoped
 deployment gives that project's path); it refuses when the script is not there. Other keys stay untouched, a
 `settings.json.bak-<timestamp>` is written first, and a second run changes nothing. Entries of older versions (copies under
-`~/.claude/apm-hub/statusline/`) are migrated and the copies removed. A `statusLine` you set yourself is replaced
+`~/.claude/apm-hub/statusline/`) are migrated and the copies removed. On Windows the home directory is `%USERPROFILE%`, never Git Bash's `HOME` (which can point elsewhere, e.g. `/y/`): the commands carry the absolute path in forward-slash form (`C:/Users/<user>/.claude/...`, quoted when it contains whitespace) instead of `~/...`, and a re-run migrates `~/...` entries the installer wrote earlier; `-Uninstall` recognizes both forms. A `statusLine` you set yourself is replaced
 only with `-Force`; `-Uninstall` removes only the entries this installer wrote and old copies, never the skill files.
 
 ### Installer details
 
-- No copy: `statusLine` and `subagentStatusLine` become `{"type":"command","command":"node <scripts>/<file>.mjs"}` with `<scripts>` the skill's own `scripts/` directory (written as `~/...` under `$HOME`).
+- No copy: `statusLine` and `subagentStatusLine` become `{"type":"command","command":"node <scripts>/<file>.mjs"}` with `<scripts>` the skill's own `scripts/` directory (written as `~/...` under `$HOME` on Linux/macOS, as the absolute `%USERPROFILE%` path on Windows).
 - `<scripts>` is derived from where the installer runs: in a `~/.claude/skills/` or `~/.agents/skills/` deployment each client gets its own copy (Claude Code `~/.claude/skills/context-statusline/scripts`, Copilot CLI `~/.agents/skills/context-statusline/scripts`); anywhere else (a project checkout) the directory it runs from. It refuses when that script is missing (skill deployed for the other client only).
 - Every other settings key is kept, `settings.json.bak-<timestamp>` is written before a change, indent is 2 spaces.
 - Idempotent; entries of older versions (`apm-hub/statusline/` copies) are migrated and their copies removed; a foreign entry is refused without `-Force`.
@@ -41,7 +41,7 @@ only with `-Force`; `-Uninstall` removes only the entries this installer wrote a
 `npx skills` installs no hooks, so the installer registers `scripts/context-warning.sh` of the skill (no copy) unless you pass `-NoContextWarning`:
 
 - Claude Code: `hooks.UserPromptSubmit` in `~/.claude/settings.json`, `{"hooks":[{"type":"command","command":"bash <scripts>/context-warning.sh","timeout":5}]}`.
-- Copilot CLI (`-Client copilot|all`): `hooks.postToolUse` in `<copilot home>/settings.json`, `{"type":"command","bash":"bash <scripts>/context-warning.sh","timeoutSec":5}`. Verified live against Copilot CLI 1.0.105: `hooks` in the user `settings.json` are read (same schema as `.github/hooks/*.json`, documented in `copilot help config`), the payload carries `sessionId` but no `transcriptPath`, so the hook reads `${COPILOT_HOME:-~/.copilot}/session-state/<sessionId>/events.jsonl`.
+- Copilot CLI (`-Client copilot|all`): `hooks.postToolUse` in `<copilot home>/settings.json`, `{"type":"command","bash":"bash <scripts>/context-warning.sh","timeoutSec":5}`. Verified live against Copilot CLI 1.0.105: `hooks` in the user `settings.json` are read (same schema as `.github/hooks/*.json`, documented in `copilot help config`), the payload carries `sessionId` but no `transcriptPath`, so the hook reads `${COPILOT_HOME:-~/.copilot}/session-state/<sessionId>/events.jsonl` (on Windows `~` is `USERPROFILE` converted to `/c/...`, not Git Bash's `HOME`).
 - Idempotent, foreign hooks are kept, the same backup and `-WhatIf` rules apply; `-Uninstall` removes only our hook entry (and an emptied `hooks` key).
 
 The context size is `input_tokens + cache_read_input_tokens + cache_creation_input_tokens` of the last usage line in the last 2 MB of the transcript (Copilot: the last `session.usage_record`, `inputTokens`). At or above the threshold the hook prints `systemMessage` (the user sees it in Claude Code) and `additionalContext` (the model sees it; on Copilot only the top-level `additionalContext` reaches the model, the nested `hookSpecificOutput` of Claude Code is ignored there; the hook prints both). On Copilot the `systemMessage` is not visible in `-p` mode and unverified interactively, so the user hint there is not guaranteed; the model hint is: finish the step, write a short hand-off, then `/clear` (or `/compact`).

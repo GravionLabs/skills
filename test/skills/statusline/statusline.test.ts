@@ -775,3 +775,92 @@ describe.skipIf(!hasPwsh || !posix)('Install-Statusline.ps1', () => {
     });
   });
 });
+
+// Windows setup on the Linux CI: Git Bash's HOME (/y/) differs from the profile (USERPROFILE); the seam
+// GRAVIONLABS_TEST_WINDOWS=1 makes the installer decide as on Windows.
+describe.skipIf(!hasPwsh || !posix)(
+  'Install-Statusline.ps1 on Windows (HOME differs from USERPROFILE)',
+  () => {
+    let tmp: string;
+    let profile: string;
+    beforeEach(() => {
+      tmp = fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(), 'slwin-')));
+      profile = path.join(tmp, 'Test User'); // whitespace: the path is quoted
+    });
+    afterEach(() => fs.rmSync(tmp, { recursive: true, force: true }));
+
+    const install = (inst: string, ...args: string[]) =>
+      spawnSync('pwsh', ['-NoProfile', '-File', inst, ...args], {
+        encoding: 'utf8',
+        cwd: tmp,
+        env: {
+          ...process.env,
+          HOME: '/y/',
+          USERPROFILE: profile,
+          GRAVIONLABS_TEST_WINDOWS: '1',
+          COPILOT_HOME: '',
+        },
+      });
+    const read = (clientDir: string) =>
+      JSON.parse(fs.readFileSync(path.join(profile, clientDir, 'settings.json'), 'utf8'));
+    const scripts = (clientDir: string) =>
+      `"${profile}/${clientDir}/skills/context-statusline/scripts"`;
+
+    it('writes absolute USERPROFILE commands for both clients, never ~ and never under HOME', () => {
+      const inst = deploy(profile, '.claude');
+      deploy(profile, '.agents');
+      const r = install(inst, '-Client', 'all');
+      expect(r.status).toBe(0);
+      const c = scripts('.claude').slice(1, -1);
+      const a = scripts('.agents').slice(1, -1);
+      expect(read('.claude')).toEqual({
+        statusLine: { type: 'command', command: `node "${c}"/statusline.mjs` },
+        subagentStatusLine: { type: 'command', command: `node "${c}"/subagent-statusline.mjs` },
+        hooks: {
+          UserPromptSubmit: [
+            { hooks: [{ type: 'command', command: `bash "${c}"/context-warning.sh`, timeout: 5 }] },
+          ],
+        },
+      });
+      const cop = read('.copilot');
+      expect(cop.statusLine.command).toBe(`node "${a}"/statusline.mjs`);
+      expect(cop.hooks.postToolUse[0].bash).toBe(`bash "${a}"/context-warning.sh`);
+      expect(fs.existsSync('/y')).toBe(false);
+    });
+
+    it('migrates ~/ entries to the USERPROFILE form, idempotent, and -Uninstall knows both forms', () => {
+      const inst = deploy(profile, '.claude');
+      const dir = path.join(profile, '.claude');
+      const c = scripts('.claude').slice(1, -1);
+      const tilde = '~/.claude/skills/context-statusline/scripts';
+      fs.writeFileSync(
+        path.join(dir, 'settings.json'),
+        JSON.stringify({
+          statusLine: { type: 'command', command: `node ${tilde}/statusline.mjs` },
+          subagentStatusLine: { type: 'command', command: `node ${tilde}/subagent-statusline.mjs` },
+          hooks: {
+            UserPromptSubmit: [
+              {
+                hooks: [
+                  { type: 'command', command: `bash ${tilde}/context-warning.sh`, timeout: 5 },
+                ],
+              },
+            ],
+          },
+        }),
+      );
+      expect(install(inst).status).toBe(0);
+      expect(read('.claude').statusLine.command).toBe(`node "${c}"/statusline.mjs`);
+      expect(read('.claude').hooks.UserPromptSubmit).toHaveLength(1);
+      expect(read('.claude').hooks.UserPromptSubmit[0].hooks[0].command).toBe(
+        `bash "${c}"/context-warning.sh`,
+      );
+      expect(fs.readdirSync(dir).filter((f) => f.startsWith('settings.json.bak-'))).toHaveLength(1);
+      const again = install(inst);
+      expect(again.stderr).toBe('');
+      expect(again.stdout).toContain('Up to date');
+      expect(install(inst, '-Uninstall').status).toBe(0);
+      expect(read('.claude')).toEqual({});
+    });
+  },
+);
