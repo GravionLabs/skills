@@ -83,7 +83,7 @@ Milestone 1.3.0: Feature #104, `/<skill> help` for the user-invoked skills. #105
 
 ## 1.5.0 — herdr and the deliver loop
 
-Milestone 1.5.0, released as `v1.5.0` on 2026-11-03. The milestone is still open on GitHub with two issues: Feature #207 (release routine closes and opens milestones; its PBIs #206, #223, #226 and #236 are done, the last in 1.6.0) and Epic #165 (documentation site, its Features #166–#169 are closed). Delivered (12 of 14 issues closed):
+Milestone 1.5.0, released as `v1.5.0` on 2026-11-03. The milestone is still open on GitHub with two issues: Feature #207 (release routine closes and opens milestones; its PBIs are done, #206 in 1.5.0, #223, #226 and #236 in 1.6.0) and Epic #165 (documentation site, its Features #166–#169 are closed). Delivered (12 of 14 issues closed):
 
 | Issue | Title                                                                            |
 | ----- | -------------------------------------------------------------------------------- |
