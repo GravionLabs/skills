@@ -142,8 +142,8 @@ The `main` branch has its own ruleset that allows merge commits only, for the re
 Once the release job has tagged `v1.3.0`, close the milestone and create the next one. The next `github-release finish` (the run that deletes the merged `release/next`) prints this hint for the lowest open `M<n>`, with the version taken from the tag:
 
 ```text
-/github-milestone close M3
 /github-milestone create M4
+/github-milestone close M3
 ```
 
 With open issues left, create the next milestone first and move them: `/github-milestone create M4`, then `/github-milestone close M3 --move-to M4`. `--move-to` needs the target to exist and be open, so `create` always comes before `close ... --move-to`; `create` is idempotent. Legacy repositories whose open milestone is named `x.y.z` get the old hint: `create` the next `x.y.z` milestone first, then `/github-milestone close 1.3.0 [--move-to <next>]`.
