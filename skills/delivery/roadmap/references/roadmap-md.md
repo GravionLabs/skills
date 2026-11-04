@@ -34,5 +34,6 @@ Legacy `x.y.z` milestones use their title as key (`plan 1.3.0`).
 - A closed milestone `M<n> (x.y.z)` leaves the plan sections: its `plan` block is removed and a `done` block with its closed issues (`milestones[].issues[]` of the state) is added.
 - New `plan` and `done` blocks go to the comments `<!-- roadmap:slot plan -->` and `<!-- roadmap:slot done -->`. A file without slots gets them before `## Later`, else at the end. Existing blocks keep their place, so hand-written notes next to them stay.
 - A fixed block (`intro`, `where`, `later`) missing from an existing file is not added: the script warns on stderr.
+- Tables are padded to the widest cell with dashes to column width, as Biome formats Markdown tables (wide characters count 2, `\|` counts 2), so `biome check` leaves a generated file unchanged and a second run changes nothing.
 - The run is idempotent: unchanged state prints `ROADMAP.md is current`.
 - Out of scope: release PR text and changelog (`github-release`).

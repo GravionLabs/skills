@@ -36,9 +36,32 @@ $milestones = @($st.milestones)
 function Get-Key([string]$title) { if ($title -cmatch '^(M[0-9]+(?:\.[0-9]+)*)(?= |$)') { $Matches[1] } else { $title } }
 function Get-Num([string]$title) { if ($title -cmatch '^M([0-9]+(?:\.[0-9]+)*)(?= |$)') { $q = @($Matches[1] -split '\.' | ForEach-Object { $_.PadLeft(8, '0') }); (0..7 | ForEach-Object { if ($_ -lt $q.Count) { $q[$_] } else { '00000000' } }) -join '' } else { '' } }
 function Get-Cell([string]$s) { ($s -replace '\|', '\|') -replace '\s+', ' ' }
+# display width as Biome's Markdown formatter counts it: wide (CJK, emoji) characters 2, combining marks and joiners 0
+function Get-Width([string]$s) {
+  $w = 0
+  foreach ($r in $s.EnumerateRunes()) {
+    $v = $r.Value
+    if ($v -in 0x200B, 0x200D, 0xFE0E, 0xFE0F -or ($v -ge 0x300 -and $v -le 0x36F)) { continue }
+    if (($v -ge 0x1100 -and $v -le 0x115F) -or ($v -ge 0x2E80 -and $v -le 0xA4CF -and $v -ne 0x303F) -or ($v -ge 0xAC00 -and $v -le 0xD7A3) -or
+      ($v -ge 0xF900 -and $v -le 0xFAFF) -or ($v -ge 0xFE30 -and $v -le 0xFE6F) -or ($v -ge 0xFF00 -and $v -le 0xFF60) -or
+      ($v -ge 0xFFE0 -and $v -le 0xFFE6) -or ($v -ge 0x1F300 -and $v -le 0x1F64F) -or ($v -ge 0x1F680 -and $v -le 0x1F6FF) -or ($v -ge 0x1F900 -and $v -le 0x1FAFF) -or
+      $v -in 0x231A, 0x231B, 0x23E9, 0x23EA, 0x23EB, 0x23EC, 0x23F0, 0x23F3, 0x2705, 0x270A, 0x270B, 0x2728, 0x274C, 0x274E, 0x2753, 0x2754, 0x2755, 0x2757, 0x2795, 0x2796, 0x2797, 0x26A1, 0x2B50, 0x2B55 -or
+      ($v -ge 0x20000 -and $v -le 0x3FFFD)) { $w += 2 } else { $w += 1 }
+  }
+  $w
+}
+# tables are padded to the widest cell and the delimiter row to column width, exactly like Biome formats them, so `biome check` leaves them unchanged
 function Get-Table([string[]]$head, $rows) {
-  $out = @(('| ' + ($head -join ' | ') + ' |'), ('| ' + (($head | ForEach-Object { '---' }) -join ' | ') + ' |'))
-  foreach ($r in $rows) { $out += '| ' + (($r | ForEach-Object { Get-Cell ([string]$_) }) -join ' | ') + ' |' }
+  $n = $head.Count
+  $grid = [System.Collections.Generic.List[object]]::new()
+  $grid.Add(@($head | ForEach-Object { [string]$_ }))
+  foreach ($r in $rows) { $grid.Add(@($r | ForEach-Object { Get-Cell ([string]$_) })) }
+  $widths = @(0..($n - 1) | ForEach-Object { $c = $_; [Math]::Max(3, ($grid | ForEach-Object { Get-Width $_[$c] } | Measure-Object -Maximum).Maximum) })
+  $fmt = { param($row) '| ' + ((0..($n - 1) | ForEach-Object { $row[$_] + (' ' * ($widths[$_] - (Get-Width $row[$_]))) }) -join ' | ') + ' |' }
+  $out = [System.Collections.Generic.List[string]]::new()
+  $out.Add((& $fmt $grid[0]))
+  $out.Add('| ' + ((0..($n - 1) | ForEach-Object { '-' * $widths[$_] }) -join ' | ') + ' |')
+  for ($k = 1; $k -lt $grid.Count; $k++) { $out.Add((& $fmt $grid[$k])) }
   $out -join "`n"
 }
 function Get-Why($i) {
