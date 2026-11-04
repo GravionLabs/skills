@@ -44,6 +44,8 @@ describe('New-Roadmap.ps1', () => {
       { cwd: dir },
     );
   const file = () => path.join(dir, 'ROADMAP.md');
+  // tables are padded like Biome pads them: compare the cell text only
+  const flat = (t: string) => t.replace(/ {2,}/g, ' ').replace(/-{4,}/g, '---');
   const reset = () => fs.rmSync(file(), { force: true });
 
   const open = {
@@ -63,7 +65,7 @@ describe('New-Roadmap.ps1', () => {
     const r = await run(open, ['-Write']);
     expect(r.stderr).toBe('');
     expect(r.status).toBe(0);
-    const text = fs.readFileSync(file(), 'utf8');
+    const text = flat(fs.readFileSync(file(), 'utf8'));
     expect(text).toContain('Updated 2026-11-04. Last release `v1.5.0`.');
     expect(text).toContain('| #1 [epic] title 1 | open: #2 | not scheduled |');
     expect(text).toContain('## M3 Roadmap');
@@ -113,7 +115,7 @@ describe('New-Roadmap.ps1', () => {
     };
     const r = await run(closed, ['-Write']);
     expect(r.status).toBe(0);
-    const text = fs.readFileSync(file(), 'utf8');
+    const text = flat(fs.readFileSync(file(), 'utf8'));
     expect(text).not.toContain('roadmap:begin plan M3');
     expect(text).toContain('<!-- roadmap:begin done M3 -->\n## Done in M3 Roadmap (1.6.0)');
     expect(text).toContain('| #4 | [PBI] four |');
