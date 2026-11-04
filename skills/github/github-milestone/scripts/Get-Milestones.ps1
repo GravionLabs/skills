@@ -2,23 +2,23 @@
 .SYNOPSIS
   Milestones of a repository as JSON (schema/milestones.schema.json) for the github-milestone skill.
 .DESCRIPTION
-  Milestone titles: `M<n>` while open, `M<n> (x.y.z)` after close (the version of the release), and the legacy
+  Milestone titles: `M<n>` or `M<n> <Topic>` while open (topic without parentheses), `M<n> [<Topic>] (x.y.z)` after close, and the legacy
   bare `x.y.z` (still valid, no flag day). Other titles are listed but never current.
   current, list and show are read-only and use only `gh api` GET calls (REST). create and close are the writes.
   current: the open milestone with the lowest M number; legacy rule unchanged: an open x.y.z title above the latest
   release tag v<x.y.z> comes first ({ current: null, hint } when there is none). list: all milestones, open and
   closed, sorted legacy semver first, then M number, other titles last. show: one milestone by -Name: exact title,
-  M<n> (also when the title has the parentheses) or the version in the parentheses. current and show group the open
+  M<n> (also with a topic and/or the parentheses; `M3` and `M3 Market data` find the same milestone) or the version in the parentheses. current and show group the open
   issues (pull requests filtered out) as needsDecision, needsRefinement, blocked (open blockers), claimed (assignee)
   and ready, in that precedence (a blocker from another repository carries repository owner/repo), and add the release
   PR release/next -> default from Get-ReleaseState.ps1 of the github-release skill. tagged: the tag v<version> of the
   parentheses exists (legacy: v<title>; M<n> without version: false).
-  create: creates milestone -Name (M<n>, or legacy x.y.z) when none matches; without -Name the next free M number.
+  create: creates milestone -Name (M<n> [<Topic>], or legacy x.y.z) when none matches; without -Name the next free M number.
   It never renames or closes one.
   issues: resolves the milestone -Name (any form above) to its number and lists its issues (body, labels, assignees,
   state; pull requests filtered out) in one paginated REST call, for the batched reads of deliver; unknown milestone: exit 1.
   close: closes the milestone -Name. M<n>: takes the version from -Version, else the newest release tag v<x.y.z> not yet
-  assigned to a milestone; that tag must exist; the title becomes `M<n> (x.y.z)` in the same PATCH that closes it.
+  assigned to a milestone; that tag must exist; the version is added at the end (`M3 Market data` becomes `M3 Market data (x.y.z)`) in the same PATCH that closes it.
   Legacy x.y.z: needs the tag v<x.y.z>, closes without renaming. Exit 1 when the name is not valid, the milestone
   does not exist, or no tag fits. Already closed: changes nothing ({ closed: false }). Open issues (pull requests are
   ignored and never moved): without -MoveTo nothing is renamed or closed and they are listed in openIssues;
@@ -69,19 +69,20 @@ function Add-Leaf($list, $x) {
 $semverRx = '^([0-9]+)\.([0-9]+)\.([0-9]+)$'
 function ConvertTo-Version([string]$t) { if ($t -match $semverRx) { [version]"$($Matches[1]).$($Matches[2]).$($Matches[3])" } else { $null } }
 function Get-Bare([string]$n) { $n -replace '^v(?=[0-9])', '' }
-$numberedRx = '^M([0-9]+)( \(([0-9]+\.[0-9]+\.[0-9]+)\))?$'
+$numberedRx = '^M([0-9]+)(?: ([^()]+?))?(?: \(([0-9]+\.[0-9]+\.[0-9]+)\))?$'
 # title -> @{ kind = 'numbered'|'legacy'|$null; n; version } (version: of the parentheses, or the legacy title)
 function Get-Title([string]$t) {
-  if ($t -cmatch $numberedRx) { @{ kind = 'numbered'; n = [int]$Matches[1]; version = $Matches[3] } }
-  elseif ($t -match $semverRx) { @{ kind = 'legacy'; n = 0; version = $t } }
-  else { @{ kind = $null; n = 0; version = $null } }
+  if ($t -cmatch $numberedRx) { @{ kind = 'numbered'; n = [int]$Matches[1]; topic = $Matches[2]; version = $Matches[3] } }
+  elseif ($t -match $semverRx) { @{ kind = 'legacy'; n = 0; topic = $null; version = $t } }
+  else { @{ kind = $null; n = 0; topic = $null; version = $null } }
 }
-# lookup: exact title, M<n>, the version in the parentheses (a leading v is dropped)
+# lookup: exact title, M<n> or M<n> <Topic> (by the number), the version in the parentheses (a leading v is dropped)
 function Find-Milestone($all, [string]$name) {
   $bare = Get-Bare $name
   $hit = $all | Where-Object { $_.title -eq $name -or $_.title -eq $bare } | Select-Object -First 1
-  if (-not $hit -and $name -cmatch '^M([0-9]+)$') {
-    $n = [int]$Matches[1]
+  $np = Get-Title $bare
+  if (-not $hit -and $np.kind -eq 'numbered' -and -not $np.version) {
+    $n = $np.n
     $hit = $all | Where-Object { $p = Get-Title $_.title; $p.kind -eq 'numbered' -and $p.n -eq $n } | Select-Object -First 1
   }
   if (-not $hit -and $bare -match $semverRx) {
@@ -95,7 +96,8 @@ $milestones = @(Get-Paged "repos/$Repo/milestones?state=all&per_page=100")
 if ($Mode -eq 'create') {
   if ($Name) {
     $title = Get-Bare $Name
-    if (-not (Get-Title $title).kind -or $title -cmatch '^M[0-9]+ \(') { Fail "invalid milestone name '$Name': expected M<n> or x.y.z" }
+    $pt = Get-Title $title
+    if (-not $pt.kind -or ($pt.kind -eq 'numbered' -and $pt.version)) { Fail "invalid milestone name '$Name': expected M<n> [<Topic>] or x.y.z" }
   }
   else {
     $max = 0
@@ -150,7 +152,8 @@ if ($Mode -eq 'close') {
       if (-not $cand.Count) { Fail "no release tag without a milestone: release first, or pass -Version x.y.z" }
       $ver = $cand[-1].Substring(1)
     }
-    $newTitle = "M$((Get-Title $m.title).n) ($ver)"
+    $mt = Get-Title $m.title
+    $newTitle = "M$($mt.n)$(if ($mt.topic) { " $($mt.topic)" }) ($ver)"
   }
   else {
     $title = $m.title

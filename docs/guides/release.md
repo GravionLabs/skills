@@ -28,7 +28,7 @@ Cut a release.
 
 ## 2. Create and inspect the milestone
 
-Milestones are the releases. Name them `M<n>` (a number, no version); on close the title becomes `M<n> (x.y.z)`. Existing `x.y.z` titles stay valid.
+Milestones are the releases. Name them `M<n>` or `M<n> <Topic>` (a number, optional topic, no version; `M3 Market data`); on close the version is added at the end (`M3 Market data (x.y.z)`). The number sets the order, the topic is ignored for it and `M3` finds `M3 Market data`. Existing `x.y.z` titles stay valid.
 
 ```text
 /github-milestone create M3
@@ -148,4 +148,4 @@ Once the release job has tagged `v1.3.0`, close the milestone and create the nex
 
 With open issues left, create the next milestone first and move them: `/github-milestone create M4`, then `/github-milestone close M3 --move-to M4`. `--move-to` needs the target to exist and be open, so `create` always comes before `close ... --move-to`; `create` is idempotent. Legacy repositories whose open milestone is named `x.y.z` get the old hint: `create` the next `x.y.z` milestone first, then `/github-milestone close 1.3.0 [--move-to <next>]`.
 
-`close` needs the release tag: without `--version <x.y.z>` it takes the newest tag not yet assigned to a milestone, and renames `M3` to `M3 (1.3.0)` while closing it. Open issues stay, and nothing is renamed or closed, unless you pass `--move-to M<m>`, an existing open milestone that receives them (create it first). Pull requests are not moved. A milestone that is already closed is left as is. `close` renames only to add the version, never edits the due date or deletes a milestone.
+`close` needs the release tag: without `--version <x.y.z>` it takes the newest tag not yet assigned to a milestone, and renames `M3` to `M3 (1.3.0)` (`M3 Market data` to `M3 Market data (1.3.0)`) while closing it. Open issues stay, and nothing is renamed or closed, unless you pass `--move-to M<m>`, an existing open milestone that receives them (create it first). Pull requests are not moved. A milestone that is already closed is left as is. `close` renames only to add the version, never edits the due date or deletes a milestone.
