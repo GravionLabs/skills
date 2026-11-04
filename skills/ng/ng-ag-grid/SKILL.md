@@ -1,5 +1,5 @@
 ---
-name: ng-ag-grid-developer
+name: ng-ag-grid
 description: 'Build or modify Angular components with AG Grid Enterprise. Use when a task mentions ag-grid.'
 license: MIT
 ---

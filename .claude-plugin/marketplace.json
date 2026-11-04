@@ -91,7 +91,7 @@
       "source": "./",
       "strict": false,
       "skills": [
-        "./skills/ng/ng-ag-grid-developer",
+        "./skills/ng/ng-ag-grid",
         "./skills/ng/ng-create-project",
         "./skills/ng/ng-implementation",
         "./skills/ng/ng-test"

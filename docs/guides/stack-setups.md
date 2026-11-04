@@ -51,7 +51,7 @@ The same pattern works with `ts`, `py` and `ng`: `<lang>-create-project` or `ng-
 | New Angular workspace                  | "Create an Angular app named shop with Vitest."        | `ng-create-project`                                |
 | Standalone component                   | "Add a product-list component under features/catalog." | `ng-implementation` (`references/component.md`)    |
 | NgRx Signal Store                      | "Create a signal store for the cart."                  | `ng-implementation` (`references/signal-store.md`) |
-| AG Grid Enterprise                     | "Add a grid with row grouping and Excel export."       | `ng-ag-grid-developer`                             |
+| AG Grid Enterprise                     | "Add a grid with row grouping and Excel export."       | `ng-ag-grid`                                       |
 | MCP server                             | "Generate an MCP server with a search tool."           | `ts-mcp-server-generator`                          |
 
 ## Verify a change
