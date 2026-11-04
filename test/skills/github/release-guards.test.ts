@@ -92,6 +92,30 @@ describe('Get-ReleaseState.ps1', () => {
       state: 'unreleased',
       action: 'release-pr',
       releasePr: null,
+      defaultIsAncestor: true,
+      mergeConflicts: null,
+    });
+  });
+
+  it('back-merge: main is no ancestor (hotfix not merged back), conflicts reported, finish stops', async () => {
+    // branch from v2.1.0 whose H.txt clashes with the hotfix H on main (v2.1.1)
+    git(fx.clone, 'checkout', '-q', '--detach', 'v2.1.0');
+    fs.writeFileSync(path.join(fx.clone, 'H.txt'), 'other');
+    git(fx.clone, 'add', 'H.txt');
+    git(fx.clone, 'commit', '-q', '-m', 'feat: clash');
+    git(fx.clone, 'push', '-q', 'origin', 'HEAD:refs/heads/release/3.0');
+    git(fx.clone, 'checkout', '-q', '-');
+    const r = await state('finish', 'release/3.0');
+    expect(r).toMatchObject({ state: 'behind', defaultIsAncestor: false, mergeConflicts: true });
+    expect(r.action).toContain('back-merge');
+    // clean case: the same hotfix gap without a clash
+    git(fx.clone, 'checkout', '-q', '--detach', 'v2.1.0');
+    fx.commit(fx.clone, 'W');
+    git(fx.clone, 'push', '-q', '-f', 'origin', 'HEAD:refs/heads/release/3.0');
+    git(fx.clone, 'checkout', '-q', '-');
+    expect(await state('finish', 'release/3.0')).toMatchObject({
+      defaultIsAncestor: false,
+      mergeConflicts: false,
     });
   });
 
@@ -128,7 +152,10 @@ describe('Get-ReleaseState.ps1', () => {
   it('behind: main has commits the branch lacks (release/2.2)', async () => {
     expect(await state('finish', 'release/2.2')).toMatchObject({
       state: 'behind',
-      action: 'stop: behind main; merge it in first',
+      action: expect.stringContaining(
+        'main is not an ancestor of release/2.2; back-merge it first',
+      ),
+      defaultIsAncestor: false,
     });
   });
 

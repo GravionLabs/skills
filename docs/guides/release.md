@@ -73,6 +73,16 @@ gh pr merge <nr> --merge
 
 `deliver` and `finish` never merge it and never wait for it. After the merge the next `github-release finish` (or `cut`) deletes `release/next`; `cut` recreates it from `main` for the next release.
 
+## After a hotfix
+
+A hotfix goes straight into `main` and must come back into `release/next`, otherwise `finish` stops (`main` is not an ancestor of `release/next`; `Get-ReleaseState.ps1` reports `defaultIsAncestor` and `mergeConflicts`). The back-merge is a real merge commit, not a squash, which would drop the ancestry:
+
+1. Branch from `release/next`, merge `origin/main`, take the content of `release/next` on conflicts.
+2. Open a PR into `release/next` with `Closes #<issue>` in the body.
+3. Allow the `merge` method in the ruleset for this one PR, merge with `gh pr merge <nr> --merge`, set the ruleset back to `squash` only.
+
+The skill never changes the ruleset; the decision is per back-merge, not a permanent `merge` method. Details: back-merge section of `github-release`.
+
 ## Ruleset on `release/next`
 
 `/deliver` squash merges without asking when the review is clean and the checks are green. The ruleset is what makes that safe: a red or missing required check blocks the merge whatever the session does. At the start `deliver` runs

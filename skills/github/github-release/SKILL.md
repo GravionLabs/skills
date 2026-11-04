@@ -16,7 +16,7 @@ Prerequisites: `gh` authenticated, repo root, clean `git status`. Mode: `cut [--
 pwsh scripts/Get-ReleaseState.ps1 -Mode cut            # or: -Mode finish [-Branch release/next]
 ```
 
-The script is read-only and prints JSON: `default`, `branch`, `state`, `openPrs`, `localAhead`, `staleLines`, `deleteAllowed`, `action`, `hasMajorCommit`, `releaseWorkflow`, `releasePr`. Exit 1 with a message on stderr (invalid branch name, no release branch) means stop and report. Do what `action` says; `stop: ...` means report the text and change nothing.
+The script is read-only and prints JSON: `default`, `branch`, `state`, `openPrs`, `localAhead`, `staleLines`, `deleteAllowed`, `action`, `hasMajorCommit`, `releaseWorkflow`, `releasePr`, `defaultIsAncestor`, `mergeConflicts`. Exit 1 with a message on stderr (invalid branch name, no release branch) means stop and report. Do what `action` says; `stop: ...` means report the text and change nothing.
 
 | `state`                     | cut                                                             | finish                                                                                                 |
 | :-------------------------- | :-------------------------------------------------------------- | :----------------------------------------------------------------------------------------------------- |
@@ -37,7 +37,7 @@ The script is read-only and prints JSON: `default`, `branch`, `state`, `openPrs`
 
 ## finish
 
-1. `state` `unreleased`, `openPrs` empty: continue. Otherwise `action` already says stop; list `openPrs` when they block.
+1. `state` `unreleased`, `openPrs` empty: continue. `defaultIsAncestor` false (`state` `behind`) stops `finish` before any release PR: report `mergeConflicts` and the back-merge in `references/back-merge.md`; `deliver` step 9 stops the same way. Otherwise `action` already says stop; list `openPrs` when they block.
 2. Bump: no commit by default, on `release/next` and on `release/<x.y>`. GitVersion derives it from the Conventional Commits on the branch: `fix:` → patch, `feat:` → minor, `<type>!:` or `BREAKING CHANGE:` → major; a release with only fixes is a patch release. Only the argument `major` (deliberate escape hatch, e.g. batched renames; never ask in a fork) adds `git commit --allow-empty -m "chore: release major" -m "+semver: major"` and a push, and only when `hasMajorCommit` is false.
 3. `releasePr` set: CI keeps it current, report it. None: open it with `github-pull-request` in release mode (`branch`, `base_branch: <default>`, `title: release: <branch>`, `merged_prs` per its default, `feature_number` only when recorded, `release_review_notes` when the caller passes them, `auto_merge: false`). Never use a direct `gh pr create`; when `github-pull-request` stops, stop and report. Do not touch `CHANGELOG.md`: the release job on `main` regenerates it with git-cliff, tags, publishes and closes the issues the release's PRs reference.
 4. Report the PR URL, `gh pr merge <nr> --merge` (merge commit, never squash: a squash hides the `feat:`/`fix:` commits from GitVersion and git-cliff) and the cleanup `git push origin --delete <branch>`, then stop; never wait for the merge. The cleanup after the merge is a later `finish` on the merged branch: `Get-ReleaseState.ps1` returns `delete-branch` and that run deletes `release/next`.
@@ -50,7 +50,7 @@ The script is read-only and prints JSON: `default`, `branch`, `state`, `openPrs`
 
 - Never merge the release PR yourself; the push to `main` builds, regenerates the changelog and closes the delivered issues.
 - The `merged` label lifecycle: `references/merged-label.md`. A repo without `cliff.toml` gets no changelog from CI: `references/cliff-setup.md`.
-- Hotfixes bypass this skill (`fix/<nr>-<slug>` from `main`, merge commit into `main`); afterwards merge `main` into `release/next`.
+- Hotfixes bypass this skill (`fix/<nr>-<slug>` from `main`, merge commit into `main`); afterwards run the back-merge (`references/back-merge.md`: merge commit PR, never squash).
 - Workflows reference `GravionLabs/ci` at the major tag `@v<major>` (today `@v1`, as `templates/release-branch.yml`), never `@main` or a commit SHA; third-party actions stay SHA-pinned where the repository requires it.
 - A release branch is never continued after its merge. The CI release PR title may show the branch name, not the version (`release-branches.md`).
 
