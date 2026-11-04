@@ -109,14 +109,22 @@ describe('Get-RoadmapState.ps1', () => {
     const out = await state({ FAKE_ISSUES: [issue(7, 'pbi')], FAKE_MILESTONES: [], FAKE_TAGS: [] });
     expect(out.milestones).toEqual([]);
     expect(out.issues).toHaveLength(1);
-    expect(out.issues[0]).toMatchObject({ number: 7, milestone: null, parent: null, blockedBy: [] });
+    expect(out.issues[0]).toMatchObject({
+      number: 7,
+      milestone: null,
+      parent: null,
+      blockedBy: [],
+    });
     const none = await state({ FAKE_ISSUES: [], FAKE_MILESTONES: [], FAKE_TAGS: [] });
     expect(none.issues).toEqual([]);
   });
 
   it('keeps legacy x.y.z milestone titles next to M<n>', async () => {
     const out = await state({
-      FAKE_ISSUES: [issue(8, 'pbi', { milestone: { title: '1.2.0' } }), issue(9, 'pbi', { milestone: { title: 'M3' } })],
+      FAKE_ISSUES: [
+        issue(8, 'pbi', { milestone: { title: '1.2.0' } }),
+        issue(9, 'pbi', { milestone: { title: 'M3' } }),
+      ],
       FAKE_MILESTONES: [ms(5, 'M3', 1, 0), ms(4, '1.2.0', 1, 1)],
       FAKE_TAGS: ['v1.1.0'],
     });
@@ -141,6 +149,8 @@ describe('Get-RoadmapState.ps1', () => {
 
   it('makes only GET requests', async () => {
     await state({ FAKE_ISSUES: [issue(12, 'pbi')], FAKE_MILESTONES: [], FAKE_TAGS: [] });
-    expect(fake.calls().every((c) => !c.args.includes('-X') && !c.args.includes('graphql'))).toBe(true);
+    expect(fake.calls().every((c) => !c.args.includes('-X') && !c.args.includes('graphql'))).toBe(
+      true,
+    );
   });
 });
