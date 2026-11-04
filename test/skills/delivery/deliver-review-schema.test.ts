@@ -86,6 +86,15 @@ describe('deliver-release-review.schema.json (#100)', () => {
     expect(validateRelease(doc)).toBe(false);
   });
 
+  // #235: keyed by M<n>, the same key before and after close renames the title to M<n> (x.y.z)
+  it.each(['M4', '1.2.0'])('accepts the milestone key %s', (milestone) => {
+    expect(validateRelease({ ...result(), milestone })).toBe(true);
+  });
+
+  it('rejects the renamed title M4 (0.2.0) as key', () => {
+    expect(validateRelease({ ...result(), milestone: 'M4 (0.2.0)' })).toBe(false);
+  });
+
   it('rejects round 0, a bug number 0 and an extra field', () => {
     expect(validateRelease({ ...result(), round: 0 })).toBe(false);
     expect(validateRelease({ ...result(), bugs: [0] })).toBe(false);

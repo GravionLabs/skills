@@ -9,23 +9,12 @@ Nothing here is required. Without herdr `deliver` skips the display.
 
 ## Pane tokens and sidebar layout
 
-In a herdr pane, `deliver` (and `Invoke-DeliverLoop.ps1`) reports its progress as pane tokens of source `deliver`: `deliver` (issue), `deliver_step` (step and result) and `deliver_pr` (PR), cleared at the end. The agent name in the sidebar stays the harness. herdr shows a token only where a row of `[ui.sidebar.agents]` names it. Copy this into your herdr config:
-
-```toml
-[ui.sidebar.agents]
-rows = [
-  ["state_icon", { token = "tab", bold = true }, { token = "state_text", rules = [{ equals = "done", fg = "#5f5" }, { equals = "blocked", fg = "#f55" }] }],
-  ["agent", "workspace"],
-  [{ token = "$deliver", bold = true }, { token = "$deliver_step", rules = [{ contains = "blocked", fg = "#f55" }, { contains = "merged", fg = "#5f5" }] }, "$deliver_pr"],
-]
-```
-
-Alternatives (compact two-line layout, `deliver` line first, `row_gap = 1`) are in `references/herdr.md` of the `deliver` skill. No bus or daemon is involved.
+In a herdr pane, `deliver` (and `Invoke-DeliverLoop.ps1`) reports its progress as pane tokens of source `deliver`: `deliver` (issue), `deliver_step` (step and result) and `deliver_pr` (PR), cleared at the end. The agent name in the sidebar stays the harness. herdr shows a token only where a row of `[ui.sidebar.agents]` names it. The layout (space and state, agent and terminal title, `deliver` tokens last) and its alternatives live in one place: [Sidebar layout](../../skills/delivery/deliver/references/herdr.md#sidebar-layout) in `references/herdr.md` of the `deliver` skill. Copy the TOML from there into your herdr config. No bus or daemon is involved.
 
 ## The loop in herdr
 
 - `deliver-loop` (shim, `Install-LoopShim.ps1`) opens the workspace `<repo> · deliver` (`Start-LoopWorkspace.ps1`) and runs the [loop](deliver.md#a-release-in-fresh-sessions) there in its own pane.
-- The loop reports its own agent state with `report-agent --source deliver-loop` (`working`, `blocked`, `idle`, then `release-agent`).
+- The loop reports its own agent state with `report-agent --source deliver-loop` (`working`, `blocked`, `idle`, then `release-agent`; not in a pane that already runs another agent).
 - The log pane `deliver-log` is opt-in with `-LogPane` (the console is already colored); a herdr key toggles it with `Switch-LogPane.ps1`.
 
 Details: `references/herdr.md` and `references/loop.md` of the `deliver` skill.

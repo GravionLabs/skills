@@ -38,7 +38,7 @@
     },
     {
       "name": "delivery",
-      "description": "Issue-driven delivery: /deliver with subagents on any harness, open-decision interview (grill-me), planning (planner), run retrospective (retro) and the installer (skills-install). Needs shared and github.",
+      "description": "Issue-driven delivery: /deliver with subagents on any harness, open-decision interview (grill-me), planning (planner), milestone plan and ROADMAP.md (roadmap), run retrospective (retro) and the installer (skills-install). Needs shared and github.",
       "source": "./",
       "strict": false,
       "skills": [
@@ -46,6 +46,7 @@
         "./skills/delivery/grill-me",
         "./skills/delivery/planner",
         "./skills/delivery/retro",
+        "./skills/delivery/roadmap",
         "./skills/delivery/skills-install"
       ]
     },
@@ -90,7 +91,7 @@
       "source": "./",
       "strict": false,
       "skills": [
-        "./skills/ng/ng-ag-grid-developer",
+        "./skills/ng/ng-ag-grid",
         "./skills/ng/ng-create-project",
         "./skills/ng/ng-implementation",
         "./skills/ng/ng-test"

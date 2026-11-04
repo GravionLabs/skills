@@ -213,7 +213,7 @@ describe('deliver SKILL.md', () => {
     });
 
     it('writes the release review file next to the review file of #53', () => {
-      expect(release).toContain('`<git-common-dir>/.agents/state/release-review-<milestone>.json`');
+      expect(release).toContain('`<git-common-dir>/.agents/state/release-review-<key>.json`');
       expect(ref).toContain('schema/deliver-release-review.schema.json');
       expect(ref).toContain('git rev-parse --git-common-dir');
     });
@@ -277,7 +277,7 @@ describe('deliver SKILL.md', () => {
         'skip the review, print `release: paused in round 3, waits for a decision`',
       );
       expect(ref).toContain(
-        'remove the marker (`gh issue edit <nr> --remove-label needs-decision`) and run `/deliver --milestone <name>`',
+        'remove the marker (`gh issue edit <nr> --remove-label needs-decision`) and run `/deliver --milestone <key>`',
       );
       expect(ref).toContain('run `github-release` `finish` with them as `release_review_notes`');
       expect(ref).toContain(
@@ -688,6 +688,73 @@ describe('deliver help', () => {
       'interactive',
     ]) {
       expect(help).toContain(word);
+    }
+  });
+});
+
+describe('M<n> milestones (#235)', () => {
+  const body = text.slice(text.indexOf('\n---', 3) + 4);
+  const release = body.slice(body.indexOf('**Release.**'), body.indexOf('## Pause rules'));
+  const ref = fs.readFileSync(path.join(skillDir, 'references/release-review.md'), 'utf8');
+  const loop = fs.readFileSync(path.join(skillDir, 'references/loop.md'), 'utf8');
+  const help = fs.readFileSync(path.join(skillDir, 'references/help.md'), 'utf8');
+  const guide = fs.readFileSync(path.resolve(__dirname, '../../../docs/guides/deliver.md'), 'utf8');
+
+  it('resolves --milestone M4 through the github-milestone lookup, open and after close', () => {
+    expect(body).toContain(
+      'the `github-milestone` lookup resolves `M4` to the title `M4` or, after `close`, `M4 (0.2.0)`',
+    );
+    expect(body).toContain('`<key>` is its `M<n>` or sub-number `M<n>.<m>` (legacy: the title)');
+    expect(body).toContain(
+      'The `milestone.title` of that read is the title for `gh issue create --milestone`',
+    );
+    expect(loop).toContain(
+      'resolves `M4` to the title `M4` or, after `/github-milestone close`, `M4 (0.2.0)`',
+    );
+  });
+
+  it('keys the release-review state file by M<n>', () => {
+    expect(release).toContain('release-review-<key>.json');
+    expect(release).not.toContain('release-review-<milestone>');
+    expect(ref).toContain(
+      'so `M4`, `M4 Topic` and `M4 (0.2.0)` share one file, `M1.1 Topic (0.2.0)` is `M1.1` and never `M1`; legacy: the title',
+    );
+    expect(ref).toContain('`milestone` = `<key>`');
+    expect(ref).toContain('`<name>` the resolved `milestone.title`');
+    expect(loop).toContain('`release-review-<key>.json`');
+  });
+
+  it('ends step 9 with the hint to close the milestone after merge and tag', () => {
+    expect(release).toContain(
+      'End step 9 with the hint `after the release PR is merged and tagged: /github-milestone close M<n>`',
+    );
+  });
+
+  it('help and the deliver guide name the M<n> form', () => {
+    expect(help).toContain(
+      '`M4` finds the title `M4` and, after `github-milestone close`, `M4 (0.2.0)`',
+    );
+    expect(help).toContain('/deliver --milestone M4');
+    expect(help).toContain('-Milestone M4');
+    expect(help).toContain('run `/github-milestone close M<n>`');
+    expect(guide).toContain('/deliver --milestone M4');
+    expect(guide).toContain('`M4 (0.2.0)`');
+    expect(guide).toContain('deliver-loop -Milestone M4');
+    expect(guide).toContain('`/github-milestone close M4`');
+  });
+
+  // #224: reviewers must not touch the user's checkouts
+  it('review prompts of step 4, step 9 and the release review are read-only', () => {
+    const ref = fs.readFileSync(path.join(skillDir, 'references/release-review.md'), 'utf8');
+    const step4 = body.slice(body.indexOf('4. **Review.**'), body.indexOf('5. **Fix.**'));
+    const step9 = body.slice(
+      body.indexOf('9. **Release.**'),
+      body.indexOf('After every step read'),
+    );
+    for (const t of [step4, step9, ref]) {
+      expect(t).toMatch(/[Rr]ead-only/);
+      expect(t).toContain('no stash, checkout, switch or commit in any existing checkout');
+      expect(t).toContain('temporary worktree');
     }
   });
 });

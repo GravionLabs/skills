@@ -25,35 +25,41 @@ param(
 )
 $ErrorActionPreference = 'Stop'
 
-if (-not $Config) {
-  $top = (& git rev-parse --show-toplevel 2>$null)
-  if ($LASTEXITCODE -ne 0 -or -not $top) { $top = (Get-Location).Path }
-  $Config = Join-Path $top '.agents/config.json'
-}
-$skip = @()
-if (Test-Path -LiteralPath $Config) {
-  $cfg = Get-Content -Raw -LiteralPath $Config | ConvertFrom-Json -AsHashtable
-  $gov = $cfg['governance']
-  if ($gov -is [System.Collections.IDictionary]) {
-    $skip = if ($null -ne $gov['skipLabels']) { @($gov['skipLabels']) } else { @('skip-adr') }
+# The result is always the JSON line; any unexpected failure is stderr plus a non-zero exit, never help text.
+try {
+  if (-not $Config) {
+    $top = (& git rev-parse --show-toplevel 2>$null)
+    if ($LASTEXITCODE -ne 0 -or -not $top) { $top = (Get-Location).Path }
+    $Config = Join-Path $top '.agents/config.json'
   }
+  $skip = @()
+  if (Test-Path -LiteralPath $Config) {
+    $cfg = Get-Content -Raw -LiteralPath $Config | ConvertFrom-Json -AsHashtable
+    $gov = $cfg['governance']
+    if ($gov -is [System.Collections.IDictionary]) {
+      $skip = if ($null -ne $gov['skipLabels']) { @($gov['skipLabels']) } else { @('skip-adr') }
+    }
+  }
+  $wanted = @($IssueLabel | ForEach-Object { $_ -split ',' } | Where-Object { $_ -and ($skip -contains $_) } | Select-Object -Unique)
+  $existing = @()
+  $missing = @()
+  $errors = @()
+  foreach ($l in $wanted) {
+    $out = & gh api "repos/$Repo/labels/$([uri]::EscapeDataString($l))" 2>&1
+    if ($LASTEXITCODE -eq 0) { $existing += $l }
+    elseif (($out | Out-String) -match '404|Not Found') { $missing += $l }
+    else { $errors += "skip label lookup failed: $l ($((($out | Out-String).Trim())))" }
+  }
+  $added = @()
+  if ($Pr -gt 0 -and $existing.Count -gt 0) {
+    $ghArgs = @('api', '-X', 'POST', "repos/$Repo/issues/$Pr/labels") + @($existing | ForEach-Object { '-f'; "labels[]=$_" })
+    & gh @ghArgs 2>$null | Out-Null
+    if ($LASTEXITCODE -eq 0) { $added = $existing } else { $errors += "skip labels not added: POST labels of PR $Pr failed" }
+  }
+  if ($errors.Count -gt 0) { $errors | ForEach-Object { Write-Error $_ -ErrorAction Continue } }
+  [ordered]@{ existing = $existing; added = $added; missing = $missing; errors = $errors } | ConvertTo-Json -Compress
+  if ($errors.Count -gt 0) { exit 1 }
+} catch {
+  Write-Error "Add-SkipLabels failed: $($_.Exception.Message)" -ErrorAction Continue
+  exit 1
 }
-$wanted = @($IssueLabel | ForEach-Object { $_ -split ',' } | Where-Object { $_ -and ($skip -contains $_) } | Select-Object -Unique)
-$existing = @()
-$missing = @()
-$errors = @()
-foreach ($l in $wanted) {
-  $out = & gh api "repos/$Repo/labels/$([uri]::EscapeDataString($l))" 2>&1
-  if ($LASTEXITCODE -eq 0) { $existing += $l }
-  elseif (($out | Out-String) -match '404|Not Found') { $missing += $l }
-  else { $errors += "skip label lookup failed: $l ($((($out | Out-String).Trim())))" }
-}
-$added = @()
-if ($Pr -gt 0 -and $existing.Count -gt 0) {
-  $ghArgs = @('api', '-X', 'POST', "repos/$Repo/issues/$Pr/labels") + @($existing | ForEach-Object { '-f'; "labels[]=$_" })
-  & gh @ghArgs 2>$null | Out-Null
-  if ($LASTEXITCODE -eq 0) { $added = $existing } else { $errors += "skip labels not added: POST labels of PR $Pr failed" }
-}
-if ($errors.Count -gt 0) { $errors | ForEach-Object { Write-Error $_ -ErrorAction Continue } }
-[ordered]@{ existing = $existing; added = $added; missing = $missing; errors = $errors } | ConvertTo-Json -Compress
-if ($errors.Count -gt 0) { exit 1 }

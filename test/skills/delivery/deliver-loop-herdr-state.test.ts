@@ -12,7 +12,7 @@ const SCRIPT = path.resolve(
   '../../../skills/delivery/deliver/scripts/Invoke-DeliverLoop.ps1',
 );
 const hasPwsh = spawnSync('pwsh', ['-NoProfile', '-Command', '1']).status === 0;
-const SRC = '--source deliver-loop --agent deliver p7';
+const SRC = 'p7 --source deliver-loop --agent deliver';
 
 describe.skipIf(!hasPwsh || process.platform === 'win32')(
   'Invoke-DeliverLoop.ps1 herdr agent state',
@@ -37,6 +37,7 @@ describe.skipIf(!hasPwsh || process.platform === 'win32')(
       close?: boolean;
       text?: string;
       herdrFails?: boolean;
+      paneAgent?: string;
     }) => {
       cwd = path.join(dir, `case-${++seq}`);
       fs.mkdirSync(cwd, { recursive: true });
@@ -83,7 +84,13 @@ fs.writeFileSync(f, JSON.stringify(s));`,
       const stub = (name: string, body: string) =>
         fs.writeFileSync(path.join(gh.bin, name), `#!/bin/sh\n${body}\n`, { mode: 0o755 });
       stub('claude', `cat ${cwd}/stream.jsonl\nnode ${cwd}/effect.js`);
-      stub('herdr', `echo "$*" >> ${cwd}/herdr-calls.txt${opts.herdrFails ? '\nexit 1' : ''}`);
+      const paneGet = opts.paneAgent
+        ? `\n[ "$1 $2" = "pane get" ] && echo '{"result":{"pane":{"pane_id":"p7","agent":"${opts.paneAgent}"}}}'`
+        : '';
+      stub(
+        'herdr',
+        `echo "$*" >> ${cwd}/herdr-calls.txt${opts.herdrFails ? '\nexit 1' : ''}${paneGet}`,
+      );
       stub('osascript', 'true');
       return gh;
     };
@@ -102,7 +109,8 @@ fs.writeFileSync(f, JSON.stringify(s));`,
         cwd,
         env: { ...gh.env(), HERDR_ENV: '1', HERDR_PANE_ID: 'p7', NO_COLOR: '', ...env },
       });
-    const report = (state: string) => `pane report-agent --state ${state} ${SRC}`;
+    const report = (state: string) =>
+      `pane report-agent p7 --state ${state} --source deliver-loop --agent deliver`;
     const release = `pane release-agent ${SRC}`;
 
     it('reports working per iteration, idle at the end, then releases', async () => {
@@ -121,6 +129,19 @@ fs.writeFileSync(f, JSON.stringify(s));`,
       );
       expect(paused.status).toBe(0);
       expect(calls()).toEqual([report('working'), report('blocked'), report('blocked'), release]);
+    });
+
+    it('reports nothing in a pane with another agent (it would compete) and says so', async () => {
+      const r = await run(setup({ open: [1], close: true, paneAgent: 'claude' }), ['-Target', '1']);
+      expect(r.status).toBe(0);
+      expect(calls()).toEqual([]);
+      expect(r.stdout).toContain('another agent runs in this pane');
+      const own = await run(setup({ open: [1], close: true, paneAgent: 'deliver' }), [
+        '-Target',
+        '1',
+      ]);
+      expect(own.status).toBe(0);
+      expect(calls()).toEqual([report('working'), report('idle'), release]);
     });
 
     it('releases on error, ignores herdr failures and calls nothing outside herdr', async () => {

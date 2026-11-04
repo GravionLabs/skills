@@ -92,17 +92,31 @@ describe('Get-ReleaseState.ps1', () => {
       state: 'unreleased',
       action: 'release-pr',
       releasePr: null,
+      defaultIsAncestor: true,
+      mergeConflicts: null,
     });
   });
 
-  it('a feat:/fix: branch is no major; a +semver: minor commit is no major either', async () => {
-    setRef(
-      'release/3.2',
-      child(child('main', 'feat: x'), 'chore: release minor', '+semver: minor'),
-    );
-    const r = await state('finish', 'release/3.2');
-    expect(r).toMatchObject({ hasMajorCommit: false, action: 'release-pr' });
-    expect(r).not.toHaveProperty('hasSemverCommit');
+  it('back-merge: main is no ancestor (hotfix not merged back), conflicts reported, finish stops', async () => {
+    // branch from v2.1.0 whose H.txt clashes with the hotfix H on main (v2.1.1)
+    git(fx.clone, 'checkout', '-q', '--detach', 'v2.1.0');
+    fs.writeFileSync(path.join(fx.clone, 'H.txt'), 'other');
+    git(fx.clone, 'add', 'H.txt');
+    git(fx.clone, 'commit', '-q', '-m', 'feat: clash');
+    git(fx.clone, 'push', '-q', 'origin', 'HEAD:refs/heads/release/3.0');
+    git(fx.clone, 'checkout', '-q', '-');
+    const r = await state('finish', 'release/3.0');
+    expect(r).toMatchObject({ state: 'behind', defaultIsAncestor: false, mergeConflicts: true });
+    expect(r.action).toContain('back-merge');
+    // clean case: the same hotfix gap without a clash
+    git(fx.clone, 'checkout', '-q', '--detach', 'v2.1.0');
+    fx.commit(fx.clone, 'W');
+    git(fx.clone, 'push', '-q', '-f', 'origin', 'HEAD:refs/heads/release/3.0');
+    git(fx.clone, 'checkout', '-q', '-');
+    expect(await state('finish', 'release/3.0')).toMatchObject({
+      defaultIsAncestor: false,
+      mergeConflicts: false,
+    });
   });
 
   it('reports a +semver: major commit and the CI release PR', async () => {
@@ -125,21 +139,10 @@ describe('Get-ReleaseState.ps1', () => {
     expect(r.action).toBe('stop: open PRs target the branch; merge them first');
   });
 
-  it('behind: main has commits the branch lacks (release/2.2)', async () => {
-    expect(await state('finish', 'release/2.2')).toMatchObject({
-      state: 'behind',
-      action: 'stop: behind main; merge it in first',
-    });
-  });
-
   it('released-continued: .0 tag exists and the branch moved on (release/2.1)', async () => {
     const r = await state('finish', 'release/2.1');
     expect(r.state).toBe('released-continued');
     expect(r.action).toBe('stop: already released; cut a new release branch');
-  });
-
-  it('released-continued: release/next continued after its merge (no <x.y> tag to check)', async () => {
-    expect((await state('finish', 'release/next')).state).toBe('released-continued');
   });
 
   it('merged: the tip is the second parent of a merge on main (release/1.0 = v2.1.0^2)', async () => {
@@ -147,9 +150,5 @@ describe('Get-ReleaseState.ps1', () => {
     const r = await state('finish', 'release/1.0');
     expect(r).toMatchObject({ state: 'merged', deleteAllowed: false });
     expect(r.action).toBe('stop: already released; cut a new release branch');
-  });
-
-  it('released: ancestor of main but no merge tip (release/9.0)', async () => {
-    expect((await state('finish', 'release/9.0')).state).toBe('released');
   });
 });

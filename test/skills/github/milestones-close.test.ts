@@ -11,17 +11,29 @@ const script = path.join(root, 'skills/github/github-milestone/scripts/Get-Miles
 const handler = `(call) => {
   const env = (k, d) => JSON.parse(process.env[k] || d);
   const a = call.args;
-  if (a[0] === 'issue') return { rest: {} };
-  if (a.includes('-X')) return { rest: {} };
+  const fail = env('FAKE_FAIL', '{}');
+  if (a[0] === 'issue') {
+    if (fail.edit === a[2]) throw new Error('edit failed');
+    return { rest: {} };
+  }
+  if (a.includes('-X')) {
+    if (fail.patch) throw new Error('patch failed');
+    return { rest: {} };
+  }
   const p = a[1];
   if (p.includes('/git/ref/tags/')) {
     const tag = p.split('/git/ref/tags/')[1];
     if (!env('FAKE_TAGS', '[]').includes(tag)) throw new Error('Not Found (HTTP 404)');
     return { rest: { ref: 'refs/tags/' + tag } };
   }
+  if (p.includes('/tags?')) return { rest: [env('FAKE_TAGS', '[]').map((name) => ({ name }))] };
   if (!a.includes('--paginate') || !a.includes('--slurp')) throw new Error('not paginated: ' + p);
   if (p.includes('/milestones?')) return { rest: [env('FAKE_MILESTONES', '[]')] };
-  if (p.includes('/issues?')) return { rest: [env('FAKE_ISSUES', '{}')[/milestone=(\\d+)/.exec(p)[1]] || []] };
+  if (p.includes('/issues?')) {
+    const n = /milestone=(\\d+)/.exec(p)[1];
+    const pages = env('FAKE_ISSUE_PAGES', '{}')[n];
+    return { rest: pages || [env('FAKE_ISSUES', '{}')[n] || []] };
+  }
   throw new Error('unexpected path ' + p);
 }`;
 
@@ -158,6 +170,30 @@ describe('Get-Milestones.ps1 -Mode close', () => {
       msg: "target milestone '1.1.0' is closed",
     },
     {
+      case: '-MoveTo is the milestone being closed',
+      args: ['-Name', '1.2.0', '-MoveTo', '1.2.0'],
+      env: { FAKE_ISSUES: { 5: [issue(11)] } },
+      msg: 'target milestone is the milestone to close',
+    },
+    {
+      case: '-MoveTo does not exist, no open issues',
+      args: ['-Name', '1.2.0', '-MoveTo', '2.0.0'],
+      env: {},
+      msg: "target milestone '2.0.0' not found",
+    },
+    {
+      case: '-MoveTo is closed, no open issues',
+      args: ['-Name', '1.2.0', '-MoveTo', '1.1.0'],
+      env: {},
+      msg: "target milestone '1.1.0' is closed",
+    },
+    {
+      case: '-MoveTo is invalid, no open issues',
+      args: ['-Name', '1.2.0', '-MoveTo', 'later'],
+      env: {},
+      msg: "invalid -MoveTo 'later'",
+    },
+    {
       case: '-MoveTo is not x.y.z',
       args: ['-Name', '1.2.0', '-MoveTo', 'later'],
       env: { FAKE_ISSUES: { 5: [issue(11)] } },
@@ -168,5 +204,145 @@ describe('Get-Milestones.ps1 -Mode close', () => {
     expect(r.status).toBe(1);
     expect(r.stderr).toContain(msg);
     expect(writes).toEqual([]);
+  });
+
+  it('failing issue edit: exit 1 with the moved-so-far list, milestone not closed', async () => {
+    const { r, writes } = await close(['-Name', '1.2.0', '-MoveTo', '1.3.0'], {
+      FAKE_ISSUES: { 5: [issue(11), issue(13)] },
+      FAKE_FAIL: { edit: '13' },
+    });
+    expect(r.status).toBe(1);
+    expect(r.stderr).toContain('moving #13 to milestone 1.3.0 failed (moved so far: #11)');
+    expect(writes.some((w) => w.includes('PATCH'))).toBe(false);
+  });
+
+  it('failing PATCH: exit 1 after the issues were moved', async () => {
+    const { r, writes } = await close(['-Name', '1.2.0', '-MoveTo', '1.3.0'], {
+      FAKE_ISSUES: { 5: [issue(11)] },
+      FAKE_FAIL: { patch: true },
+    });
+    expect(r.status).toBe(1);
+    expect(r.stderr).toContain('closing milestone 1.2.0 failed');
+    expect(writes).toEqual([['issue', 'edit', '11', '--milestone', '1.3.0'], patch]);
+  });
+
+  it('open issues over several pages are all moved, pull requests skipped', async () => {
+    const { out, writes } = await ok(['-Name', '1.2.0', '-MoveTo', '1.3.0'], {
+      FAKE_ISSUE_PAGES: {
+        5: [[issue(11), issue(12, { pull_request: {} })], [issue(13)], [issue(14)]],
+      },
+    });
+    expect(out.moved.map((i: { number: number }) => i.number)).toEqual([11, 13, 14]);
+    expect(writes).toHaveLength(4);
+  });
+
+  describe('numbered milestones (#234)', () => {
+    const numbered = {
+      FAKE_TAGS: ['v1.0.0', 'v1.1.0', 'v1.2.0'],
+      FAKE_MILESTONES: [
+        ms(7, 'M1 (1.0.0)', 'closed'),
+        ms(8, 'M2'),
+        ms(9, 'M3'),
+        ms(10, '1.1.0', 'closed'),
+      ],
+    };
+    const patchM = (n: number, title: string) => [
+      'api',
+      '-X',
+      'PATCH',
+      `repos/{owner}/{repo}/milestones/${n}`,
+      '-f',
+      'state=closed',
+      '-f',
+      `title=${title}`,
+    ];
+
+    it('without -Version: the newest release tag without a milestone, renamed and closed in one PATCH', async () => {
+      const { out, writes } = await ok(['-Name', 'M2'], numbered);
+      expect(out).toMatchObject({
+        closed: true,
+        version: '1.2.0',
+        milestone: { number: 8, title: 'M2 (1.2.0)', state: 'closed' },
+      });
+      expect(writes).toEqual([patchM(8, 'M2 (1.2.0)')]);
+    });
+
+    it('with -Version: that tag is used even when a newer one exists', async () => {
+      const { out, writes } = await ok(['-Name', 'M2', '-Version', 'v1.2.0'], {
+        ...numbered,
+        FAKE_TAGS: ['v1.2.0', 'v1.3.0'],
+      });
+      expect(out).toMatchObject({ closed: true, version: '1.2.0' });
+      expect(writes).toEqual([patchM(8, 'M2 (1.2.0)')]);
+    });
+
+    it('open issues moved to M<m>, then renamed and closed', async () => {
+      const { out, writes } = await ok(['-Name', 'M2', '-MoveTo', 'M3'], {
+        ...numbered,
+        FAKE_ISSUES: { 8: [issue(21)] },
+      });
+      expect(out).toMatchObject({ closed: true, moved: [{ number: 21 }] });
+      expect(writes).toEqual([
+        ['issue', 'edit', '21', '--milestone', 'M3'],
+        patchM(8, 'M2 (1.2.0)'),
+      ]);
+    });
+
+    it('open issues without -MoveTo: no rename, no close', async () => {
+      const { out, writes } = await ok(['-Name', 'M2'], {
+        ...numbered,
+        FAKE_ISSUES: { 8: [issue(21)] },
+      });
+      expect(out).toMatchObject({
+        closed: false,
+        milestone: { title: 'M2' },
+        openIssues: [{ number: 21 }],
+      });
+      expect(writes).toEqual([]);
+    });
+
+    it('already closed (found by M<n> although the title has the version): unchanged', async () => {
+      const { out, writes } = await ok(['-Name', 'M1'], numbered);
+      expect(out).toMatchObject({ closed: false, milestone: { number: 7, state: 'closed' } });
+      expect(writes).toEqual([]);
+    });
+
+    it.each([
+      {
+        case: 'no unassigned release tag',
+        args: ['-Name', 'M2'],
+        env: { FAKE_TAGS: ['v1.0.0', 'v1.1.0'] },
+        msg: 'no release tag without a milestone',
+      },
+      {
+        case: '-Version tag missing',
+        args: ['-Name', 'M2', '-Version', '9.0.0'],
+        env: {},
+        msg: 'tag v9.0.0 does not exist',
+      },
+      {
+        case: '-Version already assigned',
+        args: ['-Name', 'M2', '-Version', '1.0.0'],
+        env: {},
+        msg: 'already assigned to another milestone',
+      },
+      {
+        case: '-Version not x.y.z',
+        args: ['-Name', 'M2', '-Version', 'soon'],
+        env: {},
+        msg: "invalid -Version 'soon'",
+      },
+      {
+        case: 'milestone missing',
+        args: ['-Name', 'M9'],
+        env: {},
+        msg: "milestone 'M9' not found",
+      },
+    ])('$case: exit 1, no write', async ({ args, env, msg }) => {
+      const { r, writes } = await close(args, { ...numbered, ...env });
+      expect(r.status).toBe(1);
+      expect(r.stderr).toContain(msg);
+      expect(writes).toEqual([]);
+    });
   });
 });

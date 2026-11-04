@@ -9,7 +9,7 @@ deliver-loop() {
     return 1
   fi
   if [ "${HERDR_ENV:-}" = 1 ] && command -v herdr >/dev/null 2>&1 && [ -f "$dir/scripts/Start-LoopWorkspace.ps1" ]; then
-    pwsh -NoProfile -File "$dir/scripts/Start-LoopWorkspace.ps1" -ShimCwd "$PWD" -ShimScript "$dir/scripts/Invoke-DeliverLoop.ps1" "$@" && return 0
+    (cd "$root" && pwsh -NoProfile -File "$dir/scripts/Start-LoopWorkspace.ps1" -ShimCwd "$root" -ShimScript "$dir/scripts/Invoke-DeliverLoop.ps1" "$@") && return 0
   fi
-  pwsh -NoProfile -File "$dir/scripts/Invoke-DeliverLoop.ps1" "$@"
+  (cd "$root" && pwsh -NoProfile -File "$dir/scripts/Invoke-DeliverLoop.ps1" "$@")
 }

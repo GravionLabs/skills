@@ -70,7 +70,7 @@ esac
   const paneCalls = () =>
     read('herdr-calls.txt')
       .split('\n')
-      .filter((l) => l && !/^pane (report-metadata|report-agent|release-agent)/.test(l));
+      .filter((l) => l && !/^pane (report-metadata|report-agent|release-agent|get)/.test(l));
   const herdrEnv = { HERDR_ENV: '1', HERDR_PANE_ID: 'w1:p5', DELIVER_LOOP_ASSUME_TTY: '1' };
 
   describe('stdout colors', () => {
@@ -100,7 +100,14 @@ esac
       const gh = prepare();
       expect((await go(gh, [], herdrEnv)).status).toBe(0);
       expect(paneCalls()).toEqual([]);
-      expect((await go(gh, ['-NoPane'], herdrEnv)).status).toBe(0);
+      // own process: the worker does not capture [Console]::Error
+      const np = spawnSync('pwsh', ['-NoProfile', '-File', SCRIPT, '-Target', '401', '-NoPane'], {
+        cwd,
+        encoding: 'utf8',
+        env: { ...gh.env(), HERDR_ENV: '', NO_COLOR: '', DELIVER_LOOP_ASSUME_TTY: '' },
+      });
+      expect(np.status).toBe(0);
+      expect(np.stderr).toContain('-NoPane is deprecated');
       expect(paneCalls()).toEqual([]);
     });
 

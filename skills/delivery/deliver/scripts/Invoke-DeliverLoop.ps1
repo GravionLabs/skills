@@ -3,7 +3,7 @@
   Runs `/deliver` in a fresh harness process per PBI until the targets are done, blocked, stalled or -Max is reached.
 .DESCRIPTION
   A long unattended run in one session grows its context and dies with it. This loop starts
-  `claude -p "/deliver <targets> --unattended --max 1"` once per PBI; deliver keeps all state in GitHub, so there is no
+  `claude -p "/deliver <targets> --unattended --max 1"` (`-Harness claude`, the default) or `copilot -p` (`-Harness copilot`) once per PBI; deliver keeps all state in GitHub, so there is no
   queue file. Progress is read from GitHub before and after each iteration: the open PBIs of the targets without the
   labels needs-decision / needs-refinement / interactive (deliver skips interactive PBIs unattended). No change stops
   the loop ("no progress"); nothing open means done (unless a closed PBI of the milestone carries needs-decision, the paused release review: blocked); open PBIs that all wait on an open blocker or a label mean blocked.
@@ -18,14 +18,14 @@
   Issue numbers (PBI, Feature or Epic), as for `/deliver`: `-Target 12,14` or `-Target 12 14` (a comma list also works
   under `pwsh -File`, which does not split it itself).
 .PARAMETER Milestone
-  Adds the open PBIs and bugs of this milestone (as `/deliver --milestone`).
+  Adds the open PBIs and bugs of this milestone (as `/deliver --milestone`): M<n> or a sub-number M<n>.<m> (also after close renamed it M<n> (x.y.z)) or a legacy title.
 .PARAMETER Max
   Stop after this many iterations (PBIs delivered, blocked or paused in total).
 .PARAMETER Model
-  Model of the orchestrating session.
+  Model of the orchestrating session. Default sonnet; with -Harness copilot and no -Model: auto (Copilot picks).
 .PARAMETER Harness
   claude (Claude Code, default) or copilot (GitHub Copilot CLI: `copilot -p … --model <model> --allow-all-tools
-  --no-ask-user --output-format json`). Any other value fails before the first iteration.
+  --allow-all-paths --allow-all-urls --no-ask-user --output-format json`). Any other value fails before the first iteration.
 .PARAMETER LogPane
   Opens the herdr log pane `deliver-log` (herdr, stdout a terminal). Off by default: toggle it with Switch-LogPane.ps1.
 .PARAMETER NoPane
@@ -53,6 +53,10 @@ if ($Harness -notin $Harnesses) {
   exit 64
 }
 
+if ($NoPane) { [Console]::Error.WriteLine('deliver-loop: -NoPane is deprecated and does nothing (the log pane is off by default; -LogPane opens it).') }
+
+if ($Harness -eq 'copilot' -and -not $PSBoundParameters.ContainsKey('Model')) { $Model = 'auto' }
+
 $Nrs = @(($Target + $MoreTargets) | ForEach-Object { $_ -split '[,\s]+' } | Where-Object { $_ })
 if (($Nrs | Where-Object { $_ -notmatch '^\d+$' }) -or ($Nrs.Count -eq 0 -and -not $Milestone)) {
   [Console]::Error.WriteLine('Give -Target <nr...> (issue numbers) and/or -Milestone <name>.')
@@ -65,14 +69,13 @@ $LogFile = Join-Path (Get-Location) '.agents/deliver-loop.log'
 $AnsiFile = if ($NoColor -or $env:NO_COLOR) { '' } else { Join-Path (Get-Location) '.agents/deliver-loop.ansi.log' }
 $Esc = [char]27
 $Ansi = @{ dim = "$Esc[2m"; cyan = "$Esc[36m"; red = "$Esc[31m"; yellow = "$Esc[33m"; green = "$Esc[32m"; reset = "$Esc[0m" }
-# stdout gets the colors of the .ansi.log when it is a terminal (DELIVER_LOOP_ASSUME_TTY=1: tests only).
-$ColorStdout = [bool]$AnsiFile -and ((-not [Console]::IsOutputRedirected) -or $env:DELIVER_LOOP_ASSUME_TTY -eq '1')
+# stdout gets the colors of the .ansi.log when it is a terminal (Test-LoopTerminal in LogPane.ps1 defines "terminal").
+. (Join-Path $PSScriptRoot 'LogPane.ps1')
+$ColorStdout = [bool]$AnsiFile -and (Test-LoopTerminal)
 $RunDir = Join-Path (Get-Location) ".agents/deliver-loop/$((Get-Date).ToString('yyyyMMdd-HHmmss'))"
 $Recent = [System.Collections.Generic.List[string]]::new()
 $AgentNames = @{}
 $Pane = if ($env:HERDR_ENV -eq '1') { $env:HERDR_PANE_ID } else { '' }
-
-. (Join-Path $PSScriptRoot 'LogPane.ps1')
 
 # One step: plain to the log; colored to the .ansi.log and a terminal stdout (time dim, $Tool cyan, the rest in $Color).
 # $Tool is looked up from $ToolAt on (after the subagent prefix).
@@ -131,10 +134,23 @@ function Set-Pane([string]$Nr = '', [string]$Step = '', [switch]$Clear) {
 # herdr agent state (#191): the loop reports its own lifecycle (source deliver-loop, agent deliver); herdr tracks only the pane's agent, not the claude -p children.
 # working per iteration, blocked on a pause/blocked step or when the loop ends blocked / no progress, idle at the end, then release. Any herdr failure is ignored.
 $Paused = $false
+# Live herdr (2026-11): the pane id must come right after the subcommand; release-agent rejects it as trailing positional
+# ("unknown option"). report-agent replaces the state of another agent in the pane and release-agent does not restore it,
+# so the loop reports only in a pane without another agent (checked once with `pane get`; herdr failure: reports as before).
+$AgentStateOff = $false
+function Test-PaneHasOtherAgent {
+  if (-not $Pane) { return $false }
+  try {
+    $out = & herdr pane get $Pane 2>$null
+    if ($LASTEXITCODE -ne 0 -or -not $out) { return $false }
+    $a = (($out -join "`n") | ConvertFrom-Json).result.pane.agent
+    return [bool]$a -and $a -ne 'deliver'
+  } catch { return $false }
+}
 function Set-AgentState([string]$State = '', [switch]$Release) {
-  if (-not $Pane) { return }
+  if (-not $Pane -or $AgentStateOff) { return }
   [string[]]$a = if ($Release) { 'release-agent' } else { 'report-agent', '--state', $State }
-  try { & herdr pane $a[0] @($a | Select-Object -Skip 1) --source deliver-loop --agent deliver $Pane 2>$null | Out-Null } catch { Write-Verbose "herdr failed: $_" }
+  try { & herdr pane $a[0] $Pane @($a | Select-Object -Skip 1) --source deliver-loop --agent deliver 2>$null | Out-Null } catch { Write-Verbose "herdr failed: $_" }
 }
 
 # Get-Milestones.ps1 of github-milestone: sibling skill (installed) or skills/github (repository)
@@ -285,15 +301,15 @@ function Read-Record([string]$line, [int]$position, [int]$total) {
 }
 
 # One JSONL event of Copilot CLI (--output-format json): {type, data}. Tool calls come as tool.execution_start,
-# failures as tool.execution_complete with success=false, text as assistant.message. Subagent steps get a
-# [subagent] prefix when the event carries a parentToolCallId. Unknown event types are ignored (only logged to the jsonl).
+# failures as tool.execution_complete with success=false, text as assistant.message. Subagent steps get the
+# agentDisplayName of subagent.started as prefix (events with a parentToolCallId; [subagent] if unknown). Unknown event types are ignored (only logged to the jsonl).
 function Read-CopilotRecord([string]$line, [int]$position, [int]$total) {
   try { $rec = $line | ConvertFrom-Json } catch { Write-Step "? $(Get-Short $line)"; return }
   $d = $rec.data
-  $prefix = if ($d.parentToolCallId) { '[subagent] ' } else { '' }
+  $prefix = if ($d.parentToolCallId -and $AgentNames.ContainsKey($d.parentToolCallId)) { "[$($AgentNames[$d.parentToolCallId])] " } elseif ($d.parentToolCallId) { '[subagent] ' } else { '' }
   switch ($rec.type) {
+    'subagent.started' { if ($d.toolCallId) { $script:AgentNames[$d.toolCallId] = Get-Short ([string]($d.agentDisplayName ?? $d.agentName)) 60 } }
     'tool.execution_start' {
-      if ($d.toolCallId) { $script:AgentNames[$d.toolCallId] = $d.toolName }
       Write-ToolStep $prefix $d.toolName $d.arguments
     }
     'assistant.message' { if ($d.content) { Write-TextStep $prefix ([string]$d.content) $position $total } }
@@ -320,7 +336,7 @@ function Invoke-Iteration([int]$n, [int]$total, $state) {
   $env:HERDR_ENV = ''
   try {
     $cli = if ($Harness -eq 'copilot') {
-      @('-p', $prompt, '--model', $Model, '--allow-all-tools', '--no-ask-user', '--output-format', 'json')
+      @('-p', $prompt, '--model', $Model, '--allow-all-tools', '--allow-all-paths', '--allow-all-urls', '--no-ask-user', '--output-format', 'json')
     } else {
       @('-p', $prompt, '--model', $Model, '--permission-mode', 'auto', '--output-format', 'stream-json', '--verbose')
     }
@@ -339,6 +355,10 @@ $code = 0
 $i = 0
 try {
   if ($LogPane) { Open-LogPane -LogFile $(if ($AnsiFile) { $AnsiFile } else { $LogFile }) }
+  if (Test-PaneHasOtherAgent) {
+    $script:AgentStateOff = $true
+    Write-Step 'herdr agent state not reported: another agent runs in this pane (start the loop in its own pane)' 'yellow'
+  }
   $state = Get-State
   $result = Get-StopReason $state
   $total = if ($Max -gt 0) { [Math]::Min($Max, $state.Eligible.Count) } else { $state.Eligible.Count }
