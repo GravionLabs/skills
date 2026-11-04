@@ -9,7 +9,7 @@ Or with the shell command `deliver-loop` (`skills-install` offers it after the `
 
 `-Milestone` takes `M<n>` (legacy: the title): the `github-milestone` lookup (`Get-Milestones.ps1 -Mode issues -Name <name>`) resolves `M4` to the title `M4` or, after `/github-milestone close`, `M4 (0.2.0)`, and the loop passes `--milestone M4` unchanged, so a run started before the rename keeps working after it. The release-review state file `release-review-<key>.json` (`references/release-review.md`) is keyed by `M<n>` as well.
 
-Run it from the repository root. It starts `claude -p "/deliver <targets> --unattended --max 1" --model <model> --permission-mode auto --output-format stream-json --verbose` once per PBI (`-Model` default `sonnet`, `-Harness claude` is the default). The allowlist is `references/permissions.md`; the script checks nothing more.
+Run `Invoke-DeliverLoop.ps1` from the repository root; the shim `deliver-loop` does that itself from any directory of the repository (it changes to the git toplevel, so state, logs and the herdr workspace are the same everywhere; outside a git repository it keeps the current directory). It starts `claude -p "/deliver <targets> --unattended --max 1" --model <model> --permission-mode auto --output-format stream-json --verbose` once per PBI (`-Model` default `sonnet`, `-Harness claude` is the default). The allowlist is `references/permissions.md`; the script checks nothing more.
 
 ## Harness
 
