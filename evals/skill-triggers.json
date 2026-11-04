@@ -1,7 +1,7 @@
 [
   { "skill": "planner",
     "shouldTrigger": ["Plan issue #42 into PBIs with blockers and sizes", "Break Feature #120 down into PBIs and write the plan.json", "Refine PBI #57, it has no acceptance criteria yet: check it is ready and ask me only what is missing"],
-    "shouldNotTrigger": ["Implement issue #42 and open a pull request", "Review my changes before I merge"] },
+    "shouldNotTrigger": ["Implement issue #42 and open a pull request", "Review my changes before I merge", "Assign my open issues to milestones and write ROADMAP.md"] },
   { "skill": "dotnet-test",
     "shouldTrigger": ["Write NUnit tests with NSubstitute and Shouldly for the OrderService", "How do I structure C# tests and mock a dependency with NSubstitute?"],
     "shouldNotTrigger": ["Write Jest snapshot tests for this React component", "Scaffold a new .NET solution with Central Package Management"] },

@@ -10,7 +10,9 @@ Plans the releases of a repository. Reads the open Epics, Features, PBIs and Bug
 
 ## Input
 
-`/roadmap` (plan and update). Later PBIs add `help` and `refresh`; until then those words are not handled.
+`/roadmap` (plan and update). `refresh` is not built yet and is not handled.
+
+`help` (or `--help`, `-h`): print `references/help.md` unchanged, nothing else.
 
 ## Start
 

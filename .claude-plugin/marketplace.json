@@ -38,7 +38,7 @@
     },
     {
       "name": "delivery",
-      "description": "Issue-driven delivery: /deliver with subagents on any harness, open-decision interview (grill-me), planning (planner), run retrospective (retro) and the installer (skills-install). Needs shared and github.",
+      "description": "Issue-driven delivery: /deliver with subagents on any harness, open-decision interview (grill-me), planning (planner), milestone plan and ROADMAP.md (roadmap), run retrospective (retro) and the installer (skills-install). Needs shared and github.",
       "source": "./",
       "strict": false,
       "skills": [

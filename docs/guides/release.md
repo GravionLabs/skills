@@ -28,6 +28,8 @@ Cut a release.
 
 ## 2. Create and inspect the milestone
 
+To spread many open issues over several releases first, plan them with [`/roadmap`](roadmap.md); it sets the `M<n>` milestones and keeps `ROADMAP.md`.
+
 Milestones are the releases. Name them `M<n>` or `M<n> <Topic>` (a number, optional topic, no version; `M3 Market data`); on close the version is added at the end (`M3 Market data (x.y.z)`). The number sets the order, the topic is ignored for it and `M3` finds `M3 Market data`. Existing `x.y.z` titles stay valid.
 
 ```text
