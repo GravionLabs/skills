@@ -10,7 +10,7 @@
       "description": "The key: M<n> (never with the version in parentheses); legacy milestones: the title.",
       "type": "string",
       "minLength": 1,
-      "not": { "pattern": "^M[0-9]+ \\(" }
+      "not": { "pattern": "^M[0-9]+ " }
     },
     "sha": { "type": "string", "pattern": "^[0-9a-f]{7,64}$" },
     "round": { "type": "integer", "minimum": 1 },

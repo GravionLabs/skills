@@ -716,7 +716,7 @@ describe('M<n> milestones (#235)', () => {
   it('keys the release-review state file by M<n>', () => {
     expect(release).toContain('release-review-<key>.json');
     expect(release).not.toContain('release-review-<milestone>');
-    expect(ref).toContain('so `M4` and `M4 (0.2.0)` share one file; legacy: the title');
+    expect(ref).toContain('so `M4`, `M4 Topic` and `M4 (0.2.0)` share one file; legacy: the title');
     expect(ref).toContain('`milestone` = `<key>`');
     expect(ref).toContain('`<name>` the resolved `milestone.title`');
     expect(loop).toContain('`release-review-<key>.json`');
