@@ -135,11 +135,13 @@ if ($Update) {
   $scopeArgs = @(if ($Global) { '-g' })
   $checkOut = @(& npx -y skills check @scopeArgs 2>&1 | ForEach-Object { "$_" })
   $checkExit = $LASTEXITCODE
-  if ($checkExit -ne 0) { $notes.Add("npx skills check failed (exit $checkExit)") }
+  # npx skills check: exit 0 = nothing to update, 1 = an update exists; anything else is a failure
+  $checkFailed = $checkExit -notin 0, 1
+  if ($checkFailed) { $notes.Add("npx skills check failed (exit $checkExit)") }
   $updateArgs = @('-y', 'skills', 'update') + $scopeArgs
   $uResult = [ordered]@{ dryRun = [bool]$DryRun; scope = $(if ($Global) { 'global' } else { 'project' }); check = $checkOut; updated = $false }
   $uResult.commands = @('npx ' + ($updateArgs -join ' '))
-  $newMembers = @(); $newCmds = @(); $uFailed = $checkExit -ne 0
+  $newMembers = @(); $newCmds = @(); $uFailed = $checkFailed
   if (-not $DryRun -and -not $uFailed) {
     & npx @updateArgs 2>&1 | ForEach-Object { [Console]::Error.WriteLine("$_") }
     if ($LASTEXITCODE -ne 0) { $uFailed = $true; $notes.Add("npx skills update failed (exit $LASTEXITCODE)") } else { $uResult.updated = $true }
