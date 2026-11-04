@@ -22,10 +22,10 @@
 .PARAMETER Max
   Stop after this many iterations (PBIs delivered, blocked or paused in total).
 .PARAMETER Model
-  Model of the orchestrating session.
+  Model of the orchestrating session. Default sonnet; with -Harness copilot and no -Model: auto (Copilot picks).
 .PARAMETER Harness
   claude (Claude Code, default) or copilot (GitHub Copilot CLI: `copilot -p … --model <model> --allow-all-tools
-  --no-ask-user --output-format json`). Any other value fails before the first iteration.
+  --allow-all-paths --allow-all-urls --no-ask-user --output-format json`). Any other value fails before the first iteration.
 .PARAMETER LogPane
   Opens the herdr log pane `deliver-log` (herdr, stdout a terminal). Off by default: toggle it with Switch-LogPane.ps1.
 .PARAMETER NoPane
@@ -52,6 +52,8 @@ if ($Harness -notin $Harnesses) {
   [Console]::Error.WriteLine("Unknown -Harness '$Harness'. Supported: $($Harnesses -join ', ').")
   exit 64
 }
+
+if ($Harness -eq 'copilot' -and -not $PSBoundParameters.ContainsKey('Model')) { $Model = 'auto' }
 
 $Nrs = @(($Target + $MoreTargets) | ForEach-Object { $_ -split '[,\s]+' } | Where-Object { $_ })
 if (($Nrs | Where-Object { $_ -notmatch '^\d+$' }) -or ($Nrs.Count -eq 0 -and -not $Milestone)) {
@@ -285,15 +287,15 @@ function Read-Record([string]$line, [int]$position, [int]$total) {
 }
 
 # One JSONL event of Copilot CLI (--output-format json): {type, data}. Tool calls come as tool.execution_start,
-# failures as tool.execution_complete with success=false, text as assistant.message. Subagent steps get a
-# [subagent] prefix when the event carries a parentToolCallId. Unknown event types are ignored (only logged to the jsonl).
+# failures as tool.execution_complete with success=false, text as assistant.message. Subagent steps get the
+# agentDisplayName of subagent.started as prefix (events with a parentToolCallId; [subagent] if unknown). Unknown event types are ignored (only logged to the jsonl).
 function Read-CopilotRecord([string]$line, [int]$position, [int]$total) {
   try { $rec = $line | ConvertFrom-Json } catch { Write-Step "? $(Get-Short $line)"; return }
   $d = $rec.data
-  $prefix = if ($d.parentToolCallId) { '[subagent] ' } else { '' }
+  $prefix = if ($d.parentToolCallId -and $AgentNames.ContainsKey($d.parentToolCallId)) { "[$($AgentNames[$d.parentToolCallId])] " } elseif ($d.parentToolCallId) { '[subagent] ' } else { '' }
   switch ($rec.type) {
+    'subagent.started' { if ($d.toolCallId) { $script:AgentNames[$d.toolCallId] = Get-Short ([string]($d.agentDisplayName ?? $d.agentName)) 60 } }
     'tool.execution_start' {
-      if ($d.toolCallId) { $script:AgentNames[$d.toolCallId] = $d.toolName }
       Write-ToolStep $prefix $d.toolName $d.arguments
     }
     'assistant.message' { if ($d.content) { Write-TextStep $prefix ([string]$d.content) $position $total } }
@@ -320,7 +322,7 @@ function Invoke-Iteration([int]$n, [int]$total, $state) {
   $env:HERDR_ENV = ''
   try {
     $cli = if ($Harness -eq 'copilot') {
-      @('-p', $prompt, '--model', $Model, '--allow-all-tools', '--no-ask-user', '--output-format', 'json')
+      @('-p', $prompt, '--model', $Model, '--allow-all-tools', '--allow-all-paths', '--allow-all-urls', '--no-ask-user', '--output-format', 'json')
     } else {
       @('-p', $prompt, '--model', $Model, '--permission-mode', 'auto', '--output-format', 'stream-json', '--verbose')
     }
