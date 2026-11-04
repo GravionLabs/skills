@@ -84,3 +84,20 @@ describe('release routine creates the next milestone before close --move-to', ()
     );
   });
 });
+
+describe('migrating legacy milestones (#243)', () => {
+  const deliverGuide = read(path.resolve(__dirname, '../../../docs/guides/deliver.md'));
+  const section = guide.slice(guide.indexOf('## Migrate legacy milestones'));
+
+  it('release guide has the tamias table and the commands', () => {
+    expect(section).toContain('M2 (0.1.1)');
+    expect(section).toContain('/github-milestone rename 0.2.0 "M2 (0.1.1)"');
+    expect(section).toContain('close M2 --version 0.1.1 --move-to M3');
+    expect(section).toContain('release-review-<title>.json');
+    expect(section).toContain('docs/roadmap.md');
+  });
+
+  it('deliver guide links to the section', () => {
+    expect(deliverGuide).toContain('release.md#migrate-legacy-milestones');
+  });
+});
