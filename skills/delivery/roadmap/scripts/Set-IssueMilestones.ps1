@@ -12,18 +12,18 @@
 .PARAMETER Repo
   owner/name; default: the repository of the current directory.
 .PARAMETER MilestoneScript
-  Path of Get-Milestones.ps1; default: the sibling github-milestone skill.
+  Path of Get-Milestones.ps1; default: the sibling github-milestone skill (installed: ../../github-milestone, repository: ../../../github/github-milestone).
 #>
 param(
   [Parameter(Mandatory)][string]$Assignment,
   [string]$Repo = '{owner}/{repo}',
-  [string]$MilestoneScript = (Join-Path $PSScriptRoot '../../../github/github-milestone/scripts/Get-Milestones.ps1')
+  [string]$MilestoneScript = (@('../../github-milestone', '../../../github/github-milestone') | ForEach-Object { Join-Path $PSScriptRoot "$_/scripts/Get-Milestones.ps1" } | Where-Object { Test-Path $_ } | Select-Object -First 1)
 )
 $ErrorActionPreference = 'Stop'
 
 function Fail([string]$m) { Write-Error $m -ErrorAction Continue; exit 1 }
 
-if (-not (Test-Path $MilestoneScript)) { Fail "Get-Milestones.ps1 not found: $MilestoneScript" }
+if (-not $MilestoneScript -or -not (Test-Path $MilestoneScript)) { Fail "Get-Milestones.ps1 not found: $MilestoneScript" }
 $text = if (Test-Path -PathType Leaf $Assignment) { Get-Content -Raw $Assignment } else { $Assignment }
 try { $items = @($text | ConvertFrom-Json -NoEnumerate) } catch { Fail "-Assignment is not valid JSON: $($_.Exception.Message)" }
 if ($items.Count -eq 1 -and $items[0] -is [System.Collections.IList]) { $items = @($items[0]) }
