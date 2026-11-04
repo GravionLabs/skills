@@ -1,5 +1,5 @@
 import { describe, it, expect, beforeAll, afterAll } from 'vitest';
-import { spawnSync } from 'node:child_process';
+import { execFile, spawnSync } from 'node:child_process';
 import * as fs from 'node:fs';
 import * as os from 'node:os';
 import * as path from 'node:path';
@@ -34,6 +34,38 @@ const runShim = (cwd: string, home: string, args: string[], env: NodeJS.ProcessE
     env: { PATH: process.env.PATH, HOME: home, ...env },
   });
 
+// async spawn: independent runs of one case go in parallel (Promise.all) to stay inside the time budget
+const spawnAsync = (cmd: string, args: string[], opts: { cwd: string; env: NodeJS.ProcessEnv }) =>
+  new Promise<{ status: number; stdout: string; stderr: string }>((resolve) =>
+    execFile(cmd, args, { ...opts, encoding: 'utf8' }, (e, stdout, stderr) =>
+      resolve({ status: e ? (typeof e.code === 'number' ? e.code : 1) : 0, stdout, stderr }),
+    ),
+  );
+const runShimAsync = (cwd: string, home: string, args: string[], env: NodeJS.ProcessEnv = {}) =>
+  spawnAsync('bash', ['-c', `. "${shimSh}"; deliver-loop "$@"`, 'bash', ...args], {
+    cwd,
+    env: { PATH: process.env.PATH, HOME: home, ...env },
+  });
+
+// a fake herdr that logs its calls and answers workspace create
+const fakeHerdr = (bin: string, log: string) =>
+  fs.writeFileSync(
+    path.join(bin, 'herdr'),
+    `#!/bin/sh\necho "$@" >> "${log}"\n` +
+      `if [ "$1 $2" = "workspace create" ]; then echo '{"result":{"workspace":{"workspace_id":"w9"},"tab":{"tab_id":"w9:t1"},"root_pane":{"pane_id":"w9:p1"}}}'; fi\n`,
+    { mode: 0o755 },
+  );
+const herdrEnv = (bin: string, extra: NodeJS.ProcessEnv = {}) => ({
+  HERDR_ENV: '1',
+  PATH: `${bin}${path.delimiter}${process.env.PATH}`,
+  ...extra,
+});
+const paneRun = (log: string) =>
+  fs
+    .readFileSync(log, 'utf8')
+    .split('\n')
+    .find((l) => l.startsWith('pane run'));
+
 beforeAll(() => {
   tmp = fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(), 'loop-shim-')));
 });
@@ -59,15 +91,19 @@ describe.skipIf(!posix)('deliver-loop shell function', () => {
     expect(r.status).toBe(3);
   });
 
-  it('falls back from ~/.claude/skills to ~/.agents/skills', () => {
+  it('falls back from ~/.claude/skills to ~/.agents/skills', async () => {
     const proj = mk('p2');
     const homeAgents = mk('h2');
     fakeSkill('h2/.agents/skills', 'global-agents');
-    expect(runShim(proj, homeAgents, ['-Max', '1']).stdout.trim()).toBe('global-agents|-Max,1');
     const homeBoth = mk('h3');
     fakeSkill('h3/.agents/skills', 'global-agents');
     fakeSkill('h3/.claude/skills', 'global-claude');
-    expect(runShim(proj, homeBoth, []).stdout.trim()).toBe('global-claude|');
+    const [a, b] = await Promise.all([
+      runShimAsync(proj, homeAgents, ['-Max', '1']),
+      runShimAsync(proj, homeBoth, []),
+    ]);
+    expect(a.stdout.trim()).toBe('global-agents|-Max,1');
+    expect(b.stdout.trim()).toBe('global-claude|');
   });
 
   it('reports a missing install and exits 1', () => {
@@ -102,25 +138,6 @@ describe.skipIf(!posix)('deliver-loop shell function', () => {
     expect(calls[2]).toContain("Invoke-DeliverLoop.ps1' '-Milestone' 'it'\\''s' '-Target' '12,14'");
   });
 
-  // a fake herdr that logs its calls and answers workspace create
-  const fakeHerdr = (bin: string, log: string) =>
-    fs.writeFileSync(
-      path.join(bin, 'herdr'),
-      `#!/bin/sh\necho "$@" >> "${log}"\n` +
-        `if [ "$1 $2" = "workspace create" ]; then echo '{"result":{"workspace":{"workspace_id":"w9"},"tab":{"tab_id":"w9:t1"},"root_pane":{"pane_id":"w9:p1"}}}'; fi\n`,
-      { mode: 0o755 },
-    );
-  const herdrEnv = (bin: string, extra: NodeJS.ProcessEnv = {}) => ({
-    HERDR_ENV: '1',
-    PATH: `${bin}${path.delimiter}${process.env.PATH}`,
-    ...extra,
-  });
-  const paneRun = (log: string) =>
-    fs
-      .readFileSync(log, 'utf8')
-      .split('\n')
-      .find((l) => l.startsWith('pane run'));
-
   it('sends -Target 12,14 -Max 1 as one value to the herdr pane (PowerShell shim)', () => {
     const home = mk('h8');
     fakeSkill('h8/.claude/skills', 'x');
@@ -136,23 +153,26 @@ describe.skipIf(!posix)('deliver-loop shell function', () => {
     expect(paneRun(log)).toContain("Invoke-DeliverLoop.ps1' '-Target' '12,14' '-Max' '1'");
   });
 
-  it('quotes for the shell of the pane: pwsh doubles quotes, POSIX shells escape them, others are refused', () => {
+  it('quotes for the shell of the pane: pwsh doubles quotes, POSIX shells escape them, others are refused', async () => {
     const home = mk('h9');
     fakeSkill('h9/.claude/skills', 'global-claude');
-    const bin = mk('bin9');
-    const log = path.join(tmp, 'herdr9.log');
-    fakeHerdr(bin, log);
-    const runWith = (shell: string) => {
-      fs.rmSync(log, { force: true });
-      return runShim(mk('p9'), home, ['-Milestone', "it's"], herdrEnv(bin, { SHELL: shell }));
+    const logs = ['a', 'b', 'c'].map((n) => path.join(tmp, `herdr9${n}.log`));
+    // one fake herdr per shell, each logging to its own file
+    const runWith = (shell: string, i: number) => {
+      const b = mk(`bin9${i}`);
+      fakeHerdr(b, logs[i]);
+      return runShimAsync(mk('p9'), home, ['-Milestone', "it's"], herdrEnv(b, { SHELL: shell }));
     };
-    expect(runWith('/usr/local/bin/pwsh').status).toBe(0);
-    expect(paneRun(log)).toContain("'-Milestone' 'it''s'");
-    expect(runWith('/opt/homebrew/bin/fish').status).toBe(0);
-    expect(paneRun(log)).toContain("'-Milestone' 'it'\\''s'");
-    fs.rmSync(log, { force: true });
-    const nu = runWith('/bin/nu');
-    expect(fs.existsSync(log)).toBe(false); // herdr not called
+    const [pw, fish, nu] = await Promise.all([
+      runWith('/usr/local/bin/pwsh', 0),
+      runWith('/opt/homebrew/bin/fish', 1),
+      runWith('/bin/nu', 2),
+    ]);
+    expect(pw.status).toBe(0);
+    expect(paneRun(logs[0])).toContain("'-Milestone' 'it''s'");
+    expect(fish.status).toBe(0);
+    expect(paneRun(logs[1])).toContain("'-Milestone' 'it'\\''s'");
+    expect(fs.existsSync(logs[2])).toBe(false); // herdr not called
     expect(nu.stdout.trim()).toBe("global-claude|-Milestone,it's"); // loop runs in the current terminal
     expect(nu.stderr).toContain('unsupported pane shell');
   });
@@ -171,68 +191,67 @@ describe.skipIf(!posix)('deliver-loop shell function', () => {
 });
 
 describe('deliver-loop runs in the repository root (#227)', () => {
-  // a fake loop script that reports its working directory
-  const cwdSkill = (base: string) => {
-    const dir = mk(base, 'deliver/scripts');
+  // one repo with a fake loop script that reports its working directory, built once
+  let home: string;
+  let root: string;
+  let sub: string;
+  let plain: string;
+  let log: string;
+  let herdrPath: string;
+  beforeAll(() => {
+    home = mk('rh');
+    root = mk('rp');
+    spawnSync('git', ['init', '-q'], { cwd: root });
+    sub = mk('rp/docs/deep');
+    plain = mk('rplain/sub');
+    const dir = mk('rh/.claude/skills/deliver/scripts');
     fs.writeFileSync(
       path.join(dir, 'Invoke-DeliverLoop.ps1'),
       'Write-Output "cwd|$((Get-Location).Path)"\n',
     );
     fs.copyFileSync(startScript, path.join(dir, 'Start-LoopWorkspace.ps1'));
-  };
-  const repo = (name: string) => {
-    const root = mk(name);
-    spawnSync('git', ['init', '-q'], { cwd: root });
-    cwdSkill(`${name}/.claude/skills`);
-    return { root, sub: mk(name, 'docs/deep') };
-  };
-  const fakeHerdrLog = (name: string) => {
-    const bin = mk(name);
-    const log = path.join(tmp, `${name}.log`);
-    fs.writeFileSync(
-      path.join(bin, 'herdr'),
-      `#!/bin/sh\necho "$@" >> "${log}"\n` +
-        `if [ "$1 $2" = "workspace create" ]; then echo '{"result":{"workspace":{"workspace_id":"w9"},"tab":{"tab_id":"w9:t1"},"root_pane":{"pane_id":"w9:p1"}}}'; fi\n`,
-      { mode: 0o755 },
-    );
-    return { bin, log };
-  };
+    const bin = mk('rbin');
+    log = path.join(tmp, 'rbin.log');
+    fakeHerdr(bin, log);
+    herdrPath = `${bin}${path.delimiter}${process.env.PATH}`;
+  });
+  const ps = (cwd: string, env: NodeJS.ProcessEnv = {}) =>
+    spawnAsync('pwsh', ['-NoProfile', '-Command', `. '${shimPs1}'; deliver-loop`], {
+      cwd,
+      env: { HOME: home, PATH: process.env.PATH, ...env },
+    });
+  const firstCall = () => fs.readFileSync(log, 'utf8').split('\n')[0];
 
+  // the herdr part of both cases shares one log, so the two cases do not overlap
   it.skipIf(!posix)(
-    'bash/zsh shim: loop and herdr workspace use the toplevel from a subdirectory',
-    () => {
-      const home = mk('rh1');
-      const { root, sub } = repo('rp1');
-      expect(runShim(sub, home, []).stdout.trim()).toBe(`cwd|${root}`);
-      const { bin, log } = fakeHerdrLog('rbin1');
-      const r = runShim(sub, home, [], {
+    'bash/zsh shim: loop and herdr workspace use the toplevel from a subdirectory; non-git keeps the cwd',
+    async () => {
+      const [inLoop, plainLoop] = await Promise.all([
+        runShimAsync(sub, home, []),
+        runShimAsync(plain, home, []),
+      ]);
+      expect(inLoop.stdout.trim()).toBe(`cwd|${root}`);
+      expect(plainLoop.stdout.trim()).toBe(`cwd|${plain}`); // outside a git repository
+      fs.rmSync(log, { force: true });
+      const r = await runShimAsync(sub, home, ['-Target', '12,14', '-Max', '1'], {
         HERDR_ENV: '1',
-        PATH: `${bin}${path.delimiter}${process.env.PATH}`,
+        PATH: herdrPath,
       });
       expect(r.status).toBe(0);
-      expect(fs.readFileSync(log, 'utf8').split('\n')[0]).toContain(`--cwd ${root} `);
-      // outside a git repository the current directory is kept
-      cwdSkill('rh1/.claude/skills');
-      const plain = mk('rp3/sub');
-      expect(runShim(plain, home, []).stdout.trim()).toBe(`cwd|${plain}`);
+      expect(firstCall()).toContain(`--cwd ${root} `);
+      expect(paneRun(log)).toContain("Invoke-DeliverLoop.ps1' '-Target' '12,14' '-Max' '1'");
     },
   );
 
-  it('PowerShell shim: loop and herdr workspace use the toplevel from a subdirectory', () => {
-    const home = mk('rh2');
-    const { root, sub } = repo('rp2');
-    const ps = (env: NodeJS.ProcessEnv) =>
-      spawnSync('pwsh', ['-NoProfile', '-Command', `. '${shimPs1}'; deliver-loop`], {
-        cwd: sub,
-        encoding: 'utf8',
-        env: { HOME: home, PATH: process.env.PATH, ...env },
-      });
-    expect(ps({}).stdout.trim()).toBe(`cwd|${root}`);
+  it('PowerShell shim: loop and herdr workspace use the toplevel from a subdirectory; non-git keeps the cwd', async () => {
+    const [inLoop, plainLoop] = await Promise.all([ps(sub), ps(plain)]);
+    expect(inLoop.stdout.trim()).toBe(`cwd|${root}`);
+    expect(plainLoop.stdout.trim()).toBe(`cwd|${plain}`);
     if (posix) {
-      const { bin, log } = fakeHerdrLog('rbin2');
-      const r = ps({ HERDR_ENV: '1', PATH: `${bin}${path.delimiter}${process.env.PATH}` });
+      fs.rmSync(log, { force: true });
+      const r = await ps(sub, { HERDR_ENV: '1', PATH: herdrPath });
       expect(r.status).toBe(0);
-      expect(fs.readFileSync(log, 'utf8').split('\n')[0]).toContain(`--cwd ${root} `);
+      expect(firstCall()).toContain(`--cwd ${root} `);
     }
   });
 });
