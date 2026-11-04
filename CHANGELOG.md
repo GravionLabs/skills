@@ -5,6 +5,45 @@ Versioning follows [Semantic Versioning](https://semver.org/).
 
 ---
 
+## [2.0.0] — 2026-11-04
+
+### Bug Fixes
+- **delivery**: Verify the Copilot harness and the Copilot context hook against a live Copilot CLI (#220) (#251)
+- **delivery**: Deliver-loop shim and herdr state verified against a live herdr, quoting gaps closed (#221) (#252)
+- **github**: Github-milestone close validates -MoveTo first and covers its failure paths (#222) (#253)
+- **delivery**: Read-only reviewers, PR skill reads the pushed branch, delivery tests under 10 s (#224) (#256)
+- **delivery**: Deliver-loop shim runs in the repository root (#227) (#258)
+- **docs**: ROADMAP.md is reproducible by the roadmap skill (#270) (#271)
+- **delivery**: Roadmap state keeps the repository of a foreign blocker (#272) (#275)
+- **delivery**: Roadmap scripts find github-milestone in the installed flat layout (#276) (#277)
+
+
+### Documentation
+- **github**: Release routine creates the next milestone before close --move-to (#226) (#257)
+- **deliver**: One herdr sidebar layout instead of two (#228) (#259)
+- Stale loop and milestone wording, group table cell test (#229) (#260)
+- Migrating legacy x.y.z milestones to M<n>, tamias as example (#243) (#263)
+- Refresh ROADMAP.md to M<n> and 1.6.0 with the roadmap skill (#248) (#268)
+
+
+### Features
+- **github**: Milestones M<n> and M<n> (x.y.z), close renames (#234) (#237)
+- **delivery**: Deliver and loop work with M<n> milestones (#235) (#239)
+- **github**: Release routine closes M<n> and creates the next (#236) (#240)
+- **github**: Github-release defines the back-merge of main into release/next (#223) (#254)
+- **github**: Milestones accept a topic name, M<n> <Topic> (x.y.z) (#249) (#261)
+- **github**: Github-milestone rename mode for legacy x.y.z titles (#242) (#262)
+- **delivery**: Roadmap skill skeleton and Get-RoadmapState.ps1 (#244) (#264)
+- **delivery**: Roadmap proposes M<n> assignment and sets milestones after approval (#245) (#265)
+- **delivery**: Roadmap writes and updates ROADMAP.md after approval (#246) (#266)
+- **delivery**: Roadmap help, marketplace entry, tables, trigger eval, guide (#247) (#267)
+- **github**: Insert a milestone between M<n> and M<n+1> with sub-numbers and insert (#255) (#269)
+
+
+### Refactoring
+- **ng**: Rename skill ng-ag-grid-developer to ng-ag-grid (#273) (#274)
+
+
 ## [1.5.0] — 2026-11-03
 
 ### Bug Fixes
@@ -15,6 +54,7 @@ Versioning follows [Semantic Versioning](https://semver.org/).
 - Herdr page with the GravionLabs herdr plugins (#177) (#208)
 - Update CHANGELOG.md for v1.4.1 [skip ci]
 - Guides and AGENTS.md mention the loop features of 1.5.0 (#219) (#225)
+- Update CHANGELOG.md for v1.5.0 [skip ci]
 
 
 ### Features
