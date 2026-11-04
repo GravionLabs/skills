@@ -42,3 +42,27 @@ describe('github-release milestone hint after the release tag', () => {
     ).toBe(true);
   });
 });
+
+describe('release routine creates the next milestone before close --move-to', () => {
+  const ms = read(path.resolve(__dirname, '../../../skills/github/github-milestone/SKILL.md'));
+  const texts: [string, string][] = [
+    ['docs/guides/release.md', guide],
+    ['github-release SKILL.md', skill],
+    ['github-milestone SKILL.md', ms],
+  ];
+
+  it.each(texts)('%s names create before close and says why', (_name, text) => {
+    expect(text).not.toMatch(/tag, `close`, then `create`/);
+    expect(text).toMatch(/`create`[^.\n]{0,80}(first|before|if missing)/);
+    expect(text).toMatch(/--move-to.{0,80}(exist|open)|(exist|open).{0,80}--move-to/);
+  });
+
+  it.each([
+    ['docs/guides/release.md', guide],
+    ['github-release SKILL.md', skill],
+  ])('%s legacy hint creates before close', (_name, text) => {
+    expect(text).toMatch(
+      /`create` the next `x\.y\.z` milestone first, then `\/github-milestone close/,
+    );
+  });
+});
