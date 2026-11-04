@@ -32,6 +32,8 @@ To spread many open issues over several releases first, plan them with [`/roadma
 
 Milestones are the releases. Name them `M<n>` or `M<n> <Topic>` (a number, optional topic, no version; `M3 Market data`); on close the version is added at the end (`M3 Market data (x.y.z)`). The number sets the order, the topic is ignored for it and `M3` finds `M3 Market data`. Existing `x.y.z` titles stay valid.
 
+To put a milestone between two open ones, use a sub-number: `/github-milestone create M1.1` sorts between `M1` and `M2` (numerically per part: 1, 1.1, 1.2, 2, 10), `M1` never finds `M1.1`, and `current` stays the lowest open one. For a clean sequence use `/github-milestone insert M2 --dry-run`, then `/github-milestone insert M2`: every open `M<k>` with k ≥ 2 (and its sub-numbered ones) moves up by one, from the highest down, then `M2` is created. Closed milestones are never renamed (`M1 (0.1.0)` carries its version, nothing can come before it). `insert` lists what it does not rewrite: old names in issue bodies, `ROADMAP.md` and `release-review-M<n>.json` state files; you decide. `deliver` uses the sub-number as state key (`M1.1`, not `M1`).
+
 ```text
 /github-milestone create M3
 /github-milestone current

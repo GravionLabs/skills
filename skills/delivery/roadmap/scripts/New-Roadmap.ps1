@@ -33,8 +33,8 @@ if ($null -eq $st.issues -and $null -eq $st.milestones) { Fail '-State has neith
 $issues = @($st.issues)
 $milestones = @($st.milestones)
 
-function Get-Key([string]$title) { if ($title -cmatch '^(M[0-9]+)\b') { $Matches[1] } else { $title } }
-function Get-Num([string]$title) { if ($title -cmatch '^M([0-9]+)\b') { [int]$Matches[1] } else { -1 } }
+function Get-Key([string]$title) { if ($title -cmatch '^(M[0-9]+(?:\.[0-9]+)*)(?= |$)') { $Matches[1] } else { $title } }
+function Get-Num([string]$title) { if ($title -cmatch '^M([0-9]+(?:\.[0-9]+)*)(?= |$)') { $q = @($Matches[1] -split '\.' | ForEach-Object { $_.PadLeft(8, '0') }); (0..7 | ForEach-Object { if ($_ -lt $q.Count) { $q[$_] } else { '00000000' } }) -join '' } else { '' } }
 function Get-Cell([string]$s) { ($s -replace '\|', '\|') -replace '\s+', ' ' }
 function Get-Table([string[]]$head, $rows) {
   $out = @(('| ' + ($head -join ' | ') + ' |'), ('| ' + (($head | ForEach-Object { '---' }) -join ' | ') + ' |'))

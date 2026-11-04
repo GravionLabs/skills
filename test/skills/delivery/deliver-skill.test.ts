@@ -704,7 +704,7 @@ describe('M<n> milestones (#235)', () => {
     expect(body).toContain(
       'the `github-milestone` lookup resolves `M4` to the title `M4` or, after `close`, `M4 (0.2.0)`',
     );
-    expect(body).toContain('`<key>` is its `M<n>` (legacy: the title)');
+    expect(body).toContain('`<key>` is its `M<n>` or sub-number `M<n>.<m>` (legacy: the title)');
     expect(body).toContain(
       'The `milestone.title` of that read is the title for `gh issue create --milestone`',
     );
@@ -716,7 +716,9 @@ describe('M<n> milestones (#235)', () => {
   it('keys the release-review state file by M<n>', () => {
     expect(release).toContain('release-review-<key>.json');
     expect(release).not.toContain('release-review-<milestone>');
-    expect(ref).toContain('so `M4`, `M4 Topic` and `M4 (0.2.0)` share one file; legacy: the title');
+    expect(ref).toContain(
+      'so `M4`, `M4 Topic` and `M4 (0.2.0)` share one file, `M1.1 Topic (0.2.0)` is `M1.1` and never `M1`; legacy: the title',
+    );
     expect(ref).toContain('`milestone` = `<key>`');
     expect(ref).toContain('`<name>` the resolved `milestone.title`');
     expect(loop).toContain('`release-review-<key>.json`');
