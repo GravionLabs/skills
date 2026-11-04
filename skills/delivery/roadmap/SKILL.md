@@ -26,9 +26,9 @@ pwsh <skill-dir>/scripts/Get-RoadmapState.ps1
 ## Steps
 
 1. **Read.** Run the state script (Start 2). An empty `issues[]` ends the run: `roadmap: no open work`.
-2. **Propose.** Not built yet (PBI #245): the proposal per issue, children follow their parent, a blocked issue never sits in an earlier milestone than its blocker.
-3. **Decide.** Not built yet (PBI #245): open decisions go to `grill-me`.
-4. **Set.** Not built yet (PBI #245): milestones are set only after the user approves the proposal; a missing `M<n>` is created with `github-milestone`.
+2. **Propose.** Order the issues by the blocked-by DAG and size, group them into `M<n>` (open ones first), print the table. Procedure: `references/proposal.md`.
+3. **Decide.** Open decisions (scope per release, no size, `needs-decision`) go to `grill-me`; the final table needs the user's approval.
+4. **Set.** Only after approval: `pwsh <skill-dir>/scripts/Set-IssueMilestones.ps1 -Assignment <json>` sets the milestones and creates a missing `M<n>` (`references/proposal.md`).
 5. **Write.** Not built yet (PBI #246): create or update `ROADMAP.md`.
 
 Until a step is built, say so in one line and stop after the last built step; never invent its behavior.
