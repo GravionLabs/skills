@@ -149,3 +149,22 @@ Once the release job has tagged `v1.3.0`, close the milestone and create the nex
 With open issues left, create the next milestone first and move them: `/github-milestone create M4`, then `/github-milestone close M3 --move-to M4`. `--move-to` needs the target to exist and be open, so `create` always comes before `close ... --move-to`; `create` is idempotent. Legacy repositories whose open milestone is named `x.y.z` get the old hint: `create` the next `x.y.z` milestone first, then `/github-milestone close 1.3.0 [--move-to <next>]`.
 
 `close` needs the release tag: without `--version <x.y.z>` it takes the newest tag not yet assigned to a milestone, and renames `M3` to `M3 (1.3.0)` (`M3 Market data` to `M3 Market data (1.3.0)`) while closing it. Open issues stay, and nothing is renamed or closed, unless you pass `--move-to M<m>`, an existing open milestone that receives them (create it first). Pull requests are not moved. A milestone that is already closed is left as is. `close` renames only to add the version, never edits the due date or deletes a milestone. To rename a legacy `x.y.z` milestone (or any open one) use `/github-milestone rename <name> <new title>`: `rename 0.2.0 "M2 (0.1.1)"` (the version comes from the new title, the number of an `M<n>` never changes, closed milestones are refused).
+
+## Migrate legacy milestones
+
+A repository with `x.y.z` milestones moves to `M<n>` in one pass; no flag day is needed, legacy titles keep working meanwhile. Worked example: tamias, whose milestone `0.2.0` shipped as `v0.1.1`. The number follows the order of the releases, the version in the parentheses is the tag that shipped.
+
+| Legacy title | New title    | State                      |
+| :----------- | :----------- | :------------------------- |
+| `0.1.0`      | `M1 (0.1.0)` | shipped, close             |
+| `0.2.0`      | `M2 (0.1.1)` | shipped as `v0.1.1`, close |
+| `0.3.0`      | `M3`         | open                       |
+| `0.4.0`      | `M4`         | open                       |
+
+1. Rename every milestone, shipped or open: `/github-milestone rename 0.1.0 "M1 (0.1.0)"`, `/github-milestone rename 0.2.0 "M2 (0.1.1)"`, `/github-milestone rename 0.3.0 M3`, `/github-milestone rename 0.4.0 M4`. `rename` takes open milestones only, so rename before you close; the version comes from the new title. The rename of `0.3.0` makes the target `M3` exist for step 2; do not `create` it first, a taken title is refused.
+2. Close the shipped milestones and move their open issues: `/github-milestone close M1 --version 0.1.0` and `/github-milestone close M2 --version 0.1.1 --move-to M3`. The target must exist and be open before `close --move-to` (#226), so the renames come first; without `--move-to` a milestone with open issues stays open and unchanged.
+3. Check with `/github-milestone list`, then create the next milestone with `/github-milestone create M5` when work starts.
+
+`deliver` keeps its state in `release-review-<title>.json` (`<git-common-dir>/.agents/state/`). The files of the old titles (`release-review-0.3.0.json`) stay as history and are not read again; new runs use the `M<n>` key (`release-review-M3.json`), the same before and after `close`.
+
+Also update the places of the migrated repository that name a milestone by version. In tamias these are the headings of `docs/roadmap.md` (`## 0.3.0` becomes `## M3`), plus any `--milestone 0.3.0` in scripts, notes or issue templates; run `/deliver --milestone M3` from then on.
