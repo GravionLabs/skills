@@ -10,6 +10,21 @@
 
 Updates: `npx skills check` (exit 1 when an update exists, usable in CI), `npx skills update` (all) or `npx skills update <name>`.
 
+## Renamed skills
+
+`npx skills update` cannot follow a rename: the old skill stays in `skills-lock.json` and on disk, and `/skills-install` skips a skill that is already present, so the new name is added next to the old copy and both trigger. Replace the old skill when `npx skills check` or the release notes name a rename.
+
+| Old name               | New name     | Since  |
+| :--------------------- | :----------- | :----- |
+| `ng-ag-grid-developer` | `ng-ag-grid` | v2.0.0 |
+
+```powershell
+npx skills remove ng-ag-grid-developer
+npx skills add GravionLabs/skills --skill ng-ag-grid
+```
+
+Add `-g` to both commands for a global install, and commit the changed `skills-lock.json` and the skill folders. The rename policy is in [CONTRIBUTING.md](https://github.com/GravionLabs/skills/blob/main/CONTRIBUTING.md#public-surface-and-renames).
+
 ## Global and project copies
 
 A skill installed both globally (`-g`) and in the project may resolve to the global copy, depending on the client: OpenCode, for example, loaded `detect-techstack` from `~/.agents/skills/` although `.opencode/skills/` linked the project copy. An outdated global copy then wins silently. Keep the global copy current (`npx skills update -g`) or remove it. To see which copy is loaded, OpenCode prints the resolved path per skill with `opencode debug skill`.
