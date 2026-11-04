@@ -36,10 +36,10 @@ describe.skipIf(!hasPwsh || process.platform === 'win32')('Install-Skills.ps1 -U
       `#!/bin/sh
 echo "$*" >> "${log}"
 case "$*" in
-  *"skills check"*) echo "deliver  update available";;
+  *"skills check"*) echo "deliver  update available"; exit \${FAKE_CHECK_EXIT:-1};;
   *"skills update"*) cp "${tmp}/new-groups.json" "${scripts}/groups.json";;
 esac
-exit \${FAKE_NPX_EXIT:-0}
+exit \${FAKE_UPDATE_EXIT:-0}
 `,
       { mode: 0o755 },
     );
@@ -70,10 +70,16 @@ exit \${FAKE_NPX_EXIT:-0}
     expect(fs.readFileSync(log, 'utf8')).not.toContain('skills update');
   });
 
-  it('fails without updating when check fails', () => {
-    const r = run(['-Global'], { FAKE_NPX_EXIT: '3' });
+  it('treats check exit 0 (nothing to update) as success, without a note', () => {
+    const r = run(['-Global'], { FAKE_CHECK_EXIT: '0' });
+    expect(r.status).toBe(0);
+    expect(JSON.parse(r.stdout).notes).toEqual([]);
+  });
+
+  it('fails without updating when check exits 2', () => {
+    const r = run(['-Global'], { FAKE_CHECK_EXIT: '2' });
     expect(r.status).toBe(1);
-    expect(JSON.parse(r.stdout).notes[0]).toContain('check failed');
+    expect(JSON.parse(r.stdout).notes[0]).toContain('check failed (exit 2)');
     expect(fs.readFileSync(log, 'utf8')).not.toContain('skills update');
   });
 
