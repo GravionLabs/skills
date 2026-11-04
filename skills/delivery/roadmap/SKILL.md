@@ -29,7 +29,7 @@ pwsh <skill-dir>/scripts/Get-RoadmapState.ps1
 2. **Propose.** Order the issues by the blocked-by DAG and size, group them into `M<n>` (open ones first), print the table. Procedure: `references/proposal.md`.
 3. **Decide.** Open decisions (scope per release, no size, `needs-decision`) go to `grill-me`; the final table needs the user's approval.
 4. **Set.** Only after approval: `pwsh <skill-dir>/scripts/Set-IssueMilestones.ps1 -Assignment <json>` sets the milestones and creates a missing `M<n>` (`references/proposal.md`).
-5. **Write.** Not built yet (PBI #246): create or update `ROADMAP.md`.
+5. **Write.** `pwsh <skill-dir>/scripts/New-Roadmap.ps1 -State <state.json> -Path ROADMAP.md` prints the diff and writes nothing; show it, and only after approval run it again with `-Write`. Markers and rules: `references/roadmap-md.md`.
 
 Until a step is built, say so in one line and stop after the last built step; never invent its behavior.
 
