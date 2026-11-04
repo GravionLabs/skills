@@ -75,6 +75,12 @@ Renamed when moving from GravionLabs/apm-hub:
 | `apm-tooling` (package)       | `skill-tooling` (group)     | same skills                                 |
 | `core`, `all` (meta-packages) | presets of `skills-install` | no longer installable units                 |
 
+Renamed since:
+
+| Old name               | New name     | Note                                                                          |
+| :--------------------- | :----------- | :---------------------------------------------------------------------------- |
+| `ng-ag-grid-developer` | `ng-ag-grid` | same skill; `npx skills remove ng-ag-grid-developer`, then `add` `ng-ag-grid` |
+
 ## Issues
 
 Use the templates in `.github/ISSUE_TEMPLATE/` (Epic → Feature → PBI, Bug; there is no Task level). Children are linked as native GitHub sub-issues; see `skills/github/github-issue/references/sub-issues.md`.
