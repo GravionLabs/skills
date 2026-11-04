@@ -9,18 +9,7 @@ Nothing here is required. Without herdr `deliver` skips the display.
 
 ## Pane tokens and sidebar layout
 
-In a herdr pane, `deliver` (and `Invoke-DeliverLoop.ps1`) reports its progress as pane tokens of source `deliver`: `deliver` (issue), `deliver_step` (step and result) and `deliver_pr` (PR), cleared at the end. The agent name in the sidebar stays the harness. herdr shows a token only where a row of `[ui.sidebar.agents]` names it. Copy this into your herdr config:
-
-```toml
-[ui.sidebar.agents]
-rows = [
-  ["state_icon", { token = "tab", bold = true }, { token = "state_text", rules = [{ equals = "done", fg = "#5f5" }, { equals = "blocked", fg = "#f55" }] }],
-  ["agent", "workspace"],
-  [{ token = "$deliver", bold = true }, { token = "$deliver_step", rules = [{ contains = "blocked", fg = "#f55" }, { contains = "merged", fg = "#5f5" }] }, "$deliver_pr"],
-]
-```
-
-Alternatives (compact two-line layout, `deliver` line first, `row_gap = 1`) are in `references/herdr.md` of the `deliver` skill. No bus or daemon is involved.
+In a herdr pane, `deliver` (and `Invoke-DeliverLoop.ps1`) reports its progress as pane tokens of source `deliver`: `deliver` (issue), `deliver_step` (step and result) and `deliver_pr` (PR), cleared at the end. The agent name in the sidebar stays the harness. herdr shows a token only where a row of `[ui.sidebar.agents]` names it. The layout (space and state, agent and terminal title, `deliver` tokens last) and its alternatives live in one place: [Sidebar layout](../../skills/delivery/deliver/references/herdr.md#sidebar-layout) in `references/herdr.md` of the `deliver` skill. Copy the TOML from there into your herdr config. No bus or daemon is involved.
 
 ## The loop in herdr
 
