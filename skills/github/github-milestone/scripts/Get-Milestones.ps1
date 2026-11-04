@@ -2,7 +2,7 @@
 .SYNOPSIS
   Milestones of a repository as JSON (schema/milestones.schema.json) for the github-milestone skill.
 .DESCRIPTION
-  Milestone titles: `M<n>` or `M<n> <Topic>` while open (topic without parentheses), `M<n> [<Topic>] (x.y.z)` after close, and the legacy
+  Milestone titles: `M<n>` or `M<n>.<m>[.<k>...]` (sub-number, sorts numerically per part between M<n> and M<n+1>: 1, 1.1, 1.2, 2, 10; lookup by `M1.1` is exact, `M1` never finds `M1.1`) or `M<n> <Topic>` while open (topic without parentheses), `M<n> [<Topic>] (x.y.z)` after close, and the legacy
   bare `x.y.z` (still valid, no flag day). Other titles are listed but never current.
   current, list and show are read-only and use only `gh api` GET calls (REST). create and close are the writes.
   current: the open milestone with the lowest M number; legacy rule unchanged: an open x.y.z title above the latest
@@ -27,8 +27,13 @@
   ignored and never moved): without -MoveTo nothing is renamed or closed and they are listed in openIssues;
   -MoveTo is validated first (also without open issues). With -MoveTo <M<m>|x.y.z> they are moved to that existing open milestone first (never created), then it is closed.
   Never edits the due date or deletes a milestone.
+  insert: `insert -Name M<n>` renames every open M<k> with k >= n (and its sub-numbered ones, topic and version kept) to k+1, from the highest down so no title collides,
+  then creates M<n>. Closed milestones are never touched; a closed or unmoved milestone that would collide exits 1 before the first write. -DryRun only lists
+  the renames. Result: renames[], references[] (what is not rewritten: issue bodies of the shifted milestones, ROADMAP.md, release-review-<M<n>>.json state files).
 .PARAMETER Mode
-  current, list, show, create, issues, close or rename.
+  current, list, show, create, issues, close, rename or insert.
+.PARAMETER DryRun
+  insert: list the renames and the references that need a manual check, write nothing.
 .PARAMETER Name
   show, create, close, issues: M<n>, the full title, the version x.y.z (a leading v is dropped) or the title of a legacy milestone.
   create: M<n> or x.y.z; empty: the next free M number.
@@ -46,10 +51,11 @@
   Path of Get-ReleaseState.ps1; default: the sibling github-release skill. Missing: releasePr is null.
 #>
 param(
-  [Parameter(Mandatory)][ValidateSet('current', 'list', 'show', 'create', 'issues', 'close', 'rename')][string]$Mode,
+  [Parameter(Mandatory)][ValidateSet('current', 'list', 'show', 'create', 'issues', 'close', 'rename', 'insert')][string]$Mode,
   [string]$Name,
   [string]$To,
   [string]$MoveTo,
+  [switch]$DryRun,
   [string]$Version,
   [ValidateSet('open', 'closed', 'all')][string]$State = 'all',
   [string]$Repo = '{owner}/{repo}',
@@ -75,12 +81,14 @@ function Add-Leaf($list, $x) {
 $semverRx = '^([0-9]+)\.([0-9]+)\.([0-9]+)$'
 function ConvertTo-Version([string]$t) { if ($t -match $semverRx) { [version]"$($Matches[1]).$($Matches[2]).$($Matches[3])" } else { $null } }
 function Get-Bare([string]$n) { $n -replace '^v(?=[0-9])', '' }
-$numberedRx = '^M([0-9]+)(?: ([^()]+?))?(?: \(([0-9]+\.[0-9]+\.[0-9]+)\))?$'
-# title -> @{ kind = 'numbered'|'legacy'|$null; n; version } (version: of the parentheses, or the legacy title)
+$numberedRx = '^M([0-9]{1,8}(?:\.[0-9]{1,8}){0,7})(?: ([^()]+?))?(?: \(([0-9]+\.[0-9]+\.[0-9]+)\))?$'
+# sort key of a number id (1, 1.1, 10): every part padded to 8 digits, 8 parts, so the string order is the numeric order per part
+function Get-NumKey([string]$id) { $p = @(if ($id) { $id -split '\.' }); (0..7 | ForEach-Object { if ($_ -lt $p.Count) { $p[$_].PadLeft(8, '0') } else { '00000000' } }) -join '' }
+# title -> @{ kind = 'numbered'|'legacy'|$null; n (id string: 1 or 1.1); key (sort key); whole (int before the first dot); topic; version } (version: of the parentheses, or the legacy title)
 function Get-Title([string]$t) {
-  if ($t -cmatch $numberedRx) { @{ kind = 'numbered'; n = [int]$Matches[1]; topic = $Matches[2]; version = $Matches[3] } }
-  elseif ($t -match $semverRx) { @{ kind = 'legacy'; n = 0; topic = $null; version = $t } }
-  else { @{ kind = $null; n = 0; topic = $null; version = $null } }
+  if ($t -cmatch $numberedRx) { @{ kind = 'numbered'; n = $Matches[1]; key = (Get-NumKey $Matches[1]); whole = [int](($Matches[1] -split '\.')[0]); topic = $Matches[2]; version = $Matches[3] } }
+  elseif ($t -match $semverRx) { @{ kind = 'legacy'; n = ''; key = (Get-NumKey ''); whole = 0; topic = $null; version = $t } }
+  else { @{ kind = $null; n = ''; key = (Get-NumKey ''); whole = 0; topic = $null; version = $null } }
 }
 # lookup: exact title, M<n> or M<n> <Topic> (by the number), the version in the parentheses (a leading v is dropped)
 function Find-Milestone($all, [string]$name) {
@@ -107,7 +115,7 @@ if ($Mode -eq 'create') {
   }
   else {
     $max = 0
-    foreach ($x in $milestones) { $p = Get-Title $x.title; if ($p.kind -eq 'numbered' -and $p.n -gt $max) { $max = $p.n } }
+    foreach ($x in $milestones) { $p = Get-Title $x.title; if ($p.kind -eq 'numbered' -and $p.whole -gt $max) { $max = $p.whole } }
     $title = "M$($max + 1)"
   }
   $existing = Find-Milestone $milestones $title
@@ -137,6 +145,54 @@ if ($Mode -eq 'rename') {
   if ($LASTEXITCODE -ne 0) { Fail "renaming milestone $($m.title) to $To failed" }
   [ordered]@{ renamed = $true; previousTitle = $m.title; milestone = [ordered]@{ number = $m.number; title = $To; state = $m.state; url = $m.html_url } } |
     ConvertTo-Json -Depth 4
+  exit 0
+}
+
+if ($Mode -eq 'insert') {
+  if (-not $Name) { Fail 'insert needs -Name M<n>' }
+  if ($Name -cnotmatch '^M([0-9]{1,8})$') { Fail "invalid milestone name '$Name': insert takes a whole number M<n>" }
+  $at = [int]$Matches[1]
+  $shift = @($milestones | Where-Object { $p = Get-Title $_.title; $_.state -eq 'open' -and $p.kind -eq 'numbered' -and $p.whole -ge $at } | Sort-Object { (Get-Title $_.title).key } -Descending)
+  $plan = @($shift | ForEach-Object {
+      $p = Get-Title $_.title
+      $parts = $p.n -split '\.'
+      $parts[0] = [string]($p.whole + 1)
+      $to = "M$($parts -join '.')$(if ($p.topic) { " $($p.topic)" })$(if ($p.version) { " ($($p.version))" })"
+      [pscustomobject]@{ number = $_.number; from = $_.title; to = $to; old = "M$($p.n)" }
+    })
+  $moving = @($plan | ForEach-Object { $_.number })
+  $taken = @($milestones | Where-Object { $moving -notcontains $_.number } | ForEach-Object { (Get-Title $_.title).n } | Where-Object { $_ })
+  $final = @($plan | ForEach-Object { (Get-Title $_.to).n }) + @("$at")
+  foreach ($id in $final) { if ($taken -contains $id) { Fail "M$id already exists (closed or not moved): insert M$at would collide; only open milestones can take an insert" } }
+  $refs = [System.Collections.Generic.List[object]]::new()
+  $common = & git rev-parse --git-common-dir 2>$null
+  if ($LASTEXITCODE -ne 0) { $common = $null }
+  foreach ($pl in $plan) {
+    $rx = "(?<![A-Za-z0-9.])$([regex]::Escape($pl.old))(?![0-9]|\.[0-9])"
+    foreach ($i in (Get-Paged "repos/$Repo/issues?milestone=$($pl.number)&state=all&per_page=100" | Where-Object { $null -eq $_.pull_request })) {
+      if ("$($i.body)" -cmatch $rx) { $refs.Add([ordered]@{ where = "issue #$($i.number)"; name = $pl.old; hint = 'issue body names the old milestone' }) }
+    }
+    if ((Test-Path ROADMAP.md) -and ((Get-Content -Raw ROADMAP.md) -cmatch $rx)) { $refs.Add([ordered]@{ where = 'ROADMAP.md'; name = $pl.old; hint = 'text names the old milestone' }) }
+    if ($common) {
+      $sf = Join-Path $common ".agents/state/release-review-$($pl.old).json"
+      if (Test-Path $sf) { $refs.Add([ordered]@{ where = $sf; name = $pl.old; hint = 'release-review state of the old name' }) }
+    }
+  }
+  $res = [ordered]@{ inserted = $false; dryRun = [bool]$DryRun; title = "M$at"; renames = @($plan | ForEach-Object { [ordered]@{ number = $_.number; from = $_.from; to = $_.to } }); references = @($refs) }
+  if (-not $DryRun) {
+    $done = [System.Collections.Generic.List[string]]::new()
+    foreach ($pl in $plan) {
+      $null = & gh api -X PATCH "repos/$Repo/milestones/$($pl.number)" -f "title=$($pl.to)" 2>$null
+      if ($LASTEXITCODE -ne 0) { Fail "renaming milestone $($pl.from) to $($pl.to) failed (renamed so far: $($done -join ', '))" }
+      $done.Add("$($pl.from) -> $($pl.to)")
+    }
+    $raw = & gh api -X POST "repos/$Repo/milestones" -f "title=M$at" 2>$null
+    if ($LASTEXITCODE -ne 0) { Fail "creating milestone M$at failed (renamed so far: $($done -join ', '))" }
+    $c = $raw | ConvertFrom-Json
+    $res.inserted = $true
+    $res.milestone = [ordered]@{ number = $c.number; title = $c.title; state = $c.state; url = $c.html_url }
+  }
+  $res | ConvertTo-Json -Depth 5
   exit 0
 }
 
@@ -286,7 +342,7 @@ function Get-Detail($m) {
 switch ($Mode) {
   'list' {
     $rank = @{ legacy = 0; numbered = 1 }
-    $sorted = @($milestones | Sort-Object @{ e = { $k = (Get-Title $_.title).kind; if ($k) { $rank[$k] } else { 2 } } }, @{ e = { (Get-Title $_.title).n } }, @{ e = { ConvertTo-Version $_.title } }, @{ e = { $_.title } })
+    $sorted = @($milestones | Sort-Object @{ e = { $k = (Get-Title $_.title).kind; if ($k) { $rank[$k] } else { 2 } } }, @{ e = { (Get-Title $_.title).key } }, @{ e = { ConvertTo-Version $_.title } }, @{ e = { $_.title } })
     [ordered]@{ latestTag = $latestTag; milestones = @($sorted | ForEach-Object { Get-Summary $_ }) } | ConvertTo-Json -Depth 6
   }
   'show' {
@@ -298,7 +354,7 @@ switch ($Mode) {
   'current' {
     $floor = if ($latestTag) { [version]$latestTag.Substring(1) } else { [version]'0.0.0' }
     $m = @($milestones | Where-Object { $_.state -eq 'open' -and (ConvertTo-Version $_.title) -gt $floor } | Sort-Object { ConvertTo-Version $_.title }) | Select-Object -First 1
-    if (-not $m) { $m = @($milestones | Where-Object { $_.state -eq 'open' -and (Get-Title $_.title).kind -eq 'numbered' } | Sort-Object { (Get-Title $_.title).n }) | Select-Object -First 1 }
+    if (-not $m) { $m = @($milestones | Where-Object { $_.state -eq 'open' -and (Get-Title $_.title).kind -eq 'numbered' } | Sort-Object { (Get-Title $_.title).key }) | Select-Object -First 1 }
     if ($m) { [ordered]@{ latestTag = $latestTag; current = Get-Detail $m } | ConvertTo-Json -Depth 8 }
     else {
       $hint = "no open milestone M<n> (or x.y.z above $(if ($latestTag) { $latestTag } else { 'the first release' })); create one with /github-milestone create"

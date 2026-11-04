@@ -29,16 +29,16 @@ try { $items = @($text | ConvertFrom-Json -NoEnumerate) } catch { Fail "-Assignm
 if ($items.Count -eq 1 -and $items[0] -is [System.Collections.IList]) { $items = @($items[0]) }
 
 $semverRx = '^[0-9]+\.[0-9]+\.[0-9]+$'
-$numberedRx = '^M([0-9]+)(?: ([^()]+?))?(?: \(([0-9]+\.[0-9]+\.[0-9]+)\))?$'
+$numberedRx = '^M([0-9]{1,8}(?:\.[0-9]{1,8}){0,7})(?: ([^()]+?))?(?: \(([0-9]+\.[0-9]+\.[0-9]+)\))?$'
 function Get-Bare([string]$n) { $n -replace '^v(?=[0-9])', '' }
-function Get-N([string]$t) { if ($t -cmatch $numberedRx) { [int]$Matches[1] } else { -1 } }
+function Get-N([string]$t) { if ($t -cmatch $numberedRx) { $Matches[1] } else { $null } }
 function Get-Ver([string]$t) { if ($t -cmatch $numberedRx) { $Matches[3] } else { $null } }
 # same lookup as github-milestone: exact title, M<n> by number, version in the parentheses
 function Find-Milestone($all, [string]$name) {
   $bare = Get-Bare $name
   $hit = $all | Where-Object { $_.title -eq $name -or $_.title -eq $bare } | Select-Object -First 1
   if (-not $hit -and $bare -cmatch $numberedRx -and -not $Matches[3]) {
-    $n = [int]$Matches[1]
+    $n = $Matches[1]
     $hit = $all | Where-Object { (Get-N $_.title) -eq $n } | Select-Object -First 1
   }
   if (-not $hit -and $bare -match $semverRx) { $hit = $all | Where-Object { (Get-Ver $_.title) -eq $bare } | Select-Object -First 1 }
