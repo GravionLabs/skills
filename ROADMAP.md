@@ -194,7 +194,7 @@ Herdr and the deliver loop, released as `v1.5.0` on 2026-11-03. The release rout
 <!-- roadmap:begin plan 1.6.0 -->
 ## 1.6.0
 
-Progress: 92 % (24 of 26 issues closed).
+Progress: 93 % (25 of 27 issues closed).
 
 | Order | Issue | Title                                                       | Size | Depends on / decision |
 | ----- | ----- | ----------------------------------------------------------- | ---- | --------------------- |
