@@ -11,11 +11,11 @@
 .PARAMETER Repo
   owner/name; default: the repository of the current directory.
 .PARAMETER MilestoneScript
-  Path of Get-Milestones.ps1; default: the sibling github-milestone skill.
+  Path of Get-Milestones.ps1; default: the sibling github-milestone skill (installed: ../../github-milestone, repository: ../../../github/github-milestone).
 #>
 param(
   [string]$Repo = '{owner}/{repo}',
-  [string]$MilestoneScript = (Join-Path $PSScriptRoot '../../../github/github-milestone/scripts/Get-Milestones.ps1')
+  [string]$MilestoneScript = (@('../../github-milestone', '../../../github/github-milestone') | ForEach-Object { Join-Path $PSScriptRoot "$_/scripts/Get-Milestones.ps1" } | Where-Object { Test-Path $_ } | Select-Object -First 1)
 )
 $ErrorActionPreference = 'Stop'
 
@@ -33,7 +33,7 @@ function Get-Paged([string]$path) {
   $items.ToArray()
 }
 
-if (-not (Test-Path $MilestoneScript)) { Fail "Get-Milestones.ps1 not found: $MilestoneScript" }
+if (-not $MilestoneScript -or -not (Test-Path $MilestoneScript)) { Fail "Get-Milestones.ps1 not found: $MilestoneScript" }
 
 $levels = @('epic', 'feature', 'pbi', 'bug')
 $issues = foreach ($i in (Get-Paged "repos/$Repo/issues?state=open&per_page=100")) {
