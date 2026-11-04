@@ -15,6 +15,9 @@
   parentheses exists (legacy: v<title>; M<n> without version: false).
   create: creates milestone -Name (M<n> [<Topic>], or legacy x.y.z) when none matches; without -Name the next free M number.
   It never renames or closes one.
+  rename: renames the open milestone -Name (found as in show) to -To, a title of the grammar M<n> [<Topic>] [(x.y.z)] (legacy x.y.z is no valid target).
+  The number of an existing M<n> title never changes; a legacy x.y.z title may become any M<n>. Refuses an unknown or closed milestone, an existing -To and an invalid -To (exit 1).
+  The one PATCH changes only the title; the version comes from -To (a milestone shipped as v0.1.1 under the title 0.2.0 becomes M2 (0.1.1)).
   issues: resolves the milestone -Name (any form above) to its number and lists its issues (body, labels, assignees,
   state; pull requests filtered out) in one paginated REST call, for the batched reads of deliver; unknown milestone: exit 1.
   close: closes the milestone -Name. M<n>: takes the version from -Version, else the newest release tag v<x.y.z> not yet
@@ -25,10 +28,12 @@
   -MoveTo is validated first (also without open issues). With -MoveTo <M<m>|x.y.z> they are moved to that existing open milestone first (never created), then it is closed.
   Never edits the due date or deletes a milestone.
 .PARAMETER Mode
-  current, list, show, create, issues or close.
+  current, list, show, create, issues, close or rename.
 .PARAMETER Name
   show, create, close, issues: M<n>, the full title, the version x.y.z (a leading v is dropped) or the title of a legacy milestone.
   create: M<n> or x.y.z; empty: the next free M number.
+.PARAMETER To
+  rename: the new title, M<n> [<Topic>] [(x.y.z)].
 .PARAMETER Version
   close M<n>: the release version x.y.z for the new title; default the newest release tag not yet assigned to a milestone.
 .PARAMETER MoveTo
@@ -41,8 +46,9 @@
   Path of Get-ReleaseState.ps1; default: the sibling github-release skill. Missing: releasePr is null.
 #>
 param(
-  [Parameter(Mandatory)][ValidateSet('current', 'list', 'show', 'create', 'issues', 'close')][string]$Mode,
+  [Parameter(Mandatory)][ValidateSet('current', 'list', 'show', 'create', 'issues', 'close', 'rename')][string]$Mode,
   [string]$Name,
+  [string]$To,
   [string]$MoveTo,
   [string]$Version,
   [ValidateSet('open', 'closed', 'all')][string]$State = 'all',
@@ -112,6 +118,24 @@ if ($Mode -eq 'create') {
     $existing = $raw | ConvertFrom-Json
   }
   [ordered]@{ created = $created; milestone = [ordered]@{ number = $existing.number; title = $existing.title; state = $existing.state; url = $existing.html_url } } |
+    ConvertTo-Json -Depth 4
+  exit 0
+}
+
+if ($Mode -eq 'rename') {
+  if (-not $Name) { Fail 'rename needs -Name <milestone>' }
+  if (-not $To -or (Get-Title $To).kind -ne 'numbered') { Fail "invalid -To '$To': expected M<n> [<Topic>] [(x.y.z)]" }
+  $m = Find-Milestone $milestones $Name
+  if (-not $m) { Fail "milestone '$Name' not found" }
+  if ($m.state -ne 'open') { Fail "milestone '$($m.title)' is closed: only open milestones are renamed" }
+  $from = Get-Title $m.title
+  $dest = Get-Title $To
+  if ($from.kind -eq 'numbered' -and $from.n -ne $dest.n) { Fail "the number of $($m.title) stays M$($from.n): -To '$To' would change it" }
+  $clash = $milestones | Where-Object { $_.title -ieq $To -or ($_.number -ne $m.number -and (Get-Title $_.title).kind -eq 'numbered' -and (Get-Title $_.title).n -eq $dest.n) } | Select-Object -First 1
+  if ($clash) { Fail "milestone '$($clash.title)' already exists: -To '$To' is taken" }
+  $null = & gh api -X PATCH "repos/$Repo/milestones/$($m.number)" -f "title=$To" 2>$null
+  if ($LASTEXITCODE -ne 0) { Fail "renaming milestone $($m.title) to $To failed" }
+  [ordered]@{ renamed = $true; previousTitle = $m.title; milestone = [ordered]@{ number = $m.number; title = $To; state = $m.state; url = $m.html_url } } |
     ConvertTo-Json -Depth 4
   exit 0
 }
