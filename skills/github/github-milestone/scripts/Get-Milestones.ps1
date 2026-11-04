@@ -22,7 +22,7 @@
   Legacy x.y.z: needs the tag v<x.y.z>, closes without renaming. Exit 1 when the name is not valid, the milestone
   does not exist, or no tag fits. Already closed: changes nothing ({ closed: false }). Open issues (pull requests are
   ignored and never moved): without -MoveTo nothing is renamed or closed and they are listed in openIssues;
-  with -MoveTo <M<m>|x.y.z> they are moved to that existing open milestone first (never created), then it is closed.
+  -MoveTo is validated first (also without open issues). With -MoveTo <M<m>|x.y.z> they are moved to that existing open milestone first (never created), then it is closed.
   Never edits the due date or deletes a milestone.
 .PARAMETER Mode
   current, list, show, create, issues or close.
@@ -121,6 +121,15 @@ if ($Mode -eq 'close') {
   if (-not $kind -and $title -cnotmatch '^M[0-9]+ \(') { Fail "invalid milestone name '$Name': expected M<n> or x.y.z" }
   $m = Find-Milestone $milestones $title
   if (-not $m) { Fail "milestone '$title' not found" }
+  $t = $null
+  if ($MoveTo) {
+    $target = Get-Bare $MoveTo
+    if (-not (Get-Title $target).kind) { Fail "invalid -MoveTo '$MoveTo': expected M<n> or x.y.z" }
+    $t = Find-Milestone $milestones $target
+    if (-not $t) { Fail "target milestone '$target' not found; create it with /github-milestone create $target" }
+    if ($t.state -ne 'open') { Fail "target milestone '$target' is closed" }
+    if ($t.number -eq $m.number) { Fail 'target milestone is the milestone to close' }
+  }
   $mk = (Get-Title $m.title).kind
   $ref = [ordered]@{ number = $m.number; title = $m.title; state = $m.state; url = $m.html_url }
   $result = [ordered]@{ closed = $false; milestone = $ref; moved = @(); openIssues = @() }
@@ -150,13 +159,7 @@ if ($Mode -eq 'close') {
   }
   $open = @(Get-Paged "repos/$Repo/issues?milestone=$($m.number)&state=open&per_page=100" | Where-Object { $null -eq $_.pull_request } | Sort-Object number |
       ForEach-Object { [ordered]@{ number = $_.number; title = $_.title } })
-  if ($open.Count -and $MoveTo) {
-    $target = Get-Bare $MoveTo
-    if (-not (Get-Title $target).kind) { Fail "invalid -MoveTo '$MoveTo': expected M<n> or x.y.z" }
-    $t = Find-Milestone $milestones $target
-    if (-not $t) { Fail "target milestone '$target' not found; create it with /github-milestone create $target" }
-    if ($t.state -ne 'open') { Fail "target milestone '$target' is closed" }
-    if ($t.number -eq $m.number) { Fail 'target milestone is the milestone to close' }
+  if ($open.Count -and $t) {
     $repoArgs = if ($Repo -eq '{owner}/{repo}') { @() } else { @('--repo', $Repo) }
     $moved = [System.Collections.Generic.List[object]]::new()
     foreach ($i in $open) {

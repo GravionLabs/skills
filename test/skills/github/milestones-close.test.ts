@@ -11,8 +11,15 @@ const script = path.join(root, 'skills/github/github-milestone/scripts/Get-Miles
 const handler = `(call) => {
   const env = (k, d) => JSON.parse(process.env[k] || d);
   const a = call.args;
-  if (a[0] === 'issue') return { rest: {} };
-  if (a.includes('-X')) return { rest: {} };
+  const fail = env('FAKE_FAIL', '{}');
+  if (a[0] === 'issue') {
+    if (fail.edit === a[2]) throw new Error('edit failed');
+    return { rest: {} };
+  }
+  if (a.includes('-X')) {
+    if (fail.patch) throw new Error('patch failed');
+    return { rest: {} };
+  }
   const p = a[1];
   if (p.includes('/git/ref/tags/')) {
     const tag = p.split('/git/ref/tags/')[1];
@@ -22,7 +29,11 @@ const handler = `(call) => {
   if (p.includes('/tags?')) return { rest: [env('FAKE_TAGS', '[]').map((name) => ({ name }))] };
   if (!a.includes('--paginate') || !a.includes('--slurp')) throw new Error('not paginated: ' + p);
   if (p.includes('/milestones?')) return { rest: [env('FAKE_MILESTONES', '[]')] };
-  if (p.includes('/issues?')) return { rest: [env('FAKE_ISSUES', '{}')[/milestone=(\\d+)/.exec(p)[1]] || []] };
+  if (p.includes('/issues?')) {
+    const n = /milestone=(\\d+)/.exec(p)[1];
+    const pages = env('FAKE_ISSUE_PAGES', '{}')[n];
+    return { rest: pages || [env('FAKE_ISSUES', '{}')[n] || []] };
+  }
   throw new Error('unexpected path ' + p);
 }`;
 
@@ -159,6 +170,30 @@ describe('Get-Milestones.ps1 -Mode close', () => {
       msg: "target milestone '1.1.0' is closed",
     },
     {
+      case: '-MoveTo is the milestone being closed',
+      args: ['-Name', '1.2.0', '-MoveTo', '1.2.0'],
+      env: { FAKE_ISSUES: { 5: [issue(11)] } },
+      msg: 'target milestone is the milestone to close',
+    },
+    {
+      case: '-MoveTo does not exist, no open issues',
+      args: ['-Name', '1.2.0', '-MoveTo', '2.0.0'],
+      env: {},
+      msg: "target milestone '2.0.0' not found",
+    },
+    {
+      case: '-MoveTo is closed, no open issues',
+      args: ['-Name', '1.2.0', '-MoveTo', '1.1.0'],
+      env: {},
+      msg: "target milestone '1.1.0' is closed",
+    },
+    {
+      case: '-MoveTo is invalid, no open issues',
+      args: ['-Name', '1.2.0', '-MoveTo', 'later'],
+      env: {},
+      msg: "invalid -MoveTo 'later'",
+    },
+    {
       case: '-MoveTo is not x.y.z',
       args: ['-Name', '1.2.0', '-MoveTo', 'later'],
       env: { FAKE_ISSUES: { 5: [issue(11)] } },
@@ -169,6 +204,36 @@ describe('Get-Milestones.ps1 -Mode close', () => {
     expect(r.status).toBe(1);
     expect(r.stderr).toContain(msg);
     expect(writes).toEqual([]);
+  });
+
+  it('failing issue edit: exit 1 with the moved-so-far list, milestone not closed', async () => {
+    const { r, writes } = await close(['-Name', '1.2.0', '-MoveTo', '1.3.0'], {
+      FAKE_ISSUES: { 5: [issue(11), issue(13)] },
+      FAKE_FAIL: { edit: '13' },
+    });
+    expect(r.status).toBe(1);
+    expect(r.stderr).toContain('moving #13 to milestone 1.3.0 failed (moved so far: #11)');
+    expect(writes.some((w) => w.includes('PATCH'))).toBe(false);
+  });
+
+  it('failing PATCH: exit 1 after the issues were moved', async () => {
+    const { r, writes } = await close(['-Name', '1.2.0', '-MoveTo', '1.3.0'], {
+      FAKE_ISSUES: { 5: [issue(11)] },
+      FAKE_FAIL: { patch: true },
+    });
+    expect(r.status).toBe(1);
+    expect(r.stderr).toContain('closing milestone 1.2.0 failed');
+    expect(writes).toEqual([['issue', 'edit', '11', '--milestone', '1.3.0'], patch]);
+  });
+
+  it('open issues over several pages are all moved, pull requests skipped', async () => {
+    const { out, writes } = await ok(['-Name', '1.2.0', '-MoveTo', '1.3.0'], {
+      FAKE_ISSUE_PAGES: {
+        5: [[issue(11), issue(12, { pull_request: {} })], [issue(13)], [issue(14)]],
+      },
+    });
+    expect(out.moved.map((i: { number: number }) => i.number)).toEqual([11, 13, 14]);
+    expect(writes).toHaveLength(4);
   });
 
   describe('numbered milestones (#234)', () => {
