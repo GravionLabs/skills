@@ -42,3 +42,45 @@ describe('github-release milestone hint after the release tag', () => {
     ).toBe(true);
   });
 });
+
+describe('release routine creates the next milestone before close --move-to', () => {
+  const ms = read(path.resolve(__dirname, '../../../skills/github/github-milestone/SKILL.md'));
+  const texts: [string, string][] = [
+    ['docs/guides/release.md', guide],
+    ['github-release SKILL.md', skill],
+    ['github-milestone SKILL.md', ms],
+  ];
+
+  const segments = (text: string) => text.split('\n').flatMap((line) => line.split(/(?<=[.;])\s+/));
+
+  it.each(texts)('%s says why: --move-to needs an existing open target', (_name, text) => {
+    expect(text).not.toMatch(/tag, `close`, then `create`/);
+    expect(text).toMatch(/--move-to.{0,80}(exist|open)|(exist|open).{0,80}--move-to/);
+  });
+
+  it.each(texts)('%s puts create before close in every --move-to statement', (_name, text) => {
+    const both = segments(text).filter(
+      (s) => s.includes('--move-to') && /\bcreate\b/.test(s) && /\bclose\b/.test(s),
+    );
+    expect(both.length).toBeGreaterThan(0);
+    for (const s of both) {
+      expect(s.search(/\bcreate\b/), s).toBeLessThan(s.search(/\bclose\b/));
+    }
+  });
+
+  it.each(texts)('%s has no close line before the create line in a hint block', (_name, text) => {
+    const lines = text.split('\n');
+    const close = lines.findIndex((l) => /^\/github-milestone close M\d+$/.test(l));
+    const create = lines.findIndex((l) => /^\/github-milestone create M\d+$/.test(l));
+    if (close >= 0 && create >= 0) expect(create).toBeLessThan(close);
+  });
+
+  it.each([
+    ['docs/guides/release.md', guide],
+    ['github-release SKILL.md', skill],
+  ])('%s legacy hint creates before close', (_name, text) => {
+    expect(text).toMatch(
+      /`create` the next `x\.y\.z` milestone first, then `\/github-milestone close/,
+    );
+  });
+});
