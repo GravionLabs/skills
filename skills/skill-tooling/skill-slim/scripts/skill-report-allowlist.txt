@@ -19,3 +19,5 @@ skill-write: references/help.md
 deliver: deliver-loop
 # deliver-loop is the shell command of the deliver skill, not a skill
 skills-install: deliver-loop
+# ng-ag-grid-developer is the former name of ng-ag-grid, named in the rename section of references/after-install.md, not a skill
+skills-install: ng-ag-grid-developer
