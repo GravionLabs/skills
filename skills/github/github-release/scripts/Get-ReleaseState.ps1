@@ -5,7 +5,9 @@
   Runs `git fetch origin --tags` and the git/gh checks of `cut` and `finish`, never pushes or deletes.
   Fields: default, branch, state, openPrs[], localAhead, staleLines[], deleteAllowed, action, plus
   hasMajorCommit (a `+semver: major` commit on the branch: `finish major` adds none again), releaseWorkflow and
-  releasePr (the CI release PR, or null). The bump otherwise comes from the Conventional Commits on the branch.
+  releasePr (the CI release PR, or null), defaultIsAncestor (origin/<default> is an ancestor of the branch; null when
+  the branch is not on origin) and mergeConflicts (`git merge-tree` reports conflicts between them; null when
+  defaultIsAncestor is true, the branch is absent or git cannot tell). A squashed back-merge leaves it false. The bump otherwise comes from the Conventional Commits on the branch.
   state: absent (not on origin), fresh (equals default), unreleased (own work, not behind), behind (default
   has commits the branch lacks), merged (tip is the second parent of a merge on default), released (ancestor
   of default, not a merge tip), released-continued (continued after its release merge).
@@ -102,11 +104,17 @@ $remote = "origin/$Branch"
 $def = "origin/$default"
 $onOrigin = $heads -contains $Branch
 $state = 'absent'; $openPrs = @(); $localAhead = 0; $major = $false
+$defaultIsAncestor = $null; $mergeConflicts = $null
 
 if ($onOrigin) {
   $null = Invoke-Git merge-base --is-ancestor $remote $def; $inDefault = $gitOk
   $null = Invoke-Git merge-base --is-ancestor $def $remote; $hasDefault = $gitOk
   $tip = Invoke-Git rev-parse $remote
+  $defaultIsAncestor = [bool]$hasDefault
+  if (-not $hasDefault) {
+    $null = & git merge-tree --write-tree $def $remote 2>$null
+    $mergeConflicts = switch ($LASTEXITCODE) { 0 { $false } 1 { $true } default { $null } }
+  }
   if ($inDefault) {
     $merges = @(Invoke-Git log --merges --first-parent $def --format=%P)
     if ((Invoke-Git rev-parse $remote) -eq (Invoke-Git rev-parse $def)) { $state = 'fresh' }
@@ -151,7 +159,7 @@ else {
     'fresh' { 'stop: nothing to release' }
     'merged' { if ($deleteAllowed) { 'delete-branch' } else { $stopReleased } }
     { $_ -in 'released', 'released-continued' } { $stopReleased }
-    'behind' { "stop: behind $default; merge it in first" }
+    'behind' { "stop: $default is not an ancestor of $Branch; back-merge it first (merge commit PR, see the back-merge section of github-release)" }
     default { if ($openPrs.Count -gt 0) { 'stop: open PRs target the branch; merge them first' } else { 'release-pr' } }
   }
 }
@@ -169,5 +177,5 @@ if ($Mode -eq 'finish' -and $onOrigin) {
 [ordered]@{
   default = $default; branch = $Branch; state = $state; openPrs = @($openPrs); localAhead = $localAhead
   staleLines = @($staleLines); deleteAllowed = $deleteAllowed; action = $action
-  hasMajorCommit = $major; releaseWorkflow = $workflow; releasePr = $releasePr
+  hasMajorCommit = $major; defaultIsAncestor = $defaultIsAncestor; mergeConflicts = $mergeConflicts; releaseWorkflow = $workflow; releasePr = $releasePr
 } | ConvertTo-Json -Depth 4
