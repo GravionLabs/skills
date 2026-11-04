@@ -1,7 +1,7 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "title": "deliver release review result",
-  "description": "Result of the last release-review round of a milestone, written by deliver to <git-common-dir>/.agents/state/release-review-<key>.json; <key> is the M<n> of the milestone title (M4 also for the closed M4 (0.2.0)), legacy: the title.",
+  "description": "Result of the last release-review round of a milestone, written by deliver to <git-common-dir>/.agents/state/release-review-<key>.json; <key> is the M<n> of the milestone title (M4 also for M4 Topic and the closed M4 Topic (0.2.0)), legacy: the title.",
   "type": "object",
   "required": ["milestone", "sha", "round", "review", "bugs"],
   "additionalProperties": false,
@@ -10,7 +10,7 @@
       "description": "The key: M<n> (never with the version in parentheses); legacy milestones: the title.",
       "type": "string",
       "minLength": 1,
-      "not": { "pattern": "^M[0-9]+ \\(" }
+      "not": { "pattern": "^M[0-9]+ " }
     },
     "sha": { "type": "string", "pattern": "^[0-9a-f]{7,64}$" },
     "round": { "type": "integer", "minimum": 1 },
