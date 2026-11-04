@@ -207,6 +207,9 @@ fs.writeFileSync(f, JSON.stringify(s));`,
         expect(read('notices.txt')).toContain('#7 CI red');
       }
       expect(r.stdout).toContain('loop result: done');
+      expect(read('.agents/deliver-loop.ansi.log')).toContain(
+        `${String.fromCharCode(27)}[32mloop result: done`,
+      );
     });
   });
 
@@ -227,7 +230,7 @@ fs.writeFileSync(f, JSON.stringify(s));`,
         issues: {
           10: { labels: ['bug'], blockers: [{ number: 5, state: 'closed' }] },
         },
-        milestones: { M4: [10] },
+        milestones: { 'M4 (0.2.0)': [10] }, // a closed milestone renamed 'M<n> (x.y.z)' is still found by M4
         effect: 'close-first',
       });
       const r = await run(gh, ['-Milestone', 'M4'], { HERDR_PANE_ID: 'w1:p5' });
@@ -277,22 +280,6 @@ fs.writeFileSync(f, JSON.stringify(s));`,
       ]);
       expect(r.stdout).toContain('no progress');
       expect(r.stdout).toMatch(/ {2}\d\d:\d\d:\d\d » working on it/);
-    });
-
-    it('a paused PBI counts as progress; what remains behind an open blocker, needs-refinement or interactive ends as blocked', async () => {
-      const gh = setup({
-        issues: {
-          10: pbi(),
-          9: pbi({ blockers: [{ number: 5, state: 'open' }] }),
-          11: pbi({ labels: ['pbi', 'needs-refinement'] }),
-          12: pbi({ labels: ['pbi', 'interactive'] }),
-        },
-        effect: 'hold-first',
-      });
-      const r = await run(gh, ['-Target', '9,10,11,12']);
-      expect(harnessCalls()).toHaveLength(1);
-      expect(r.status).toBe(2);
-      expect(r.stdout).toContain('loop result: blocked');
     });
   });
 
@@ -352,13 +339,26 @@ fs.writeFileSync(f, JSON.stringify(s));`,
     ];
 
     it('logs one line per step with the agent prefix, tool errors, writes every record to the jsonl and owns the herdr display: harness runs without HERDR_ENV, pane tokens with the position per progress line, cleared at the end (#16)', async () => {
-      const gh = setup({ issues: { 401: pbi() }, effect: 'close-first', stream });
-      const r = await run(gh, ['-Target', '401'], {
+      // 401 is paused by the run (needs-decision) and counts as progress; 402 (open blocker), 403 (needs-refinement) and
+      // 404 (interactive) stay behind, so the loop ends blocked
+      const gh = setup({
+        issues: {
+          401: pbi(),
+          402: pbi({ blockers: [{ number: 5, state: 'open' }] }),
+          403: pbi({ labels: ['pbi', 'needs-refinement'] }),
+          404: pbi({ labels: ['pbi', 'interactive'] }),
+        },
+        effect: 'hold-first',
+        stream,
+      });
+      const r = await run(gh, ['-Target', '401,402,403,404'], {
         HERDR_ENV: '1',
         HERDR_PANE_ID: 'p7',
         DELIVER_LOOP_ASSUME_TTY: '1',
       });
-      expect(r.status).toBe(0);
+      expect(harnessCalls()).toHaveLength(1);
+      expect(r.status).toBe(2);
+      expect(r.stdout).toContain('loop result: blocked');
       const lines = read('.agents/deliver-loop.log');
       expect(lines).toMatch(/\d\d:\d\d:\d\d » #401 pr: opened #55/);
       expect(lines).toMatch(/\d\d:\d\d:\d\d Agent Review PBI #401 diff/);
@@ -382,12 +382,12 @@ fs.writeFileSync(f, JSON.stringify(s));`,
         .filter((l) => l.includes('report-metadata'));
       const tokens = '--ttl-ms 3600000';
       expect(calls).toEqual([
-        `pane report-metadata p7 --source deliver --token deliver=#401 --token deliver_step=1/1 starting ${tokens}`,
-        `pane report-metadata p7 --source deliver --token deliver=#401 --token deliver_step=1/1 pr: opened #55 --token deliver_pr=#55 ${tokens}`,
+        `pane report-metadata p7 --source deliver --token deliver=#401 --token deliver_step=1/2 starting ${tokens}`,
+        `pane report-metadata p7 --source deliver --token deliver=#401 --token deliver_step=1/2 pr: opened #55 --token deliver_pr=#55 ${tokens}`,
         // the PR token stays for later steps; the step value is cut at 80 characters
-        `pane report-metadata p7 --source deliver --token deliver=#401 --token deliver_step=1/1 review: ${'x'.repeat(67)}… --token deliver_pr=#55 ${tokens}`,
-        `pane report-metadata p7 --source deliver --token deliver=#401 --token deliver_step=1/1 ci: red --token deliver_pr=#55 ${tokens}`,
-        `pane report-metadata p7 --source deliver --token deliver=#401 --token deliver_step=1/1 merged: squash --token deliver_pr=#55 ${tokens}`,
+        `pane report-metadata p7 --source deliver --token deliver=#401 --token deliver_step=1/2 review: ${'x'.repeat(67)}… --token deliver_pr=#55 ${tokens}`,
+        `pane report-metadata p7 --source deliver --token deliver=#401 --token deliver_step=1/2 ci: red --token deliver_pr=#55 ${tokens}`,
+        `pane report-metadata p7 --source deliver --token deliver=#401 --token deliver_step=1/2 merged: squash --token deliver_pr=#55 ${tokens}`,
         'pane report-metadata p7 --source deliver --clear-token deliver --clear-token deliver_step --clear-token deliver_pr',
       ]);
       expect(calls.join('\n')).not.toContain('display-agent');
@@ -400,12 +400,11 @@ fs.writeFileSync(f, JSON.stringify(s));`,
       expect(ansi).toContain(`${ESC}[31m✗ boom${ESC}[0m`);
       expect(ansi).toContain(`${ESC}[33m» #401 ci: red${ESC}[0m`);
       expect(ansi).toContain(`${ESC}[32m» #401 merged: squash${ESC}[0m`);
-      expect(ansi).toContain(`${ESC}[32mloop result: done`);
       if (process.platform === 'darwin') {
         // osascript stub: attention step and loop result
         const notes = read('notices.txt');
         expect(notes).toContain('#401 PR opened');
-        expect(notes).toContain('loop result: done');
+        expect(notes).toContain('loop result: blocked');
       }
     });
   });
