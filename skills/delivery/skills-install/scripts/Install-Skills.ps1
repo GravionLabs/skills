@@ -152,8 +152,21 @@ if ($Update) {
         $cArgs = @('-NoProfile', '-File', $PSCommandPath, '-DryRun', '-Groups', ($g -join ','), '-Agents', ($Agents -join ','))
         if ($Global) { $cArgs += '-Global' }
         if ($Ref) { $cArgs += @('-Ref', $Ref) }
-        $child = (& pwsh @cArgs 2>$null | Out-String | ConvertFrom-Json)
-        $newMembers = @($child.wouldInstall); $newCmds = @($child.commands)
+        $errFile = [System.IO.Path]::GetTempFileName()
+        try {
+          $childOut = (& pwsh @cArgs 2>$errFile | Out-String)
+          $childExit = $LASTEXITCODE
+          $childErr = (Get-Content -Raw -LiteralPath $errFile -ErrorAction SilentlyContinue)
+        } finally { Remove-Item -LiteralPath $errFile -Force -ErrorAction SilentlyContinue }
+        $child = $null
+        if ($childExit -eq 0) { try { $child = $childOut | ConvertFrom-Json -ErrorAction Stop } catch { $child = $null } }
+        if ($childExit -ne 0 -or $null -eq $child) {
+          $uFailed = $true
+          $detail = if ($childErr -and $childErr.Trim()) { $childErr.Trim() } elseif ($childOut -and $childOut.Trim()) { $childOut.Trim() } else { 'no output' }
+          $notes.Add("new-member check after the update failed (exit $childExit): $detail")
+        } else {
+          $newMembers = @(@($child.wouldInstall) | Where-Object { $null -ne $_ }); $newCmds = @(@($child.commands) | Where-Object { $null -ne $_ })
+        }
       }
     }
   } elseif ($DryRun) { $notes.Add('Dry run: new group members are proposed after the update, with the refreshed group definition.') }
