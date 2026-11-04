@@ -20,7 +20,7 @@ const handler = `(call) => {
     return { rest: { number: parent } };
   }
   if (m) return { rest: env('FAKE_BLOCKERS', '{}')[m[1]] || [] };
-  if (p.includes('/issues?')) return { rest: [env('FAKE_ISSUES', '[]')] };
+  if (p.includes('/issues?')) return { rest: [env('FAKE_ISSUES', '[]'), env('FAKE_ISSUES_PAGE2', '[]')] };
   if (p.includes('/milestones?')) return { rest: [env('FAKE_MILESTONES', '[]')] };
   if (p.includes('/tags?')) return { rest: [env('FAKE_TAGS', '[]').map((name) => ({ name }))] };
   throw new Error('unexpected path ' + p);
@@ -95,6 +95,14 @@ describe('Get-RoadmapState.ps1', () => {
       ['M2 (1.0.0)', 100],
     ]);
     expect(out.latestTag).toBe('v1.0.0');
+  });
+
+  it('collects issues from every page of the paginated response', async () => {
+    const out = await state({
+      FAKE_ISSUES: [issue(1, 'epic')],
+      FAKE_ISSUES_PAGE2: [issue(2, 'pbi'), issue(3, 'bug')],
+    });
+    expect(out.issues.map((i: any) => i.number)).toEqual([1, 2, 3]);
   });
 
   it('prints empty lists and no milestone when the repository has neither', async () => {
