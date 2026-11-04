@@ -88,7 +88,7 @@ describe.skipIf(!posix)('deliver-loop shell function', () => {
         `if [ "$1 $2" = "workspace create" ]; then echo '{"result":{"workspace":{"workspace_id":"w9"},"tab":{"tab_id":"w9:t1"},"root_pane":{"pane_id":"w9:p1"}}}'; fi\n`,
       { mode: 0o755 },
     );
-    const r = runShim(proj, home, ['-Milestone', "it's"], {
+    const r = runShim(proj, home, ['-Milestone', "it's", '-Target', '12,14'], {
       HERDR_ENV: '1',
       PATH: `${bin}${path.delimiter}${process.env.PATH}`,
     });
@@ -99,7 +99,7 @@ describe.skipIf(!posix)('deliver-loop shell function', () => {
     expect(calls[0]).toContain('--label my repo · deliver');
     expect(calls[1]).toBe('tab rename w9:t1 deliver-loop');
     expect(calls[2]).toContain('pane run w9:p1 pwsh -NoProfile -File');
-    expect(calls[2]).toContain("Invoke-DeliverLoop.ps1' '-Milestone' 'it'\\''s'");
+    expect(calls[2]).toContain("Invoke-DeliverLoop.ps1' '-Milestone' 'it'\\''s' '-Target' '12,14'");
   });
 
   // a fake herdr that logs its calls and answers workspace create
@@ -120,17 +120,6 @@ describe.skipIf(!posix)('deliver-loop shell function', () => {
       .readFileSync(log, 'utf8')
       .split('\n')
       .find((l) => l.startsWith('pane run'));
-
-  it('sends -Target 12,14 -Max 1 as one value to the herdr pane (bash/zsh shim)', () => {
-    const home = mk('h7');
-    fakeSkill('h7/.claude/skills', 'x');
-    const bin = mk('bin7');
-    const log = path.join(tmp, 'herdr7.log');
-    fakeHerdr(bin, log);
-    const r = runShim(mk('p7'), home, ['-Target', '12,14', '-Max', '1'], herdrEnv(bin));
-    expect(r.status).toBe(0);
-    expect(paneRun(log)).toContain("Invoke-DeliverLoop.ps1' '-Target' '12,14' '-Max' '1'");
-  });
 
   it('sends -Target 12,14 -Max 1 as one value to the herdr pane (PowerShell shim)', () => {
     const home = mk('h8');
@@ -178,6 +167,73 @@ describe.skipIf(!posix)('deliver-loop shell function', () => {
       PATH: `${bin}${path.delimiter}${process.env.PATH}`,
     });
     expect(r.stdout.trim()).toBe('global-claude|-Max,1');
+  });
+});
+
+describe('deliver-loop runs in the repository root (#227)', () => {
+  // a fake loop script that reports its working directory
+  const cwdSkill = (base: string) => {
+    const dir = mk(base, 'deliver/scripts');
+    fs.writeFileSync(
+      path.join(dir, 'Invoke-DeliverLoop.ps1'),
+      'Write-Output "cwd|$((Get-Location).Path)"\n',
+    );
+    fs.copyFileSync(startScript, path.join(dir, 'Start-LoopWorkspace.ps1'));
+  };
+  const repo = (name: string) => {
+    const root = mk(name);
+    spawnSync('git', ['init', '-q'], { cwd: root });
+    cwdSkill(`${name}/.claude/skills`);
+    return { root, sub: mk(name, 'docs/deep') };
+  };
+  const fakeHerdrLog = (name: string) => {
+    const bin = mk(name);
+    const log = path.join(tmp, `${name}.log`);
+    fs.writeFileSync(
+      path.join(bin, 'herdr'),
+      `#!/bin/sh\necho "$@" >> "${log}"\n` +
+        `if [ "$1 $2" = "workspace create" ]; then echo '{"result":{"workspace":{"workspace_id":"w9"},"tab":{"tab_id":"w9:t1"},"root_pane":{"pane_id":"w9:p1"}}}'; fi\n`,
+      { mode: 0o755 },
+    );
+    return { bin, log };
+  };
+
+  it.skipIf(!posix)(
+    'bash/zsh shim: loop and herdr workspace use the toplevel from a subdirectory',
+    () => {
+      const home = mk('rh1');
+      const { root, sub } = repo('rp1');
+      expect(runShim(sub, home, []).stdout.trim()).toBe(`cwd|${root}`);
+      const { bin, log } = fakeHerdrLog('rbin1');
+      const r = runShim(sub, home, [], {
+        HERDR_ENV: '1',
+        PATH: `${bin}${path.delimiter}${process.env.PATH}`,
+      });
+      expect(r.status).toBe(0);
+      expect(fs.readFileSync(log, 'utf8').split('\n')[0]).toContain(`--cwd ${root} `);
+      // outside a git repository the current directory is kept
+      cwdSkill('rh1/.claude/skills');
+      const plain = mk('rp3/sub');
+      expect(runShim(plain, home, []).stdout.trim()).toBe(`cwd|${plain}`);
+    },
+  );
+
+  it('PowerShell shim: loop and herdr workspace use the toplevel from a subdirectory', () => {
+    const home = mk('rh2');
+    const { root, sub } = repo('rp2');
+    const ps = (env: NodeJS.ProcessEnv) =>
+      spawnSync('pwsh', ['-NoProfile', '-Command', `. '${shimPs1}'; deliver-loop`], {
+        cwd: sub,
+        encoding: 'utf8',
+        env: { HOME: home, PATH: process.env.PATH, ...env },
+      });
+    expect(ps({}).stdout.trim()).toBe(`cwd|${root}`);
+    if (posix) {
+      const { bin, log } = fakeHerdrLog('rbin2');
+      const r = ps({ HERDR_ENV: '1', PATH: `${bin}${path.delimiter}${process.env.PATH}` });
+      expect(r.status).toBe(0);
+      expect(fs.readFileSync(log, 'utf8').split('\n')[0]).toContain(`--cwd ${root} `);
+    }
   });
 });
 

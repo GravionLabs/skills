@@ -16,8 +16,10 @@ function deliver-loop {
   if ($env:HERDR_ENV -eq '1' -and (Get-Command herdr -ErrorAction SilentlyContinue) -and (Test-Path -LiteralPath $start)) {
     # an array argument (-Target 12,14) would reach the native pwsh as separate words: pass it as one comma-joined value
     $nativeArgs = @($args | ForEach-Object { if ($_ -is [array]) { $_ -join ',' } else { "$_" } })
-    & pwsh -NoProfile -File $start -ShimCwd (Get-Location).Path -ShimScript (Join-Path $dir 'scripts/Invoke-DeliverLoop.ps1') @nativeArgs
+    & pwsh -NoProfile -File $start -ShimCwd $root -ShimScript (Join-Path $dir 'scripts/Invoke-DeliverLoop.ps1') @nativeArgs
     if ($LASTEXITCODE -eq 0) { return }
   }
-  & (Join-Path $dir 'scripts/Invoke-DeliverLoop.ps1') @args
+  # the loop runs in the repository root (git toplevel), also from a subdirectory
+  Push-Location -LiteralPath $root
+  try { & (Join-Path $dir 'scripts/Invoke-DeliverLoop.ps1') @args } finally { Pop-Location }
 }
