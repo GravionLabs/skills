@@ -55,7 +55,7 @@ A herdr plugin can filter panes on the `deliver` token of source `deliver`.
 
 ## Agent state
 
-Besides the tokens, `Invoke-DeliverLoop.ps1` reports the pane state (`herdr pane report-agent --source deliver-loop --agent deliver --state working|blocked|idle`, then `release-agent`), so the sidebar does not show `idle` while the loop delivers. Details in `loop.md` "Observability". Start the loop in its own pane: an agent pane would compete for the state.
+Besides the tokens, `Invoke-DeliverLoop.ps1` reports the pane state (`herdr pane report-agent --source deliver-loop --agent deliver --state working|blocked|idle`, then `release-agent`), so the sidebar does not show `idle` while the loop delivers. Details in `loop.md` "Observability". Start the loop in its own pane: in a pane with another agent the loop reports nothing (see below).
 
 ## Log pane toggle
 
@@ -72,3 +72,16 @@ description = "toggle deliver log"
 `type = "shell"` runs detached from the focused pane's cwd with `HERDR_ACTIVE_TAB_ID`, `HERDR_ACTIVE_PANE_ID` and `HERDR_ACTIVE_PANE_CWD` set; these count as in herdr even without `HERDR_ENV`. With a herdr plugin, `type = "plugin_action"` takes its place and the script reads `HERDR_TAB_ID` and `HERDR_PANE_ID` (with `HERDR_ENV=1`).
 
 The allowlist entries (`printenv HERDR_ENV`, `printenv HERDR_PANE_ID`, `herdr pane report-metadata`) are in `references/permissions.md`.
+
+## Verified against a live herdr
+
+Checked 2026-11-04 in a spare workspace (closed afterwards) with the herdr CLI of this machine:
+
+- `herdr workspace create --cwd <dir> --label <l> --no-focus` returns `result.tab.tab_id` and `result.root_pane.pane_id` (also `workspace.workspace_id`); `Start-LoopWorkspace.ps1` reads exactly these. `herdr tab rename <tab> <label>` and `herdr pane run <pane> "<command line>"` work as used.
+- `report-agent` and `release-agent` take the pane id as a positional. `report-agent --source … --agent … --state … <pane>` works, but `release-agent --source … --agent … <pane>` fails with `unknown option: deliver-loop`; `release-agent <pane> --source … --agent …` works. The loop therefore puts the pane id right after the subcommand for both.
+- Another agent in the pane: `report-agent` from a second source replaces the shown agent and state, and `release-agent` of that source does not restore the first one (the pane showed `unknown`). So the two compete. `herdr pane get <pane>` has an `agent` field; the loop reports only when it is empty or `deliver`, otherwise it prints one step line and stays silent.
+- Not verified: a real agent process detected by herdr (a second `report-agent` source stood in for it), and Ctrl+C of a live loop (covered by `finally` and the error-path test).
+
+## Quoting for the pane shell
+
+`Start-LoopWorkspace.ps1` quotes the command line for the shell of the new pane: POSIX single quotes for sh, bash, zsh, dash, ksh and fish; doubled single quotes for pwsh and powershell. The shell is `-PaneShell`, else `DELIVER_LOOP_PANE_SHELL`, else the name of `$SHELL` (Windows: pwsh, elsewhere unset: sh). Any other shell (cmd, nu, …) fails before herdr is called with a message, and the shim then runs the loop in the current terminal.

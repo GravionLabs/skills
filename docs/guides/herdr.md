@@ -25,7 +25,7 @@ Alternatives (compact two-line layout, `deliver` line first, `row_gap = 1`) are 
 ## The loop in herdr
 
 - `deliver-loop` (shim, `Install-LoopShim.ps1`) opens the workspace `<repo> · deliver` (`Start-LoopWorkspace.ps1`) and runs the [loop](deliver.md#a-release-in-fresh-sessions) there in its own pane.
-- The loop reports its own agent state with `report-agent --source deliver-loop` (`working`, `blocked`, `idle`, then `release-agent`).
+- The loop reports its own agent state with `report-agent --source deliver-loop` (`working`, `blocked`, `idle`, then `release-agent`; not in a pane that already runs another agent).
 - The log pane `deliver-log` is opt-in with `-LogPane` (the console is already colored); a herdr key toggles it with `Switch-LogPane.ps1`.
 
 Details: `references/herdr.md` and `references/loop.md` of the `deliver` skill.
