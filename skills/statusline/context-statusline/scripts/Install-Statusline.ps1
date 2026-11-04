@@ -9,7 +9,9 @@
   <root>/.claude/skills/ or <root>/.agents/skills/ deployment, the client gets its own deployment: Claude Code
   <root>/.claude/skills/context-statusline/scripts, Copilot CLI <root>/.agents/skills/context-statusline/scripts.
   Any other location (project checkout, custom path) is used as is. The installer refuses when the target script does not
-  exist, for example when the skill was deployed for the other client only. Paths under $HOME are written as ~/...
+  exist, for example when the skill was deployed for the other client only. On Linux/macOS paths under $HOME are written as ~/...;
+  on Windows the home directory is %USERPROFILE% (never Git Bash's HOME) and paths are written absolute in forward-slash form
+  (C:/Users/<user>/.claude/...), quoted when they contain whitespace; re-running migrates ~/... entries to that form.
   -Client claude (default): sets 'statusLine' and 'subagentStatusLine' in ~/.claude/settings.json to
   node <scripts>/statusline.mjs and node <scripts>/subagent-statusline.mjs.
   -Client copilot: sets 'statusLine' (with padding 1) in <copilot home>/settings.json plus the feature flag STATUS_LINE
@@ -34,6 +36,11 @@ $ErrorActionPreference = 'Stop'
 
 $script:SkillRel = 'skills/context-statusline/scripts'
 
+# Platform decision in one place; GRAVIONLABS_TEST_WINDOWS=1 forces Windows (test seam, undocumented).
+function Test-Windows { [bool]$IsWindows -or $env:GRAVIONLABS_TEST_WINDOWS -eq '1' }
+# Home directory: %USERPROFILE% on Windows (Git Bash's HOME may differ), else $HOME.
+function Get-UserHome { if ((Test-Windows) -and $env:USERPROFILE) { $env:USERPROFILE } else { $HOME } }
+
 function ConvertTo-Slash([string]$p) { ($p -replace '\\', '/').TrimEnd('/') }
 
 # Script directory for a client: the client's own deployment next to this one, else this directory.
@@ -43,11 +50,14 @@ function Get-ScriptDir([string]$clientDir) {
   $here
 }
 
-# Command path: ~/... under $HOME, else absolute; quoted when it contains whitespace (then always absolute).
+# Command path: Windows always absolute (a ~ would expand against Git Bash's HOME); else ~/... under $HOME, else absolute;
+# quoted when it contains whitespace (then always absolute).
 function Get-CommandPath([string]$dir) {
-  $home2 = ConvertTo-Slash $HOME
-  $cmp = if ($IsWindows) { [StringComparison]::OrdinalIgnoreCase } else { [StringComparison]::Ordinal }
+  $dir = ConvertTo-Slash $dir
   if ($dir -match '\s') { return '"' + $dir + '"' }
+  if (Test-Windows) { return $dir }
+  $home2 = ConvertTo-Slash $HOME
+  $cmp = [StringComparison]::Ordinal
   if ($home2 -and $dir.StartsWith("$home2/", $cmp)) { return '~' + $dir.Substring($home2.Length) }
   $dir
 }
@@ -110,10 +120,10 @@ function Set-Hook($root, [string]$hookEvent, [bool]$nested, [string]$cmd, [bool]
 
 function Get-Cfg([string]$name) {
   if ($name -eq 'claude') {
-    @{ Name = 'claude'; Dir = (Join-Path $HOME '.claude'); Scripts = (Get-ScriptDir '.claude'); Padding = $false; HookEvent = 'UserPromptSubmit'; Nested = $true
+    @{ Name = 'claude'; Dir = (Join-Path (Get-UserHome) '.claude'); Scripts = (Get-ScriptDir '.claude'); Padding = $false; HookEvent = 'UserPromptSubmit'; Nested = $true
        Keys = [ordered]@{ statusLine = 'statusline.mjs'; subagentStatusLine = 'subagent-statusline.mjs' } }
   } else {
-    $dir = if ($env:COPILOT_HOME) { $env:COPILOT_HOME } else { Join-Path $HOME '.copilot' }
+    $dir = if ($env:COPILOT_HOME) { $env:COPILOT_HOME } else { Join-Path (Get-UserHome) '.copilot' }
     @{ Name = 'copilot'; Dir = $dir; Scripts = (Get-ScriptDir '.agents'); Padding = $true; HookEvent = 'postToolUse'; Nested = $false; Keys = [ordered]@{ statusLine = 'statusline.mjs' } }
   }
 }
@@ -126,7 +136,7 @@ $settings = Join-Path $clientDir 'settings.json'
 $oldDir = Join-Path $clientDir 'apm-hub/statusline'
 $cmdPath = Get-CommandPath $cfg.Scripts
 $isOurs = { param($node)
-  try { $cmd = $node['command'].GetValue[string](); $cmd -match '(apm-hub/statusline|context-statusline/scripts)/(statusline|subagent-statusline)\.mjs"?\s*$' } catch { $false } }
+  try { $cmd = $node['command'].GetValue[string](); $cmd -match '(apm-hub/statusline|context-statusline/scripts)"?/(statusline|subagent-statusline)\.mjs"?\s*$' } catch { $false } }
 
 if (-not $Uninstall) {
   $needed = if ($NoContextWarning) { $files } else { $files + 'context-warning.sh' }

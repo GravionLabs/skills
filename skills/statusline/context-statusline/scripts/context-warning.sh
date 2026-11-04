@@ -27,6 +27,22 @@ jdecode() { # jdecode <string body>: JD = decoded JSON string (\001 and \002 sta
   x=${x//'\n'/$'\n'}; x=${x//'\t'/$'\t'}; x=${x//'\r'/$'\r'}; x=${x//'\/'/"/"}
   x=${x//$'\002'/'"'}; JD=${x//$'\001'/'\'}
 }
+# Home directory: on Windows (Git Bash/MSYS/Cygwin) from USERPROFILE as /c/... path, since HOME may differ; else $HOME.
+user_home() {
+  case "$(uname -s 2>/dev/null)" in
+    MINGW*|MSYS*|CYGWIN*)
+      if [ -n "${USERPROFILE:-}" ]; then
+        local up="${USERPROFILE//\\//}" drive
+        if [[ "$up" =~ ^([A-Za-z]):(.*)$ ]]; then
+          drive="$(printf '%s' "${BASH_REMATCH[1]}" | tr 'A-Z' 'a-z')"
+          up="/$drive${BASH_REMATCH[2]}"
+        fi
+        printf '%s' "${up%/}"; return 0
+      fi ;;
+  esac
+  printf '%s' "$HOME"
+}
+
 jsonscan() { # jsonscan <json>: sets J_transcript, J_session from the first "key": "string" pairs (keys outside strings)
   local rest between str prev="" have=0
   rest=${1//'\\'/$'\001'}; rest=${rest//'\"'/$'\002'}
@@ -67,7 +83,7 @@ if [ -z "$transcript" ] && [ -z "$session" ] && { [ -n "$J_ctranscript" ] || [ -
   session="$J_csession"
   transcript="$J_ctranscript"
   if [ -z "$transcript" ] && [[ "$session" =~ ^[A-Za-z0-9_-]+$ ]]; then
-    transcript="${COPILOT_HOME:-$HOME/.copilot}/session-state/$session/events.jsonl"
+    transcript="${COPILOT_HOME:-$(user_home)/.copilot}/session-state/$session/events.jsonl"
   fi
 fi
 [ -n "$transcript" ] || { note "no transcript_path in payload"; exit 0; }

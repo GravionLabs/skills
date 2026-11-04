@@ -336,5 +336,59 @@ describe('context-warning hook', () => {
       const evil = JSON.stringify({ sessionId: '../../x', toolName: 'bash' });
       expect(runRaw(evil, lowEnv(home))).toEqual({ code: 0, out: '', err: '' });
     });
+
+    describe('Windows (Git Bash HOME differs from USERPROFILE)', () => {
+      // uname stub on PATH fakes MINGW; the real home layout lives below USERPROFILE, HOME points nowhere
+      const winEnv = (userprofile: string) => {
+        const bin = path.join(dir, 'winbin');
+        fs.mkdirSync(bin, { recursive: true });
+        fs.writeFileSync(path.join(bin, 'uname'), '#!/bin/sh\necho MINGW64_NT-10.0\n', {
+          mode: 0o755,
+        });
+        return {
+          PATH: `${bin}${path.delimiter}${process.env.PATH}`,
+          HOME: '/y/',
+          USERPROFILE: userprofile,
+          COPILOT_HOME: '',
+          CONTEXT_WARN_TOKENS: '25000',
+        };
+      };
+      const profileWithEvents = () => {
+        const profile = path.join(dir, 'profile');
+        fs.mkdirSync(path.join(profile, '.copilot', 'session-state', id), { recursive: true });
+        fs.copyFileSync(
+          eventsFixture,
+          path.join(profile, '.copilot', 'session-state', id, 'events.jsonl'),
+        );
+        return profile;
+      };
+
+      it('finds the Copilot transcript below USERPROFILE, not below HOME', () => {
+        const r = runRaw(post, winEnv(profileWithEvents()));
+        expect(r.code).toBe(0);
+        expect(JSON.parse(r.out).additionalContext).toContain('Context is 28k tokens');
+      });
+
+      it('converts a C:\\ profile to /c/... for the transcript path', () => {
+        const r = runRaw(post, { ...winEnv('C:\\Users\\Test'), CONTEXT_WARN_DEBUG: '1' });
+        expect(r.err).toBe(
+          `context-warning: transcript not readable: /c/Users/Test/.copilot/session-state/${id}/events.jsonl`,
+        );
+      });
+
+      it('keeps using HOME outside Windows, ignoring USERPROFILE', () => {
+        const nohome = path.join(dir, 'nohome');
+        // real uname (Linux): the stub directory is not on PATH
+        const env = {
+          ...winEnv(profileWithEvents()),
+          PATH: process.env.PATH as string,
+          HOME: nohome,
+          CONTEXT_WARN_DEBUG: '1',
+        };
+        expect(runRaw(post, env).err).toContain(
+          `transcript not readable: ${nohome}/.copilot/session-state/${id}`,
+        );
+      });
+    });
   });
 });

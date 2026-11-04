@@ -93,7 +93,9 @@ if ($Ref -and $Ref -notmatch '^[\w][\w./-]*$') {
 }
 
 $notes = [System.Collections.Generic.List[string]]::new()
-$userHome = if ($env:HOME) { $env:HOME } else { $env:USERPROFILE }
+# Windows: %USERPROFILE% (Git Bash's HOME may differ); GRAVIONLABS_TEST_WINDOWS=1 forces it (test seam, undocumented)
+$isWin = [bool]$IsWindows -or $env:GRAVIONLABS_TEST_WINDOWS -eq '1'
+$userHome = if ($isWin -and $env:USERPROFILE) { $env:USERPROFILE } elseif ($env:HOME) { $env:HOME } else { $env:USERPROFILE }
 $projectDirs = '.claude/skills', '.agents/skills', '.opencode/skills', '.github/skills'
 $homeDirs = '.claude/skills', '.agents/skills', '.config/opencode/skills', '.copilot/skills'
 $scopeBase = if ($Global) { $userHome } else { (Get-Location).Path }
