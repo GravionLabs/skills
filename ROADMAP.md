@@ -194,7 +194,7 @@ Herdr and the deliver loop, released as `v1.5.0` on 2026-11-03. The release rout
 <!-- roadmap:begin plan 1.6.0 -->
 ## 1.6.0
 
-Progress: 92 % (23 of 25 issues closed).
+Progress: 92 % (24 of 26 issues closed).
 
 | Order | Issue | Title                                                       | Size | Depends on / decision |
 | ----- | ----- | ----------------------------------------------------------- | ---- | --------------------- |
@@ -209,14 +209,14 @@ Numbered milestones and the roadmap skill. Delivered on `release/next`: the rele
 ## Later
 
 <!-- roadmap:begin later -->
-| Issue | Title                                                                                                  | Why later        |
-| ----- | ------------------------------------------------------------------------------------------------------ | ---------------- |
-| #10   | [PBI] feat(jvm): jvm package for Java and Kotlin with jvm-implementation and jvm-test                  | `needs-decision` |
-| #11   | [PBI] feat(swift): swift package with swift-implementation and swift-test, detection via Package.swift | blocked by #10   |
-| #190  | [Feature] Budget check before large runs via tamias                                                    | no milestone     |
-| #231  | [Bug] fix(statusline): use %USERPROFILE% on Windows instead of ~ for hook and status line paths        | no milestone     |
-| #232  | [PBI] feat(delivery): write review findings in poimen's findings.json format                           | no milestone     |
-| #250  | [PBI] chore: migrate the milestones of this repository to M<n>                                         | no milestone     |
+| Issue | Title                                                                                                  | Why later                         |
+| ----- | ------------------------------------------------------------------------------------------------------ | --------------------------------- |
+| #10   | [PBI] feat(jvm): jvm package for Java and Kotlin with jvm-implementation and jvm-test                  | `needs-decision`                  |
+| #11   | [PBI] feat(swift): swift package with swift-implementation and swift-test, detection via Package.swift | blocked by #10                    |
+| #190  | [Feature] Budget check before large runs via tamias                                                    | no milestone                      |
+| #231  | [Bug] fix(statusline): use %USERPROFILE% on Windows instead of ~ for hook and status line paths        | no milestone                      |
+| #232  | [PBI] feat(delivery): write review findings in poimen's findings.json format                           | blocked by GravionLabs/poimen#246 |
+| #250  | [PBI] chore: migrate the milestones of this repository to M<n>                                         | no milestone                      |
 <!-- roadmap:end -->
 
 ## Risks

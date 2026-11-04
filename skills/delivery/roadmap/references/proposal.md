@@ -5,7 +5,7 @@ Used by `/roadmap` steps Propose, Decide and Set. State comes from `scripts/Get-
 ## Propose
 
 1. Take `issues[]` (Epics, Features, PBIs, Bugs) and `milestones[]`. Candidates are issues without a milestone; an issue already in an open milestone keeps it unless the user asks to move it.
-2. Order by the blocked-by DAG (`blockedBy`): a blocker lands in the same or an earlier milestone than the issues it blocks. A cycle is an open decision.
+2. Order by the blocked-by DAG (`blockedBy`): a blocker lands in the same or an earlier milestone than the issues it blocks. A cycle is an open decision. A blocker in another repository (`owner/repo#n` string) does not take part in the DAG: it never matches a local issue; show it as an external blocker in the Blockers column.
 3. Children follow their parent (`parent`).
 4. Fill by size within each milestone (S small, M medium, L large; weights, not hours). Ask the user for the capacity per release when it is unknown.
 5. Use existing open `M<n>` first in ascending order; propose a new `M<n>` (next free number) only when they are full or the DAG needs a later one.
