@@ -20,7 +20,7 @@ The hard gate is a GitHub ruleset on `release/next` (required checks, no bypass)
 
 ## A release in fresh sessions
 
-See the [guide](guides/deliver.md#a-release-in-fresh-sessions). `pwsh <skill-dir>/scripts/Invoke-DeliverLoop.ps1 -Milestone <name> [-Max <n>] [-Model sonnet]` runs `claude -p "/deliver … --unattended --max 1"` in a fresh process per PBI, so no session grows over a whole release. It reads the progress from GitHub (done, blocked, no progress, max reached), writes a stream log to `.agents/deliver-loop/` and shows the progress in herdr. Details: `references/loop.md` of the `deliver` skill.
+See the [guide](guides/deliver.md#a-release-in-fresh-sessions). `pwsh <skill-dir>/scripts/Invoke-DeliverLoop.ps1 -Milestone <name> [-Max <n>] [-Model sonnet]` runs `claude -p "/deliver … --unattended --max 1"` (or `copilot -p` with `-Harness copilot`, `-Model` a Copilot model name) in a fresh process per PBI, so no session grows over a whole release. The shell shim `deliver-loop` (offered by `skills-install`) starts it; shim and `-Harness copilot` are described in the guide. It reads the progress from GitHub (done, blocked, no progress, max reached), writes a stream log to `.agents/deliver-loop/` and shows the progress in herdr. Details: `references/loop.md` of the `deliver` skill.
 
 ## Review result file
 
