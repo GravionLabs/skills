@@ -3,20 +3,21 @@ import * as path from 'node:path';
 import { describe, expect, it } from 'vitest';
 
 const root = path.resolve(__dirname, '../../..');
-const skillDir = path.join(root, 'skills/obsolete/skills-install');
-const skill = fs.readFileSync(path.join(skillDir, 'SKILL.md'), 'utf8');
 const installer = fs.readFileSync(
-  path.join(root, 'skills/delivery/skill-manage/scripts/Install-Skills.ps1'),
+  path.join(root, 'skills/delivery/skills-manage/scripts/Install-Skills.ps1'),
   'utf8',
 );
 const groups = JSON.parse(
-  fs.readFileSync(path.join(root, 'skills/delivery/skill-manage/scripts/groups.json'), 'utf8'),
+  fs.readFileSync(path.join(root, 'skills/delivery/skills-manage/scripts/groups.json'), 'utf8'),
 ) as Record<string, string[]>;
 
-describe('obsolete skills-install forwarder', () => {
-  it('names skill-manage and its install command', () => {
-    expect(skill).toContain('npx skills add GravionLabs/skills --skill skill-manage');
-    expect(skill).toContain('/skill-manage');
+describe.each(['skills-install', 'skill-manage'])('obsolete %s forwarder', (name) => {
+  const skillDir = path.join(root, 'skills/obsolete', name);
+  const skill = fs.readFileSync(path.join(skillDir, 'SKILL.md'), 'utf8');
+
+  it('names skills-manage and its install command', () => {
+    expect(skill).toContain('npx skills add GravionLabs/skills --skill skills-manage');
+    expect(skill).toContain('/skills-manage');
   });
 
   it('is not auto-invocable', () => {
@@ -30,7 +31,7 @@ describe('obsolete skills-install forwarder', () => {
   });
 
   it('keeps obsolete out of both presets and the valid group names', () => {
-    expect(groups).toHaveProperty('obsolete', ['skills-install']);
+    expect(groups).toHaveProperty('obsolete', ['skill-manage', 'skills-install']);
     expect(installer).toContain(
       "all  = @($groupMap.Keys | Where-Object { $_ -notin @('skill-tooling', 'obsolete') } | Sort-Object)",
     );

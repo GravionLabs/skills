@@ -9,17 +9,17 @@ Requirements: Node.js 22+ (for `npx`), PowerShell 7+ (`pwsh`) for the skill scri
 1. Install the installer skill once per machine:
 
    ```bash
-   npx skills add GravionLabs/skills --skill skill-manage -g -y
+   npx skills add GravionLabs/skills --skill skills-manage -g -y
    ```
 
 2. In your agent, let it detect the stack and propose the groups (dry run first, it asks before installing):
 
    ```text
-   /skill-manage              # this project: detects ts, py, dotnet, rust, go, angular
-   /skill-manage core -g      # user-wide: shared, github, delivery, statusline
+   /skills-manage              # this project: detects ts, py, dotnet, rust, go, angular
+   /skills-manage core -g      # user-wide: shared, github, delivery, statusline
    ```
 
-   Without the agent: `pwsh ~/.claude/skills/skill-manage/scripts/Install-Skills.ps1 -DryRun`.
+   Without the agent: `pwsh ~/.claude/skills/skills-manage/scripts/Install-Skills.ps1 -DryRun`.
 
 3. Or install single skills directly:
 
@@ -29,7 +29,7 @@ Requirements: Node.js 22+ (for `npx`), PowerShell 7+ (`pwsh`) for the skill scri
    npx skills add GravionLabs/skills#v1.0.0 --skill ts-implementation          # pinned to a release
    ```
 
-Updates: `/skill-manage update` (add `-g` for the global install), or directly `npx skills check` (exit 1 when one is available) and `npx skills update`. The skills CLI sends anonymous telemetry; `DISABLE_TELEMETRY=1` turns it off.
+Updates: `/skills-manage update` (add `-g` for the global install), or directly `npx skills check` (exit 1 when one is available) and `npx skills update`. The skills CLI sends anonymous telemetry; `DISABLE_TELEMETRY=1` turns it off.
 
 ## Where things land
 
@@ -39,7 +39,7 @@ Updates: `/skill-manage update` (add `-g` for the global install), or directly `
 | OpenCode       | `.agents/skills/<name>/` | `~/.config/opencode/skills/` |
 | GitHub Copilot | `.agents/skills/<name>/` | `~/.copilot/skills/`         |
 
-Commit `skills-lock.json`, `.agents/skills/` and `.claude/skills/` so a fresh clone has the skills. On Windows `skill-manage` copies instead of linking (symlinks need Developer Mode).
+Commit `skills-lock.json`, `.agents/skills/` and `.claude/skills/` so a fresh clone has the skills. On Windows `skills-manage` copies instead of linking (symlinks need Developer Mode).
 
 ## First prompts
 

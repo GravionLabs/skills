@@ -8,11 +8,11 @@
 | `.agents/skills/`, `.claude/skills/` | commit (instant context on clone). `.agents/skills/` holds the copies for OpenCode and Copilot; `.claude/skills/` links to them (copies on Windows)                                                                                                                                                                             |
 | `.agents/config.json`                | commit (project config, see [project config](https://github.com/GravionLabs/skills/blob/main/docs/usage/project-config.md)). A `.gitignore` line `.agents/*` without exceptions hides it and the installed skills: add `!.agents/skills/`, `!.agents/config.json` and `!.agents/lessons/` below it; the installer prints a note |
 
-Updates: `/skill-manage update [-g]`, or `npx skills check` (exit 1 when an update exists, usable in CI), `npx skills update` (all) or `npx skills update <name>`.
+Updates: `/skills-manage update [-g]`, or `npx skills check` (exit 1 when an update exists, usable in CI), `npx skills update` (all) or `npx skills update <name>`.
 
 ## Renamed skills
 
-`npx skills update` cannot follow a rename: the old skill stays in `skills-lock.json` and on disk, and `/skill-manage` skips a skill that is already present, so the new name is added next to the old copy and both trigger. Replace the old skill when `npx skills check` or the release notes name a rename.
+`npx skills update` cannot follow a rename: the old skill stays in `skills-lock.json` and on disk, and `/skills-manage` skips a skill that is already present, so the new name is added next to the old copy and both trigger. Replace the old skill when `npx skills check` or the release notes name a rename.
 
 | Old name               | New name     | Since  |
 | :--------------------- | :----------- | :----- |
@@ -48,10 +48,10 @@ In herdr (`HERDR_ENV=1`) it starts the loop in its own workspace `<repo> · deli
 
 ## Coming from apm-hub
 
-GravionLabs/skills replaces GravionLabs/apm-hub (archived; its last release `v3.3.x` stays installable with apm). The skills keep their names; `apm-install` is now `skill-manage`.
+GravionLabs/skills replaces GravionLabs/apm-hub (archived; its last release `v3.3.x` stays installable with apm). The skills keep their names; `apm-install` is now `skills-manage`.
 
 1. Remove the apm-hub packages: delete the `GravionLabs/apm-hub/packages/...` entries from `apm.yml` and run `apm install` (project) or `apm uninstall -g GravionLabs/apm-hub/packages/<pkg>` (global). apm deletes the files it recorded in `apm.lock.yaml`.
-2. Run `/skill-manage` (or `pwsh scripts/Install-Skills.ps1 -DryRun`) and confirm.
+2. Run `/skills-manage` (or `pwsh scripts/Install-Skills.ps1 -DryRun`) and confirm.
 3. When `apm.yml` lists nothing else, delete `apm.yml`, `apm.lock.yaml` and `apm_modules/`.
 4. `.agents/config.json` stays as it is; its schema moved to `https://raw.githubusercontent.com/GravionLabs/skills/main/skills/shared/implementation/schema/config.schema.json`.
 5. `[Task]` issues of apm-hub plans stay readable; planning creates no Task level any more (a PBI that fits one session goes to `planner refine <nr>`, a bigger one becomes sibling PBIs), and commits carry `Refs #<pbi>`.

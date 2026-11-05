@@ -3,7 +3,7 @@ import * as fs from 'node:fs';
 import * as path from 'node:path';
 
 const doc = fs.readFileSync(
-  path.resolve(__dirname, '../../../skills/delivery/skill-manage/references/after-install.md'),
+  path.resolve(__dirname, '../../../skills/delivery/skills-manage/references/after-install.md'),
   'utf8',
 );
 
@@ -15,7 +15,7 @@ function section(heading: string): string | undefined {
   return next < 0 ? rest : rest.slice(0, next);
 }
 
-describe('skill-manage after-install: global copy shadows the project install', () => {
+describe('skills-manage after-install: global copy shadows the project install', () => {
   const body = section('Global and project copies');
 
   it('has the section', () => {

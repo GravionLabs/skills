@@ -1,10 +1,10 @@
-# /skill-manage
+# /skills-manage
 
 ## Usage
 
 ```
-/skill-manage [dry-run] [<group>...] [-g]
-/skill-manage update [dry-run] [<group>...] [-g]
+/skills-manage [dry-run] [<group>...] [-g]
+/skills-manage update [dry-run] [<group>...] [-g]
 ```
 
 Detects the stack of the project (or uses the named groups), shows a dry run, asks for confirmation and installs the skills with `npx skills add GravionLabs/skills --skill …`.
@@ -21,12 +21,12 @@ Detects the stack of the project (or uses the named groups), shows a dry run, as
 
 ## Examples
 
-- `/skill-manage`: detect the stack and propose groups
-- `/skill-manage ts py`: install the `ts` and `py` groups
-- `/skill-manage dry-run ng`: show what `ng` would install, including `angular/skills`
-- `/skill-manage core -g`: install the core preset user-wide
-- `/skill-manage update -g`: update the global skills, then propose new group members
-- `/skill-manage all`: every group except `skill-tooling` and `obsolete`
+- `/skills-manage`: detect the stack and propose groups
+- `/skills-manage ts py`: install the `ts` and `py` groups
+- `/skills-manage dry-run ng`: show what `ng` would install, including `angular/skills`
+- `/skills-manage core -g`: install the core preset user-wide
+- `/skills-manage update -g`: update the global skills, then propose new group members
+- `/skills-manage all`: every group except `skill-tooling` and `obsolete`
 
 ## Config
 

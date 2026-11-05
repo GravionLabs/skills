@@ -146,7 +146,7 @@ if ($Update) {
     & npx @updateArgs 2>&1 | ForEach-Object { [Console]::Error.WriteLine("$_") }
     if ($LASTEXITCODE -ne 0) { $uFailed = $true; $notes.Add("npx skills update failed (exit $LASTEXITCODE)") } else { $uResult.updated = $true }
     if (-not $uFailed) {
-      # new process: the updated skill-manage ships the refreshed groups.json
+      # new process: the updated skills-manage ships the refreshed groups.json
       $g = if ($Groups) { $Groups } else { @($groupMap.Keys | Where-Object { $_ -notin @('skill-tooling', 'obsolete') } | Where-Object { $gn = $_; @($groupMap[$gn] | Where-Object { Test-Installed $_ $scopeBase $scopeDirs }).Count -gt 0 } | Sort-Object) }
       if ($g.Count -gt 0) {
         $cArgs = @('-NoProfile', '-File', $PSCommandPath, '-DryRun', '-Groups', ($g -join ','), '-Agents', ($Agents -join ','))
