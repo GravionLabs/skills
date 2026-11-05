@@ -2,7 +2,7 @@
 
 The `context-statusline` skill of the `statusline` package (Claude Code; the status line also on GitHub Copilot CLI) shows how full the context is, in the status line
 of the main session and per subagent in the agent panel. It keeps the [work an issue by hand](../guides/work-an-issue-by-hand.md) honest: you see the
-context grow before the 150k warning fires.
+context grow before the warning fires.
 
 ```text
 jk@laptop:/repo Opus 4 ctx:42% (84k/200k) (feat/354-statusline) 5h:12% 7d:30%     # statusLine
@@ -25,12 +25,12 @@ Or run `/context-statusline` (`/context-statusline help` prints the usage). The 
 refreshes the status line and no copy is made. The directory is derived from where the installer runs (a project-scoped
 deployment gives that project's path); it refuses when the script is not there. Other keys stay untouched, a
 `settings.json.bak-<timestamp>` is written first, and a second run changes nothing. Entries of older versions (copies under
-`~/.claude/apm-hub/statusline/`) are migrated and the copies removed. A `statusLine` you set yourself is replaced
+`~/.claude/apm-hub/statusline/`) are migrated and the copies removed. On Windows the home directory is `%USERPROFILE%`, never Git Bash's `HOME` (which can point elsewhere, e.g. `/y/`): the commands carry the absolute path in forward-slash form (`C:/Users/<user>/.claude/...`, quoted when it contains whitespace) instead of `~/...`, and a re-run migrates `~/...` entries the installer wrote earlier; `-Uninstall` recognizes both forms. A `statusLine` you set yourself is replaced
 only with `-Force`; `-Uninstall` removes only the entries this installer wrote and old copies, never the skill files.
 
 ### Installer details
 
-- No copy: `statusLine` and `subagentStatusLine` become `{"type":"command","command":"node <scripts>/<file>.mjs"}` with `<scripts>` the skill's own `scripts/` directory (written as `~/...` under `$HOME`).
+- No copy: `statusLine` and `subagentStatusLine` become `{"type":"command","command":"node <scripts>/<file>.mjs"}` with `<scripts>` the skill's own `scripts/` directory (written as `~/...` under `$HOME` on Linux/macOS, as the absolute `%USERPROFILE%` path on Windows).
 - `<scripts>` is derived from where the installer runs: in a `~/.claude/skills/` or `~/.agents/skills/` deployment each client gets its own copy (Claude Code `~/.claude/skills/context-statusline/scripts`, Copilot CLI `~/.agents/skills/context-statusline/scripts`); anywhere else (a project checkout) the directory it runs from. It refuses when that script is missing (skill deployed for the other client only).
 - Every other settings key is kept, `settings.json.bak-<timestamp>` is written before a change, indent is 2 spaces.
 - Idempotent; entries of older versions (`apm-hub/statusline/` copies) are migrated and their copies removed; a foreign entry is refused without `-Force`.
@@ -41,18 +41,27 @@ only with `-Force`; `-Uninstall` removes only the entries this installer wrote a
 `npx skills` installs no hooks, so the installer registers `scripts/context-warning.sh` of the skill (no copy) unless you pass `-NoContextWarning`:
 
 - Claude Code: `hooks.UserPromptSubmit` in `~/.claude/settings.json`, `{"hooks":[{"type":"command","command":"bash <scripts>/context-warning.sh","timeout":5}]}`.
-- Copilot CLI (`-Client copilot|all`): `hooks.postToolUse` in `<copilot home>/settings.json`, `{"type":"command","bash":"bash <scripts>/context-warning.sh","timeoutSec":5}`. Verified live against Copilot CLI 1.0.105: `hooks` in the user `settings.json` are read (same schema as `.github/hooks/*.json`, documented in `copilot help config`), the payload carries `sessionId` but no `transcriptPath`, so the hook reads `${COPILOT_HOME:-~/.copilot}/session-state/<sessionId>/events.jsonl`.
+- Copilot CLI (`-Client copilot|all`): `hooks.postToolUse` in `<copilot home>/settings.json`, `{"type":"command","bash":"bash <scripts>/context-warning.sh","timeoutSec":5}`. Verified live against Copilot CLI 1.0.105: `hooks` in the user `settings.json` are read (same schema as `.github/hooks/*.json`, documented in `copilot help config`), the payload carries `sessionId` but no `transcriptPath`, so the hook reads `${COPILOT_HOME:-~/.copilot}/session-state/<sessionId>/events.jsonl` (on Windows `~` is `USERPROFILE` converted to `/c/...`, not Git Bash's `HOME`).
 - Idempotent, foreign hooks are kept, the same backup and `-WhatIf` rules apply; `-Uninstall` removes only our hook entry (and an emptied `hooks` key).
 
 The context size is `input_tokens + cache_read_input_tokens + cache_creation_input_tokens` of the last usage line in the last 2 MB of the transcript (Copilot: the last `session.usage_record`, `inputTokens`). At or above the threshold the hook prints `systemMessage` (the user sees it in Claude Code) and `additionalContext` (the model sees it; on Copilot only the top-level `additionalContext` reaches the model, the nested `hookSpecificOutput` of Claude Code is ignored there; the hook prints both). On Copilot the `systemMessage` is not visible in `-p` mode and unverified interactively, so the user hint there is not guaranteed; the model hint is: finish the step, write a short hand-off, then `/clear` (or `/compact`).
 
 | Variable              | Default  | Meaning                                                               |
 | :-------------------- | :------- | :-------------------------------------------------------------------- |
-| `CONTEXT_WARN_TOKENS` | `150000` | Context size from which the hook warns                                |
+| `CONTEXT_WARN_TOKENS` | derived  | Context size from which the hook warns; default below                 |
 | `CONTEXT_WARN_STEP`   | `100000` | Growth before the next warning; the state resets below the threshold  |
 | `CONTEXT_WARN_DEBUG`  | unset    | `1` prints a note on stderr when payload or transcript cannot be read |
 
-Invalid values (non-numeric, empty, more than 9 digits) fall back to the defaults. State lives in `$TMPDIR/<host>-context-warning-<session>`. jq is optional (a bash scanner parses the payload without it); every path exits 0 and nothing touches the network.
+Default of `CONTEXT_WARN_TOKENS`: with a known window size `min(50 %, 250k)` of it (the yellow `ctx` colour of the status line: 200k window 100k, 272k window 136k, 1M window 250k), else `150000`. An explicit valid value always wins. The message ("limit <n>k") names the threshold actually used.
+
+Where the hook gets the window size (checked against the scripts and the recorded fixtures, 2026-11-05):
+
+- Copilot CLI: `maxPromptTokens` of the `session.usage_record` in `events.jsonl` (verified in `copilot-events.jsonl`; the `postToolUse` payload itself carries no size).
+- Claude Code: the `UserPromptSubmit` payload carries `session_id` and `transcript_path`; a window size field there is unverified and not read. The hook reads the `model` of the last usage line of the transcript and takes 1M when the id ends in `[1m]` (unverified assumption about the transcript content). Otherwise the size is unknown and `150000` stays; set `CONTEXT_WARN_TOKENS` for a 1M model without that suffix.
+
+The variables are read by the script, not by a client: they work for every host as long as they are in the hook's process environment. Claude Code: `"env": {"CONTEXT_WARN_TOKENS": "400000"}` in `settings.json` (verified). Copilot CLI: no documented way verified here; export them in the shell profile that starts `copilot`.
+
+Invalid values (non-numeric, empty, more than 9 digits) fall back to the defaults (for the threshold: the derived default). State lives in `$TMPDIR/<host>-context-warning-<session>`. jq is optional (a bash scanner parses the payload without it); every path exits 0 and nothing touches the network.
 
 ## GitHub Copilot CLI
 

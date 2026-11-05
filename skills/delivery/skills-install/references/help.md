@@ -4,6 +4,7 @@
 
 ```
 /skills-install [dry-run] [<group>...] [-g]
+/skills-install update [dry-run] [<group>...] [-g]
 ```
 
 Detects the stack of the project (or uses the named groups), shows a dry run, asks for confirmation and installs the skills with `npx skills add GravionLabs/skills --skill …`.
@@ -16,7 +17,7 @@ Detects the stack of the project (or uses the named groups), shows a dry run, as
 - `all`: preset with every group except `skill-tooling`
 - `-g`: install user-wide instead of into the project (`-Global`)
 - Pinned external packs: `ng` adds `angular/skills` (`angular-developer`), `dotnet` adds `dotnet/skills` (`csharp-scripts`, `dotnet-pinvoke`, `nuget-trusted-publishing`), each at a fixed commit
-- Updates: `npx skills update` (all) or `npx skills update <name>`; `npx skills check` lists available updates
+- `update`: `npx skills check` (shown), after confirmation `npx skills update`, then skills that are new in the installed groups are proposed (`-Update`); `-g` for the global scope
 
 ## Examples
 
@@ -24,6 +25,7 @@ Detects the stack of the project (or uses the named groups), shows a dry run, as
 - `/skills-install ts py`: install the `ts` and `py` groups
 - `/skills-install dry-run ng`: show what `ng` would install, including `angular/skills`
 - `/skills-install core -g`: install the core preset user-wide
+- `/skills-install update -g`: update the global skills, then propose new group members
 - `/skills-install all`: every group except `skill-tooling`
 
 ## Config
