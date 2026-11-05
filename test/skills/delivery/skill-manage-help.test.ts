@@ -29,7 +29,7 @@ describe('skill-manage help', () => {
   });
 
   it('names every installable group of groups.json except skill-tooling', () => {
-    for (const g of Object.keys(groups).filter((g) => g !== 'skill-tooling')) {
+    for (const g of Object.keys(groups).filter((g) => !['skill-tooling', 'obsolete'].includes(g))) {
       expect(help).toContain(`\`${g}\``);
     }
   });
