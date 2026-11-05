@@ -5,10 +5,24 @@ Versioning follows [Semantic Versioning](https://semver.org/).
 
 ---
 
+## [2.1.0] — 2026-11-05
+
+### Bug Fixes
+- **statusline**: Use %USERPROFILE% on Windows instead of ~ for hook and status line paths (#231) (#282)
+- Skills-install cannot update installed skills or pick up new group members (#278) (#284)
+- **skills-install**: -Update skips the update when npx skills check exits 1 (#285) (#287)
+- **skills-install**: -Update reports a failing newMembers child process (#286) (#288)
+
+
+### Features
+- **statusline**: Context warning threshold follows the context window size (#289) (#294)
+
+
 ## [2.0.1] — 2026-11-04
 
 ### Documentation
 - **skills-install**: After-install.md names the ng-ag-grid rename (#279) (#280)
+- Update CHANGELOG.md for v2.0.1 [skip ci]
 
 
 ## [2.0.0] — 2026-11-04
