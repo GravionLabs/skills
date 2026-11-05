@@ -87,7 +87,7 @@
     },
     {
       "name": "ng",
-      "description": "Angular 21+: implementation conventions and review rules, Vitest/TestBed testing, project scaffolding, NgRx Signal Store, AG Grid. skills-install adds angular/skills (angular-developer).",
+      "description": "Angular 21+: implementation conventions and review rules, Vitest/TestBed testing, project scaffolding, NgRx Signal Store, AG Grid. skills-manage adds angular/skills (angular-developer).",
       "source": "./",
       "strict": false,
       "skills": [
@@ -99,7 +99,7 @@
     },
     {
       "name": "dotnet",
-      "description": "C#/.NET: implementation conventions and review rules, NUnit/NSubstitute/Shouldly testing, solution scaffolding with Central Package Management, MCP server generator. skills-install adds the dotnet plugin of dotnet/skills.",
+      "description": "C#/.NET: implementation conventions and review rules, NUnit/NSubstitute/Shouldly testing, solution scaffolding with Central Package Management, MCP server generator. skills-manage adds the dotnet plugin of dotnet/skills.",
       "source": "./",
       "strict": false,
       "skills": [
@@ -139,16 +139,6 @@
         "./skills/skill-tooling/skill-audit",
         "./skills/skill-tooling/skill-slim",
         "./skills/skill-tooling/skill-write"
-      ]
-    },
-    {
-      "name": "obsolete",
-      "description": "Superseded skills, kept for one major version: skills-install and skill-manage forward to skills-manage. In no preset; removed in the next major release.",
-      "source": "./",
-      "strict": false,
-      "skills": [
-        "./skills/obsolete/skill-manage",
-        "./skills/obsolete/skills-install"
       ]
     }
   ]

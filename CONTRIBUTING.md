@@ -77,11 +77,11 @@ Renamed when moving from GravionLabs/apm-hub:
 
 Renamed since:
 
-| Old name               | New name        | Note                                                                                                                       |
-| :--------------------- | :-------------- | :------------------------------------------------------------------------------------------------------------------------- |
-| `ng-ag-grid-developer` | `ng-ag-grid`    | same skill; `npx skills remove ng-ag-grid-developer`, then `add` `ng-ag-grid`                                              |
-| `skills-install`       | `skills-manage` | `skills-install` stays as an obsolete forwarder until the next major release; then `npx skills remove skills-install`      |
-| `skill-manage`         | `skills-manage` | `skill-manage` (v2.2.0) stays as an obsolete forwarder until the next major release; then `npx skills remove skill-manage` |
+| Old name               | New name        | Note                                                                          |
+| :--------------------- | :-------------- | :---------------------------------------------------------------------------- |
+| `ng-ag-grid-developer` | `ng-ag-grid`    | same skill; `npx skills remove ng-ag-grid-developer`, then `add` `ng-ag-grid` |
+| `skills-install`       | `skills-manage` | removed in v3.0.0; `npx skills remove skills-install`                         |
+| `skill-manage`         | `skills-manage` | removed in v3.0.0; `npx skills remove skill-manage`                           |
 
 ## Issues
 

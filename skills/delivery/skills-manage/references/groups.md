@@ -17,8 +17,8 @@ A group is a plugin in `.claude-plugin/marketplace.json` of GravionLabs/skills; 
 ## Presets
 
 - `core`: `shared`, `github`, `delivery`, `statusline`, no stack skills. Use `core -g` once per machine and the stack group per project.
-- `all`: every group except `skill-tooling` and `obsolete`. For machines that mix stacks.
-- `skill-tooling` (skill authoring and audit) is for contributors of GravionLabs/skills and never part of `all`; `obsolete` (superseded skills, kept for one major version) is in no preset; install it by name with `npx skills add GravionLabs/skills --skill skill-write ...`.
+- `all`: every group except `skill-tooling`. For machines that mix stacks.
+- `skill-tooling` (skill authoring and audit) is for contributors of GravionLabs/skills and never part of `all`; install it by name with `npx skills add GravionLabs/skills --skill skill-write ...`.
 
 Groups only exist at install time: `npx skills` records single skills in `skills-lock.json` and updates them one by one (`npx skills update`, `npx skills check`).
 

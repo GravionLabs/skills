@@ -32,10 +32,9 @@ A group is a folder `skills/<group>/` and a plugin in [`.claude-plugin/marketpla
 | `go`            | `go-implementation`, `go-test`                                                                                                                                                                                                                                       |
 | `ng`            | `ng-implementation`, `ng-test`, `ng-create-project`, `ng-ag-grid`; `skills-manage` adds `angular/skills` (`angular-developer`)                                                                                                                                       |
 | `statusline`    | `context-statusline`: status line, subagent line, warning hook                                                                                                                                                                                                       |
-| `obsolete`      | `skills-install`, `skill-manage` (forward to `skills-manage`; in no preset; removed in the next major release)                                                                                                                                                       |
 | `skill-tooling` | `skill-write`, `skill-audit`, `skill-slim` (contributor tooling)                                                                                                                                                                                                     |
 
-Presets of `skills-manage`: `core` (`shared`, `github`, `delivery`, `statusline`) and `all` (every group except `skill-tooling` and `obsolete`).
+Presets of `skills-manage`: `core` (`shared`, `github`, `delivery`, `statusline`) and `all` (every group except `skill-tooling`).
 
 📄 **[Skills](docs/concepts/skills.md)** · 📄 **[Skill list](docs/skill-list.md)** (generated) · 📄 **[Work an issue by hand](docs/guides/work-an-issue-by-hand.md)** · 📄 **[Delivery](docs/delivery.md)** · 📄 **[Project config](docs/usage/project-config.md)** · 📄 **[External frameworks](docs/frameworks.md)** · 📄 **[AGENTS.md](AGENTS.md)** for layout and conventions
 
