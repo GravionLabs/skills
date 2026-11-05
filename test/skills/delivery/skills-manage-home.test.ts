@@ -6,7 +6,7 @@ import * as path from 'path';
 const hasPwsh = spawnSync('pwsh', ['-NoProfile', '-Command', '1']).status === 0;
 const SCRIPT = path.resolve(
   __dirname,
-  '../../../skills/delivery/skill-manage/scripts/Install-Skills.ps1',
+  '../../../skills/delivery/skills-manage/scripts/Install-Skills.ps1',
 );
 
 // Windows setup on Linux CI: Git Bash's HOME (/y/) differs from the profile (USERPROFILE). The seam is

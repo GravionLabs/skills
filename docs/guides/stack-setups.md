@@ -5,7 +5,7 @@ Set up a repository for a stack, then verify a change. Each scenario starts from
 ## Set up a .NET repository
 
 ```text
-/skill-manage dotnet
+/skills-manage dotnet
 ```
 
 or without the installer: `npx skills add GravionLabs/skills --skill dotnet-implementation --skill dotnet-test --skill dotnet-create-solution --skill implementation --skill detect-techstack --skill code-review`.
@@ -39,8 +39,8 @@ The same pattern works with `ts`, `py` and `ng`: `<lang>-create-project` or `ng-
 ## Set up tooling in a TypeScript or Angular project
 
 ```text
-/skill-manage ts
-/skill-manage ng   # Angular only; brings angular/skills (angular-developer)
+/skills-manage ts
+/skills-manage ng   # Angular only; brings angular/skills (angular-developer)
 ```
 
 | Goal                                   | Prompt                                                 | Skill                                              |

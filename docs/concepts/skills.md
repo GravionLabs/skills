@@ -69,7 +69,7 @@ Language skills, shared skills, issue skills and the `planner` and `deliver` wor
 
 ## Slash commands
 
-A skill with `disable-model-invocation: true` is started by name only (`/deliver`, `/skill-manage`); the behaviour lives in the skill, so it works the same on every platform.
+A skill with `disable-model-invocation: true` is started by name only (`/deliver`, `/skills-manage`); the behaviour lives in the skill, so it works the same on every platform.
 
 ## Related
 

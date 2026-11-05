@@ -7,11 +7,11 @@ Everything here is interactive: you start a Claude Code, Copilot CLI or OpenCode
 ## Install once
 
 ```text
-/skill-manage core -g    # once per machine: shared, github, delivery, statusline
-/skill-manage            # per project: detects the stack
+/skills-manage core -g    # once per machine: shared, github, delivery, statusline
+/skills-manage            # per project: detects the stack
 ```
 
-`/skill-manage help` prints the usage (groups, `dry-run`, `-g`, presets).
+`/skills-manage help` prints the usage (groups, `dry-run`, `-g`, presets).
 
 ## One issue per session
 
