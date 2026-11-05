@@ -6,10 +6,10 @@ import * as path from 'node:path';
 import { PwshWorker } from '../../helpers/pwsh-worker';
 
 const delivery = path.resolve(__dirname, '../../../skills/delivery');
-const shimSh = path.join(delivery, 'skills-install/templates/deliver-loop.sh');
-const installScript = path.join(delivery, 'skills-install/scripts/Install-LoopShim.ps1');
+const shimSh = path.join(delivery, 'skill-manage/templates/deliver-loop.sh');
+const installScript = path.join(delivery, 'skill-manage/scripts/Install-LoopShim.ps1');
 const startScript = path.join(delivery, 'deliver/scripts/Start-LoopWorkspace.ps1');
-const shimPs1 = path.join(delivery, 'skills-install/templates/deliver-loop.ps1');
+const shimPs1 = path.join(delivery, 'skill-manage/templates/deliver-loop.ps1');
 const posix = process.platform !== 'win32';
 
 let tmp: string;

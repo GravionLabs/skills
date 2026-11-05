@@ -26,7 +26,7 @@ Test behavior through the public interface, never internals; expected values com
 
 ## Language dispatch
 
-Run `detect-techstack`, then load each `<lang>-implementation` and `<lang>-test` skill from the report. A listed skill that is not installed: say "run `/skills-install <stack>` in this project" once and continue with these rules.
+Run `detect-techstack`, then load each `<lang>-implementation` and `<lang>-test` skill from the report. A listed skill that is not installed: say "run `/skill-manage <stack>` in this project" once and continue with these rules.
 
 ## Lessons
 

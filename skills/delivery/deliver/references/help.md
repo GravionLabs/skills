@@ -31,7 +31,7 @@ pwsh scripts/Invoke-DeliverLoop.ps1 -Milestone M4 -Harness copilot -Model gpt-5
 - `-Milestone <name>`: as `--milestone` (`M<n>`, before and after the rename)
 - `-Max <n>`: stop after `n` iterations
 - `-Model <name>`: model of the orchestrating session (default `sonnet`)
-- Shell command `deliver-loop` (offered by `skills-install`) runs the installed script from any directory of the repository, always in the git toplevel (so logs and state live in the repository root; outside a git repository it keeps the current directory), with the same flags, e.g. `deliver-loop -Milestone M4 -Max 5`. In herdr it opens the workspace `<repo> · deliver` (tab `deliver-loop`).
+- Shell command `deliver-loop` (offered by `skill-manage`) runs the installed script from any directory of the repository, always in the git toplevel (so logs and state live in the repository root; outside a git repository it keeps the current directory), with the same flags, e.g. `deliver-loop -Milestone M4 -Max 5`. In herdr it opens the workspace `<repo> · deliver` (tab `deliver-loop`).
 - Also `-LogPane` (opens the herdr log pane; off by default, `-NoPane` is a deprecated no-op) and `-NoColor` (no `.ansi.log`, plain stdout). Stdout is colored on a terminal. Exit 0 done or max reached, 1 no progress, 2 blocked, 64 bad arguments.
 
 ## Examples
