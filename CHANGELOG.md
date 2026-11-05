@@ -5,10 +5,18 @@ Versioning follows [Semantic Versioning](https://semver.org/).
 
 ---
 
+## [3.0.0] — 2026-11-05
+
+### Refactoring
+- **delivery**: Rename skill-manage to skills-manage (#299) (#300)
+- **skills**: Remove the obsolete group (#302) (#303)
+
+
 ## [2.2.0] — 2026-11-05
 
 ### Documentation
 - README, AGENTS and docs name skill-manage (#293) (#298)
+- Update CHANGELOG.md for v2.2.0 [skip ci]
 
 
 ### Features
