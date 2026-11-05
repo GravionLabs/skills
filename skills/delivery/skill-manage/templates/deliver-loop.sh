@@ -5,7 +5,7 @@ deliver-loop() {
     if [ -f "$d/scripts/Invoke-DeliverLoop.ps1" ]; then dir=$d; break; fi
   done
   if [ -z "$dir" ]; then
-    echo "deliver-loop: no installed deliver skill found (run /skills-install delivery)." >&2
+    echo "deliver-loop: no installed deliver skill found (run /skill-manage delivery)." >&2
     return 1
   fi
   if [ "${HERDR_ENV:-}" = 1 ] && command -v herdr >/dev/null 2>&1 && [ -f "$dir/scripts/Start-LoopWorkspace.ps1" ]; then

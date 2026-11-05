@@ -3,12 +3,12 @@ import path from 'node:path';
 import { describe, expect, it } from 'vitest';
 
 const doc = fs.readFileSync(
-  path.resolve(__dirname, '../../../skills/delivery/skills-install/references/after-install.md'),
+  path.resolve(__dirname, '../../../skills/delivery/skill-manage/references/after-install.md'),
   'utf8',
 );
 const section = doc.split(/^## /m).find((s) => s.startsWith('Renamed skills')) ?? '';
 
-describe('skills-install after-install: renamed skills', () => {
+describe('skill-manage after-install: renamed skills', () => {
   it('has a Renamed skills section', () => {
     expect(section).not.toBe('');
   });

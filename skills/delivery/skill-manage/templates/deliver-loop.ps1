@@ -8,7 +8,7 @@ function deliver-loop {
     if (Test-Path -LiteralPath (Join-Path $d 'scripts/Invoke-DeliverLoop.ps1') -PathType Leaf) { $dir = $d; break }
   }
   if (-not $dir) {
-    [Console]::Error.WriteLine('deliver-loop: no installed deliver skill found (run /skills-install delivery).')
+    [Console]::Error.WriteLine('deliver-loop: no installed deliver skill found (run /skill-manage delivery).')
     $global:LASTEXITCODE = 1
     return
   }

@@ -15,7 +15,7 @@ import { join, resolve } from 'node:path';
 const root = resolve(import.meta.dirname, '..');
 const skillsDir = join(root, 'skills');
 const manifestPath = join(root, '.claude-plugin/marketplace.json');
-const groupsPath = join(skillsDir, 'delivery/skills-install/scripts/groups.json');
+const groupsPath = join(skillsDir, 'delivery/skill-manage/scripts/groups.json');
 const fix = process.argv.includes('--fix');
 
 const manifest = JSON.parse(readFileSync(manifestPath, 'utf-8'));
@@ -80,7 +80,7 @@ if (fix) {
   writeFileSync(manifestPath, `${JSON.stringify(manifest, null, 2)}\n`);
   if (current !== groupsJson) writeFileSync(groupsPath, groupsJson);
 } else if (current !== groupsJson) {
-  problems.push('groups.json of skills-install is out of date (--fix)');
+  problems.push('groups.json of skill-manage is out of date (--fix)');
 }
 
 if (problems.length) {

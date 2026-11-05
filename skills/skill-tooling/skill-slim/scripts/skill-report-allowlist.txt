@@ -1,10 +1,6 @@
 # Known false positives of Get-SkillReport.ps1, one `skill: ref` per line as printed in danglingCandidates.
 # Put a comment line above each entry that says why it is not a dangling reference.
 
-# skill-tooling is a group name, not a skill
-skills-install: skill-tooling
-# dotnet-pinvoke is a skill of the external dotnet/skills pack that skills-install adds
-skills-install: dotnet-pinvoke
 # ng-template is the Angular element, not a skill
 ng-implementation: ng-template
 # deliver-log is the label of the herdr log pane of Invoke-DeliverLoop.ps1, not a skill
@@ -17,7 +13,11 @@ code-review: adr-missing
 skill-write: references/help.md
 # deliver-loop is the shell command that wraps Invoke-DeliverLoop.ps1, not a skill
 deliver: deliver-loop
+# skill-tooling is a group name, not a skill
+skill-manage: skill-tooling
+# dotnet-pinvoke is a skill of the external dotnet/skills pack that skill-manage adds
+skill-manage: dotnet-pinvoke
 # deliver-loop is the shell command of the deliver skill, not a skill
-skills-install: deliver-loop
+skill-manage: deliver-loop
 # ng-ag-grid-developer is the former name of ng-ag-grid, named in the rename section of references/after-install.md, not a skill
-skills-install: ng-ag-grid-developer
+skill-manage: ng-ag-grid-developer

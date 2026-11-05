@@ -1,12 +1,12 @@
 ---
-name: skills-install
-description: '/skills-install: detect the stack, install the matching GravionLabs skill groups into this project or globally (-g) with npx skills, or update installed skills and pick up new group members. Use for "install the skills", "update the skills".'
+name: skill-manage
+description: '/skill-manage: detect the stack, install the matching GravionLabs skill groups into this project or globally (-g) with npx skills, or update installed skills and pick up new group members. Use for "install the skills", "update the skills".'
 disable-model-invocation: true
 metadata:
   opencode/autoinvoke: 'false'
 ---
 
-# skills-install
+# skill-manage
 
 `help` (or `--help`, `-h`): print `references/help.md` unchanged, nothing else.
 
@@ -14,7 +14,7 @@ metadata:
 
 ## Slash usage
 
-`/skills-install` (detect and propose), `/skills-install ts py` (named groups, no detection), `/skills-install core -g` (user-wide), `/skills-install dry-run ...` (print the commands only), `/skills-install update [-g]` (update installed skills, then propose new group members). Mapping: `dry-run` is `-DryRun`, `-g` is `-Global`, remaining words are `-Groups` (comma-separated on the command line: `-Groups ts,py`). Valid: `shared`, `github`, `delivery`, `statusline`, `ts`, `py`, `ng`, `dotnet`, `rust`, `go` and the presets `core`, `all`; anything else makes the script exit 1. What each group brings: [groups](references/groups.md).
+`/skill-manage` (detect and propose), `/skill-manage ts py` (named groups, no detection), `/skill-manage core -g` (user-wide), `/skill-manage dry-run ...` (print the commands only), `/skill-manage update [-g]` (update installed skills, then propose new group members). Mapping: `dry-run` is `-DryRun`, `-g` is `-Global`, remaining words are `-Groups` (comma-separated on the command line: `-Groups ts,py`). Valid: `shared`, `github`, `delivery`, `statusline`, `ts`, `py`, `ng`, `dotnet`, `rust`, `go` and the presets `core`, `all`; anything else makes the script exit 1. What each group brings: [groups](references/groups.md).
 
 ## Steps
 
@@ -34,7 +34,7 @@ metadata:
 
 ## Update
 
-`/skills-install update [dry-run] [<group>...] [-g]` (`-Update`): `pwsh scripts/Install-Skills.ps1 -Update -DryRun [-Global]` runs `npx skills check` and shows its output as `check`. Ask for confirmation, then run it without `-DryRun`: `npx skills update` runs, then the script starts itself in a new process (refreshed `groups.json`) and lists the skills new in the installed groups as `newMembers`. Offer them: dry run and confirmation as for an install, `-Groups <groups>` without `-Update`.
+`/skill-manage update [dry-run] [<group>...] [-g]` (`-Update`): `pwsh scripts/Install-Skills.ps1 -Update -DryRun [-Global]` runs `npx skills check` and shows its output as `check`. Ask for confirmation, then run it without `-DryRun`: `npx skills update` runs, then the script starts itself in a new process (refreshed `groups.json`) and lists the skills new in the installed groups as `newMembers`. Offer them: dry run and confirmation as for an install, `-Groups <groups>` without `-Update`.
 
 ## Script inputs and output
 

@@ -4,7 +4,7 @@ import * as os from 'os';
 import * as path from 'path';
 
 const hasPwsh = spawnSync('pwsh', ['-NoProfile', '-Command', '1']).status === 0;
-const SRC = path.resolve(__dirname, '../../../skills/delivery/skills-install/scripts');
+const SRC = path.resolve(__dirname, '../../../skills/delivery/skill-manage/scripts');
 
 // Fake npx on PATH records its calls; "skills update" adds `roadmap` to groups.json like a release would.
 describe.skipIf(!hasPwsh || process.platform === 'win32')('Install-Skills.ps1 -Update', () => {

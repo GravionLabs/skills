@@ -63,5 +63,5 @@ If `pwsh` is not available → infer the stack from this table (search recursive
 ## Gotchas
 
 - Monorepos report several languages (e.g. Angular frontend + .NET backend); load every listed skill.
-- A skill named in `test` or `implementation` that is not installed (stacks are installed per project): report "run `/skills-install <stack>` in this project" (`ts`, `py`, `dotnet`, `go`; `ng` for `angular`, `rust`), never fail silently.
+- A skill named in `test` or `implementation` that is not installed (stacks are installed per project): report "run `/skill-manage <stack>` in this project" (`ts`, `py`, `dotnet`, `go`; `ng` for `angular`, `rust`), never fail silently.
 - `js` has no `js-test`/`js-implementation` skill in this hub; treat it like `ts` without type rules.

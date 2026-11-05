@@ -3,13 +3,13 @@ import * as fs from 'node:fs';
 import * as path from 'node:path';
 import { expectSkillHelp } from '../../helpers/skill-help';
 
-const skillDir = path.resolve(__dirname, '../../../skills/delivery/skills-install');
+const skillDir = path.resolve(__dirname, '../../../skills/delivery/skill-manage');
 const help = fs.readFileSync(path.join(skillDir, 'references/help.md'), 'utf8');
 const groups = JSON.parse(
   fs.readFileSync(path.join(skillDir, 'scripts/groups.json'), 'utf8'),
 ) as Record<string, string[]>;
 
-describe('skills-install help', () => {
+describe('skill-manage help', () => {
   it('follows the help convention', () => {
     expectSkillHelp(skillDir);
   });
@@ -29,7 +29,7 @@ describe('skills-install help', () => {
   });
 
   it('names every installable group of groups.json except skill-tooling', () => {
-    for (const g of Object.keys(groups).filter((g) => g !== 'skill-tooling')) {
+    for (const g of Object.keys(groups).filter((g) => !['skill-tooling', 'obsolete'].includes(g))) {
       expect(help).toContain(`\`${g}\``);
     }
   });
