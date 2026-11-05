@@ -4,19 +4,21 @@
 # Copilot CLI: postToolUse carries sessionId but no transcriptPath, so the hook reads
 # ${COPILOT_HOME:-~/.copilot}/session-state/<sessionId>/events.jsonl (also what agentStop sends as transcriptPath);
 # the last session.usage_record gives inputTokens, which already includes cache reads and writes.
-# CONTEXT_WARN_TOKENS (default 150000) is the threshold, CONTEXT_WARN_STEP (default 100000) the growth
+# CONTEXT_WARN_TOKENS is the threshold. Default: with a known window size min(50 %, 250k) of it (the yellow ctx colour of the
+# status line), else 150000. Window size: Copilot maxPromptTokens of the usage record (verified); Claude Code: 1000000 when the
+# model id of the last usage line ends in [1m] (unverified), else unknown. An explicit valid value always wins. CONTEXT_WARN_STEP (default 100000) the growth
 # before the next warning. Never blocks: every path exits 0; no network.
 # The payload is parsed with jq when present, else with a bash JSON string scanner (no required dependency);
 # both handle escapes, pretty-printed payloads, spaces after colons and any field order. Token counts are read
 # from the last transcript line holding a usage object (one JSON object per line, spaces after colons allowed).
 # CONTEXT_WARN_DEBUG=1 prints a one-line note on stderr when payload or transcript cannot be parsed; silent otherwise.
 
-threshold="${CONTEXT_WARN_TOKENS:-150000}"
+threshold="${CONTEXT_WARN_TOKENS:-}"
 step="${CONTEXT_WARN_STEP:-100000}"
 # a non-numeric, empty or overlong (> 9 digits) value falls back to the default; leading zeros are read as decimal
-case "$threshold" in ''|*[!0-9]*) threshold=150000 ;; esac
+case "$threshold" in *[!0-9]*) threshold="" ;; esac
 case "$step" in ''|*[!0-9]*) step=100000 ;; esac
-[ ${#threshold} -le 9 ] && threshold=$((10#$threshold)) || threshold=150000
+if [ ${#threshold} -gt 9 ]; then threshold=""; elif [ -n "$threshold" ]; then threshold=$((10#$threshold)); fi
 [ ${#step} -le 9 ] && step=$((10#$step)) || step=100000
 payload="$(cat 2>/dev/null || true)"
 
@@ -105,6 +107,21 @@ else
   a="$(num input_tokens)"; b="$(num cache_read_input_tokens)"; c="$(num cache_creation_input_tokens)"
 fi
 ctx=$(( ${a:-0} + ${b:-0} + ${c:-0} )) 2>/dev/null || { note "unreadable token counts"; exit 0; }
+
+if [ -z "$threshold" ]; then # no explicit value: relative to the window size when known
+  window=0
+  if [ "$host" = copilot ]; then
+    window="$(num maxPromptTokens)"
+  elif printf '%s' "$line" | grep -qE '"model"[[:space:]]*:[[:space:]]*"[^"]*\[1m\]"'; then
+    window=1000000
+  fi
+  case "$window" in ''|*[!0-9]*) window=0 ;; esac
+  if [ ${#window} -le 9 ] && [ "$((10#$window))" -gt 0 ]; then
+    threshold=$(( 10#$window / 2 )); [ "$threshold" -gt 250000 ] && threshold=250000
+  else
+    threshold=150000
+  fi
+fi
 
 state="${TMPDIR:-/tmp}/$host-context-warning-${session//[^A-Za-z0-9_-]/_}"
 
