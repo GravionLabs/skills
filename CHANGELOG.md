@@ -5,6 +5,17 @@ Versioning follows [Semantic Versioning](https://semver.org/).
 
 ---
 
+## [2.2.0] — 2026-11-05
+
+### Documentation
+- README, AGENTS and docs name skill-manage (#293) (#298)
+
+
+### Features
+- **delivery**: Skill-manage with install and update (#291) (#295)
+- **obsolete**: Group obsolete with skills-install as a forwarder (#292) (#297)
+
+
 ## [2.1.0] — 2026-11-05
 
 ### Bug Fixes
@@ -12,6 +23,10 @@ Versioning follows [Semantic Versioning](https://semver.org/).
 - Skills-install cannot update installed skills or pick up new group members (#278) (#284)
 - **skills-install**: -Update skips the update when npx skills check exits 1 (#285) (#287)
 - **skills-install**: -Update reports a failing newMembers child process (#286) (#288)
+
+
+### Documentation
+- Update CHANGELOG.md for v2.1.0 [skip ci]
 
 
 ### Features
