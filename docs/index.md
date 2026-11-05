@@ -23,7 +23,7 @@ features:
   - title: One skill, three clients
     details: Each SKILL.md follows the agentskills.io format and works on Claude Code, OpenCode and Copilot without changes.
   - title: Install with npx skills
-    details: Groups for GitHub, delivery, .NET, TypeScript, Python, Angular, Rust and Go; /skills-install detects the stack and installs the matching skills.
+    details: Groups for GitHub, delivery, .NET, TypeScript, Python, Angular, Rust and Go; /skill-manage detects the stack and installs the matching skills.
   - title: Workflows are skills
     details: Issue planning, implementation, review and release are skills that compose; each one owns a workflow and the others delegate to it by name.
   - title: Delivery as a skill

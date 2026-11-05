@@ -8,7 +8,7 @@
 | `.agents/skills/`, `.claude/skills/` | commit (instant context on clone). `.agents/skills/` holds the copies for OpenCode and Copilot; `.claude/skills/` links to them (copies on Windows)                                                                                                                                                                             |
 | `.agents/config.json`                | commit (project config, see [project config](https://github.com/GravionLabs/skills/blob/main/docs/usage/project-config.md)). A `.gitignore` line `.agents/*` without exceptions hides it and the installed skills: add `!.agents/skills/`, `!.agents/config.json` and `!.agents/lessons/` below it; the installer prints a note |
 
-Updates: `npx skills check` (exit 1 when an update exists, usable in CI), `npx skills update` (all) or `npx skills update <name>`.
+Updates: `/skill-manage update [-g]`, or `npx skills check` (exit 1 when an update exists, usable in CI), `npx skills update` (all) or `npx skills update <name>`.
 
 ## Renamed skills
 

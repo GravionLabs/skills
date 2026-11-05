@@ -6,12 +6,12 @@ This documentation is also published as a site at <https://gravionlabs.github.io
 
 ## What a group gives you
 
-A group is a set of skills for one domain, listed in `.claude-plugin/marketplace.json`. Installing it copies (or links) the skills into your repository, where the agent picks them up by their `description` or when you name them. `/skills-install` resolves the groups for a project; `npx skills add GravionLabs/skills --skill <name>` installs single skills.
+A group is a set of skills for one domain, listed in `.claude-plugin/marketplace.json`. Installing it copies (or links) the skills into your repository, where the agent picks them up by their `description` or when you name them. `/skill-manage` resolves the groups for a project; `npx skills add GravionLabs/skills --skill <name>` installs single skills.
 
 | Group           | What it covers                                                                                                                                                                                                                                                                       |
 | :-------------- | :----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | `shared`        | `implementation` (tests per change), `detect-techstack`, `code-review` (blocking findings and notes), `diagnose` (bug diagnosis), `check-prerequisites`, `lessons` (approved project lessons per role), `adr` (ADR with the next free number, see [governance](usage/governance.md)) |
-| `delivery`      | `deliver`, `planner`, `grill-me`, `retro`, `skills-install`                                                                                                                                                                                                                          |
+| `delivery`      | `deliver`, `planner`, `grill-me`, `retro`, `skill-manage`                                                                                                                                                                                                                            |
 | `github`        | `github-issue` (Epic → Feature → PBI hierarchy with native sub-issues), `github-pull-request`, `github-release`, `github-milestone` (milestones `M<n>`, renamed `M<n> (x.y.z)` on close: current and all with their progress, create, close after the release tag)                   |
 | `dotnet`        | `dotnet-implementation`, `dotnet-test`, `dotnet-create-solution`, `dotnet-mcp-server-generator`, `dotnet-aspire` (AppHost for local orchestration)                                                                                                                                   |
 | `ts`            | `ts-implementation`, `ts-test`, `ts-create-project`, `ts-mcp-server-generator`, `ts-pnpm-workflow`, `setup-biome-husky`, `setup-prettier-eslint-husky`                                                                                                                               |
@@ -20,9 +20,10 @@ A group is a set of skills for one domain, listed in `.claude-plugin/marketplace
 | `go`            | `go-implementation`, `go-test`                                                                                                                                                                                                                                                       |
 | `ng`            | `ng-implementation`, `ng-test`, `ng-create-project`, `ng-ag-grid`                                                                                                                                                                                                                    |
 | `statusline`    | `context-statusline`: status line and subagent status line                                                                                                                                                                                                                           |
+| `obsolete`      | `skills-install` (forwards to `skill-manage`; in no preset; removed in the next major release)                                                                                                                                                                                       |
 | `skill-tooling` | `skill-write`, `skill-audit`, `skill-slim` (contributor tooling, not in the `all` preset)                                                                                                                                                                                            |
 
-Presets of `/skills-install`: `core` (`shared`, `github`, `delivery`, `statusline`, for the global install) and `all` (every group except `skill-tooling`). The full list with descriptions is generated into [skill-list.md](skill-list.md).
+Presets of `/skill-manage`: `core` (`shared`, `github`, `delivery`, `statusline`, for the global install) and `all` (every group except `skill-tooling` and `obsolete`). The full list with descriptions is generated into [skill-list.md](skill-list.md).
 
 ## How the skills fit together
 
@@ -52,3 +53,7 @@ Skills delegate by name instead of repeating each other. One skill owns a workfl
 - Rules the model does not already know: repo conventions, tool contracts, repeatable procedures. No generic tutorials.
 - Compose, don't duplicate.
 - The agent proposes, the developer approves.
+
+## The obsolete skill
+
+`skills-install` was renamed to `skill-manage`. It stays in the group `obsolete` as a forwarder for one major version, because `npx skills update` cannot follow a rename and consumers still have the old name in `skills-lock.json` and in muscle memory. Calling `/skills-install` only points to `/skill-manage`. The group is in no preset, and the skill is removed in the next major release; switch with `npx skills add GravionLabs/skills --skill skill-manage`.
