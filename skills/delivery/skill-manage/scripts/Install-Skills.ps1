@@ -79,13 +79,13 @@ $source = 'GravionLabs/skills'
 $groupMap = Get-Content -Raw (Join-Path $PSScriptRoot 'groups.json') | ConvertFrom-Json -AsHashtable
 $presets = @{
   core = @('shared', 'github', 'delivery', 'statusline')
-  all  = @($groupMap.Keys | Where-Object { $_ -ne 'skill-tooling' } | Sort-Object)
+  all  = @($groupMap.Keys | Where-Object { $_ -notin @('skill-tooling', 'obsolete') } | Sort-Object)
 }
 $external = @{
   ng     = [ordered]@{ source = 'angular/skills#d422d3c17e27c9860f3df91b6e617ad80970ba05'; skills = @('angular-developer') }
   dotnet = [ordered]@{ source = 'dotnet/skills#cb7c10bd32b250459632df9e6fa1350cdaf00b18'; skills = @('csharp-scripts', 'dotnet-pinvoke', 'nuget-trusted-publishing') }
 }
-$valid = @($groupMap.Keys | Where-Object { $_ -ne 'skill-tooling' }) + @('core', 'all') | Sort-Object
+$valid = @($groupMap.Keys | Where-Object { $_ -notin @('skill-tooling', 'obsolete') }) + @('core', 'all') | Sort-Object
 
 # pwsh -File passes "ts,ng" as one string: split on commas, then validate
 if ($PSBoundParameters.ContainsKey('Groups')) {
@@ -147,7 +147,7 @@ if ($Update) {
     if ($LASTEXITCODE -ne 0) { $uFailed = $true; $notes.Add("npx skills update failed (exit $LASTEXITCODE)") } else { $uResult.updated = $true }
     if (-not $uFailed) {
       # new process: the updated skill-manage ships the refreshed groups.json
-      $g = if ($Groups) { $Groups } else { @($groupMap.Keys | Where-Object { $_ -ne 'skill-tooling' } | Where-Object { $gn = $_; @($groupMap[$gn] | Where-Object { Test-Installed $_ $scopeBase $scopeDirs }).Count -gt 0 } | Sort-Object) }
+      $g = if ($Groups) { $Groups } else { @($groupMap.Keys | Where-Object { $_ -notin @('skill-tooling', 'obsolete') } | Where-Object { $gn = $_; @($groupMap[$gn] | Where-Object { Test-Installed $_ $scopeBase $scopeDirs }).Count -gt 0 } | Sort-Object) }
       if ($g.Count -gt 0) {
         $cArgs = @('-NoProfile', '-File', $PSCommandPath, '-DryRun', '-Groups', ($g -join ','), '-Agents', ($Agents -join ','))
         if ($Global) { $cArgs += '-Global' }

@@ -5,8 +5,7 @@
     "planner",
     "retro",
     "roadmap",
-    "skill-manage",
-    "skills-install"
+    "skill-manage"
   ],
   "dotnet": [
     "dotnet-aspire",
@@ -30,6 +29,9 @@
     "ng-create-project",
     "ng-implementation",
     "ng-test"
+  ],
+  "obsolete": [
+    "skills-install"
   ],
   "py": [
     "py-create-project",
