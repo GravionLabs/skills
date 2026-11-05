@@ -2,7 +2,7 @@
 
 The `context-statusline` skill of the `statusline` package (Claude Code; the status line also on GitHub Copilot CLI) shows how full the context is, in the status line
 of the main session and per subagent in the agent panel. It keeps the [work an issue by hand](../guides/work-an-issue-by-hand.md) honest: you see the
-context grow before the 150k warning fires.
+context grow before the warning fires.
 
 ```text
 jk@laptop:/repo Opus 4 ctx:42% (84k/200k) (feat/354-statusline) 5h:12% 7d:30%     # statusLine
@@ -48,11 +48,20 @@ The context size is `input_tokens + cache_read_input_tokens + cache_creation_inp
 
 | Variable              | Default  | Meaning                                                               |
 | :-------------------- | :------- | :-------------------------------------------------------------------- |
-| `CONTEXT_WARN_TOKENS` | `150000` | Context size from which the hook warns                                |
+| `CONTEXT_WARN_TOKENS` | derived  | Context size from which the hook warns; default below                 |
 | `CONTEXT_WARN_STEP`   | `100000` | Growth before the next warning; the state resets below the threshold  |
 | `CONTEXT_WARN_DEBUG`  | unset    | `1` prints a note on stderr when payload or transcript cannot be read |
 
-Invalid values (non-numeric, empty, more than 9 digits) fall back to the defaults. State lives in `$TMPDIR/<host>-context-warning-<session>`. jq is optional (a bash scanner parses the payload without it); every path exits 0 and nothing touches the network.
+Default of `CONTEXT_WARN_TOKENS`: with a known window size `min(50 %, 250k)` of it (the yellow `ctx` colour of the status line: 200k window 100k, 272k window 136k, 1M window 250k), else `150000`. An explicit valid value always wins. The message ("limit <n>k") names the threshold actually used.
+
+Where the hook gets the window size (checked against the scripts and the recorded fixtures, 2026-11-05):
+
+- Copilot CLI: `maxPromptTokens` of the `session.usage_record` in `events.jsonl` (verified in `copilot-events.jsonl`; the `postToolUse` payload itself carries no size).
+- Claude Code: the `UserPromptSubmit` payload carries `session_id` and `transcript_path`; a window size field there is unverified and not read. The hook reads the `model` of the last usage line of the transcript and takes 1M when the id ends in `[1m]` (unverified assumption about the transcript content). Otherwise the size is unknown and `150000` stays; set `CONTEXT_WARN_TOKENS` for a 1M model without that suffix.
+
+The variables are read by the script, not by a client: they work for every host as long as they are in the hook's process environment. Claude Code: `"env": {"CONTEXT_WARN_TOKENS": "400000"}` in `settings.json` (verified). Copilot CLI: no documented way verified here; export them in the shell profile that starts `copilot`.
+
+Invalid values (non-numeric, empty, more than 9 digits) fall back to the defaults (for the threshold: the derived default). State lives in `$TMPDIR/<host>-context-warning-<session>`. jq is optional (a bash scanner parses the payload without it); every path exits 0 and nothing touches the network.
 
 ## GitHub Copilot CLI
 

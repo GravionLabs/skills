@@ -34,7 +34,7 @@ The installer points `statusLine` and `subagentStatusLine` at the skill's own sc
 
 ## Context warning hook
 
-`scripts/context-warning.sh` (bash) warns once the session context reaches `CONTEXT_WARN_TOKENS` (default 150000): the user sees a `systemMessage`, the model gets the same text as `additionalContext`: finish the step, write a short hand-off, then `/clear` (or `/compact`). `CONTEXT_WARN_STEP` (default 100000) is the growth before the next warning. `CONTEXT_WARN_DEBUG=1` prints notes on stderr. Never blocks, no network.
+`scripts/context-warning.sh` (bash) warns once the session context reaches `CONTEXT_WARN_TOKENS` (default: `min(50 %, 250k)` of the window size when known (Copilot `maxPromptTokens`, Claude model id `[1m]`), else 150000; an explicit value wins): the user sees a `systemMessage`, the model gets the same text as `additionalContext`: finish the step, write a short hand-off, then `/clear` (or `/compact`). `CONTEXT_WARN_STEP` (default 100000) is the growth before the next warning. `CONTEXT_WARN_DEBUG=1` prints notes on stderr. Never blocks, no network.
 
 ## Rules
 

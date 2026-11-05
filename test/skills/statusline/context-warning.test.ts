@@ -37,7 +37,7 @@ describe('context-warning hook', () => {
     const r = spawnSync(BASH, [SCRIPT], {
       input: payload,
       encoding: 'utf8',
-      env: { ...process.env, TMPDIR: dir, ...env },
+      env: { ...process.env, CONTEXT_WARN_TOKENS: '', CONTEXT_WARN_STEP: '', TMPDIR: dir, ...env },
     });
     return { code: r.status, out: r.stdout.trim(), err: r.stderr.trim() };
   };
@@ -88,6 +88,80 @@ describe('context-warning hook', () => {
     expect(json.hookSpecificOutput.additionalContext).toContain('/clear');
     expect(json.systemMessage).toBe(json.hookSpecificOutput.additionalContext);
     expect(json.systemMessage).not.toContain('progress.md');
+  });
+
+  describe('threshold follows the context window size', () => {
+    const claudeLine = (model: string, tokens: number) =>
+      JSON.stringify({
+        type: 'assistant',
+        message: {
+          model,
+          usage: {
+            input_tokens: tokens,
+            cache_creation_input_tokens: 0,
+            cache_read_input_tokens: 0,
+          },
+        },
+      });
+    const copilotRun = (
+      tokens: number,
+      window: number | null,
+      env: Record<string, string> = {},
+    ) => {
+      const id = 'sess-window';
+      const home = path.join(dir, 'copilot-home');
+      fs.mkdirSync(path.join(home, 'session-state', id), { recursive: true });
+      const usage: Record<string, unknown> = { inputTokens: tokens };
+      if (window !== null) usage.maxPromptTokens = window;
+      fs.writeFileSync(
+        path.join(home, 'session-state', id, 'events.jsonl'),
+        JSON.stringify({ type: 'session.usage_record', data: { usage } }) + '\n',
+      );
+      return runRaw(JSON.stringify({ sessionId: id }), { COPILOT_HOME: home, ...env });
+    };
+
+    it('uses half of a 200k window (100k) and names it in the message', () => {
+      expect(copilotRun(99000, 200000).out).toBe('');
+      expect(JSON.parse(copilotRun(100000, 200000).out).additionalContext).toContain(
+        'Context is 100k tokens (limit 100k)',
+      );
+    });
+
+    it('caps the threshold at 250k for a 1M window', () => {
+      expect(copilotRun(200000, 1000000).out).toBe('');
+      expect(JSON.parse(copilotRun(250000, 1000000).out).additionalContext).toContain(
+        '(limit 250k)',
+      );
+    });
+
+    it('uses 1M for a Claude model id ending in [1m]', () => {
+      expect(run(writeTranscript(claudeLine('claude-opus-4-7[1m]', 200000))).out).toBe('');
+      expect(
+        JSON.parse(run(writeTranscript(claudeLine('claude-opus-4-7[1m]', 250000))).out)
+          .systemMessage,
+      ).toContain('(limit 250k)');
+    });
+
+    it('keeps 150000 for an unknown window size', () => {
+      expect(copilotRun(149000, null).out).toBe('');
+      expect(JSON.parse(copilotRun(150000, null).out).additionalContext).toContain('(limit 150k)');
+      expect(run(writeTranscript(claudeLine('claude-opus-4-7', 149000))).out).toBe('');
+      expect(run(writeTranscript(claudeLine('claude-opus-4-7', 150000))).out).toContain(
+        'limit 150k',
+      );
+    });
+
+    it('lets an explicit CONTEXT_WARN_TOKENS win, and falls back to the derived default if invalid', () => {
+      expect(
+        JSON.parse(copilotRun(180000, 1000000, { CONTEXT_WARN_TOKENS: '120000' }).out)
+          .additionalContext,
+      ).toContain('(limit 120k)');
+      expect(copilotRun(120000, 200000, { CONTEXT_WARN_TOKENS: '300000' }).out).toBe('');
+      expect(
+        JSON.parse(copilotRun(100000, 200000, { CONTEXT_WARN_TOKENS: 'abc' }).out)
+          .additionalContext,
+      ).toContain('(limit 100k)');
+    });
   });
 
   it('uses the last request of the transcript', () => {
