@@ -77,7 +77,7 @@ Earlier versions read the map directly from `.agents/format.json`. That file sti
 
 ## Commit the file
 
-`.agents/` also holds installed skills (`.agents/skills`). When the project ignores `.agents/`, ignore its content instead of the directory, so the exception works (`/skills-install` prints a notice when `.gitignore` ignores `.agents/`):
+`.agents/` also holds installed skills (`.agents/skills`). When the project ignores `.agents/`, ignore its content instead of the directory, so the exception works (`/skill-manage` prints a notice when `.gitignore` ignores `.agents/`):
 
 ```gitignore
 .agents/*

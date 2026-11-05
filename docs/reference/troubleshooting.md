@@ -30,7 +30,7 @@ Common failure cases of the skills, each with symptom, cause and fix. The state 
 
 - **Symptom:** the agent works without loading the skill you expected.
 - **Cause:** the skill is not installed in this project (or client), or the prompt does not match its `description`.
-- **Fix:** check the install (`npx skills check`, or `/skills-install dry-run`); name the skill in the prompt (`Use the planner skill: plan issue #42`) or call it by slash (`/deliver 42`). To measure triggering, see [skill trigger evals](../usage/trigger-evals.md).
+- **Fix:** check the install (`npx skills check`, or `/skill-manage dry-run`); name the skill in the prompt (`Use the planner skill: plan issue #42`) or call it by slash (`/deliver 42`). To measure triggering, see [skill trigger evals](../usage/trigger-evals.md).
 
 ## The context grows too large
 

@@ -106,7 +106,7 @@ State lives in GitHub only (issue, branch, PR, checks). After a crash, a closed 
 
 ## A release in fresh sessions
 
-One session over a whole release grows large. `Invoke-DeliverLoop.ps1` starts a fresh `claude -p "/deliver … --unattended --max 1"` per PBI and reads the progress from GitHub. `skills-install` offers the `deliver-loop` shim (`Install-LoopShim.ps1`), so you start it from any shell:
+One session over a whole release grows large. `Invoke-DeliverLoop.ps1` starts a fresh `claude -p "/deliver … --unattended --max 1"` per PBI and reads the progress from GitHub. `skill-manage` offers the `deliver-loop` shim (`Install-LoopShim.ps1`), so you start it from any shell:
 
 ```powershell
 deliver-loop -Milestone M4 -Max 5 -Model sonnet

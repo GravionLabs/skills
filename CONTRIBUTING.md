@@ -61,7 +61,7 @@ Both folders are gitignored. An existing link is replaced; a real directory of t
 
 ## Public surface and renames
 
-Public surface is everything a consumer can depend on: skill names (`npx skills add --skill <name>` and `skills-lock.json` record them), group names (`/skills-install <group>`), script parameters and entry points.
+Public surface is everything a consumer can depend on: skill names (`npx skills add --skill <name>` and `skills-lock.json` record them), group names (`/skill-manage <group>`), script parameters and entry points.
 
 - Announce every rename in the PR body and in the release notes.
 - A renamed skill leaves a `skills-lock.json` entry behind in every consumer: `npx skills update` cannot follow a rename. Prefer keeping names; when a rename is unavoidable, batch it into a major release and describe the `npx skills remove <old>` / `add <new>` step in the release notes.
@@ -69,17 +69,18 @@ Public surface is everything a consumer can depend on: skill names (`npx skills 
 
 Renamed when moving from GravionLabs/apm-hub:
 
-| Old name                      | New name                    | Note                                        |
-| :---------------------------- | :-------------------------- | :------------------------------------------ |
-| `apm-install` (skill)         | `skills-install`            | installs with `npx skills` instead of `apm` |
-| `apm-tooling` (package)       | `skill-tooling` (group)     | same skills                                 |
-| `core`, `all` (meta-packages) | presets of `skills-install` | no longer installable units                 |
+| Old name                      | New name                  | Note                                        |
+| :---------------------------- | :------------------------ | :------------------------------------------ |
+| `apm-install` (skill)         | `skill-manage`            | installs with `npx skills` instead of `apm` |
+| `apm-tooling` (package)       | `skill-tooling` (group)   | same skills                                 |
+| `core`, `all` (meta-packages) | presets of `skill-manage` | no longer installable units                 |
 
 Renamed since:
 
-| Old name               | New name     | Note                                                                          |
-| :--------------------- | :----------- | :---------------------------------------------------------------------------- |
-| `ng-ag-grid-developer` | `ng-ag-grid` | same skill; `npx skills remove ng-ag-grid-developer`, then `add` `ng-ag-grid` |
+| Old name               | New name       | Note                                                                                                                  |
+| :--------------------- | :------------- | :-------------------------------------------------------------------------------------------------------------------- |
+| `ng-ag-grid-developer` | `ng-ag-grid`   | same skill; `npx skills remove ng-ag-grid-developer`, then `add` `ng-ag-grid`                                         |
+| `skills-install`       | `skill-manage` | `skills-install` stays as an obsolete forwarder until the next major release; then `npx skills remove skills-install` |
 
 ## Issues
 
@@ -89,7 +90,7 @@ The title of an issue starts with its level: `[Epic]`, `[Feature]`, `[PBI]` or `
 
 ## Releases
 
-Releases are cut from a single rolling branch, `release/next`. The version bump comes from the Conventional Commits on the branch: `fix:` → patch, `feat:` → minor, `<type>!:` or `BREAKING CHANGE:` → major; a release with only fixes is a patch release. `github-release finish` adds no bump commit. The release PR into `main` is merged with a merge commit, never squashed, so the `feat:`/`fix:` commits stay visible to GitVersion and git-cliff. A release is a git tag; consumers pin it with `npx skills add GravionLabs/skills#v<x.y.z>` or `skills-install -Ref v<x.y.z>`.
+Releases are cut from a single rolling branch, `release/next`. The version bump comes from the Conventional Commits on the branch: `fix:` → patch, `feat:` → minor, `<type>!:` or `BREAKING CHANGE:` → major; a release with only fixes is a patch release. `github-release finish` adds no bump commit. The release PR into `main` is merged with a merge commit, never squashed, so the `feat:`/`fix:` commits stay visible to GitVersion and git-cliff. A release is a git tag; consumers pin it with `npx skills add GravionLabs/skills#v<x.y.z>` or `skill-manage -Ref v<x.y.z>`.
 
 - Major on purpose: `github-release finish major` adds an empty commit with `+semver: major` in its message. Renames ship here, see [Public surface and renames](#public-surface-and-renames).
 - Hotfix: fix on `main` (merge commit, the `main` ruleset allows only merge), then merge `main` into `release/next`.
