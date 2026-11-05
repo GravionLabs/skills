@@ -1,12 +1,12 @@
 # Skill groups
 
-A group is a plugin in `.claude-plugin/marketplace.json` of GravionLabs/skills; `scripts/groups.json` is its copy. Install form: `npx skills add GravionLabs/skills --skill <name> ... [-g]`. `skill-manage` builds that call from the groups, skips skills already present and adds the external dependencies pinned to a commit.
+A group is a plugin in `.claude-plugin/marketplace.json` of GravionLabs/skills; `scripts/groups.json` is its copy. Install form: `npx skills add GravionLabs/skills --skill <name> ... [-g]`. `skills-manage` builds that call from the groups, skips skills already present and adds the external dependencies pinned to a commit.
 
 | Group        | Brings                                                                                             | Install         |
 | :----------- | :------------------------------------------------------------------------------------------------- | :-------------- |
 | `shared`     | `implementation`, `detect-techstack`, `diagnose`, `code-review`, `check-prerequisites`             | project or `-g` |
 | `github`     | `github-issue`, `github-pull-request`, `github-release`                                            | project or `-g` |
-| `delivery`   | `deliver`, `planner`, `grill-me`, `retro`, `skill-manage`; uses `github` and `shared`              | project or `-g` |
+| `delivery`   | `deliver`, `planner`, `grill-me`, `retro`, `skills-manage`; uses `github` and `shared`             | project or `-g` |
 | `statusline` | `context-statusline` (status line and subagent status line)                                        | `-g`            |
 | `ts`, `py`   | `<lang>-implementation`, `<lang>-test`, project scaffolding                                        | per project     |
 | `rust`       | `rust-implementation`, `rust-test`                                                                 | per project     |

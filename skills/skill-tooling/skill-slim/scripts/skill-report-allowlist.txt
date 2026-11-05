@@ -14,10 +14,10 @@ skill-write: references/help.md
 # deliver-loop is the shell command that wraps Invoke-DeliverLoop.ps1, not a skill
 deliver: deliver-loop
 # skill-tooling is a group name, not a skill
-skill-manage: skill-tooling
-# dotnet-pinvoke is a skill of the external dotnet/skills pack that skill-manage adds
-skill-manage: dotnet-pinvoke
+skills-manage: skill-tooling
+# dotnet-pinvoke is a skill of the external dotnet/skills pack that skills-manage adds
+skills-manage: dotnet-pinvoke
 # deliver-loop is the shell command of the deliver skill, not a skill
-skill-manage: deliver-loop
+skills-manage: deliver-loop
 # ng-ag-grid-developer is the former name of ng-ag-grid, named in the rename section of references/after-install.md, not a skill
-skill-manage: ng-ag-grid-developer
+skills-manage: ng-ag-grid-developer

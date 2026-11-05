@@ -53,7 +53,7 @@ const text = [
   '# Skill list',
   '',
   `${total} skills in ${manifest.plugins.length} groups. Generated from \`.claude-plugin/marketplace.json\` by \`pnpm run generate\`; do not edit.`,
-  'The easier way to install a group is `/skill-manage <group>` (or its script), which also brings the external dependencies.',
+  'The easier way to install a group is `/skills-manage <group>` (or its script), which also brings the external dependencies.',
   '',
   ...sections,
 ].join('\n');

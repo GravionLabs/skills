@@ -65,7 +65,7 @@ describe('rust group', () => {
   });
 
   it('is a group of marketplace.json and of the installer groups', () => {
-    const groups = JSON.parse(read('skills/delivery/skill-manage/scripts/groups.json'));
+    const groups = JSON.parse(read('skills/delivery/skills-manage/scripts/groups.json'));
     expect(groups.rust).toEqual([...skills].sort());
   });
 

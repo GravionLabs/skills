@@ -5,7 +5,7 @@ pwsh <skill-dir>/scripts/Invoke-DeliverLoop.ps1 -Milestone M4 -Max 5
 pwsh <skill-dir>/scripts/Invoke-DeliverLoop.ps1 -Target 860,870 -Model opus
 ```
 
-Or with the shell command `deliver-loop` (`skill-manage` offers it after the `delivery` group): `deliver-loop -Milestone M4 -Max 5`. It resolves the installed script (project, `~/.claude/skills`, `~/.agents/skills`), passes all arguments through and exits 1 with a message when none is installed. In herdr (`HERDR_ENV=1`) it starts the loop in its own workspace `<repo> · deliver` (tab `deliver-loop`, `scripts/Start-LoopWorkspace.ps1`), because the herdr sidebar shows one state per workspace by the selected tab; outside herdr it runs in the current terminal.
+Or with the shell command `deliver-loop` (`skills-manage` offers it after the `delivery` group): `deliver-loop -Milestone M4 -Max 5`. It resolves the installed script (project, `~/.claude/skills`, `~/.agents/skills`), passes all arguments through and exits 1 with a message when none is installed. In herdr (`HERDR_ENV=1`) it starts the loop in its own workspace `<repo> · deliver` (tab `deliver-loop`, `scripts/Start-LoopWorkspace.ps1`), because the herdr sidebar shows one state per workspace by the selected tab; outside herdr it runs in the current terminal.
 
 `-Milestone` takes `M<n>` (legacy: the title): the `github-milestone` lookup (`Get-Milestones.ps1 -Mode issues -Name <name>`) resolves `M4` to the title `M4` or, after `/github-milestone close`, `M4 (0.2.0)` (also `M4 Topic`), and the loop passes `--milestone M4` unchanged, so a run started before the rename keeps working after it. The release-review state file `release-review-<key>.json` (`references/release-review.md`) is keyed by `M<n>` as well.
 
