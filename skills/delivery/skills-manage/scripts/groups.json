@@ -30,10 +30,6 @@
     "ng-implementation",
     "ng-test"
   ],
-  "obsolete": [
-    "skill-manage",
-    "skills-install"
-  ],
   "py": [
     "py-create-project",
     "py-implementation",
