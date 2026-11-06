@@ -5,7 +5,50 @@ Versioning follows [Semantic Versioning](https://semver.org/).
 
 ---
 
+## [3.1.0] — 2026-11-06
+
+### Bug Fixes
+- **delivery**: Paused PBIs are no longer counted as delivered by the loop (#346) (#351)
+- **delivery**: Count milestone progress over PBIs and Bugs only (#347) (#352)
+- **delivery**: Control session does not pin -Model on the loop (#348) (#353)
+- **delivery**: Docs name the tier default for the loop -Model (#349) (#354)
+- **delivery**: Use the real poimen-server report syntax for tokens and clear (#350) (#355)
+- **delivery**: List poimen-server report in its own permissions row (#356) (#361)
+- **delivery**: Describe closed and total of the status schema as PBIs and Bugs (#357) (#362)
+- **docs**: Remove the repeated preflight sentence from the AGENTS.md delivery row (#359) (#364)
+- **delivery**: Control session handles the loop result max reached (#360) (#365)
+
+
+### Features
+- **shared**: Project-setup with format per language and .editorconfig (#306) (#315)
+- **shared**: Lint key in the project config, runner and project-setup choice (#307) (#317)
+- **shared**: Project-setup proposes the governance key (#308) (#318)
+- **shared**: Project-setup adds .gitattributes, .gitignore and pre-commit hooks (#309) (#326)
+- **delivery**: Write review findings in poimen's findings.json format (#232) (#328)
+- **shared**: Project-setup writes VS Code settings, tasks and launch configs (#310) (#330)
+- **delivery**: Skills-manage offers project-setup after an install (#311) (#333)
+- **shared**: Project-setup writes Zed settings, tasks and debug configs (#313) (#334)
+- **shared**: Project-setup writes JetBrains shared run configurations (#314) (#335)
+- **delivery**: Status block after each PBI and deliver status (#320) (#336)
+- **delivery**: Interactive milestone run as a thin control session over the loop (#321) (#337)
+- **github**: Release finish closes the milestone and checks the version after the merge (#322) (#338)
+- **delivery**: Preflight for repo skills, allowlist and stale worktrees (#323) (#339)
+- **delivery**: Feedback during a run becomes issues in the milestone (#324) (#340)
+- **delivery**: Tier and model per PBI visible in select, status and loop (#325) (#341)
+- **delivery**: Milestones hold PBIs and Bugs, Features only when complete, Epics never (#327) (#342)
+- **delivery**: JSON schema and fixtures for the deliver loop status.json (#332) (#344)
+- **delivery**: Deliver loop reports milestone progress, status.json and backend tokens (#329) (#345)
+
+
+### Refactoring
+- **delivery**: Terminal backend adapter for herdr and poimen in the deliver scripts (#331) (#343)
+
+
 ## [3.0.0] — 2026-11-05
+
+### Documentation
+- Update CHANGELOG.md for v3.0.0 [skip ci]
+
 
 ### Refactoring
 - **delivery**: Rename skill-manage to skills-manage (#299) (#300)
