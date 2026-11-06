@@ -16,6 +16,16 @@
         }
       ]
     },
+    "lint": {
+      "description": "false disables every lint call; a map replaces the built-in lint command per language.",
+      "oneOf": [
+        { "const": false },
+        {
+          "type": "object",
+          "additionalProperties": { "$ref": "#/$defs/lintEntry" }
+        }
+      ]
+    },
     "governance": {
       "description": "Architecture decisions and specs; read by adr, github-issue, planner, implementation, code-review, deliver, detect-techstack and the CI checks adr and spec of GravionLabs/ci.",
       "type": "object",
@@ -98,6 +108,15 @@
         { "type": "string", "minLength": 1 },
         { "type": "array", "minItems": 1, "items": { "type": "string", "minLength": 1 } }
       ]
+    },
+    "lintEntry": {
+      "type": "object",
+      "required": ["command"],
+      "additionalProperties": false,
+      "properties": {
+        "extensions": { "type": "array", "items": { "type": "string", "minLength": 1 } },
+        "command": { "$ref": "#/$defs/commands" }
+      }
     },
     "formatEntry": {
       "type": "object",

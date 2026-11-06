@@ -1,13 +1,14 @@
 <#
 .SYNOPSIS
-  Plans (default, dry run) or applies the project setup: the `format` key of .agents/config.json per language and the .editorconfig.
+  Plans (default, dry run) or applies the project setup: the `format` and `lint` keys of .agents/config.json per language and the .editorconfig.
 .DESCRIPTION
   Runs detect-techstack, maps its languages to the keys of `format` (ts, ng, py, dotnet, rust, go) and prints the plan as JSON:
   per language the default formatter, the detected tool, the options and the choice; the .editorconfig action; tool checks.
   Without -Apply nothing is written. With -Apply only non-default choices are written under `format` (other keys of the file stay,
   an existing entry of a language stays unless it gets a new non-default choice); an existing .editorconfig is never overwritten
   (the action is `exists` with a diff). A missing tool is reported with its install hint, never installed.
-  Extension points: one Get-*Plan function and one Write-* function per part (format, editorconfig).
+  Lint works the same way: per language the default linter and the options (`languages[].lint`), only non-default choices are written under `lint`.
+  Extension points: one Get-*Plan function and one Write-* function per part (format, lint, editorconfig).
 .PARAMETER ProjectRoot
   Project root (default: current directory).
 .PARAMETER Choice
@@ -17,6 +18,10 @@
   `lang=command` for a `custom` choice (the format command, {files} placeholder).
 .PARAMETER CheckCommand
   `lang=command` for a `custom` choice (the read-only check command). Required for `custom`.
+.PARAMETER LintChoice
+  `lang=option` entries for the linter, e.g. 'dotnet=jb','py=pyright'. `default` (or no entry) keeps the default. Options are listed in the plan (`languages[].lint.options`).
+.PARAMETER LintCommand
+  `lang=command` for a `custom` lint choice (the lint command, {files} placeholder).
 .PARAMETER StackJson
   A `detect-techstack` report (JSON text) instead of running the detection; for tests and callers that already have the report.
 .PARAMETER Apply
@@ -28,6 +33,8 @@ param(
   [string[]]$Choice = @(),
   [string[]]$FormatCommand = @(),
   [string[]]$CheckCommand = @(),
+  [string[]]$LintChoice = @(),
+  [string[]]$LintCommand = @(),
   [string]$StackJson,
   [switch]$Apply
 )
@@ -200,6 +207,92 @@ function Get-FormatPlan($Stack, $Choices, $Formats, $Checks) {
   , $entries.ToArray()
 }
 
+# ---- lint plan --------------------------------------------------------------------------------------------------------
+# option table: id -> entry (null = the default of the language, nothing is written)
+function Get-LintOptions([string]$Lang, [string[]]$Tools) {
+  $opts = [ordered]@{}
+  switch ($Lang) {
+    { $_ -in 'ts', 'ng' } {
+      $biomeDefault = $Tools -contains 'biome'
+      $opts['eslint'] = if ($biomeDefault) { [ordered]@{ extensions = @($defaultExt[$Lang]); command = 'npx --no-install eslint {files}' } } else { $null }
+      $opts['biome'] = if ($biomeDefault) { $null } else { [ordered]@{ extensions = @($defaultExt[$Lang]); command = 'npx biome lint --no-errors-on-unmatched {files}' } }
+      $opts['oxlint'] = [ordered]@{ extensions = @($defaultExt[$Lang]); command = 'npx oxlint {files}' }
+      $defaultId = if ($biomeDefault) { 'biome' } else { 'eslint' }
+    }
+    'py' {
+      $opts['ruff'] = $null
+      $opts['pyright'] = [ordered]@{ extensions = @('.py', '.pyi'); command = 'uv run pyright {files}' }
+      $opts['mypy'] = [ordered]@{ extensions = @('.py', '.pyi'); command = 'uv run mypy {files}' }
+      $defaultId = 'ruff'
+    }
+    'dotnet' {
+      $opts['dotnet-analyzers'] = $null
+      $sln = Find-Solution
+      # inspectcode writes SARIF; whether it exits non-zero on findings is not verified (references/lint.md of implementation)
+      $opts['jb'] = [ordered]@{
+        extensions    = @('.cs')
+        command       = "jb inspectcode $(if ($sln) { $sln } else { '<solution>' }) --no-build --include={files} -o=obj/inspect.sarif"
+        needsSolution = (-not $sln)
+      }
+      $defaultId = 'dotnet-analyzers'
+    }
+    'rust' { $opts['clippy'] = $null; $defaultId = 'clippy' }
+    'go' { $opts['golangci-lint'] = $null; $defaultId = 'golangci-lint' }
+  }
+  $opts['custom'] = 'custom'
+  [pscustomobject]@{ Options = $opts; DefaultId = $defaultId }
+}
+
+function Get-LintPlan([string]$Lang, $Stack, $Choices, $Commands) {
+  $o = Get-LintOptions $Lang $Stack.Tools
+  $want = if ($Choices.ContainsKey($Lang)) { $Choices[$Lang] } else { 'default' }
+  if ($want -eq 'default') { $want = $o.DefaultId }
+  if (-not $o.Options.Contains($want)) { Fail "unknown lint option '$want' for $Lang (options: $($o.Options.Keys -join ', '))" }
+  $entry = $null
+  if ($want -eq 'custom') {
+    if (-not $Commands.ContainsKey($Lang)) { Fail "custom lint for $Lang needs -LintCommand '$Lang=<cmd>'" }
+    $entry = [ordered]@{ extensions = @($defaultExt[$Lang]); command = $Commands[$Lang] }
+  }
+  elseif ($null -ne $o.Options[$want]) {
+    $entry = [ordered]@{} + $o.Options[$want]
+    if ($entry.Contains('needsSolution')) {
+      if ($entry['needsSolution']) { Fail 'jb needs a solution file (*.slnx or *.sln) in the project root' }
+      $entry.Remove('needsSolution')
+    }
+  }
+  $tools = @()
+  if ($want -eq 'jb') { $tools += , (Get-ToolStatus 'jb' $jbHint $true) }
+  if ($want -eq 'custom') { $tools += , (Get-ToolStatus (($Commands[$Lang] -split '\s+')[0]) $null $true) }
+  [ordered]@{
+    default = $o.DefaultId
+    options = @($o.Options.Keys)
+    choice  = $want
+    write   = ($null -ne $entry)
+    entry   = $entry
+    tools   = $tools
+  }
+}
+
+function Write-LintPlan($Plan) {
+  $todo = @($Plan | Where-Object { $_.lint.write })
+  if (-not $todo.Count) { return 'unchanged' }
+  $cfg = Read-Config
+  if ($null -eq $cfg) { $cfg = [pscustomobject]@{ '$schema' = 'https://raw.githubusercontent.com/GravionLabs/skills/main/skills/shared/implementation/schema/config.schema.json' } }
+  $has = $cfg.PSObject.Properties.Name -contains 'lint'
+  if ($has -and $cfg.lint -is [bool] -and -not $cfg.lint) { return 'skipped: lint is false (disabled) in .agents/config.json' }
+  if ($has -and $null -ne $cfg.lint -and $cfg.lint.GetType().Name -ne 'PSCustomObject') { Fail 'lint in .agents/config.json is neither false nor a map' }
+  if (-not $has) { $cfg | Add-Member -NotePropertyName lint -NotePropertyValue ([pscustomobject]@{}) }
+  foreach ($p in $todo) {
+    $en = $p.lint.entry
+    if (-not ($en['command'] -is [string] -and $en['command'])) { Fail "lint.$($p.language) has no valid command" }
+    $cfg.lint | Add-Member -NotePropertyName $p.language -NotePropertyValue ([pscustomobject]$en) -Force
+  }
+  $path = Get-ConfigPath
+  New-Item -ItemType Directory -Force -Path (Split-Path $path) | Out-Null
+  [System.IO.File]::WriteAllText($path, (($cfg | ConvertTo-Json -Depth 10) + "`n"), $utf8)
+  'written'
+}
+
 function Get-ConfigPath { Join-Path $root '.agents/config.json' }
 
 function Read-Config {
@@ -284,19 +377,24 @@ function Write-EditorconfigPlan($Plan, [string]$Text) {
 $choices = ConvertTo-Map $Choice '-Choice'
 $formats = ConvertTo-Map $FormatCommand '-FormatCommand'
 $checks = ConvertTo-Map $CheckCommand '-CheckCommand'
+$lintChoices = ConvertTo-Map $LintChoice '-LintChoice'
+$lintCommands = ConvertTo-Map $LintCommand '-LintCommand'
 $stack = Get-Stack
+foreach ($k in $lintChoices.Keys) { if ($k -notin $stack.Keys) { Fail "-LintChoice names '$k', which is not a detected language ($($stack.Keys -join ', '))" } }
 foreach ($k in $choices.Keys) { if ($k -notin $stack.Keys) { Fail "-Choice names '$k', which is not a detected language ($($stack.Keys -join ', '))" } }
 
 $formatPlan = Get-FormatPlan $stack $choices $formats $checks
+foreach ($p in $formatPlan) { $p['lint'] = Get-LintPlan $p.language $stack $lintChoices $lintCommands }
 $ecPlan = Get-EditorconfigPlan $stack
 $ecText = Get-EditorconfigText $stack
-$result = [ordered]@{ mode = if ($Apply) { 'apply' } else { 'dry-run' }; languages = $formatPlan; editorconfig = $null; format = $null }
+$result = [ordered]@{ mode = if ($Apply) { 'apply' } else { 'dry-run' }; languages = $formatPlan; editorconfig = $null; format = $null; lint = $null }
 if ($Apply) {
   $result.format = Write-FormatPlan $formatPlan
+  $result.lint = Write-LintPlan $formatPlan
   $ecPlan.result = Write-EditorconfigPlan $ecPlan $ecText
 }
 $result.editorconfig = $ecPlan
 $warnings = @()
-foreach ($p in $formatPlan) { foreach ($t in $p.tools) { if ($t.needed -and -not $t.found) { $warnings += "$($t.name) not found" + $(if ($t.installHint) { ": $($t.installHint)" }) } } }
+foreach ($p in $formatPlan) { foreach ($t in @($p.tools) + @($p.lint.tools)) { if ($t.needed -and -not $t.found) { $warnings += "$($t.name) not found" + $(if ($t.installHint) { ": $($t.installHint)" }) } } }
 $result.warnings = @($warnings | Select-Object -Unique)
 $result | ConvertTo-Json -Depth 10

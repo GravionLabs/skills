@@ -61,7 +61,20 @@ By default `Format-Changed.ps1 -Language <lang>` runs the built-in commands of `
 - `extensions`: files to keep (optional; absent needs `-Extensions` on the call).
 - `format` (entry): command for the format step; `check`: command for the read-only check (what CI or the caller runs). Each is a string or an array run in order; the first non-zero exit stops. `{files}` is replaced by the changed files, repo-relative, one argument each; inside a token (`--include={files}`) the files are joined by `;`.
 
-`/project-setup` (skill `project-setup`) writes the `format` key for you: it asks per detected language for the formatter and writes only the non-default choices.
+- `lint`: `false` skips every lint call (`skipped: disabled`), or a map keyed by language. An entry has `command` (string or array, run in order, `{files}` as for `format`; a command without `{files}` runs as it is) and optional `extensions` (absent: those of the built-in default). No `lint` key keeps the per-language default (`references/lint.md` of the `implementation` skill): eslint or biome lint (ts, ng), `ruff check` (py), `dotnet format analyzers` (dotnet), `cargo clippy` (rust), `golangci-lint` (go). `Format-Changed.ps1 -Lint` runs it on the changed files; `code-review` reports the findings.
+
+```json
+{
+  "lint": {
+    "dotnet": {
+      "extensions": [".cs"],
+      "command": "jb inspectcode MySolution.sln --no-build --include={files} -o=obj/inspect.sarif"
+    }
+  }
+}
+```
+
+`/project-setup` (skill `project-setup`) writes the `format` and `lint` keys for you: it asks per detected language for the formatter and the linter and writes only the non-default choices.
 
 ## Precedence
 
