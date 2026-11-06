@@ -1,6 +1,6 @@
 <#
 .SYNOPSIS
-  Maps a `review.schema.json` result to the findings format of poimen (`findings.json`, schema `docs/findings.schema.json` of GravionLabs/poimen).
+  Maps a `review.schema.json` result to the findings format of poimen (`findings.json`, schema `findings.schema.json` in the docs of GravionLabs/poimen).
 .DESCRIPTION
   Single place of the mapping for `code-review` (form `findings`, stdout) and `deliver` (file). `blocking[]` becomes severity `blocking`
   with `file`, `line`, `title`, `why` (and `rule`); `notes[]` (strings) become severity `note` without location (title and why are the note);
