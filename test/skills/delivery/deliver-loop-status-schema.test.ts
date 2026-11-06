@@ -10,6 +10,13 @@ const validate = new Ajv({ allErrors: true }).compile(read(schemaPath));
 const fixture = (name: string) => read(`test/skills/delivery/fixtures/${name}.json`);
 
 describe('deliver-loop-status.schema.json (#332)', () => {
+  it.each(['closed', 'total'])('describes %s as PBIs and Bugs only (#357)', (key) => {
+    const desc: string = read(schemaPath).properties[key].description ?? '';
+    expect(desc).toMatch(/pbi/i);
+    expect(desc).toMatch(/bug/i);
+    expect(desc).toMatch(/Features and Epics excluded/);
+  });
+
   it.each(['running', 'blocked', 'done'])('accepts the %s fixture', (name) => {
     const ok = validate(fixture(`deliver-loop-status-${name}`));
     expect(ok, JSON.stringify(validate.errors)).toBe(true);
