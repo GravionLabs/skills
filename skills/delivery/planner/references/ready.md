@@ -15,10 +15,11 @@ with `governance`: also `references/governance.md`
 - Goal.
 - Acceptance criteria, testable.
 - PBIs as sub-issues with blocked-by links.
-- Milestone set.
+- Milestone: none, or the one all its PBIs are in (`github-issue` `references/milestones.md`).
 
 ## PBI
 
+- Milestone set.
 - Testable acceptance criteria.
 - Files and symbols named.
 - Where the tests go.
@@ -28,7 +29,7 @@ with `governance`: also `references/governance.md`
 
 ## Bug
 
-All PBI points, plus repro steps or a failing test to write first.
+All PBI points (milestone included), plus repro steps or a failing test to write first.
 
 ## Milestone
 

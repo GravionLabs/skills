@@ -16,11 +16,13 @@ const handler = `(call) => {
   if (a[0] === 'issue' && a[1] === 'edit') return { rest: {} };
   if (a.includes('POST')) return { rest: { number: 99, title: a.find((x) => x.startsWith('title=')).slice(6), state: 'open', html_url: 'https://x/m/99' } };
   if (a.includes('-X')) throw new Error('unexpected write: ' + a.join(' '));
+  const sub = /issues\\/(\\d+)\\/sub_issues/.exec(p);
+  if (sub) return { rest: env('FAKE_SUBS', '{}')[sub[1]] || [] };
   const m = /issues\\/(\\d+)$/.exec(p);
   if (m) {
     const cur = env('FAKE_CURRENT', '{}')[m[1]];
     if (cur === undefined) throw new Error('404 Not Found');
-    return { rest: { number: Number(m[1]), milestone: cur ? { title: cur } : null } };
+    return { rest: { number: Number(m[1]), milestone: cur ? { title: cur } : null, labels: (env('FAKE_LABELS', '{}')[m[1]] || []).map((name) => ({ name })) } };
   }
   if (p.includes('/milestones?')) return { rest: [env('FAKE_MILESTONES', '[]')] };
   if (p.includes('/tags?')) return { rest: [[]] };
@@ -162,5 +164,63 @@ describe('Set-IssueMilestones.ps1', () => {
     expect(r.status).toBe(1);
     expect(r.stderr).toContain(msg);
     expect(writes(r.calls)).toEqual([]);
+  });
+
+  // #327: an Epic never has a milestone; a Feature only when all its open PBIs are in it
+  describe('milestone rule', () => {
+    const base = {
+      FAKE_MILESTONES: [ms(1, 'M1'), ms(2, 'M2')],
+      FAKE_CURRENT: { 1: null, 2: null, 3: null, 4: null },
+    };
+    it('refuses an Epic without writes', async () => {
+      const r = await run([{ issue: 1, milestone: 'M1' }], {
+        ...base,
+        FAKE_LABELS: { 1: ['epic'] },
+      });
+      expect(r.status).toBe(1);
+      expect(r.stderr).toContain('Epic never has a milestone');
+      expect(writes(r.calls)).toEqual([]);
+    });
+
+    it.each([
+      ['an open PBI without milestone', [{ number: 3, state: 'open', milestone: null }], '#3'],
+      [
+        'an open PBI in another milestone',
+        [{ number: 3, state: 'open', milestone: { title: 'M2' } }],
+        '#3',
+      ],
+    ])('refuses a Feature with %s', async (_n, subs, outside) => {
+      const r = await run([{ issue: 1, milestone: 'M1' }], {
+        ...base,
+        FAKE_LABELS: { 1: ['feature'] },
+        FAKE_SUBS: { 1: subs },
+      });
+      expect(r.status).toBe(1);
+      expect(r.stderr).toContain(`outside: ${outside}`);
+      expect(writes(r.calls)).toEqual([]);
+    });
+
+    it('sets a Feature when its PBIs land in the same milestone (assigned now or already there), closed ones do not count', async () => {
+      const r = await run(
+        [
+          { issue: 1, milestone: 'M1' },
+          { issue: 3, milestone: 'M1' },
+        ],
+        {
+          ...base,
+          FAKE_CURRENT: { 1: null, 3: null },
+          FAKE_LABELS: { 1: ['feature'], 3: ['pbi'] },
+          FAKE_SUBS: {
+            1: [
+              { number: 3, state: 'open', milestone: null },
+              { number: 4, state: 'open', milestone: { title: 'M1' } },
+              { number: 5, state: 'closed', milestone: null },
+            ],
+          },
+        },
+      );
+      expect(r.status).toBe(0);
+      expect(writes(r.calls).map((a) => a[2])).toEqual(['1', '3']);
+    });
   });
 });

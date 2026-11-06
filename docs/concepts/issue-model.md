@@ -29,6 +29,10 @@ The skills work on one issue hierarchy with a fixed set of labels. `github-issue
 
 A PBI that another session claimed (assignee) is skipped too, see [delivery](../delivery.md).
 
+## Milestones
+
+A milestone holds the work items that are delivered: PBIs and Bugs always have one. A Feature has one only when all its PBIs are in that milestone, an Epic never. `github-milestone` shows breaks of the rule as `warnings`, `roadmap` refuses them, and `deliver --milestone` skips work items outside the milestone. Closing is independent: after the release PR is merged, Features whose sub-issues are all closed close with them. Details: `references/milestones.md` of `github-issue`.
+
 ## Branches and the release branch
 
 - Work branches are named `<type>/<nr>-<slug>`, for example `feat/42-csv-export`. The slug comes from the title without its `[Level]` prefix and conventional type.
