@@ -4,8 +4,11 @@
 
 ```
 /deliver <nr> [<nr> …] [--milestone <name>] [--unattended] [--max <n>]
+/deliver status --milestone <name>
 /deliver help
 ```
+
+`/deliver status --milestone <name>` prints the status block (progress, delivered, ready, waiting, needs you, release state, next milestone; at most 10 lines) without delivering. `deliver` prints it after each PBI too; `pwsh scripts/Get-DeliverStatus.ps1 -Milestone <name> [-Delivered <nr…>] [-Text]` produces it as JSON or text.
 
 Delivers the open PBIs and Bugs of the given issues in dependency order: a subagent implements (`implementation`), a subagent reviews (`code-review`, at most 2 fix rounds), then PR into `release/next`, required checks, squash merge, close. State lives in GitHub only; run it again to continue.
 
