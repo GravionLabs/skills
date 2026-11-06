@@ -74,7 +74,7 @@ By default `Format-Changed.ps1 -Language <lang>` runs the built-in commands of `
 }
 ```
 
-`/project-setup` (skill `project-setup`) writes the `format` and `lint` keys for you: it asks per detected language for the formatter and the linter and writes only the non-default choices.
+`/project-setup` (skill `project-setup`) writes the `format` and `lint` keys for you: it asks per detected language for the formatter and the linter and writes only the non-default choices. When ADR or spec folders exist without a `governance` key it also offers that key, with `adrPaths` and `specMap` proposed from the repo and `specMode: warn`; an existing key is shown and only changed on `merge` or `replace`.
 
 ## Precedence
 

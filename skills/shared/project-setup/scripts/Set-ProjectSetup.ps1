@@ -1,6 +1,6 @@
 <#
 .SYNOPSIS
-  Plans (default, dry run) or applies the project setup: the `format` and `lint` keys of .agents/config.json per language and the .editorconfig.
+  Plans (default, dry run) or applies the project setup: the `format` and `lint` keys of .agents/config.json per language, the `governance` key and the .editorconfig.
 .DESCRIPTION
   Runs detect-techstack, maps its languages to the keys of `format` (ts, ng, py, dotnet, rust, go) and prints the plan as JSON:
   per language the default formatter, the detected tool, the options and the choice; the .editorconfig action; tool checks.
@@ -22,6 +22,9 @@
   `lang=option` entries for the linter, e.g. 'dotnet=jb','py=pyright'. `default` (or no entry) keeps the default. Options are listed in the plan (`languages[].lint.options`).
 .PARAMETER LintCommand
   `lang=command` for a `custom` lint choice (the lint command, {files} placeholder).
+.PARAMETER Governance
+  `enable` writes the proposed `governance` key when none exists; `merge` adds the proposal to an existing key (its values stay, lists and specMap are extended);
+  `replace` writes the proposal over an existing key. Without it the governance key is only proposed. An existing key is never changed otherwise.
 .PARAMETER StackJson
   A `detect-techstack` report (JSON text) instead of running the detection; for tests and callers that already have the report.
 .PARAMETER Apply
@@ -35,6 +38,8 @@ param(
   [string[]]$CheckCommand = @(),
   [string[]]$LintChoice = @(),
   [string[]]$LintCommand = @(),
+  [ValidateSet('enable', 'merge', 'replace')]
+  [string]$Governance,
   [string]$StackJson,
   [switch]$Apply
 )
@@ -80,7 +85,8 @@ function Get-Stack {
     if ($k -eq 'ts' -and $frameworks -contains 'angular') { $k = 'ng' }
     if (@('ts', 'ng', 'py', 'dotnet', 'rust', 'go') -contains $k -and -not $keys.Contains($k)) { $keys.Add($k) }
   }
-  [pscustomobject]@{ Keys = @($keys); Tools = @($report.tools) }
+  $gov = if ($report.PSObject.Properties.Name -contains 'governance') { $report.governance } else { $null }
+  [pscustomobject]@{ Keys = @($keys); Tools = @($report.tools); Governance = $gov }
 }
 
 # ---- tools ------------------------------------------------------------------------------------------------------------
@@ -333,6 +339,122 @@ function Write-FormatPlan($Plan) {
   'written'
 }
 
+# ---- governance -------------------------------------------------------------------------------------------------------
+function Get-GovValue($Gov, [string]$Name, $Default) {
+  if ($Gov -is [pscustomobject] -and $Gov.PSObject.Properties.Name -contains $Name -and $Gov.$Name) { return $Gov.$Name }
+  $Default
+}
+
+function ConvertTo-Ordered($Object) {
+  $m = [ordered]@{}
+  if ($Object -is [System.Collections.IDictionary]) { foreach ($k in $Object.Keys) { $m[$k] = $Object[$k] }; return $m }
+  foreach ($p in $Object.PSObject.Properties) { $m[$p.Name] = $p.Value }
+  $m
+}
+
+# proposal from the repo: the ADR and spec folders of detect-techstack; compose, infra and CI paths for adrPaths; one spec per apps/ folder
+function Get-GovernanceProposal($Gov) {
+  $adrPaths = [System.Collections.Generic.List[string]]::new()
+  foreach ($f in 'docker-compose.yml', 'docker-compose.yaml', 'compose.yaml', 'compose.yml') {
+    if (Test-Path -LiteralPath (Join-Path $root $f) -PathType Leaf) { $adrPaths.Add($f) }
+  }
+  if (Test-Path -LiteralPath (Join-Path $root 'infra') -PathType Container) { $adrPaths.Add('infra/**') }
+  if (Test-Path -LiteralPath (Join-Path $root '.github/workflows') -PathType Container) { $adrPaths.Add('.github/workflows/**') }
+  $specDir = [string](Get-GovValue $Gov 'specDir' 'docs/specs')
+  $specMap = [ordered]@{}
+  $apps = Join-Path $root 'apps'
+  if (Test-Path -LiteralPath $apps -PathType Container) {
+    foreach ($d in Get-ChildItem -LiteralPath $apps -Directory | Sort-Object Name) {
+      $specMap["apps/$($d.Name)/**"] = "$specDir/$($d.Name).md"
+    }
+  }
+  [ordered]@{
+    adrDir     = [string](Get-GovValue $Gov 'adrDir' 'docs/adr')
+    adrPaths   = @($adrPaths)
+    specDir    = $specDir
+    specMap    = $specMap
+    specMode   = 'warn'
+    skipLabels = @('skip-adr')
+  }
+}
+
+# the current values stay; the proposal adds what is missing (lists and maps are extended, scalars are kept)
+function Merge-Governance($Current, $Proposal) {
+  $merged = [ordered]@{}
+  foreach ($k in $Current.Keys) { $merged[$k] = $Current[$k] }
+  foreach ($k in $Proposal.Keys) {
+    $p = $Proposal[$k]
+    if (-not $merged.Contains($k)) { $merged[$k] = $p; continue }
+    $c = $merged[$k]
+    if ($p -is [System.Collections.IDictionary]) {
+      $map = ConvertTo-Ordered $c
+      foreach ($mk in $p.Keys) { if (-not $map.Contains($mk)) { $map[$mk] = $p[$mk] } }
+      $merged[$k] = $map
+    }
+    elseif ($p -is [array]) {
+      $list = [System.Collections.Generic.List[object]]::new()
+      foreach ($x in @($c) + @($p)) { if ($null -ne $x -and -not $list.Contains($x)) { $list.Add($x) } }
+      $merged[$k] = @($list)
+    }
+  }
+  $merged
+}
+
+function Get-GovernanceChanges($Current, $Merged) {
+  @($Merged.Keys | Where-Object {
+      -not $Current.Contains($_) -or
+      ((ConvertTo-Json -InputObject $Current[$_] -Compress -Depth 5) -ne (ConvertTo-Json -InputObject $Merged[$_] -Compress -Depth 5))
+    })
+}
+
+function Get-GovernancePlan($Stack) {
+  $cfg = Read-Config
+  $current = $null
+  if ($null -ne $cfg -and $cfg.PSObject.Properties.Name -contains 'governance') {
+    if ($cfg.governance -isnot [pscustomobject]) { Fail 'governance in .agents/config.json is not a map' }
+    $current = ConvertTo-Ordered $cfg.governance
+  }
+  $proposal = Get-GovernanceProposal $Stack.Governance
+  $hint = Get-GovValue $Stack.Governance 'hint' $null
+  $merged = if ($null -ne $current) { Merge-Governance $current $proposal } else { $proposal }
+  # @() around the call: an empty result would unroll to $null, and .Count would fail under strict mode
+  $changed = @()
+  if ($null -ne $current) { $changed = @(Get-GovernanceChanges $current $merged) }
+  $action = if ($null -eq $current) { 'create' } elseif ($changed.Count) { 'exists' } else { 'unchanged' }
+  $entry = $null
+  switch ($Governance) {
+    'enable' { if ($null -eq $current) { $entry = $proposal } }
+    'merge' { if ($null -eq $current) { $entry = $proposal } elseif ($changed.Count) { $entry = $merged } }
+    'replace' { if ($null -eq $current -or $changed.Count) { $entry = $proposal } }
+  }
+  [ordered]@{
+    ask         = [bool]$hint
+    hint        = $hint
+    choice      = if ($Governance) { $Governance } else { 'none' }
+    action      = $action
+    changedKeys = @($changed)
+    write       = ($null -ne $entry)
+    entry       = $entry
+    current     = $current
+    proposal    = $proposal
+  }
+}
+
+function Write-GovernancePlan($Plan) {
+  if ($Plan.choice -eq 'none') { return 'not requested' }
+  if (-not $Plan.write) {
+    if ($Plan.action -eq 'exists') { return 'skipped: governance exists in .agents/config.json; choose merge or replace' }
+    return 'unchanged'
+  }
+  $cfg = Read-Config
+  if ($null -eq $cfg) { $cfg = [pscustomobject]@{ '$schema' = 'https://raw.githubusercontent.com/GravionLabs/skills/main/skills/shared/implementation/schema/config.schema.json' } }
+  $cfg | Add-Member -NotePropertyName governance -NotePropertyValue ([pscustomobject]$Plan.entry) -Force
+  $path = Get-ConfigPath
+  New-Item -ItemType Directory -Force -Path (Split-Path $path) | Out-Null
+  [System.IO.File]::WriteAllText($path, (($cfg | ConvertTo-Json -Depth 10) + "`n"), $utf8)
+  'written'
+}
+
 # ---- .editorconfig -----------------------------------------------------------------------------------------------------
 function Get-EditorconfigText($Stack) {
   $t = Join-Path $skillDir 'templates'
@@ -387,12 +509,15 @@ $formatPlan = Get-FormatPlan $stack $choices $formats $checks
 foreach ($p in $formatPlan) { $p['lint'] = Get-LintPlan $p.language $stack $lintChoices $lintCommands }
 $ecPlan = Get-EditorconfigPlan $stack
 $ecText = Get-EditorconfigText $stack
-$result = [ordered]@{ mode = if ($Apply) { 'apply' } else { 'dry-run' }; languages = $formatPlan; editorconfig = $null; format = $null; lint = $null }
+$govPlan = Get-GovernancePlan $stack
+$result = [ordered]@{ mode = if ($Apply) { 'apply' } else { 'dry-run' }; languages = $formatPlan; editorconfig = $null; format = $null; lint = $null; governance = $null }
 if ($Apply) {
   $result.format = Write-FormatPlan $formatPlan
   $result.lint = Write-LintPlan $formatPlan
+  $govPlan['result'] = Write-GovernancePlan $govPlan
   $ecPlan.result = Write-EditorconfigPlan $ecPlan $ecText
 }
+$result.governance = $govPlan
 $result.editorconfig = $ecPlan
 $warnings = @()
 foreach ($p in $formatPlan) { foreach ($t in @($p.tools) + @($p.lint.tools)) { if ($t.needed -and -not $t.found) { $warnings += "$($t.name) not found" + $(if ($t.installHint) { ": $($t.installHint)" }) } } }
