@@ -210,8 +210,30 @@
     "detail": {
       "allOf": [{ "$ref": "#/$defs/summary" }],
       "type": "object",
-      "required": ["issues", "releasePr"],
+      "required": ["issues", "warnings", "releasePr"],
       "properties": {
+        "warnings": {
+          "type": "array",
+          "description": "Breaks of the milestone rule: an Epic in the milestone (epic-in-milestone); a Feature in it with open sub-issues outside of it (feature-incomplete, outside[] with their milestone title or none).",
+          "items": {
+            "type": "object",
+            "required": ["type", "number", "title"],
+            "properties": {
+              "type": { "enum": ["epic-in-milestone", "feature-incomplete"] },
+              "number": { "type": "integer" },
+              "title": { "type": "string" },
+              "outside": {
+                "type": "array",
+                "items": {
+                  "type": "object",
+                  "required": ["number", "title", "milestone"],
+                  "properties": { "number": { "type": "integer" }, "title": { "type": "string" }, "milestone": { "type": "string" } }
+                }
+              }
+            },
+            "additionalProperties": false
+          }
+        },
         "issues": {
           "type": "object",
           "description": "Open issues, pull requests excluded; each in the first matching group: needsDecision, needsRefinement, blocked, claimed, ready.",
