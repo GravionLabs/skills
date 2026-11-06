@@ -11,7 +11,7 @@
   at the start of the iteration), a summary line per step to .agents/deliver-loop.log (plain) and stdout, the same line
   with ANSI colors to .agents/deliver-loop.ansi.log (long text is cut to the terminal width, 120 characters when redirected), desktop notifications for the attention steps (macOS osascript,
   Windows toast), the herdr pane tokens deliver, deliver_step, deliver_pr when HERDR_ENV=1 and, with -LogPane in herdr on a terminal,
-  a split pane labeled deliver-log below the session that tails the log (LogPane.ps1; never closed by the loop).
+  a split pane labeled deliver-log below the session that tails the log (TerminalBackend.ps1; never closed by the loop).
   Stdout carries the colors of the .ansi.log when it is a terminal and neither -NoColor nor NO_COLOR is set; otherwise it is plain.
   Machine-readable progress for a control session (`deliver` `references/control.md`): .agents/deliver-loop/<run>/progress.jsonl,
   one JSON object per line (`start`, `iteration-start`, `iteration-end`, `result`), and .agents/deliver-loop/latest.txt with the path of the newest run directory.
@@ -86,14 +86,16 @@ $LogFile = Join-Path (Get-Location) '.agents/deliver-loop.log'
 $AnsiFile = if ($NoColor -or $env:NO_COLOR) { '' } else { Join-Path (Get-Location) '.agents/deliver-loop.ansi.log' }
 $Esc = [char]27
 $Ansi = @{ dim = "$Esc[2m"; cyan = "$Esc[36m"; red = "$Esc[31m"; yellow = "$Esc[33m"; green = "$Esc[32m"; reset = "$Esc[0m" }
-# stdout gets the colors of the .ansi.log when it is a terminal (Test-LoopTerminal in LogPane.ps1 defines "terminal").
-. (Join-Path $PSScriptRoot 'LogPane.ps1')
+# stdout gets the colors of the .ansi.log when it is a terminal (Test-LoopTerminal in TerminalBackend.ps1 defines "terminal").
+. (Join-Path $PSScriptRoot 'TerminalBackend.ps1')
 $ColorStdout = [bool]$AnsiFile -and (Test-LoopTerminal)
 $RunDir = Join-Path (Get-Location) ".agents/deliver-loop/$((Get-Date).ToString('yyyyMMdd-HHmmss'))"
 $Progress = Join-Path $RunDir 'progress.jsonl'
 $Recent = [System.Collections.Generic.List[string]]::new()
 $AgentNames = @{}
-$Pane = if ($env:HERDR_ENV -eq '1') { $env:HERDR_PANE_ID } else { '' }
+# resolved once: the harness runs with HERDR_ENV blanked, the progress callbacks still report
+$Backend = Get-TerminalBackend
+$Pane = Get-LoopPane $Backend
 
 # One step: plain to the log; colored to the .ansi.log and a terminal stdout (time dim, $Tool cyan, the rest in $Color).
 # $Tool is looked up from $ToolAt on (after the subagent prefix).
@@ -134,41 +136,25 @@ function Send-Notice([string]$text) {
 $PanePbi = ''
 $PanePr = ''
 function Set-Pane([string]$Nr = '', [string]$Step = '', [switch]$Clear) {
-  # herdr pane tokens (#16): deliver=#<nr>, deliver_step=<pos>/<total> <step>[: <result>], deliver_pr=#<pr>; values <= 80 chars
-  if (-not $Pane) { return }
-  if ($Clear) {
-    $tokenArgs = @('--clear-token', 'deliver', '--clear-token', 'deliver_step', '--clear-token', 'deliver_pr')
-  } else {
-    if ($Nr -ne $script:PanePbi) { $script:PanePbi = $Nr; $script:PanePr = '' }
-    if ($Step -match '^\d+/\d+ pr: .*?#(\d+)') { $script:PanePr = $Matches[1] }
-    $value = if ($Step.Length -gt 80) { $Step.Substring(0, 79) + '…' } else { $Step }
-    $tokenArgs = @('--token', "deliver=#$Nr", '--token', "deliver_step=$value")
-    if ($script:PanePr) { $tokenArgs += @('--token', "deliver_pr=#$($script:PanePr)") }
-    $tokenArgs += @('--ttl-ms', '3600000')
-  }
-  try { & herdr pane report-metadata $Pane --source deliver @tokenArgs 2>$null | Out-Null } catch { Write-Verbose "herdr failed: $_" }
+  # pane tokens (#16): deliver=#<nr>, deliver_step=<pos>/<total> <step>[: <result>], deliver_pr=#<pr>; values <= 80 chars
+  if ($Clear) { Clear-LoopTokens -Pane $Pane -Name 'deliver', 'deliver_step', 'deliver_pr' -Backend $Backend; return }
+  if ($Nr -ne $script:PanePbi) { $script:PanePbi = $Nr; $script:PanePr = '' }
+  if ($Step -match '^\d+/\d+ pr: .*?#(\d+)') { $script:PanePr = $Matches[1] }
+  $value = if ($Step.Length -gt 80) { $Step.Substring(0, 79) + '…' } else { $Step }
+  $tokens = [ordered]@{ deliver = "#$Nr"; deliver_step = $value }
+  if ($script:PanePr) { $tokens['deliver_pr'] = "#$($script:PanePr)" }
+  Set-LoopTokens -Pane $Pane -Token $tokens -TtlMs 3600000 -Backend $Backend
 }
 
-# herdr agent state (#191): the loop reports its own lifecycle (source deliver-loop, agent deliver); herdr tracks only the pane's agent, not the claude -p children.
-# working per iteration, blocked on a pause/blocked step or when the loop ends blocked / no progress, idle at the end, then release. Any herdr failure is ignored.
+# Agent state (#191): the loop reports its own lifecycle (source deliver-loop, agent deliver); the terminal tracks only the pane's agent, not the claude -p children.
+# working per iteration, blocked on a pause/blocked step or when the loop ends blocked / no progress, idle at the end, then release. Any backend failure is ignored.
+# report-agent replaces the state of another agent in the pane and release does not restore it, so the loop reports only
+# in a pane without another agent (Test-LoopAgentConflict, checked once; backend failure: reports as before).
 $Paused = $false
-# Live herdr (2026-11): the pane id must come right after the subcommand; release-agent rejects it as trailing positional
-# ("unknown option"). report-agent replaces the state of another agent in the pane and release-agent does not restore it,
-# so the loop reports only in a pane without another agent (checked once with `pane get`; herdr failure: reports as before).
 $AgentStateOff = $false
-function Test-PaneHasOtherAgent {
-  if (-not $Pane) { return $false }
-  try {
-    $out = & herdr pane get $Pane 2>$null
-    if ($LASTEXITCODE -ne 0 -or -not $out) { return $false }
-    $a = (($out -join "`n") | ConvertFrom-Json).result.pane.agent
-    return [bool]$a -and $a -ne 'deliver'
-  } catch { return $false }
-}
 function Set-AgentState([string]$State = '', [switch]$Release) {
-  if (-not $Pane -or $AgentStateOff) { return }
-  [string[]]$a = if ($Release) { 'release-agent' } else { 'report-agent', '--state', $State }
-  try { & herdr pane $a[0] $Pane @($a | Select-Object -Skip 1) --source deliver-loop --agent deliver 2>$null | Out-Null } catch { Write-Verbose "herdr failed: $_" }
+  if ($AgentStateOff) { return }
+  if ($Release) { Clear-LoopAgentState -Pane $Pane -Backend $Backend } else { Set-LoopAgentState -Pane $Pane -State $State -Backend $Backend }
 }
 
 # Get-Milestones.ps1 of github-milestone: sibling skill (installed) or skills/github (repository)
@@ -398,10 +384,10 @@ $result = 'done'
 $code = 0
 $i = 0
 try {
-  if ($LogPane) { Open-LogPane -LogFile $(if ($AnsiFile) { $AnsiFile } else { $LogFile }) }
-  if (Test-PaneHasOtherAgent) {
+  if ($LogPane) { Open-LogPane -LogFile $(if ($AnsiFile) { $AnsiFile } else { $LogFile }) -Backend $Backend }
+  if (Test-LoopAgentConflict -Pane $Pane -Backend $Backend) {
     $script:AgentStateOff = $true
-    Write-Step 'herdr agent state not reported: another agent runs in this pane (start the loop in its own pane)' 'yellow'
+    Write-Step 'agent state not reported: another agent runs in this pane (start the loop in its own pane)' 'yellow'
   }
   $state = Get-State
   Write-ProgressRecord 'start' @{ targets = @($Nrs); milestone = $Milestone; max = $Max; harness = $Harness; model = $Model; open = $state.Open }

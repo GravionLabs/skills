@@ -9,6 +9,7 @@ const delivery = path.resolve(__dirname, '../../../skills/delivery');
 const shimSh = path.join(delivery, 'skills-manage/templates/deliver-loop.sh');
 const installScript = path.join(delivery, 'skills-manage/scripts/Install-LoopShim.ps1');
 const startScript = path.join(delivery, 'deliver/scripts/Start-LoopWorkspace.ps1');
+const backendScript = path.join(delivery, 'deliver/scripts/TerminalBackend.ps1');
 const shimPs1 = path.join(delivery, 'skills-manage/templates/deliver-loop.ps1');
 const posix = process.platform !== 'win32';
 
@@ -26,6 +27,7 @@ const fakeSkill = (base: string, marker: string) => {
     `Write-Output "${marker}|$($args -join ',')"\nexit 3\n`,
   );
   fs.copyFileSync(startScript, path.join(dir, 'Start-LoopWorkspace.ps1'));
+  fs.copyFileSync(backendScript, path.join(dir, 'TerminalBackend.ps1'));
 };
 const runShim = (cwd: string, home: string, args: string[], env: NodeJS.ProcessEnv = {}) =>
   spawnSync('bash', ['-c', `. "${shimSh}"; deliver-loop "$@"`, 'bash', ...args], {
@@ -210,6 +212,7 @@ describe('deliver-loop runs in the repository root (#227)', () => {
       'Write-Output "cwd|$((Get-Location).Path)"\n',
     );
     fs.copyFileSync(startScript, path.join(dir, 'Start-LoopWorkspace.ps1'));
+    fs.copyFileSync(backendScript, path.join(dir, 'TerminalBackend.ps1'));
     const bin = mk('rbin');
     log = path.join(tmp, 'rbin.log');
     fakeHerdr(bin, log);

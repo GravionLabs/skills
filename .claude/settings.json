@@ -24,6 +24,7 @@
       "Bash(printenv HERDR_ENV)",
       "Bash(printenv HERDR_PANE_ID)",
       "Bash(herdr pane report-metadata:*)",
+      "Bash(poimen-server report:*)",
       "Edit",
       "Write"
     ],
