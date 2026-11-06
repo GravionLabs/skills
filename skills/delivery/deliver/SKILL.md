@@ -52,6 +52,10 @@ Every PR and issue the chat names is written as its full URL (`https://github.co
 
 After every step read the state from GitHub again (issue, branch, PR, checks), not from the memory of this session.
 
+## Feedback during a run
+
+Interactive only: a user message describing a defect or a change becomes a draft `[Bug]` or `[PBI]` per finding (shown in at most 6 lines), created in the milestone after confirmation; small and clear ones are ready, unclear ones get `needs-refinement`. This session implements nothing for it; "fix it now" is delivered as a PBI through steps 2 to 8 (`references/feedback.md`).
+
 ## Pause rules
 
 From OpenSpec `openspec-apply-change`; a pause follows the mode of `## Input`.

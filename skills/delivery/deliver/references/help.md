@@ -20,7 +20,7 @@ Delivers the open PBIs and Bugs of the given issues in dependency order: a subag
 - `--inline`: deliver all PBIs in this session. Without it an interactive run over more than `deliver.loopThreshold` (default 3) PBIs starts the loop and stays a control session (`references/control.md`). `--no-preflight` skips the preflight (skills, allowlist, stale worktrees; `references/preflight.md`).
 - `--max <n>`: stops after `n` delivered, blocked or paused PBIs and prints the report.
 - Skipped: `needs-decision`; `needs-refinement` (hint `planner refine <nr>`); `interactive` (unattended only; `/deliver <nr>` in a session delivers it); PBIs claimed by another session.
-- `help`, `--help`, `-h`: print this file.
+- `help`, `--help`, `-h`: print this file. Feedback in an interactive run becomes one `[Bug]` or `[PBI]` per finding in the milestone after you confirm (`references/feedback.md`).
 
 ### Loop script
 

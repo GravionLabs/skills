@@ -119,6 +119,10 @@ An interactive `/deliver --milestone M4` (or a Feature or Epic with more than th
 
 `/deliver --milestone M4 --inline` keeps the old behavior: this session delivers every PBI itself. Details: `references/control.md` of the `deliver` skill.
 
+## Feedback during a run
+
+Tell the session what you see while testing (a defect, a UI wish, an idea) and it drafts an issue per finding instead of changing code: `[Bug]` with repro or `[PBI]` with acceptance criteria, `Tier:` and `Size:`, shown in at most 6 lines. After your confirmation it is created in the current milestone (or the one you name) with `github-issue`; screenshots are referenced in the body. Small, clear items are ready and the same run picks them up; unclear ones get `needs-refinement` (`planner refine <nr>`). "Fix it now" delivers a PBI through the normal steps. Details: `references/feedback.md` of the `deliver` skill.
+
 ## Preflight
 
 Before the first PBI `deliver` checks the repository and prints one line per check (ok, fixed or action needed): the stack skills of `detect-techstack` are installed in the project and not older than the global ones (missing: `skills-manage`, after one question; unattended the run continues with the global skills), `git`, `gh`, `pwsh <skill-dir>/scripts/*` and the verify commands of `AGENTS.md` are on the allowlist (missing lines are listed, interactive offers to add them), and worktrees of merged or deleted PBI branches are removed (others are listed). `--no-preflight` skips it. Details: `references/preflight.md` of the `deliver` skill.

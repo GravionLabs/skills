@@ -27,6 +27,29 @@ describe('deliver SKILL.md', () => {
     expect(report).toContain('the release PR of step 9 as a full URL');
   });
 
+  it('turns feedback during a run into issues instead of code (#324)', () => {
+    const feedback = fs.readFileSync(path.join(skillDir, 'references/feedback.md'), 'utf8');
+    expect(body).toContain('## Feedback during a run');
+    expect(body).toContain('references/feedback.md');
+    for (const part of [
+      'at most 6 lines',
+      '`Tier:`',
+      '`Size:`',
+      '`needs-refinement`',
+      'planner refine <nr>',
+      'one draft per finding',
+      'implements nothing',
+      'Fix it now',
+      'Screenshots',
+    ]) {
+      expect(feedback).toContain(part);
+    }
+    expect(text.split('\n').length).toBeLessThanOrEqual(100);
+    expect(
+      fs.readFileSync(path.resolve(__dirname, '../../../docs/guides/deliver.md'), 'utf8'),
+    ).toContain('## Feedback during a run');
+  });
+
   it('hands interactive runs over many PBIs to a control session over the loop (#321)', () => {
     const control = fs.readFileSync(path.join(skillDir, 'references/control.md'), 'utf8');
     expect(body).toContain('--inline');
