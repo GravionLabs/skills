@@ -12,6 +12,8 @@ The deliver scripts call the terminal only through `scripts/TerminalBackend.ps1`
 | `Open-LogPane`         | `herdr pane list`, `pane split`, `pane run`, `pane rename`                       | notice only                                                                  | poimen, none |
 | `Switch-LogPane`       | `herdr pane list`, `pane close` or `Open-LogPane`                                | notice only                                                                  | poimen, none |
 
+The loop reports the tokens `deliver`, `deliver_step`, `deliver_pr` and `deliver_progress` (`<closed>/<total>` of the milestone, e.g. `7/19`) through `Set-LoopTokens`, and the lifecycle through `Set-LoopAgentState`; `Clear-LoopTokens` removes all four on exit. poimen gets the same tokens and state through `poimen-server` (`terminal.report_tokens`); a missing server or method warns once on stderr (`Invoke-Poimen`) and the loop goes on. The status file `.agents/deliver-loop/status.json` is written whatever the backend (`loop.md` "Observability").
+
 Only `Test-LoopAgentConflict` (`herdr pane get`, herdr only) reads state. The sections below describe herdr.
 
 Only when `printenv HERDR_ENV` prints `1` (the session runs in a herdr pane). Without herdr nothing here runs.
@@ -33,6 +35,7 @@ herdr pane report-metadata <pane> --source deliver --token deliver=#12 --token "
 - `deliver=#<nr>`: the PBI or Bug of the progress line.
 - `deliver_step=<step>[: <result>]`: the step and its result from the progress line, at most 80 characters (cut longer ones).
 - `deliver_pr=#<pr>`: only once the PR exists (from the `pr` step on).
+- `deliver_progress=<closed>/<total>`: set by the loop only (not by a session following this file).
 
 The tokens never replace the agent name: the sidebar keeps showing the harness (`claude`, `opencode`). herdr keeps them per source for the TTL (one hour), so a crashed run does not leave them forever. Token names are 1–32 ASCII letters, digits, `_` or `-`; at most 16 per report.
 

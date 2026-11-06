@@ -289,7 +289,7 @@ fs.writeFileSync(f, JSON.stringify(s));`,
       // redirected stdout stays plain text
       expect(r.stdout).not.toContain(String.fromCharCode(27));
       const paths = gh.calls().map((c) => c.args.join(' '));
-      expect(paths.filter((c) => c.includes('/issues?milestone='))).toHaveLength(3); // the state read before and after the one iteration; the closed list is read once for the done check
+      expect(paths.filter((c) => c.includes('/issues?milestone='))).toHaveLength(5); // the state read before and after the one iteration; the closed list is read once for the done check; the status block (state=all) before and after (#329)
       expect(
         paths.filter((c) => c.includes('issues?milestone=1&state=open&per_page=100 --paginate')),
       ).toHaveLength(2);
@@ -492,7 +492,7 @@ fs.writeFileSync(f, JSON.stringify(s));`,
         `pane report-metadata p7 --source deliver --token deliver=#401 --token deliver_step=1/2 review: ${'x'.repeat(67)}… --token deliver_pr=#55 ${tokens}`,
         `pane report-metadata p7 --source deliver --token deliver=#401 --token deliver_step=1/2 ci: red --token deliver_pr=#55 ${tokens}`,
         `pane report-metadata p7 --source deliver --token deliver=#401 --token deliver_step=1/2 merged: squash --token deliver_pr=#55 ${tokens}`,
-        'pane report-metadata p7 --source deliver --clear-token deliver --clear-token deliver_step --clear-token deliver_pr',
+        'pane report-metadata p7 --source deliver --clear-token deliver --clear-token deliver_step --clear-token deliver_pr --clear-token deliver_progress',
       ]);
       expect(calls.join('\n')).not.toContain('display-agent');
       // no -LogPane: opens no pane (a TTY and a herdr pane are present); the plain log has no escape codes, the ANSI log is colored

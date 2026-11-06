@@ -5,8 +5,8 @@
   One read of the milestone (github-milestone Get-Milestones.ps1 -Mode issues -State all, REST: issues with their native
   blocked-by links, base URL, next open milestone) plus a lookup of the release PR (REST, no GraphQL). Blockers come from
   the native links; the "Blocked by"/"Depends on" lines of the body count only when the read has no blockedBy field. Prints JSON; -Text prints the block of at most 10 lines.
-  Every issue is a full URL with its title. JSON: milestone, key, closed, total, delivered[], ready{count,next},
-  tiers{fast,standard,strong} (open PBIs and Bugs; Tier: line, else size S/M/L, else standard), waiting[], needsYou[],
+  Every issue is a full URL with its title. JSON: milestone, key, baseUrl, milestoneUrl, closed, total, delivered[], ready{count,next},
+  baseUrl, milestoneUrl, tiers{fast,standard,strong} (open PBIs and Bugs; Tier: line, else size S/M/L, else standard), waiting[], needsYou[],
   release{state,round,pr}, next, lines[].
 .PARAMETER Milestone
   Milestone name (M<n>, full title or legacy x.y.z).
@@ -132,7 +132,7 @@ $lines.Add('Next milestone: ' + $(if ($next) { $next } else { '-' }))
 
 if ($Text) { $lines -join "`n"; exit 0 }
 [ordered]@{
-  milestone = $title; key = $key; closed = $closed.Count; total = $total
+  milestone = $title; key = $key; baseUrl = $BaseUrl; milestoneUrl = "$BaseUrl/milestone/$($data.milestone.number)"; closed = $closed.Count; total = $total
   tiers = $tiers
   delivered = $doneRefs
   ready = [ordered]@{ count = $ready.Count; next = $(if ($ready.Count) { $ready[0] } else { $null }) }
