@@ -202,6 +202,19 @@ describe('Get-DeliverStatus.ps1', () => {
     expect(j.ready.next.number).toBe(4);
   });
 
+  it('#347: closed and total count only PBIs and Bugs, an open Feature does not count', () => {
+    const fake = fixture('feature', [
+      { number: 1, title: 'feat: one', state: 'closed' },
+      { number: 2, title: 'fix: two', state: 'closed', labels: ['bug'] },
+      { number: 3, title: 'feat: three', state: 'open' },
+      { number: 9, title: '[Feature] open', state: 'open', labels: ['feature'] },
+    ]);
+    const j = JSON.parse(run(fake).stdout);
+    expect(j.closed).toBe(2);
+    expect(j.total).toBe(3);
+    expect(run(fake, ['-Text']).stdout.split('\n')[0]).toBe('Milestone M4: 2/3 closed · standard 1');
+  });
+
   it('fails when the milestone cannot be read', () => {
     const bad = path.join(tmp, 'bad.ps1');
     fs.writeFileSync(bad, 'exit 1\n');

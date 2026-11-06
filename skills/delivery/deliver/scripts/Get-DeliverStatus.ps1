@@ -50,6 +50,7 @@ function Format-Ref($r) { "$($r.url) $($r.title)" }
 function Test-Label($i, [string]$l) { @($i.labels) -contains $l }
 
 $closed = @($all | Where-Object { $_.state -eq 'closed' })
+$closedWork = @($closed | Where-Object { (Test-Label $_ 'pbi') -or (Test-Label $_ 'bug') })
 $open = @($all | Where-Object { $_.state -eq 'open' })
 $openNumbers = @($open | ForEach-Object { [int]$_.number })
 $work = @($open | Where-Object { (Test-Label $_ 'pbi') -or (Test-Label $_ 'bug') })
@@ -108,7 +109,7 @@ else { $release.state = 'release review'; $release.round = $round }
 
 $next = if ($data.nextMilestone) { [string]$data.nextMilestone } else { $null }
 
-$total = $all.Count
+$total = $closedWork.Count + $work.Count
 $cap = 3
 function Join-Cap($items, [scriptblock]$fmt) {
   $a = @($items)
@@ -116,7 +117,7 @@ function Join-Cap($items, [scriptblock]$fmt) {
   (($a[0..($cap - 1)] | ForEach-Object { & $fmt $_ }) -join '; ') + "; +$($a.Count - $cap) more"
 }
 $lines = [System.Collections.Generic.List[string]]::new()
-$lines.Add("Milestone ${key}: $($closed.Count)/$total closed" + $(if ($work.Count) { ' · ' + (($tiers.Keys | Where-Object { $tiers[$_] } | ForEach-Object { "$_ $($tiers[$_])" }) -join ' · ') } else { '' }))
+$lines.Add("Milestone ${key}: $($closedWork.Count)/$total closed" + $(if ($work.Count) { ' · ' + (($tiers.Keys | Where-Object { $tiers[$_] } | ForEach-Object { "$_ $($tiers[$_])" }) -join ' · ') } else { '' }))
 $lines.Add('Delivered: ' + $(if ($doneRefs.Count) { Join-Cap $doneRefs { param($r) Format-Ref $r } } else { '-' }))
 $lines.Add("Ready: $($ready.Count)" + $(if ($ready.Count) { ", next $(Format-Ref $ready[0])" } else { '' }))
 $lines.Add('Waiting: ' + $(if ($waiting.Count) { Join-Cap $waiting { param($r) "$(Format-Ref $r) ($($r.reason))" } } else { '-' }))
@@ -132,7 +133,7 @@ $lines.Add('Next milestone: ' + $(if ($next) { $next } else { '-' }))
 
 if ($Text) { $lines -join "`n"; exit 0 }
 [ordered]@{
-  milestone = $title; key = $key; baseUrl = $BaseUrl; milestoneUrl = "$BaseUrl/milestone/$($data.milestone.number)"; closed = $closed.Count; total = $total
+  milestone = $title; key = $key; baseUrl = $BaseUrl; milestoneUrl = "$BaseUrl/milestone/$($data.milestone.number)"; closed = $closedWork.Count; total = $total
   tiers = $tiers
   delivered = $doneRefs
   ready = [ordered]@{ count = $ready.Count; next = $(if ($ready.Count) { $ready[0] } else { $null }) }
