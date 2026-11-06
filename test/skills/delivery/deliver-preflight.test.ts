@@ -9,6 +9,10 @@ const SCRIPT = path.resolve(
   __dirname,
   '../../../skills/delivery/deliver/scripts/Test-DeliverPreflight.ps1',
 );
+const DETECT = path.resolve(
+  __dirname,
+  '../../../skills/shared/detect-techstack/scripts/Detect-TechStack.ps1',
+);
 const SKILL_MD = path.resolve(__dirname, '../../../skills/delivery/deliver/SKILL.md');
 const hasPwsh = spawnSync('pwsh', ['-NoProfile', '-Command', '1']).status === 0;
 
@@ -154,7 +158,18 @@ describe.skipIf(!hasPwsh || process.platform === 'win32')('Test-DeliverPreflight
     expect(old.check('skills').fix).toBe('continue with the global skills');
     fs.rmSync(path.join(home, '.claude/skills/ts-test'), { recursive: true });
     // real detect-techstack once: the stub's report has the shape of the real one
-    expect((await run(...only('skills'))).check('skills').status).toBe('ok');
+    const real = JSON.parse(
+      execFileSync('pwsh', ['-NoProfile', '-File', DETECT, '-ProjectRoot', repo], {
+        encoding: 'utf8',
+      }),
+    );
+    for (const key of ['languages', 'implementation', 'test'])
+      expect(Array.isArray(real[key])).toBe(true);
+    expect(real.implementation).toContain('ts-implementation');
+    expect(real.test).toContain('ts-test');
+    const ok = (await run(...only('skills'))).check('skills');
+    expect(ok.status).toBe('ok');
+    expect(ok.detail).toBe('2 stack skills current');
   });
 
   it('removes worktrees of merged or deleted branches and lists the others', async () => {
