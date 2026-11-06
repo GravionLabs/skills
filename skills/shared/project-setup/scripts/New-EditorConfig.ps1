@@ -1,14 +1,14 @@
 <#
 .SYNOPSIS
-  Plans (default, dry run) or writes the editor files of a project: for -Editor vscode .vscode/settings.json, extensions.json, tasks.json and launch.json.
+  Plans (default, dry run) or writes the editor files of a project: for -Editor vscode .vscode/settings.json, extensions.json, tasks.json and launch.json; for -Editor zed .zed/settings.json, tasks.json and debug.json.
 .DESCRIPTION
-  Prints the plan as JSON. Without -Apply nothing is written. Content comes from templates/vscode/targets.json and the mapping in references/launch-targets.md.
+  Prints the plan as JSON. Without -Apply nothing is written. Content comes from templates/vscode/targets.json (commands, shared by all editors), templates/zed/targets.json (Zed formatters) and the mapping in references/launch-targets.md.
   A missing file is created. An existing file is never changed: the plan lists what it lacks (`missing`), the user merges by hand.
   Languages or frameworks without a mapping are skipped with an entry in `notes`.
 .PARAMETER ProjectRoot
   Project root (default: current directory).
 .PARAMETER Editor
-  Editor to write for. Only `vscode` exists so far (Zed and JetBrains follow with the same mapping).
+  Editor to write for. `vscode` or `zed` (JetBrains follows with the same mapping).
 .PARAMETER StackJson
   A detect-techstack report (JSON text) instead of running the detection.
 .PARAMETER Apply
@@ -28,12 +28,13 @@ function Fail([string]$Message) {
   Write-Error "New-EditorConfig: $Message" -ErrorAction Continue
   exit 1
 }
-if ($Editor -ne 'vscode') { Fail "editor '$Editor' is not supported (vscode)" }
+if ($Editor -notin 'vscode', 'zed') { Fail "editor '$Editor' is not supported (vscode, zed)" }
 
 $root = (Resolve-Path -LiteralPath $ProjectRoot).Path
 $skillDir = Split-Path -Parent $PSScriptRoot
 $utf8 = [System.Text.UTF8Encoding]::new($false)
 $map = [System.IO.File]::ReadAllText((Join-Path $skillDir 'templates/vscode/targets.json')) | ConvertFrom-Json -AsHashtable
+$zedMap = [System.IO.File]::ReadAllText((Join-Path $skillDir 'templates/zed/targets.json')) | ConvertFrom-Json -AsHashtable
 $notes = [System.Collections.Generic.List[string]]::new()
 
 function Get-Report {
@@ -103,6 +104,9 @@ $settings = [ordered]@{ 'editor.formatOnSave' = $true }
 $extensions = [System.Collections.Generic.List[string]]::new()
 $tasks = [System.Collections.Generic.List[object]]::new()
 $configs = [System.Collections.Generic.List[object]]::new()
+$zedSettings = [ordered]@{ format_on_save = 'on'; languages = [ordered]@{} }
+$zedTasks = [System.Collections.Generic.List[object]]::new()
+$zedDebug = [System.Collections.Generic.List[object]]::new()
 function Add-Ext([string[]]$Ids) { foreach ($i in $Ids) { if (-not $extensions.Contains($i)) { $extensions.Add($i) } } }
 
 foreach ($k in $keys) {
@@ -115,13 +119,19 @@ foreach ($k in $keys) {
     Add-Ext @($map.formatters[$which])
     if ($tools -contains 'vitest') { Add-Ext @('vitest.explorer') }
   }
+  $z = $zedMap[$k]
+  $zf = if ($k -in 'ts', 'ng') { $zedMap.formatters[$which] } else { $z.formatter }
+  $zl = if ($z.ContainsKey('languages')) { $z.languages } else { @($z.language) }
+  foreach ($l in $zl) { $zedSettings.languages[$l] = [ordered]@{ formatter = $zf } }
   foreach ($id in $t.languageIds) { $settings["[$id]"] = [ordered]@{ 'editor.defaultFormatter' = $formatter } }
   foreach ($kind in 'build', 'test') {
     if (-not $t[$kind]) { continue }
     $tasks.Add([ordered]@{ label = "${kind}: $k"; type = 'shell'; command = $t[$kind].Replace('{pm}', $pm); group = $kind; problemMatcher = @() })
+    $zedTasks.Add([ordered]@{ label = "${kind}: $k"; command = $t[$kind].Replace('{pm}', $pm); use_new_terminal = $false; reveal = 'always' })
   }
   switch ($k) {
     'dotnet' {
+      if ($Editor -eq 'zed') { $notes.Add('dotnet: Zed has no built-in .NET debug adapter, no debug entry') }
       $aspire = $frameworks -contains 'aspire'
       $proj = $null
       foreach ($p in Get-SourceFiles '*.csproj') {
@@ -143,25 +153,41 @@ foreach ($k in $keys) {
       $script = @('dev', 'start') | Where-Object { $scripts.ContainsKey($_) } | Select-Object -First 1
       if ($script) {
         $configs.Add([ordered]@{ name = "Debug dev server ($script)"; type = 'node'; request = 'launch'; runtimeExecutable = $pm; runtimeArgs = @('run', $script); console = 'integratedTerminal' })
+        $zedDebug.Add([ordered]@{ label = "Debug dev server ($script)"; adapter = 'JavaScript'; type = 'pwa-node'; request = 'launch'; runtimeExecutable = $pm; runtimeArgs = @('run', $script); cwd = '$ZED_WORKTREE_ROOT' })
       } else { $notes.Add("${k}: no dev or start script in package.json at the root, no dev server configuration") }
       if ($tools -contains 'vitest') {
         $configs.Add([ordered]@{ name = 'Debug Vitest'; type = 'node'; request = 'launch'; program = '${workspaceFolder}/node_modules/vitest/vitest.mjs'; args = @('run'); autoAttachChildProcesses = $true; console = 'integratedTerminal'; skipFiles = @('<node_internals>/**') })
+        $zedDebug.Add([ordered]@{ label = 'Debug Vitest'; adapter = 'JavaScript'; type = 'pwa-node'; request = 'launch'; program = '$ZED_WORKTREE_ROOT/node_modules/vitest/vitest.mjs'; args = @('run'); cwd = '$ZED_WORKTREE_ROOT' })
       }
     }
-    'py' { $configs.Add([ordered]@{ name = 'Debug current Python file'; type = 'debugpy'; request = 'launch'; program = '${file}'; console = 'integratedTerminal' }) }
-    'rust' { $configs.Add([ordered]@{ name = 'Debug cargo run'; type = 'lldb'; request = 'launch'; cargo = [ordered]@{ args = @('build') }; args = @(); cwd = '${workspaceFolder}' }) }
-    'go' { $configs.Add([ordered]@{ name = 'Debug Go'; type = 'go'; request = 'launch'; mode = 'auto'; program = '${workspaceFolder}' }) }
+    'py' { $configs.Add([ordered]@{ name = 'Debug current Python file'; type = 'debugpy'; request = 'launch'; program = '${file}'; console = 'integratedTerminal' })
+      $zedDebug.Add([ordered]@{ label = 'Debug current Python file'; adapter = 'Debugpy'; request = 'launch'; program = '$ZED_FILE' }) }
+    'rust' { $configs.Add([ordered]@{ name = 'Debug cargo run'; type = 'lldb'; request = 'launch'; cargo = [ordered]@{ args = @('build') }; args = @(); cwd = '${workspaceFolder}' })
+      $zedDebug.Add([ordered]@{ label = 'Debug cargo run'; adapter = 'CodeLLDB'; request = 'launch'; cargo = [ordered]@{ args = @('build') }; cwd = '$ZED_WORKTREE_ROOT' }) }
+    'go' { $configs.Add([ordered]@{ name = 'Debug Go'; type = 'go'; request = 'launch'; mode = 'auto'; program = '${workspaceFolder}' })
+      $zedDebug.Add([ordered]@{ label = 'Debug Go'; adapter = 'Delve'; request = 'launch'; mode = 'debug'; program = '$ZED_WORKTREE_ROOT' }) }
   }
 }
 
-$files = [ordered]@{
+if ($Editor -eq 'zed') {
+  $dirName = '.zed'
+  $files = [ordered]@{ 'settings.json' = $zedSettings; 'tasks.json' = @($zedTasks); 'debug.json' = @($zedDebug) }
+} else {
+  $dirName = '.vscode'
+  $files = [ordered]@{
   'settings.json'   = $settings
   'extensions.json' = [ordered]@{ recommendations = @($extensions) }
   'tasks.json'      = [ordered]@{ version = '2.0.0'; tasks = @($tasks) }
   'launch.json'     = [ordered]@{ version = '0.2.0'; configurations = @($configs) }
+  }
 }
 # what an existing file lacks: settings keys, extension ids, task labels, configuration names
 function Get-Missing([string]$Name, $Content, $Existing) {
+  if ($Editor -eq 'zed') {
+    if ($Name -eq 'settings.json') { return @($Content.Keys | Where-Object { -not $Existing.ContainsKey($_) }) }
+    $have = @($Existing | ForEach-Object { $_.label })
+    return @($Content | Where-Object { $have -notcontains $_.label } | ForEach-Object { $_.label })
+  }
   switch ($Name) {
     'settings.json' { @($Content.Keys | Where-Object { -not $Existing.ContainsKey($_) }) }
     'extensions.json' { $have = @($Existing['recommendations']); @($Content.recommendations | Where-Object { $have -notcontains $_ }) }
@@ -170,22 +196,22 @@ function Get-Missing([string]$Name, $Content, $Existing) {
   }
 }
 
-$dir = Join-Path $root '.vscode'
+$dir = Join-Path $root $dirName
 $out = [ordered]@{}
 foreach ($name in $files.Keys) {
   $path = Join-Path $dir $name
   $content = $files[$name]
-  $isEmpty = switch ($name) { 'extensions.json' { $content.recommendations.Count -eq 0 } 'tasks.json' { $content.tasks.Count -eq 0 } 'launch.json' { $content.configurations.Count -eq 0 } default { $false } }
+  $isEmpty = if ($Editor -eq 'zed') { $name -ne 'settings.json' -and $content.Count -eq 0 } else { switch ($name) { 'extensions.json' { $content.recommendations.Count -eq 0 } 'tasks.json' { $content.tasks.Count -eq 0 } 'launch.json' { $content.configurations.Count -eq 0 } default { $false } } }
   if (-not $keys.Count -or $isEmpty) { $out[$name] = [ordered]@{ action = 'skip'; reason = 'nothing to write' }; continue }
   if (Test-Path -LiteralPath $path) {
     $missing = @()
-    try { $missing = @(Get-Missing $name $content (Read-Jsonc $path)) } catch { $notes.Add(".vscode/$name is not valid JSON, compare by hand") }
+    try { $missing = @(Get-Missing $name $content (Read-Jsonc $path)) } catch { $notes.Add("$dirName/$name is not valid JSON, compare by hand") }
     $out[$name] = [ordered]@{ action = 'exists'; missing = $missing; result = 'unchanged' }
   } else {
     $out[$name] = [ordered]@{ action = 'create'; content = $content }
     if ($Apply) {
       [void](New-Item -ItemType Directory -Force -Path $dir)
-      [System.IO.File]::WriteAllText($path, ($content | ConvertTo-Json -Depth 10) + "`n", $utf8)
+      [System.IO.File]::WriteAllText($path, (ConvertTo-Json -InputObject $content -Depth 10) + "`n", $utf8)
       $out[$name].result = 'created'
     }
   }

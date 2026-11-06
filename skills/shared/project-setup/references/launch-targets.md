@@ -1,6 +1,6 @@
 # Launch targets
 
-The mapping language or framework to start target, build and test command and debugger type. `scripts/New-EditorConfig.ps1 -Editor vscode` turns it into `.vscode/` files; Zed and JetBrains reuse the same mapping. Data: `templates/vscode/targets.json` (formatters, extensions, commands); the start targets are in the script.
+The mapping language or framework to start target, build and test command and debugger type. `scripts/New-EditorConfig.ps1 -Editor vscode` turns it into `.vscode/` files, `-Editor zed` into `.zed/` files; JetBrains reuses the same mapping. Data: `templates/vscode/targets.json` (formatters, extensions, commands, shared by all editors), `templates/zed/targets.json` (Zed formatters); the start targets are in the script.
 
 | Key (detect-techstack) | Start target                                                              | Build / test                              | Debugger type                          |
 | :--------------------- | :------------------------------------------------------------------------ | :---------------------------------------- | :------------------------------------- |
@@ -27,3 +27,12 @@ The mapping language or framework to start target, build and test command and de
 - `extensions.json`: formatter, language support, `vitest.explorer` with Vitest, `angular.ng-template` for ng, `vadimcn.vscode-lldb` for rust.
 - `tasks.json`: `build: <key>` and `test: <key>`. `launch.json`: the start targets.
 - An existing file is never changed or merged: the plan shows `missing` (settings keys, extension ids, task labels, configuration names), the user adds them by hand. Comments in the existing file are tolerated for the comparison.
+
+## Zed files
+
+`-Editor zed` writes `.zed/settings.json`, `tasks.json` and `debug.json` from the same mapping (same commands, same start targets, no second mapping).
+
+- `settings.json`: `format_on_save: on` and per Zed language a `formatter`: ts/ng `prettier` or the `biome` language server (same choice as VS Code), py ruff, dotnet OmniSharp, rust rust-analyzer, go gopls (language servers).
+- `tasks.json`: array with `build: <key>` and `test: <key>`.
+- `debug.json`: array of the start targets with Zed adapters: ts/ng `JavaScript` (dev server, `Debug Vitest`), py `Debugpy`, rust `CodeLLDB`, go `Delve`. dotnet gets no debug entry (Zed has no built-in .NET adapter), with a note.
+- An existing file is never changed; the plan shows `missing` (settings keys, task labels, debug labels).

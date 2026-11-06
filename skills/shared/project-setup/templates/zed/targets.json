@@ -1,0 +1,9 @@
+{
+  "dotnet": { "language": "C#", "formatter": { "language_server": { "name": "OmniSharp" } } },
+  "ts": { "languages": ["TypeScript", "TSX", "JavaScript", "JSON"] },
+  "ng": { "languages": ["TypeScript", "HTML", "JSON"] },
+  "py": { "language": "Python", "formatter": { "language_server": { "name": "ruff" } } },
+  "rust": { "language": "Rust", "formatter": { "language_server": { "name": "rust-analyzer" } } },
+  "go": { "language": "Go", "formatter": { "language_server": { "name": "gopls" } } },
+  "formatters": { "biome": { "language_server": { "name": "biome" } }, "prettier": "prettier" }
+}
