@@ -118,8 +118,8 @@ describe.skipIf(!hasPwsh || process.platform === 'win32')('TerminalBackend.ps1',
     expect(r.stdout).toContain('workspace=False');
     expect(r.stderr.match(/terminal backend 'poimen'/g)).toHaveLength(1);
     expect(recorded()).toEqual([
-      'poimen-server report tokens --source deliver --token deliver=#7 --ttl-ms 5',
-      'poimen-server report clear --source deliver --clear-token deliver',
+      'poimen-server report tokens --source deliver --ttl 1 deliver=#7',
+      'poimen-server report clear --source deliver',
       'poimen-server report agent --state idle --source deliver-loop --agent deliver',
       'poimen-server report agent --release --source deliver-loop --agent deliver',
     ]);

@@ -4,8 +4,8 @@ The deliver scripts call the terminal only through `scripts/TerminalBackend.ps1`
 
 | Function               | herdr                                                                            | poimen                                                                       | Unsupported  |
 | :--------------------- | :------------------------------------------------------------------------------- | :--------------------------------------------------------------------------- | :----------- |
-| `Set-LoopTokens`       | `herdr pane report-metadata <pane> --source deliver --token k=v … --ttl-ms`      | `poimen-server report tokens --source deliver --token k=v … --ttl-ms`        | none         |
-| `Clear-LoopTokens`     | `herdr pane report-metadata <pane> --source deliver --clear-token <name> …`      | `poimen-server report clear --source deliver --clear-token <name> …`         | none         |
+| `Set-LoopTokens`       | `herdr pane report-metadata <pane> --source deliver --token k=v … --ttl-ms`      | `poimen-server report tokens --source deliver --ttl <s> k=v …`               | none         |
+| `Clear-LoopTokens`     | `herdr pane report-metadata <pane> --source deliver --clear-token <name> …`      | `poimen-server report clear --source deliver` (all tokens of the source)     | none         |
 | `Set-LoopAgentState`   | `herdr pane report-agent <pane> --state … --source deliver-loop --agent deliver` | `poimen-server report agent --state … --source deliver-loop --agent deliver` | none         |
 | `Clear-LoopAgentState` | `herdr pane release-agent <pane> --source deliver-loop --agent deliver`          | `poimen-server report agent --release --source deliver-loop --agent deliver` | none         |
 | `New-LoopWorkspace`    | `herdr workspace create`, `tab rename`, `pane run`                               | notice only                                                                  | poimen, none |
