@@ -2,8 +2,9 @@
 .SYNOPSIS
   Status block of a milestone for deliver: progress, delivered, ready, waiting, what needs the user, release state.
 .DESCRIPTION
-  One read of the milestone (github-milestone Get-Milestones.ps1 -Mode issues -State all, REST) plus a lookup of the next
-  open milestone and of the release PR (REST, no GraphQL). Prints JSON; -Text prints the block of at most 10 lines.
+  One read of the milestone (github-milestone Get-Milestones.ps1 -Mode issues -State all, REST: issues with their native
+  blocked-by links, base URL, next open milestone) plus a lookup of the release PR (REST, no GraphQL). Blockers come from
+  the native links; the "Blocked by"/"Depends on" lines of the body count only when the read has no blockedBy field. Prints JSON; -Text prints the block of at most 10 lines.
   Every issue is a full URL with its title. JSON: milestone, key, closed, total, delivered[], ready{count,next},
   waiting[], needsYou[], release{state,round,pr}, next, lines[].
 .PARAMETER Milestone
@@ -13,7 +14,7 @@
 .PARAMETER Repo
   owner/repo for gh api; default {owner}/{repo}.
 .PARAMETER BaseUrl
-  https://github.com/<owner>/<repo>; default read from the repository (REST).
+  https://github.com/<owner>/<repo>; default from the milestone read.
 .PARAMETER ReleasePr
   URL of the open release PR; default looked up (REST). Pass an empty string to skip the lookup.
 .PARAMETER Text
@@ -40,10 +41,8 @@ $all = @($data.issues)
 $title = [string]$data.milestone.title
 $key = if ($title -match '^(M[0-9]+(?:\.[0-9]+)*)') { $Matches[1] } else { $title }
 
-if (-not $BaseUrl) {
-  $BaseUrl = (& gh api "repos/$Repo" --jq .html_url 2>$null)
-  if ($LASTEXITCODE -ne 0 -or -not $BaseUrl) { Fail 'repository URL not readable' }
-}
+if (-not $BaseUrl) { $BaseUrl = [string]$data.baseUrl }
+if (-not $BaseUrl) { Fail 'repository URL not readable' }
 $BaseUrl = $BaseUrl.TrimEnd('/')
 function Get-Ref($i) { [ordered]@{ number = [int]$i.number; url = "$BaseUrl/issues/$($i.number)"; title = [string]$i.title } }
 function Format-Ref($r) { "$($r.url) $($r.title)" }
@@ -61,14 +60,19 @@ $needs = [System.Collections.Generic.List[string]]::new()
 
 foreach ($i in $work) {
   $ref = Get-Ref $i
-  $blockers = @([regex]::Matches([string]$i.body, '(?im)^\W*(?:Depends on|Blocked by)[:\s]+(.*)$') | ForEach-Object {
-      [regex]::Matches($_.Groups[1].Value, '#(\d+)') | ForEach-Object { [int]$_.Groups[1].Value } } | Where-Object { $openNumbers -contains $_ })
+  if ($null -ne $i.PSObject.Properties['blockedBy']) {
+    $blockers = @($i.blockedBy | ForEach-Object { if ($_.repository) { "https://github.com/$($_.repository)/issues/$($_.number)" } else { "$BaseUrl/issues/$($_.number)" } })
+  }
+  else {
+    $blockers = @([regex]::Matches([string]$i.body, '(?im)^\W*(?:Depends on|Blocked by)[:\s]+(.*)$') | ForEach-Object {
+        [regex]::Matches($_.Groups[1].Value, '#(\d+)') | ForEach-Object { [int]$_.Groups[1].Value } } | Where-Object { $openNumbers -contains $_ } | ForEach-Object { "$BaseUrl/issues/$_" })
+  }
   if (Test-Label $i 'needs-decision') { $needs.Add("decision: $(Format-Ref $ref)") }
   elseif (Test-Label $i 'interactive') { $needs.Add("interactive, run /deliver $($i.number) in a session: $(Format-Ref $ref)") }
   elseif (Test-Label $i 'manual-test') { $needs.Add("manual test: $(Format-Ref $ref)") }
   elseif (Test-Label $i 'needs-refinement') { $ref.reason = 'needs refinement'; $waiting.Add($ref) }
   elseif (@($i.assignees).Count) { $ref.reason = "claimed by $(@($i.assignees) -join ', ')"; $waiting.Add($ref) }
-  elseif ($blockers.Count) { $ref.reason = 'blocked by ' + (($blockers | ForEach-Object { "$BaseUrl/issues/$_" }) -join ', '); $waiting.Add($ref) }
+  elseif ($blockers.Count) { $ref.reason = 'blocked by ' + ($blockers -join ', '); $waiting.Add($ref) }
   else { $ready.Add($ref) }
 }
 # the pause marker of a round-3 release review: a closed PBI or Bug labeled needs-decision
@@ -92,12 +96,7 @@ if ($pr) { $release.state = 'release PR'; $release.pr = $pr; $needs.Add("merge t
 elseif ($work.Count -gt 0) { $release.state = 'not ready' }
 else { $release.state = 'release review'; $release.round = $round }
 
-$next = $null
-try {
-  $list = (& pwsh -NoProfile -File $MilestonesScript -Mode list -Repo $Repo | Out-String | ConvertFrom-Json).milestones
-  $next = @($list | Where-Object { $_.state -eq 'open' -and $_.title -ne $title })[0].title
-}
-catch { $next = $null }
+$next = if ($data.nextMilestone) { [string]$data.nextMilestone } else { $null }
 
 $total = $all.Count
 $cap = 3

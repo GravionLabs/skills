@@ -270,12 +270,29 @@ if ($Mode -eq 'issues') {
   $m = Find-Milestone $milestones $Name
   if (-not $m) { Fail "milestone '$Name' not found" }
   $list = @(Get-Paged "repos/$Repo/issues?milestone=$($m.number)&state=$State&per_page=100" | Where-Object { $null -eq $_.pull_request } | Sort-Object number | ForEach-Object {
-      [ordered]@{
+      $item = [ordered]@{
         number = $_.number; title = $_.title; state = $_.state; closed_at = $_.closed_at; body = $_.body
         labels = @($_.labels | ForEach-Object { $_.name }); assignees = @($_.assignees | ForEach-Object { $_.login })
       }
+      if ($_.state -eq 'open') {
+        # native blocked-by links: only the open blockers; a blocker in another repository keeps its owner/repo
+        $sum = $_.issue_dependencies_summary
+        $bl = @()
+        if ($null -eq $sum -or [int]$sum.blocked_by -gt 0) {
+          $iss = $_
+          $bl = @(Get-Paged "repos/$Repo/issues/$($_.number)/dependencies/blocked_by" | Where-Object { $_.state -eq 'open' } | ForEach-Object {
+              $b = [ordered]@{ number = $_.number }
+              if ($_.repository_url -and $_.repository_url -ne $iss.repository_url) { $b.repository = $_.repository_url -replace '^.*/repos/', '' }
+              $b
+            })
+        }
+        $item.blockedBy = $bl
+      }
+      $item
     })
-  [ordered]@{ milestone = [ordered]@{ number = $m.number; title = $m.title; state = $m.state }; issues = $list } | ConvertTo-Json -Depth 6
+  $nextM = @($milestones | Where-Object { $_.state -eq 'open' -and $_.number -ne $m.number } |
+      Sort-Object @{ e = { $k = (Get-Title $_.title).kind; if ($k) { @{ legacy = 0; numbered = 1 }[$k] } else { 2 } } }, @{ e = { (Get-Title $_.title).key } }, @{ e = { ConvertTo-Version $_.title } }, @{ e = { $_.title } }) | Select-Object -First 1
+  [ordered]@{ milestone = [ordered]@{ number = $m.number; title = $m.title; state = $m.state }; baseUrl = ($m.html_url -replace '/milestone/\d+/?$', ''); nextMilestone = $(if ($nextM) { $nextM.title } else { $null }); issues = $list } | ConvertTo-Json -Depth 6
   exit 0
 }
 

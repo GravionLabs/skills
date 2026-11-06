@@ -15,16 +15,19 @@ type Issue = {
   body?: string;
   labels?: string[];
   assignees?: string[];
+  blockedBy?: { number: number; repository?: string }[];
 };
 
 let tmp: string;
 
-// fake Get-Milestones.ps1: prints the fixture for -Mode issues and -Mode list
+// fake Get-Milestones.ps1: prints the issues fixture
 function fixture(name: string, issues: Issue[], nextTitle: string | null = 'M5'): string {
   const dir = path.join(tmp, name);
   fs.mkdirSync(dir, { recursive: true });
   const issuesJson = {
     milestone: { number: 4, title: 'M4 Status', state: 'open' },
+    baseUrl: base,
+    nextMilestone: nextTitle,
     issues: issues.map((i) => ({
       closed_at: null,
       body: '',
@@ -33,15 +36,7 @@ function fixture(name: string, issues: Issue[], nextTitle: string | null = 'M5')
       ...i,
     })),
   };
-  const listJson = {
-    latestTag: null,
-    milestones: [
-      { title: 'M4 Status', state: 'open' },
-      ...(nextTitle ? [{ title: nextTitle, state: 'open' }] : []),
-    ],
-  };
   fs.writeFileSync(path.join(dir, 'issues.json'), JSON.stringify(issuesJson));
-  fs.writeFileSync(path.join(dir, 'list.json'), JSON.stringify(listJson));
   const fake = path.join(dir, 'Get-Milestones.ps1');
   fs.writeFileSync(
     fake,
@@ -159,6 +154,26 @@ describe('Get-DeliverStatus.ps1', () => {
     ]);
     const empty = JSON.parse(run(fixture('empty', [])).stdout);
     expect(empty.total).toBe(0);
+  });
+
+  it('uses native blocked-by links, not the body, when the read carries them', () => {
+    const fake = fixture('native', [
+      { number: 2, title: 'feat: two', state: 'open', blockedBy: [{ number: 9 }] },
+      {
+        number: 3,
+        title: 'feat: three',
+        state: 'open',
+        blockedBy: [{ number: 7, repository: 'acme/other' }],
+      },
+      { number: 4, title: 'feat: four', state: 'open', body: 'Blocked by #2', blockedBy: [] },
+    ]);
+    const j = JSON.parse(run(fake).stdout);
+    expect(j.waiting.map((w: { reason: string }) => w.reason)).toEqual([
+      `blocked by ${base}/issues/9`,
+      'blocked by https://github.com/acme/other/issues/7',
+    ]);
+    expect(j.ready.count).toBe(1);
+    expect(j.ready.next.number).toBe(4);
   });
 
   it('fails when the milestone cannot be read', () => {
