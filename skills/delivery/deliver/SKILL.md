@@ -25,7 +25,7 @@ Delivers the open PBIs and Bugs of an issue (a work item = open issue labelled `
 1. `gh auth status` works and the repository has `release/next`.
 2. `gh api repos/{owner}/{repo}/rules/branches/release/next --jq '.[].type'`: no `required_status_checks` in the output → warn that red CI is mergeable here (ruleset of `github-release`), then go on.
 3. Preflight (skipped by `--no-preflight`): `pwsh <skill-dir>/scripts/Test-DeliverPreflight.ps1 -Harness <claude|opencode|copilot> [-Unattended] -Text` prints one line per check, ok / fixed / action needed: stack skills, allowlist (`git`, `gh`, `pwsh <skill-dir>/scripts/*`, the verify commands of `AGENTS.md`; entries per harness: `references/permissions.md`, otherwise an unattended run hangs at a prompt), stale worktrees; reactions in `references/preflight.md`. Write commands without quoted `$(…)`; the permission check cannot see through them.
-4. Progress display: `printenv HERDR_ENV`. Only when it prints `1`, follow `references/herdr.md` at the start, after each progress line and after the report.
+4. Progress display: `printenv HERDR_ENV`. Only when it prints `1`, follow `references/terminal-backends.md` at the start, after each progress line and after the report.
 
 ## Steps
 

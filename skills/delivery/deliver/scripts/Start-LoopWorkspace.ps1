@@ -26,10 +26,7 @@ param(
 
 $ErrorActionPreference = 'Stop'
 
-function Get-Id($o, [string]$name) {
-  foreach ($k in @("${name}_id", 'id')) { if ($o.PSObject.Properties[$k]) { return [string]$o.$k } }
-  return [string]$o
-}
+. (Join-Path $PSScriptRoot 'TerminalBackend.ps1')
 
 function Get-QuoteStyle([string]$shell) {
   if (-not $shell) { $shell = $env:DELIVER_LOOP_PANE_SHELL }
@@ -52,17 +49,13 @@ try {
   $repo = Split-Path -Leaf $(if ($top) { $top } else { $ShimCwd })
   $label = "$repo $([char]0xB7) deliver"
 
-  $r = (& herdr workspace create --cwd $ShimCwd --label $label --no-focus | Out-String | ConvertFrom-Json).result
-  $tab = Get-Id $r.tab 'tab'
-  $pane = Get-Id $r.root_pane 'pane'
-  & herdr tab rename $tab 'deliver-loop' | Out-Null
-
   $words = @('pwsh', '-NoProfile', '-File', (ConvertTo-ShellWord $ShimScript $style)) + @($LoopArgs | ForEach-Object { ConvertTo-ShellWord $_ $style })
-  & herdr pane run $pane ($words -join ' ') | Out-Null
-  Write-Host "deliver-loop started in herdr workspace '$label' (tab deliver-loop)."
+  $started = New-LoopWorkspace -Cwd $ShimCwd -Label $label -TabLabel 'deliver-loop' -Command ($words -join ' ')
+  if (-not $started) { exit 1 }
+  Write-Host "deliver-loop started in workspace '$label' (tab deliver-loop)."
   exit 0
 }
 catch {
-  [Console]::Error.WriteLine("herdr workspace not started: $($_.Exception.Message)")
+  [Console]::Error.WriteLine("workspace not started: $($_.Exception.Message)")
   exit 1
 }

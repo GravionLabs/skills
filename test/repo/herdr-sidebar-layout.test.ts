@@ -5,7 +5,7 @@ import { describe, expect, it } from 'vitest';
 const root = path.resolve(__dirname, '../..');
 const guide = readFileSync(path.join(root, 'docs/guides/herdr.md'), 'utf8');
 const reference = readFileSync(
-  path.join(root, 'skills/delivery/deliver/references/herdr.md'),
+  path.join(root, 'skills/delivery/deliver/references/terminal-backends.md'),
   'utf8',
 );
 
@@ -15,12 +15,14 @@ const sidebarSnippets = (md: string): string[] =>
     .filter((t) => t.includes('[ui.sidebar.agents]'));
 
 describe('herdr sidebar layout has one source of truth', () => {
-  it('references/herdr.md holds the layout', () => {
+  it('references/terminal-backends.md holds the layout', () => {
     expect(sidebarSnippets(reference)).toHaveLength(1);
   });
 
   it('the guide links to the references sidebar layout', () => {
-    expect(guide).toContain('](../../skills/delivery/deliver/references/herdr.md#sidebar-layout)');
+    expect(guide).toContain(
+      '](../../skills/delivery/deliver/references/terminal-backends.md#sidebar-layout)',
+    );
   });
 
   it('the guide repeats no sidebar snippet that differs from the references one', () => {

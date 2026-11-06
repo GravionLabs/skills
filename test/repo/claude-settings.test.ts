@@ -32,6 +32,7 @@ describe('.claude/settings.json', () => {
     'Bash(printenv HERDR_ENV)',
     'Bash(printenv HERDR_PANE_ID)',
     'Bash(herdr pane report-metadata:*)',
+    'Bash(poimen-server report:*)',
     'Bash(pwsh ~/.claude/skills/deliver/scripts/Remove-PbiWorktrees.ps1:*)',
     'Bash(pwsh .claude/skills/deliver/scripts/Remove-PbiWorktrees.ps1:*)',
     'Edit',

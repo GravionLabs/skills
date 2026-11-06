@@ -1,4 +1,18 @@
-# herdr progress display
+# Terminal backends and the herdr progress display
+
+The deliver scripts call the terminal only through `scripts/TerminalBackend.ps1`. `Get-TerminalBackend` picks the backend: `DELIVER_TERMINAL_BACKEND` (`herdr`, `poimen`, `none`) wins; else `POIMEN_TERMINAL_ID` and `POIMEN_SOCKET` set: `poimen`; else `HERDR_ENV=1`: `herdr`; else `none`. `none` and an unsupported operation are no-ops with one notice per run on stderr; a failing backend call never fails the loop.
+
+| Function               | herdr                                                                            | poimen                                                                       | Unsupported  |
+| :--------------------- | :------------------------------------------------------------------------------- | :--------------------------------------------------------------------------- | :----------- |
+| `Set-LoopTokens`       | `herdr pane report-metadata <pane> --source deliver --token k=v … --ttl-ms`      | `poimen-server report tokens --source deliver --token k=v … --ttl-ms`        | none         |
+| `Clear-LoopTokens`     | `herdr pane report-metadata <pane> --source deliver --clear-token <name> …`      | `poimen-server report clear --source deliver --clear-token <name> …`         | none         |
+| `Set-LoopAgentState`   | `herdr pane report-agent <pane> --state … --source deliver-loop --agent deliver` | `poimen-server report agent --state … --source deliver-loop --agent deliver` | none         |
+| `Clear-LoopAgentState` | `herdr pane release-agent <pane> --source deliver-loop --agent deliver`          | `poimen-server report agent --release --source deliver-loop --agent deliver` | none         |
+| `New-LoopWorkspace`    | `herdr workspace create`, `tab rename`, `pane run`                               | notice only                                                                  | poimen, none |
+| `Open-LogPane`         | `herdr pane list`, `pane split`, `pane run`, `pane rename`                       | notice only                                                                  | poimen, none |
+| `Switch-LogPane`       | `herdr pane list`, `pane close` or `Open-LogPane`                                | notice only                                                                  | poimen, none |
+
+Only `Test-LoopAgentConflict` (`herdr pane get`, herdr only) reads state. The sections below describe herdr.
 
 Only when `printenv HERDR_ENV` prints `1` (the session runs in a herdr pane). Without herdr nothing here runs.
 

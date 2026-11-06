@@ -9,7 +9,7 @@ const skillDir = path.join(root, 'delivery/deliver');
 const text = fs.readFileSync(path.join(skillDir, 'SKILL.md'), 'utf8');
 const roles = fs.readFileSync(path.join(skillDir, 'references/roles.md'), 'utf8');
 const permissions = fs.readFileSync(path.join(skillDir, 'references/permissions.md'), 'utf8');
-const herdr = fs.readFileSync(path.join(skillDir, 'references/herdr.md'), 'utf8');
+const herdr = fs.readFileSync(path.join(skillDir, 'references/terminal-backends.md'), 'utf8');
 const claim = fs.readFileSync(path.join(skillDir, 'references/claim.md'), 'utf8');
 
 describe('deliver SKILL.md', () => {
@@ -400,7 +400,7 @@ describe('deliver SKILL.md', () => {
 
     it('loads the herdr reference only when HERDR_ENV is 1', () => {
       expect(start).toContain(
-        '`printenv HERDR_ENV`. Only when it prints `1`, follow `references/herdr.md`',
+        '`printenv HERDR_ENV`. Only when it prints `1`, follow `references/terminal-backends.md`',
       );
       expect(herdr).toContain('Only when `printenv HERDR_ENV` prints `1`');
     });
@@ -415,7 +415,7 @@ describe('deliver SKILL.md', () => {
         'herdr pane report-metadata <pane> --source deliver --token deliver=#12 --token "deliver_step=review: 1 blocking" --token deliver_pr=#55 --ttl-ms 3600000',
         'herdr pane report-metadata <pane> --source deliver --clear-token deliver --clear-token deliver_step --clear-token deliver_pr',
       ]);
-      expect(herdr.indexOf('--clear-token')).toBeGreaterThan(herdr.indexOf('## End'));
+      expect(herdr.indexOf('--clear-token', herdr.indexOf('## End'))).toBeGreaterThan(-1);
       expect(herdr).toContain('at most 80 characters');
     });
 
