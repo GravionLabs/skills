@@ -24,7 +24,7 @@ with `governance`: also `references/governance.md`
 - Where the tests go.
 - Out of scope.
 - Size S or M (size L: split, see `## Refine` in `SKILL.md`).
-- A `Tier: <tier> — <reason>` line.
+- A `Tier: <tier> — <reason>` line (`refine` adds a missing one, `SKILL.md` `## Refine`).
 
 ## Bug
 
