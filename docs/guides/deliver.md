@@ -56,6 +56,10 @@ paused:    -
 
 A blocked PBI (a red check unrelated to the change, for example) is listed with its reason and open PR; a paused one with its question. Interactive runs ask you right away: retry, skip or give an instruction.
 
+## Status of a milestone
+
+With `--milestone`, `deliver` prints a status block of at most 10 lines after each PBI and in the report: progress, delivered in this run, ready, waiting, what needs you (decisions, `interactive`, manual tests, the release PR to merge), release state and the next milestone, every issue as a full URL with its title. `/deliver status --milestone M4` prints it without delivering; `pwsh scripts/Get-DeliverStatus.ps1 -Milestone M4 [-Text]` gives the same as JSON or text.
+
 ## Deliver a Feature or several issues
 
 ```text

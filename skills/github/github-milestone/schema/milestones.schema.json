@@ -40,6 +40,8 @@
           "required": ["number", "title", "state"],
           "properties": { "number": { "type": "integer" }, "title": { "type": "string" }, "state": { "enum": ["open", "closed"] } }
         },
+        "baseUrl": { "type": "string", "description": "https://github.com/<owner>/<repo>." },
+        "nextMilestone": { "type": ["string", "null"], "description": "Title of the next open milestone, null when there is none." },
         "issues": {
           "type": "array",
           "description": "Issues of the milestone for -State, number ascending, pull requests excluded.",
@@ -53,7 +55,16 @@
               "closed_at": { "type": ["string", "null"], "description": "ISO 8601 close time, null while open." },
               "body": { "type": ["string", "null"] },
               "labels": { "type": "array", "items": { "type": "string" } },
-              "assignees": { "type": "array", "items": { "type": "string" } }
+              "assignees": { "type": "array", "items": { "type": "string" } },
+              "blockedBy": {
+                "type": "array",
+                "description": "Open issues that block this open issue (native blocked-by links); repository only for another repository. Absent on closed issues.",
+                "items": {
+                  "type": "object",
+                  "required": ["number"],
+                  "properties": { "number": { "type": "integer" }, "repository": { "type": "string" } }
+                }
+              }
             }
           }
         }

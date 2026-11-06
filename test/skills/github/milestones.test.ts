@@ -38,7 +38,7 @@ const ms = (number: number, title: string, state = 'open', open = 0, closed = 0)
   open_issues: open,
   closed_issues: closed,
   due_on: null,
-  html_url: `https://x/m/${number}`,
+  html_url: `https://github.com/acme/app/milestone/${number}`,
 });
 const issue = (number: number, extra: Record<string, unknown> = {}) => ({
   number,
@@ -263,6 +263,8 @@ describe('Get-Milestones.ps1', () => {
         },
       });
       expect(out.milestone).toEqual({ number: 7, title: '1.2.0', state: 'open' });
+      expect(out.baseUrl).toBe('https://github.com/acme/app');
+      expect(out.nextMilestone).toBe('1.1.0');
       expect(out.issues).toEqual([
         {
           number: 12,
@@ -272,6 +274,7 @@ describe('Get-Milestones.ps1', () => {
           body: 'body 12',
           labels: ['pbi'],
           assignees: ['me'],
+          blockedBy: [],
         },
         {
           number: 13,
@@ -287,6 +290,26 @@ describe('Get-Milestones.ps1', () => {
       expect(paths.filter((q) => q.includes('/issues?'))).toContain(
         'repos/{owner}/{repo}/issues?milestone=7&state=all&per_page=100',
       );
+    });
+
+    it('lists the open native blockers per open issue and names the next open milestone', async () => {
+      const out = await json(['-Mode', 'issues', '-Name', 'M2'], {
+        FAKE_MILESTONES: [ms(2, 'M2'), ms(3, 'M3'), ms(1, 'M1', 'closed')],
+        FAKE_ISSUE_PAGES: {
+          2: [[full(20), full(21, { issue_dependencies_summary: { blocked_by: 0 } })]],
+        },
+        FAKE_BLOCKERS: {
+          20: [
+            { number: 5, title: 'done', state: 'closed' },
+            { number: 6, title: 'open', state: 'open' },
+          ],
+        },
+      });
+      expect(out.nextMilestone).toBe('M3');
+      expect(out.issues.map((i: { blockedBy: unknown }) => i.blockedBy)).toEqual([
+        [{ number: 6 }],
+        [],
+      ]);
     });
 
     it.each([
