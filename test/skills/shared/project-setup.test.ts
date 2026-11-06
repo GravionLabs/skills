@@ -38,8 +38,37 @@ describe.skipIf(!hasPwsh)('Set-ProjectSetup.ps1', () => {
   const exists = (rel: string) => fs.existsSync(path.join(dir, rel));
   // detect-techstack costs ~1 s per run: only the 'real detection' cases run it, the others hand the script a report
   let stack: string | null = null;
-  const use = (languages: string[], tools: string[] = [], frameworks: string[] = []) => {
-    stack = JSON.stringify({ languages, frameworks, tools });
+  const use = (
+    languages: string[],
+    tools: string[] = [],
+    frameworks: string[] = [],
+    governance?: object,
+  ) => {
+    stack = JSON.stringify({ languages, frameworks, tools, ...(governance ? { governance } : {}) });
+  };
+  // the governance report of detect-techstack: the hint is the trigger for the question
+  const govReport = (hint: string | null) => ({
+    configured: false,
+    adrDir: 'docs/adr',
+    adrCount: 0,
+    specDir: 'docs/specs',
+    specCount: 0,
+    hint,
+  });
+  const EXPECTED_PROPOSAL = {
+    adrDir: 'docs/adr',
+    adrPaths: ['docker-compose.yml', 'infra/**', '.github/workflows/**'],
+    specDir: 'docs/specs',
+    specMap: { 'apps/api/**': 'docs/specs/api.md', 'apps/web/**': 'docs/specs/web.md' },
+    specMode: 'warn',
+    skipLabels: ['skip-adr'],
+  };
+  const repoWithApps = () => {
+    write('docker-compose.yml', 'services: {}\n');
+    write('infra/main.tf');
+    write('.github/workflows/ci.yml');
+    fs.mkdirSync(path.join(dir, 'apps/web'), { recursive: true });
+    fs.mkdirSync(path.join(dir, 'apps/api'), { recursive: true });
   };
   const run = async (args: string[] = [], env?: NodeJS.ProcessEnv) => {
     const r = await worker.run(
@@ -323,6 +352,128 @@ describe.skipIf(!hasPwsh)('Set-ProjectSetup.ps1', () => {
       const jb = await run(['-Choice', 'dotnet=jb']);
       expect(jb.status).toBe(1);
       expect(jb.stderr).toMatch(/needs a solution file/);
+    });
+  });
+
+  describe('governance key', () => {
+    it('proposes adrPaths and specMap from the repo and writes nothing in a dry run', async () => {
+      repoWithApps();
+      use(['ts'], [], [], govReport(null));
+      const r = await run();
+      expect(r.json.governance).toMatchObject({
+        ask: false,
+        choice: 'none',
+        action: 'create',
+        write: false,
+        proposal: EXPECTED_PROPOSAL,
+      });
+      expect(exists('.agents/config.json')).toBe(false);
+    });
+
+    it('uses the detect-techstack hint as the trigger for the question', async () => {
+      use(['ts'], [], [], govReport('docs/adr or docs/specs found but no governance key'));
+      expect((await run()).json.governance.ask).toBe(true);
+    });
+
+    it('detects the hint with the real detection (docs/adr without a key)', async () => {
+      write('package.json', '{"name":"x"}');
+      write('tsconfig.json', '{}');
+      write('docs/adr/0001-first.md', '# 1\n');
+      stack = null;
+      const r = await run();
+      expect(r.json.governance.ask).toBe(true);
+      expect(r.json.governance.hint).toContain('no governance key');
+    });
+
+    it('enable writes the proposal with specMode warn and validates against the schema', async () => {
+      repoWithApps();
+      use(['ts'], [], [], govReport(null));
+      const r = await run(['-Apply', '-Governance', 'enable']);
+      expect(r.json.governance.result).toBe('written');
+      const cfg = JSON.parse(read('.agents/config.json'));
+      expect(cfg.governance).toEqual(EXPECTED_PROPOSAL);
+      expect(validate(cfg), JSON.stringify(validate.errors)).toBe(true);
+    });
+
+    it('shows an existing key and never replaces it without a choice', async () => {
+      repoWithApps();
+      const existing = {
+        governance: {
+          adrDir: 'decisions',
+          adrPaths: ['infra/**'],
+          specMap: { 'apps/api/**': 'docs/specs/my-api.md' },
+          specMode: 'require',
+        },
+        format: { py: { format: 'black {files}' } },
+      };
+      write('.agents/config.json', JSON.stringify(existing));
+      use(['ts'], [], [], govReport(null));
+      const dry = await run();
+      expect(dry.json.governance.action).toBe('exists');
+      expect(dry.json.governance.changedKeys).toEqual(
+        expect.arrayContaining(['adrPaths', 'specMap', 'specDir', 'skipLabels']),
+      );
+      // the existing values of adrDir and specMode stay: they are not changes
+      expect(dry.json.governance.changedKeys).not.toContain('adrDir');
+      expect(dry.json.governance.changedKeys).not.toContain('specMode');
+
+      const enable = await run(['-Apply', '-Governance', 'enable']);
+      expect(enable.json.governance.result).toMatch(/^skipped: governance exists/);
+      expect(JSON.parse(read('.agents/config.json'))).toEqual(existing);
+    });
+
+    it('merge keeps the existing values and extends lists and maps', async () => {
+      repoWithApps();
+      write(
+        '.agents/config.json',
+        JSON.stringify({
+          governance: {
+            adrDir: 'decisions',
+            adrPaths: ['infra/**'],
+            specMap: { 'apps/api/**': 'docs/specs/my-api.md' },
+            specMode: 'require',
+          },
+          format: { py: { format: 'black {files}' } },
+        }),
+      );
+      use(['ts'], [], [], govReport(null));
+      const r = await run(['-Apply', '-Governance', 'merge']);
+      expect(r.json.governance.result).toBe('written');
+      const cfg = JSON.parse(read('.agents/config.json'));
+      expect(cfg.governance).toEqual({
+        adrDir: 'decisions',
+        adrPaths: ['infra/**', 'docker-compose.yml', '.github/workflows/**'],
+        specDir: 'docs/specs',
+        specMap: {
+          'apps/api/**': 'docs/specs/my-api.md',
+          'apps/web/**': 'docs/specs/web.md',
+        },
+        specMode: 'require',
+        skipLabels: ['skip-adr'],
+      });
+      expect(cfg.format.py).toEqual({ format: 'black {files}' });
+      expect(validate(cfg), JSON.stringify(validate.errors)).toBe(true);
+    });
+
+    it('replace writes the proposal, and a second run finds nothing to change', async () => {
+      repoWithApps();
+      write('.agents/config.json', JSON.stringify({ governance: { adrDir: 'decisions' } }));
+      use(['ts'], [], [], govReport(null));
+      const r = await run(['-Apply', '-Governance', 'replace']);
+      expect(r.json.governance.result).toBe('written');
+      expect(JSON.parse(read('.agents/config.json')).governance).toEqual(EXPECTED_PROPOSAL);
+      const again = await run(['-Apply', '-Governance', 'replace']);
+      expect(again.json.governance).toMatchObject({ action: 'unchanged', result: 'unchanged' });
+      const merged = await run(['-Apply', '-Governance', 'merge']);
+      expect(merged.json.governance.result).toBe('unchanged');
+    });
+
+    it('fails on a governance value that is not a map', async () => {
+      use(['ts']);
+      write('.agents/config.json', '{"governance": false}');
+      const r = await run(['-Governance', 'enable']);
+      expect(r.status).toBe(1);
+      expect(r.stderr).toMatch(/governance in .agents\/config.json is not a map/);
     });
   });
 
