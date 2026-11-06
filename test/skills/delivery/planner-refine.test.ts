@@ -28,6 +28,20 @@ describe('planner refine definition of ready (#891)', () => {
     expect(refine).toMatch(/size L[\s\S]*split[\s\S]*after approval/);
   });
 
+  it('Refine adds a missing Tier line with a reason and reports the changes (#325)', () => {
+    expect(refine).toMatch(
+      /[Mm]issing `Tier:` line[\s\S]*Tier: <tier> — <reason>[\s\S]*size S fast/,
+    );
+    expect(refine).toMatch(/listed in the report[\s\S]*never changed/);
+  });
+
+  it('Refine of a milestone adds missing Tier lines and reports the changed items (#325)', () => {
+    expect(refine).toMatch(
+      /`refine M<n>`[\s\S]*every open PBI and Bug[\s\S]*reports the items it changed/,
+    );
+    expect(section('Milestone')).toMatch(/Tier: <tier> — <reason>[\s\S]*report/);
+  });
+
   it('Refine sets the labels and creates a missing one', () => {
     expect(refine).toMatch(/remove `needs-refinement`/);
     expect(refine).toMatch(/`needs-decision`[\s\S]*comment/);

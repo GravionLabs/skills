@@ -6,7 +6,8 @@
   blocked-by links, base URL, next open milestone) plus a lookup of the release PR (REST, no GraphQL). Blockers come from
   the native links; the "Blocked by"/"Depends on" lines of the body count only when the read has no blockedBy field. Prints JSON; -Text prints the block of at most 10 lines.
   Every issue is a full URL with its title. JSON: milestone, key, closed, total, delivered[], ready{count,next},
-  waiting[], needsYou[], release{state,round,pr}, next, lines[].
+  tiers{fast,standard,strong} (open PBIs and Bugs; Tier: line, else size S/M/L, else standard), waiting[], needsYou[],
+  release{state,round,pr}, next, lines[].
 .PARAMETER Milestone
   Milestone name (M<n>, full title or legacy x.y.z).
 .PARAMETER Delivered
@@ -52,6 +53,15 @@ $closed = @($all | Where-Object { $_.state -eq 'closed' })
 $open = @($all | Where-Object { $_.state -eq 'open' })
 $openNumbers = @($open | ForEach-Object { [int]$_.number })
 $work = @($open | Where-Object { (Test-Label $_ 'pbi') -or (Test-Label $_ 'bug') })
+
+$tiers = [ordered]@{ fast = 0; standard = 0; strong = 0 }
+foreach ($i in $work) {
+  $b = [string]$i.body
+  $t = 'standard'
+  if ($b -match '(?m)^\s*(?:[-*]\s*)?\**Tier:?\**:?\s*(fast|standard|strong)\b') { $t = $Matches[1] }
+  elseif ($b -match '(?m)^\s*(?:[-*]\s*)?\**Size:?\**:?\s*([SML])\b') { $t = @{ S = 'fast'; M = 'standard'; L = 'strong' }[$Matches[1]] }
+  $tiers[$t]++
+}
 
 $doneRefs = @($all | Where-Object { $Delivered -contains [int]$_.number } | ForEach-Object { Get-Ref $_ })
 $ready = [System.Collections.Generic.List[object]]::new()
@@ -106,7 +116,7 @@ function Join-Cap($items, [scriptblock]$fmt) {
   (($a[0..($cap - 1)] | ForEach-Object { & $fmt $_ }) -join '; ') + "; +$($a.Count - $cap) more"
 }
 $lines = [System.Collections.Generic.List[string]]::new()
-$lines.Add("Milestone ${key}: $($closed.Count)/$total closed")
+$lines.Add("Milestone ${key}: $($closed.Count)/$total closed" + $(if ($work.Count) { ' · ' + (($tiers.Keys | Where-Object { $tiers[$_] } | ForEach-Object { "$_ $($tiers[$_])" }) -join ' · ') } else { '' }))
 $lines.Add('Delivered: ' + $(if ($doneRefs.Count) { Join-Cap $doneRefs { param($r) Format-Ref $r } } else { '-' }))
 $lines.Add("Ready: $($ready.Count)" + $(if ($ready.Count) { ", next $(Format-Ref $ready[0])" } else { '' }))
 $lines.Add('Waiting: ' + $(if ($waiting.Count) { Join-Cap $waiting { param($r) "$(Format-Ref $r) ($($r.reason))" } } else { '-' }))
@@ -123,6 +133,7 @@ $lines.Add('Next milestone: ' + $(if ($next) { $next } else { '-' }))
 if ($Text) { $lines -join "`n"; exit 0 }
 [ordered]@{
   milestone = $title; key = $key; closed = $closed.Count; total = $total
+  tiers = $tiers
   delivered = $doneRefs
   ready = [ordered]@{ count = $ready.Count; next = $(if ($ready.Count) { $ready[0] } else { $null }) }
   waiting = @($waiting); needsYou = @($needs); release = $release; next = $next; lines = @($lines)

@@ -27,6 +27,17 @@ describe('deliver SKILL.md', () => {
     expect(report).toContain('the release PR of step 9 as a full URL');
   });
 
+  it('shows the tier and model in the select line, the report and the loop docs (#325)', () => {
+    const select = body.slice(body.indexOf('**Select.**'), body.indexOf('**Resume.**'));
+    expect(select).toContain('(tier standard → sonnet/medium)');
+    expect(select).toContain('`tier from size M` or `default`');
+    expect(body.slice(body.indexOf('## Report'))).toMatch(/tier: fast 2 · standard 5 · strong 1/);
+    expect(roles).toContain('The tier is shown before and during a run');
+    const loop = fs.readFileSync(path.join(skillDir, 'references/loop.md'), 'utf8');
+    expect(loop).toContain('## Model per PBI (tier)');
+    expect(loop).toMatch(/Without `-Model`[\s\S]*haiku[\s\S]*sonnet[\s\S]*opus/);
+  });
+
   it('turns feedback during a run into issues instead of code (#324)', () => {
     const feedback = fs.readFileSync(path.join(skillDir, 'references/feedback.md'), 'utf8');
     expect(body).toContain('## Feedback during a run');
