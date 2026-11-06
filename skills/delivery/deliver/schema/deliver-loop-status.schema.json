@@ -37,8 +37,8 @@
         "url": { "type": "string", "minLength": 1 }
       }
     },
-    "closed": { "type": "integer", "minimum": 0 },
-    "total": { "type": "integer", "minimum": 0 },
+    "closed": { "description": "Closed `pbi` and `bug` issues of the milestone (the stop-rule set), Features and Epics excluded.", "type": "integer", "minimum": 0 },
+    "total": { "description": "All `pbi` and `bug` issues of the milestone (the stop-rule set), Features and Epics excluded.", "type": "integer", "minimum": 0 },
     "current": {
       "description": "The PBI the loop works on now, null between items and when the loop has ended.",
       "oneOf": [
