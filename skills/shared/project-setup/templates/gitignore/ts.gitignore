@@ -1,0 +1,13 @@
+node_modules/
+dist/
+build/
+coverage/
+.angular/
+.next/
+.turbo/
+*.tsbuildinfo
+.eslintcache
+npm-debug.log*
+pnpm-debug.log*
+.env
+.env.local
