@@ -1,4 +1,20 @@
-# herdr progress display
+# Terminal backends and the herdr progress display
+
+The deliver scripts call the terminal only through `scripts/TerminalBackend.ps1`. `Get-TerminalBackend` picks the backend: `DELIVER_TERMINAL_BACKEND` (`herdr`, `poimen`, `none`) wins; else `POIMEN_TERMINAL_ID` and `POIMEN_SOCKET` set: `poimen`; else `HERDR_ENV=1`: `herdr`; else `none`. `none` and an unsupported operation are no-ops with one notice per run on stderr; a failing backend call never fails the loop.
+
+| Function               | herdr                                                                            | poimen                                                                       | Unsupported  |
+| :--------------------- | :------------------------------------------------------------------------------- | :--------------------------------------------------------------------------- | :----------- |
+| `Set-LoopTokens`       | `herdr pane report-metadata <pane> --source deliver --token k=v … --ttl-ms`      | `poimen-server report tokens --source deliver --ttl <s> k=v …`               | none         |
+| `Clear-LoopTokens`     | `herdr pane report-metadata <pane> --source deliver --clear-token <name> …`      | `poimen-server report clear --source deliver` (all tokens of the source)     | none         |
+| `Set-LoopAgentState`   | `herdr pane report-agent <pane> --state … --source deliver-loop --agent deliver` | `poimen-server report agent --state … --source deliver-loop --agent deliver` | none         |
+| `Clear-LoopAgentState` | `herdr pane release-agent <pane> --source deliver-loop --agent deliver`          | `poimen-server report agent --release --source deliver-loop --agent deliver` | none         |
+| `New-LoopWorkspace`    | `herdr workspace create`, `tab rename`, `pane run`                               | notice only                                                                  | poimen, none |
+| `Open-LogPane`         | `herdr pane list`, `pane split`, `pane run`, `pane rename`                       | notice only                                                                  | poimen, none |
+| `Switch-LogPane`       | `herdr pane list`, `pane close` or `Open-LogPane`                                | notice only                                                                  | poimen, none |
+
+The loop reports the tokens `deliver`, `deliver_step`, `deliver_pr` and `deliver_progress` (`<closed>/<total>` of the milestone, e.g. `7/19`) through `Set-LoopTokens`, and the lifecycle through `Set-LoopAgentState`; `Clear-LoopTokens` removes all four on exit. poimen gets the same tokens and state through `poimen-server` (`terminal.report_tokens`); a missing server or method warns once on stderr (`Invoke-Poimen`) and the loop goes on. The status file `.agents/deliver-loop/status.json` is written whatever the backend (`loop.md` "Observability").
+
+Only `Test-LoopAgentConflict` (`herdr pane get`, herdr only) reads state. The sections below describe herdr.
 
 Only when `printenv HERDR_ENV` prints `1` (the session runs in a herdr pane). Without herdr nothing here runs.
 
@@ -19,6 +35,7 @@ herdr pane report-metadata <pane> --source deliver --token deliver=#12 --token "
 - `deliver=#<nr>`: the PBI or Bug of the progress line.
 - `deliver_step=<step>[: <result>]`: the step and its result from the progress line, at most 80 characters (cut longer ones).
 - `deliver_pr=#<pr>`: only once the PR exists (from the `pr` step on).
+- `deliver_progress=<closed>/<total>`: set by the loop only (not by a session following this file).
 
 The tokens never replace the agent name: the sidebar keeps showing the harness (`claude`, `opencode`). herdr keeps them per source for the TTL (one hour), so a crashed run does not leave them forever. Token names are 1–32 ASCII letters, digits, `_` or `-`; at most 16 per report.
 

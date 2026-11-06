@@ -40,6 +40,8 @@
           "required": ["number", "title", "state"],
           "properties": { "number": { "type": "integer" }, "title": { "type": "string" }, "state": { "enum": ["open", "closed"] } }
         },
+        "baseUrl": { "type": "string", "description": "https://github.com/<owner>/<repo>." },
+        "nextMilestone": { "type": ["string", "null"], "description": "Title of the next open milestone, null when there is none." },
         "issues": {
           "type": "array",
           "description": "Issues of the milestone for -State, number ascending, pull requests excluded.",
@@ -53,7 +55,16 @@
               "closed_at": { "type": ["string", "null"], "description": "ISO 8601 close time, null while open." },
               "body": { "type": ["string", "null"] },
               "labels": { "type": "array", "items": { "type": "string" } },
-              "assignees": { "type": "array", "items": { "type": "string" } }
+              "assignees": { "type": "array", "items": { "type": "string" } },
+              "blockedBy": {
+                "type": "array",
+                "description": "Open issues that block this open issue (native blocked-by links); repository only for another repository. Absent on closed issues.",
+                "items": {
+                  "type": "object",
+                  "required": ["number"],
+                  "properties": { "number": { "type": "integer" }, "repository": { "type": "string" } }
+                }
+              }
             }
           }
         }
@@ -199,8 +210,30 @@
     "detail": {
       "allOf": [{ "$ref": "#/$defs/summary" }],
       "type": "object",
-      "required": ["issues", "releasePr"],
+      "required": ["issues", "warnings", "releasePr"],
       "properties": {
+        "warnings": {
+          "type": "array",
+          "description": "Breaks of the milestone rule: an Epic in the milestone (epic-in-milestone); a Feature in it with open sub-issues outside of it (feature-incomplete, outside[] with their milestone title or none).",
+          "items": {
+            "type": "object",
+            "required": ["type", "number", "title"],
+            "properties": {
+              "type": { "enum": ["epic-in-milestone", "feature-incomplete"] },
+              "number": { "type": "integer" },
+              "title": { "type": "string" },
+              "outside": {
+                "type": "array",
+                "items": {
+                  "type": "object",
+                  "required": ["number", "title", "milestone"],
+                  "properties": { "number": { "type": "integer" }, "title": { "type": "string" }, "milestone": { "type": "string" } }
+                }
+              }
+            },
+            "additionalProperties": false
+          }
+        },
         "issues": {
           "type": "object",
           "description": "Open issues, pull requests excluded; each in the first matching group: needsDecision, needsRefinement, blocked, claimed, ready.",

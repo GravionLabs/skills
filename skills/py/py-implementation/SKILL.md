@@ -35,6 +35,7 @@ Load `py-test` for runner config, marks, naming, mocking and coverage.
 
 ## Review rules
 
+- 🔴 Lint run (`Format-Changed.ps1 -Lint -Language py`, ruff) exits non-zero: error-level findings; 🟡 warning-level findings
 - Type annotations on public function parameters and return values
 - No mutable default arguments; no bare `except:`
 - Context managers (`with`) for files, connections, locks

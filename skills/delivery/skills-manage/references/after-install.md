@@ -40,11 +40,15 @@ Before the first `/deliver <nr> --unattended`, propose the shell allowlist of th
 `scripts/Install-LoopShim.ps1` (offered after the `delivery` group, asks first) adds the function `deliver-loop` to `~/.zshrc`, `~/.bashrc` or the PowerShell profile, between `# >>> deliver-loop >>>` markers (a second run changes nothing, an outdated block is replaced). It finds the installed script in `.claude/skills/deliver`, `.agents/skills/deliver` (project), `~/.claude/skills/deliver`, `~/.agents/skills/deliver` and passes all arguments through; no copy, so `npx skills update` keeps it current. Nothing found: message and exit 1.
 
 ```powershell
-deliver-loop -Milestone 1.3.0 -Max 5 -Model sonnet
+deliver-loop -Milestone 1.3.0 -Max 5
 deliver-loop -Target 12,14 -Harness copilot -Model gpt-5
 ```
 
 In herdr (`HERDR_ENV=1`) it starts the loop in its own workspace `<repo> · deliver` (tab `deliver-loop`); elsewhere in the current terminal.
+
+## project-setup offer
+
+After a project install (not `-g`) of `shared`, which carries `project-setup`, `skills-manage` asks whether to run `/project-setup` (formatter, linter, base files, `.editorconfig`). Yes delegates to that skill, no leaves it for later. A global install never asks: the choices are per project.
 
 ## Coming from apm-hub
 

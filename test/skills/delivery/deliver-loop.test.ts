@@ -12,7 +12,9 @@ const SCRIPT = path.resolve(
 const hasPwsh = spawnSync('pwsh', ['-NoProfile', '-Command', '1']).status === 0;
 
 type Issue = {
+  body?: string;
   state?: string;
+  milestone?: string;
   labels?: string[];
   children?: number[];
   blockers?: { number: number; state: string }[];
@@ -59,7 +61,7 @@ describe.skipIf(!hasPwsh || process.platform === 'win32')('Invoke-DeliverLoop.ps
         let m = /^repos\\/\\{owner\\}\\/\\{repo\\}\\/issues\\/(\\d+)$/.exec(a[1] || '');
         if (a[0] === 'api' && m) {
           const i = get(m[1]);
-          return { rest: { number: Number(m[1]), state: (i.state || 'OPEN').toLowerCase(), labels: (i.labels || []).map((name) => ({ name })) } };
+          return { rest: { number: Number(m[1]), body: i.body || '', state: (i.state || 'OPEN').toLowerCase(), labels: (i.labels || []).map((name) => ({ name })), milestone: i.milestone ? { title: i.milestone } : null } };
         }
         // #127: the milestone is read over REST (Get-Milestones.ps1 -Mode issues), never with gh issue list
         if (/\\/milestones\\?/.test(a[1] || '')) {
@@ -225,10 +227,45 @@ fs.writeFileSync(f, JSON.stringify(s));`,
       expect(harnessCalls()).toEqual([]);
     });
 
+    it('-Milestone skips a PBI below a Feature of the milestone that has no or another milestone, and counts the same set (#327)', async () => {
+      const gh = setup({
+        issues: {
+          20: { labels: ['feature'], children: [21, 22, 23] },
+          21: pbi({ milestone: 'M4' }),
+          22: pbi(),
+          23: pbi({ milestone: 'M5' }),
+        },
+        milestones: { M4: [20] },
+        effect: 'close-first',
+      });
+      const r = await run(gh, ['-Milestone', 'M4']);
+      expect(r.status).toBe(0);
+      expect(r.stdout).toContain('#22 select: outside M4 (milestone: none), skipped');
+      expect(r.stdout).toContain('#23 select: outside M4 (milestone: M5), skipped');
+      expect(r.stdout).not.toContain('#21 select: outside');
+      // 21 is delivered, then nothing is left: done, not "no progress"
+      expect(r.stdout).toContain('loop result: done');
+      expect(harnessCalls()).toHaveLength(1);
+    });
+
+    it('/deliver <feature> without -Milestone still takes its PBIs without a milestone (#327)', async () => {
+      const gh = setup({
+        issues: { 20: { labels: ['feature'], children: [22] }, 22: pbi() },
+        effect: 'close-first',
+      });
+      const r = await run(gh, ['20']);
+      expect(r.stdout).not.toContain('outside');
+      expect(r.stdout).toContain('loop result: done');
+    });
+
     it('-Milestone selects a bug like a PBI, delivers it in one fresh process, ends done when no open and no paused issue is left, reads the milestone M4 with one batched REST call (#103, #127, #235)', async () => {
       const gh = setup({
         issues: {
-          10: { labels: ['bug'], blockers: [{ number: 5, state: 'closed' }] },
+          10: {
+            labels: ['bug'],
+            blockers: [{ number: 5, state: 'closed' }],
+            body: '## Summary\n\nTier: fast — one-line fix\n', // #325: the model of the tier (haiku)
+          },
         },
         milestones: { 'M4 (0.2.0)': [10] }, // a closed milestone renamed 'M<n> (x.y.z)' is still found by M4
         effect: 'close-first',
@@ -245,19 +282,22 @@ fs.writeFileSync(f, JSON.stringify(s));`,
           .filter((f) => /queue/i.test(f)),
       ).toEqual([]);
       expect(harnessCalls()).toEqual([
-        '-p /deliver --milestone M4 --unattended --max 1 --model sonnet --permission-mode auto --output-format stream-json --verbose',
+        '-p /deliver --milestone M4 --unattended --max 1 --model haiku --permission-mode auto --output-format stream-json --verbose',
       ]);
       expect(JSON.parse(read('state.json')).issues[10].state).toBe('CLOSED');
       expect(r.stdout).toContain('loop result: done');
       // redirected stdout stays plain text
       expect(r.stdout).not.toContain(String.fromCharCode(27));
       const paths = gh.calls().map((c) => c.args.join(' '));
-      expect(paths.filter((c) => c.includes('/issues?milestone='))).toHaveLength(3); // the state read before and after the one iteration; the closed list is read once for the done check
+      expect(paths.filter((c) => c.includes('/issues?milestone='))).toHaveLength(5); // the state read before and after the one iteration; the closed list is read once for the done check; the status block (state=all) before and after (#329)
       expect(
         paths.filter((c) => c.includes('issues?milestone=1&state=open&per_page=100 --paginate')),
       ).toHaveLength(2);
       expect(paths.filter((c) => /^issue /.test(c))).toEqual([]);
-      expect(paths.filter((c) => /issues\/\d+$/.test(c))).toEqual([]);
+      // one REST read of the picked PBI's body per iteration, for its tier (#325)
+      expect(paths.filter((c) => /issues\/\d+$/.test(c))).toEqual([
+        'api repos/{owner}/{repo}/issues/10',
+      ]);
     });
 
     it('expands a Feature to its open PBIs, passes -Model on, and stops with "no progress" and the last log lines when a PBI stays open', async () => {
@@ -280,6 +320,68 @@ fs.writeFileSync(f, JSON.stringify(s));`,
       ]);
       expect(r.stdout).toContain('no progress');
       expect(r.stdout).toMatch(/ {2}\d\d:\d\d:\d\d » working on it/);
+    });
+  });
+
+  describe('model per tier (#325)', () => {
+    const modelOf = () =>
+      harnessCalls()
+        .find((c) => c.includes('--model'))
+        ?.match(/--model (\S+)/)?.[1];
+    const body = (line: string) => `## Summary\n\n${line}\n\n## Acceptance criteria\n- [ ] x\n`;
+
+    // the Tier line -> haiku is asserted in the milestone case above; the -Model override in the Feature case
+    it('takes the model from the size when there is no Tier line', async () => {
+      const size = setup({ issues: { 61: pbi({ body: body('Size: L') }) }, effect: 'close-first' });
+      const s = await run(size, ['-Target', '61']);
+      expect(s.status).toBe(0);
+      expect(s.stdout).toContain('#61 tier strong (size L) → model opus');
+      expect(modelOf()).toBe('opus');
+    });
+  });
+
+  describe('progress for a control session (#321)', () => {
+    it('writes progress.jsonl (start, iteration-start, iteration-end, result) and latest.txt', async () => {
+      const gh = setup({
+        issues: { 31: pbi(), 32: pbi() },
+        effect: 'close-first',
+      });
+      const r = await run(gh, ['-Target', '31,32']);
+      expect(r.status).toBe(0);
+      const latest = read('.agents/deliver-loop/latest.txt').trim();
+      expect(fs.realpathSync(latest)).toBe(
+        fs.realpathSync(path.dirname(path.join(latest, 'progress.jsonl'))),
+      );
+      const recs = fs
+        .readFileSync(path.join(latest, 'progress.jsonl'), 'utf8')
+        .trim()
+        .split('\n')
+        .map((l) => JSON.parse(l));
+      expect(recs.map((x) => x.event)).toEqual([
+        'start',
+        'iteration-start',
+        'iteration-end',
+        'iteration-start',
+        'iteration-end',
+        'result',
+      ]);
+      expect(recs[0]).toMatchObject({ targets: [31, 32], open: 2 });
+      expect(recs[2]).toMatchObject({ pbi: 31, delivered: '31', open: 1 });
+      expect(recs[5]).toMatchObject({ result: 'done', code: 0, iterations: 2, open: 0 });
+    });
+
+    it('records a held PBI as result blocked', async () => {
+      const gh = setup({ issues: { 41: pbi({ labels: ['pbi', 'needs-decision'] }) } });
+      const r = await run(gh, ['-Target', '41']);
+      expect(r.status).toBe(2);
+      const latest = read('.agents/deliver-loop/latest.txt').trim();
+      const last = fs
+        .readFileSync(path.join(latest, 'progress.jsonl'), 'utf8')
+        .trim()
+        .split('\n')
+        .map((l) => JSON.parse(l))
+        .pop();
+      expect(last).toMatchObject({ event: 'result', result: 'blocked', code: 2 });
     });
   });
 
@@ -368,7 +470,9 @@ fs.writeFileSync(f, JSON.stringify(s));`,
       // stdout is a terminal (DELIVER_LOOP_ASSUME_TTY): the colored line of the .ansi.log
       const ESC = String.fromCharCode(27);
       expect(r.stdout).toContain(`[Review PBI #401 diff] ${ESC}[36mBash${ESC}[0m git diff`);
-      const runDirs = fs.readdirSync(path.join(cwd, '.agents/deliver-loop'));
+      const runDirs = fs
+        .readdirSync(path.join(cwd, '.agents/deliver-loop'))
+        .filter((d) => d !== 'latest.txt');
       expect(runDirs).toHaveLength(1);
       const jsonl = fs
         .readFileSync(path.join(cwd, '.agents/deliver-loop', runDirs[0], '401.jsonl'), 'utf8')
@@ -388,7 +492,7 @@ fs.writeFileSync(f, JSON.stringify(s));`,
         `pane report-metadata p7 --source deliver --token deliver=#401 --token deliver_step=1/2 review: ${'x'.repeat(67)}… --token deliver_pr=#55 ${tokens}`,
         `pane report-metadata p7 --source deliver --token deliver=#401 --token deliver_step=1/2 ci: red --token deliver_pr=#55 ${tokens}`,
         `pane report-metadata p7 --source deliver --token deliver=#401 --token deliver_step=1/2 merged: squash --token deliver_pr=#55 ${tokens}`,
-        'pane report-metadata p7 --source deliver --clear-token deliver --clear-token deliver_step --clear-token deliver_pr',
+        'pane report-metadata p7 --source deliver --clear-token deliver --clear-token deliver_step --clear-token deliver_pr --clear-token deliver_progress',
       ]);
       expect(calls.join('\n')).not.toContain('display-agent');
       // no -LogPane: opens no pane (a TTY and a herdr pane are present); the plain log has no escape codes, the ANSI log is colored

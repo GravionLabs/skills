@@ -1,0 +1,10 @@
+<component name="ProjectRunConfigurationManager">
+  <configuration default="false" name="{{name}}" type="CargoCommandRunConfiguration" factoryName="Cargo Command">
+    <option name="command" value="run" />
+    <option name="workingDirectory" value="file://$PROJECT_DIR$" />
+    <envs />
+    <method v="2">
+      <option name="CARGO.BUILD_TASK_PROVIDER" enabled="true" />
+    </method>
+  </configuration>
+</component>

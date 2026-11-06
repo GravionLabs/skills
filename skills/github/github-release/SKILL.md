@@ -8,7 +8,7 @@ Owns the lifecycle of the rolling `release/next` branch (explicit `release/<x.y>
 
 `help` (or `--help`, `-h`): print `references/help.md` unchanged, nothing else.
 
-Prerequisites: `gh` authenticated, repo root, clean `git status`. Mode: `cut [--feature <nr>]` or `finish [major] [release/next|release/<x.y>]`; `finish` takes optional `release_review_notes` (lines from the release review of `deliver`).
+Prerequisites: `gh` authenticated, repo root, clean `git status`. Mode: `cut [--feature <nr>]` or `finish [major] [--yes] [release/next|release/<x.y>]`; `finish` takes optional `release_review_notes` (lines from the release review of `deliver`).
 
 ## Check the state first
 
@@ -45,6 +45,8 @@ The script is read-only and prints JSON: `default`, `branch`, `state`, `openPrs`
    - An open `M<n>` (the lowest, as `current`): `/github-milestone create` (the next free `M<n+1>`) first, then `/github-milestone close M<n> --move-to M<n+1>` (the version comes from the tag; the title becomes `M<n> (x.y.z)`; without open issues a plain `close M<n>` is enough).
    - Legacy, an open `x.y.z` milestone with `tagged: true`: `create` the next `x.y.z` milestone first, then `/github-milestone close <x.y.z> [--move-to <next>]`.
    - Neither, or `github-milestone` not installed: no hint.
+
+   With `github-milestone` installed `finish` does this itself (`--yes`: no question): `scripts/Test-ReleaseVersion.ps1` first (tag against the commits, a mismatch stops), then create, close unclosed PBIs ("Released in v<x.y.z>"), `close --move-to`, report with the next milestone's ready count. Steps: `references/close-milestone.md`.
 
 ## Gotchas
 

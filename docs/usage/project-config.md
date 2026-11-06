@@ -61,6 +61,21 @@ By default `Format-Changed.ps1 -Language <lang>` runs the built-in commands of `
 - `extensions`: files to keep (optional; absent needs `-Extensions` on the call).
 - `format` (entry): command for the format step; `check`: command for the read-only check (what CI or the caller runs). Each is a string or an array run in order; the first non-zero exit stops. `{files}` is replaced by the changed files, repo-relative, one argument each; inside a token (`--include={files}`) the files are joined by `;`.
 
+- `lint`: `false` skips every lint call (`skipped: disabled`), or a map keyed by language. An entry has `command` (string or array, run in order, `{files}` as for `format`; a command without `{files}` runs as it is) and optional `extensions` (absent: those of the built-in default). No `lint` key keeps the per-language default (`references/lint.md` of the `implementation` skill): eslint or biome lint (ts, ng), `ruff check` (py), `dotnet format analyzers` (dotnet), `cargo clippy` (rust), `golangci-lint` (go). `Format-Changed.ps1 -Lint` runs it on the changed files; `code-review` reports the findings.
+
+```json
+{
+  "lint": {
+    "dotnet": {
+      "extensions": [".cs"],
+      "command": "jb inspectcode MySolution.sln --no-build --include={files} -o=obj/inspect.sarif"
+    }
+  }
+}
+```
+
+`/project-setup` (skill `project-setup`) writes the `format` and `lint` keys for you: it asks per detected language for the formatter and the linter and writes only the non-default choices. When ADR or spec folders exist without a `governance` key it also offers that key, with `adrPaths` and `specMap` proposed from the repo and `specMode: warn`; an existing key is shown and only changed on `merge` or `replace`. On request, per editor, it also writes the VS Code files `.vscode/settings.json` (format on save, default formatter per language), `extensions.json`, `tasks.json` (build, test) and `launch.json` (debug starts); an existing file is never changed, the missing entries are shown.
+
 ## Precedence
 
 An entry for a language replaces all default commands of that language. With an entry the script runs once per mode with `-Language <lang>` only. It ignores `-Command`/`-Requires`, so a caller that runs the script several times repeats the override commands; keep them idempotent. The script prints a `notice:` on stderr when it runs commands from the file; the file is repo-controlled, review it like code. Languages without an entry keep their defaults; entries for other languages are ignored.

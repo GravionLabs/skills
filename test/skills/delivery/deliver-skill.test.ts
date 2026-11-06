@@ -9,7 +9,7 @@ const skillDir = path.join(root, 'delivery/deliver');
 const text = fs.readFileSync(path.join(skillDir, 'SKILL.md'), 'utf8');
 const roles = fs.readFileSync(path.join(skillDir, 'references/roles.md'), 'utf8');
 const permissions = fs.readFileSync(path.join(skillDir, 'references/permissions.md'), 'utf8');
-const herdr = fs.readFileSync(path.join(skillDir, 'references/herdr.md'), 'utf8');
+const herdr = fs.readFileSync(path.join(skillDir, 'references/terminal-backends.md'), 'utf8');
 const claim = fs.readFileSync(path.join(skillDir, 'references/claim.md'), 'utf8');
 
 describe('deliver SKILL.md', () => {
@@ -25,6 +25,75 @@ describe('deliver SKILL.md', () => {
     expect(body).toContain('not as a bare `#<n>`');
     const report = body.slice(body.indexOf('## Report'));
     expect(report).toContain('the release PR of step 9 as a full URL');
+  });
+
+  it('shows the tier and model in the select line, the report and the loop docs (#325)', () => {
+    const select = body.slice(body.indexOf('**Select.**'), body.indexOf('**Resume.**'));
+    expect(select).toContain('(tier standard → sonnet/medium)');
+    expect(select).toContain('`tier from size M` or `default`');
+    expect(body.slice(body.indexOf('## Report'))).toMatch(/tier: fast 2 · standard 5 · strong 1/);
+    expect(roles).toContain('The tier is shown before and during a run');
+    const loop = fs.readFileSync(path.join(skillDir, 'references/loop.md'), 'utf8');
+    expect(loop).toContain('## Model per PBI (tier)');
+    expect(loop).toMatch(/Without `-Model`[\s\S]*haiku[\s\S]*sonnet[\s\S]*opus/);
+  });
+
+  it('turns feedback during a run into issues instead of code (#324)', () => {
+    const feedback = fs.readFileSync(path.join(skillDir, 'references/feedback.md'), 'utf8');
+    expect(body).toContain('## Feedback during a run');
+    expect(body).toContain('references/feedback.md');
+    for (const part of [
+      'at most 6 lines',
+      '`Tier:`',
+      '`Size:`',
+      '`needs-refinement`',
+      'planner refine <nr>',
+      'one draft per finding',
+      'implements nothing',
+      'Fix it now',
+      'Screenshots',
+    ]) {
+      expect(feedback).toContain(part);
+    }
+    expect(text.split('\n').length).toBeLessThanOrEqual(100);
+    expect(
+      fs.readFileSync(path.resolve(__dirname, '../../../docs/guides/deliver.md'), 'utf8'),
+    ).toContain('## Feedback during a run');
+  });
+
+  it('does not pin the session model on the loop by default (#348)', () => {
+    const control = fs.readFileSync(path.join(skillDir, 'references/control.md'), 'utf8');
+    const step = control.split('\n').find((l) => l.startsWith('2. Start the loop')) ?? '';
+    expect(step).not.toContain("this session's model");
+    expect(step).toContain('no `-Model`');
+    expect(step).toContain('tier');
+  });
+
+  it('hands interactive runs over many PBIs to a control session over the loop (#321)', () => {
+    const control = fs.readFileSync(path.join(skillDir, 'references/control.md'), 'utf8');
+    expect(body).toContain('--inline');
+    expect(body).toContain('references/control.md');
+    expect(body).toContain('deliver.loopThreshold');
+    for (const part of [
+      'progress.jsonl',
+      'needs-decision',
+      '`interactive`',
+      'step 9',
+      'deliver.controlContextTokens',
+      '200000',
+      'Get-DeliverStatus',
+      '--unattended',
+    ]) {
+      expect(control + body).toContain(part);
+    }
+    expect(control).toContain('status block');
+    expect(control).toContain('resume command');
+    expect(fs.readFileSync(path.join(skillDir, 'references/loop.md'), 'utf8')).toContain(
+      '`--inline`',
+    );
+    expect(fs.readFileSync(path.join(skillDir, 'references/help.md'), 'utf8')).toContain(
+      '--inline',
+    );
   });
 
   it('stays under 100 lines', () => {
@@ -109,7 +178,7 @@ describe('deliver SKILL.md', () => {
 
   it('takes several numbers and a milestone, skips needs-refinement, reports per number', () => {
     expect(body).toContain(
-      '`/deliver <nr> [<nr> …] [--milestone <name>] [--unattended] [--max <n>]`',
+      '`/deliver <nr> [<nr> …] [--milestone <name>] [--unattended] [--inline] [--max <n>]`',
     );
     expect(body).toContain('Get-Milestones.ps1 -Mode issues -Name <name> -State open');
     expect(body).toContain('filter the returned list by label');
@@ -339,7 +408,7 @@ describe('deliver SKILL.md', () => {
 
     it('loads the herdr reference only when HERDR_ENV is 1', () => {
       expect(start).toContain(
-        '`printenv HERDR_ENV`. Only when it prints `1`, follow `references/herdr.md`',
+        '`printenv HERDR_ENV`. Only when it prints `1`, follow `references/terminal-backends.md`',
       );
       expect(herdr).toContain('Only when `printenv HERDR_ENV` prints `1`');
     });
@@ -354,7 +423,7 @@ describe('deliver SKILL.md', () => {
         'herdr pane report-metadata <pane> --source deliver --token deliver=#12 --token "deliver_step=review: 1 blocking" --token deliver_pr=#55 --ttl-ms 3600000',
         'herdr pane report-metadata <pane> --source deliver --clear-token deliver --clear-token deliver_step --clear-token deliver_pr',
       ]);
-      expect(herdr.indexOf('--clear-token')).toBeGreaterThan(herdr.indexOf('## End'));
+      expect(herdr.indexOf('--clear-token', herdr.indexOf('## End'))).toBeGreaterThan(-1);
       expect(herdr).toContain('at most 80 characters');
     });
 
@@ -756,5 +825,19 @@ describe('M<n> milestones (#235)', () => {
       expect(t).toContain('no stash, checkout, switch or commit in any existing checkout');
       expect(t).toContain('temporary worktree');
     }
+  });
+});
+
+describe('permissions.md terminal rows (#356)', () => {
+  const rows = permissions.split('\n');
+  const herdrRow = rows.find((l) => l.includes('printenv HERDR_ENV')) ?? '';
+  const poimenRow = rows.find((l) => l.startsWith('| `poimen-server report`')) ?? '';
+
+  it('limits the herdr row to herdr panes, without poimen-server', () => {
+    expect(herdrRow).toContain('inside a `herdr` pane');
+    expect(herdrRow).not.toContain('poimen-server');
+  });
+  it('gives poimen-server report its own row for a poimen terminal', () => {
+    expect(poimenRow).toContain('inside a poimen terminal');
   });
 });

@@ -9,7 +9,7 @@ Nothing here is required. Without herdr `deliver` skips the display.
 
 ## Pane tokens and sidebar layout
 
-In a herdr pane, `deliver` (and `Invoke-DeliverLoop.ps1`) reports its progress as pane tokens of source `deliver`: `deliver` (issue), `deliver_step` (step and result) and `deliver_pr` (PR), cleared at the end. The agent name in the sidebar stays the harness. herdr shows a token only where a row of `[ui.sidebar.agents]` names it. The layout (space and state, agent and terminal title, `deliver` tokens last) and its alternatives live in one place: [Sidebar layout](../../skills/delivery/deliver/references/herdr.md#sidebar-layout) in `references/herdr.md` of the `deliver` skill. Copy the TOML from there into your herdr config. No bus or daemon is involved.
+In a herdr pane, `deliver` (and `Invoke-DeliverLoop.ps1`) reports its progress as pane tokens of source `deliver`: `deliver` (issue), `deliver_step` (step and result) and `deliver_pr` (PR), cleared at the end. The agent name in the sidebar stays the harness. herdr shows a token only where a row of `[ui.sidebar.agents]` names it. The layout (space and state, agent and terminal title, `deliver` tokens last) and its alternatives live in one place: [Sidebar layout](../../skills/delivery/deliver/references/terminal-backends.md#sidebar-layout) in `references/terminal-backends.md` of the `deliver` skill. Copy the TOML from there into your herdr config. No bus or daemon is involved.
 
 ## The loop in herdr
 
@@ -17,7 +17,7 @@ In a herdr pane, `deliver` (and `Invoke-DeliverLoop.ps1`) reports its progress a
 - The loop reports its own agent state with `report-agent --source deliver-loop` (`working`, `blocked`, `idle`, then `release-agent`; not in a pane that already runs another agent).
 - The log pane `deliver-log` is opt-in with `-LogPane` (the console is already colored); a herdr key toggles it with `Switch-LogPane.ps1`.
 
-Details: `references/herdr.md` and `references/loop.md` of the `deliver` skill.
+Details: `references/terminal-backends.md` and `references/loop.md` of the `deliver` skill.
 
 ## Plugins
 

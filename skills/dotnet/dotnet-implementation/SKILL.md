@@ -39,6 +39,7 @@ Runner, layout, naming, structure and mocking live in `dotnet-test`.
 
 ## Review rules
 
+- 🔴 Lint run (`Format-Changed.ps1 -Lint -Language dotnet`, analyzer) exits non-zero: error-level findings; 🟡 warning-level findings
 - No `.Result`, `.Wait()`, or `async void` (except event handlers)
 - `CancellationToken` propagated through async call chains
 - Nullable reference types respected; no swallowed exceptions

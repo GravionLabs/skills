@@ -1,0 +1,10 @@
+{
+  "dotnet": { "languageIds": ["csharp"], "formatter": "ms-dotnettools.csdevkit", "extensions": ["ms-dotnettools.csdevkit", "ms-dotnettools.csharp"], "build": "dotnet build", "test": "dotnet test" },
+  "ts": { "languageIds": ["typescript", "typescriptreact", "javascript", "json"], "formatter": null, "extensions": [], "build": "{pm} run build", "test": "{pm} exec vitest run" },
+  "ng": { "languageIds": ["typescript", "html", "json"], "formatter": null, "extensions": ["angular.ng-template"], "build": "{pm} run build", "test": "{pm} exec vitest run" },
+  "py": { "languageIds": ["python"], "formatter": "charliermarsh.ruff", "extensions": ["ms-python.python", "charliermarsh.ruff"], "build": null, "test": "pytest" },
+  "rust": { "languageIds": ["rust"], "formatter": "rust-lang.rust-analyzer", "extensions": ["rust-lang.rust-analyzer", "vadimcn.vscode-lldb"], "build": "cargo build", "test": "cargo test" },
+  "go": { "languageIds": ["go"], "formatter": "golang.go", "extensions": ["golang.go"], "build": "go build ./...", "test": "go test ./..." },
+  "formatters": { "biome": ["biomejs.biome"], "prettier": ["esbenp.prettier-vscode", "dbaeumer.vscode-eslint"] },
+  "frameworksWithoutTarget": ["tauri", "react", "next", "vue", "svelte"]
+}

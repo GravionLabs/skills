@@ -32,6 +32,7 @@ Load `rust-test` for runner, layout, mocking and property tests.
 
 ## Review rules
 
+- 🔴 Lint run (`Format-Changed.ps1 -Lint -Language rust`, clippy) exits non-zero: error-level findings; 🟡 warning-level findings
 - 🔴 `unsafe` block without a `// SAFETY:` comment or with avoidable scope
 - 🔴 `unwrap()`/`expect()`/`panic!` on fallible input in non-test code; blocking calls inside `async` code
 - 🔴 Hardcoded secrets; SQL built by string formatting

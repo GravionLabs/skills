@@ -29,6 +29,8 @@ Planning only: no source edits. The planning steps below ask nothing (open decis
 - An Epic or Feature without children: offer the interactive plan (`## Interactive`) instead of only grilling.
 - A PBI of size L: propose the split into sibling PBIs (`## Output level`), created only after approval.
 - Load `grill-me` with the gaps only. Update the body with the decisions (`## Decisions`) and the sharpened criteria and notes via `gh api -X PATCH repos/{owner}/{repo}/issues/<nr> -F body=@file`.
+- Missing `Tier:` line (PBI or Bug, `references/ready.md`): add `Tier: <tier> — <reason>` to the body, the tier from the table of `references/plan-schema.md` (size S fast, M standard, L strong, else standard). Each change is listed in the report with its item and tier; an existing line is never changed. `refine M<n>` does this for every open PBI and Bug of the milestone and reports the items it changed (`references/ready.md`).
+- Milestone: the PBIs created in step 4 get the milestone the user names, else the one of the Feature; none known → ask once. Never set a milestone on an Epic, and a Feature only when all its PBIs are in it (`github-issue` `references/milestones.md`).
 - Labels: ready → remove `needs-refinement`; open decision left → add `needs-decision` and post the question as a comment. Create the label (`gh label create`) when the repository lacks it.
 
 ## Depth (exploration budget)
