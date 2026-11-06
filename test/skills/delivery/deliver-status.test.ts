@@ -97,6 +97,16 @@ describe('Get-DeliverStatus.ps1', () => {
     expect(j.next).toBe('M5');
   });
 
+  it('#346: an open (paused) issue passed to -Delivered is not listed as delivered', () => {
+    const fake = fixture('open-delivered', [
+      { number: 1, title: 'feat: one', state: 'closed' },
+      { number: 2, title: 'feat: two', state: 'open', labels: ['pbi', 'needs-decision'] },
+    ]);
+    const r = run(fake, ['-Delivered', '2']);
+    expect(r.status).toBe(0);
+    expect(JSON.parse(r.stdout).delivered).toEqual([]);
+  });
+
   it('shows the tier distribution of the open items (Tier line, else size, else standard)', () => {
     const fake = fixture('tiers', [
       { number: 1, title: 'a', state: 'open', body: 'Tier: fast — docs' },
