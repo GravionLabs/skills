@@ -57,6 +57,16 @@
       "type": "object",
       "additionalProperties": false,
       "properties": {
+        "loopThreshold": {
+          "description": "An interactive /deliver run with more PBIs than this starts the loop and stays a control session (default 3).",
+          "type": "integer",
+          "minimum": 1
+        },
+        "controlContextTokens": {
+          "description": "Context size at which the control session prints the status block and the resume command and stops (default 200000).",
+          "type": "integer",
+          "minimum": 1000
+        },
         "roles": {
           "description": "Model and effort per role; unset keys keep the defaults.",
           "type": "object",

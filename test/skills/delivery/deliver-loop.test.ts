@@ -283,6 +283,51 @@ fs.writeFileSync(f, JSON.stringify(s));`,
     });
   });
 
+  describe('progress for a control session (#321)', () => {
+    it('writes progress.jsonl (start, iteration-start, iteration-end, result) and latest.txt', async () => {
+      const gh = setup({
+        issues: { 31: pbi(), 32: pbi() },
+        effect: 'close-first',
+      });
+      const r = await run(gh, ['-Target', '31,32']);
+      expect(r.status).toBe(0);
+      const latest = read('.agents/deliver-loop/latest.txt').trim();
+      expect(fs.realpathSync(latest)).toBe(
+        fs.realpathSync(path.dirname(path.join(latest, 'progress.jsonl'))),
+      );
+      const recs = fs
+        .readFileSync(path.join(latest, 'progress.jsonl'), 'utf8')
+        .trim()
+        .split('\n')
+        .map((l) => JSON.parse(l));
+      expect(recs.map((x) => x.event)).toEqual([
+        'start',
+        'iteration-start',
+        'iteration-end',
+        'iteration-start',
+        'iteration-end',
+        'result',
+      ]);
+      expect(recs[0]).toMatchObject({ targets: [31, 32], open: 2 });
+      expect(recs[2]).toMatchObject({ pbi: 31, delivered: '31', open: 1 });
+      expect(recs[5]).toMatchObject({ result: 'done', code: 0, iterations: 2, open: 0 });
+    });
+
+    it('records a held PBI as result blocked', async () => {
+      const gh = setup({ issues: { 41: pbi({ labels: ['pbi', 'needs-decision'] }) } });
+      const r = await run(gh, ['-Target', '41']);
+      expect(r.status).toBe(2);
+      const latest = read('.agents/deliver-loop/latest.txt').trim();
+      const last = fs
+        .readFileSync(path.join(latest, 'progress.jsonl'), 'utf8')
+        .trim()
+        .split('\n')
+        .map((l) => JSON.parse(l))
+        .pop();
+      expect(last).toMatchObject({ event: 'result', result: 'blocked', code: 2 });
+    });
+  });
+
   describe('observability', () => {
     const stream = [
       {
@@ -368,7 +413,9 @@ fs.writeFileSync(f, JSON.stringify(s));`,
       // stdout is a terminal (DELIVER_LOOP_ASSUME_TTY): the colored line of the .ansi.log
       const ESC = String.fromCharCode(27);
       expect(r.stdout).toContain(`[Review PBI #401 diff] ${ESC}[36mBash${ESC}[0m git diff`);
-      const runDirs = fs.readdirSync(path.join(cwd, '.agents/deliver-loop'));
+      const runDirs = fs
+        .readdirSync(path.join(cwd, '.agents/deliver-loop'))
+        .filter((d) => d !== 'latest.txt');
       expect(runDirs).toHaveLength(1);
       const jsonl = fs
         .readFileSync(path.join(cwd, '.agents/deliver-loop', runDirs[0], '401.jsonl'), 'utf8')

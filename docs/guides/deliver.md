@@ -108,6 +108,17 @@ State lives in GitHub only (issue, branch, PR, checks). After a crash, a closed 
 
 `--max <n>` stops after `n` delivered, blocked or paused PBIs and prints the report. Run it again for the next batch.
 
+## A milestone as a control session
+
+An interactive `/deliver --milestone M4` (or a Feature or Epic with more than three PBIs, `deliver.loopThreshold` in `.agents/config.json`) does not deliver the PBIs in your session. It starts the loop below in the background (in herdr in its own workspace), prints the progress and the status block between PBIs, and stays small:
+
+- a `needs-decision` PBI is shown to you; after your answer the label is removed and the loop continues
+- `interactive` PBIs are delivered by this session, because they cannot run unattended
+- the release review and release PR run once in this session after the loop ends `done`
+- past `deliver.controlContextTokens` (default 200000) it prints the status block and the resume command and stops; run `/deliver --milestone M4` again
+
+`/deliver --milestone M4 --inline` keeps the old behavior: this session delivers every PBI itself. Details: `references/control.md` of the `deliver` skill.
+
 ## A release in fresh sessions
 
 One session over a whole release grows large. `Invoke-DeliverLoop.ps1` starts a fresh `claude -p "/deliver … --unattended --max 1"` per PBI and reads the progress from GitHub. `skills-manage` offers the `deliver-loop` shim (`Install-LoopShim.ps1`), so you start it from any shell:
