@@ -119,6 +119,10 @@ An interactive `/deliver --milestone M4` (or a Feature or Epic with more than th
 
 `/deliver --milestone M4 --inline` keeps the old behavior: this session delivers every PBI itself. Details: `references/control.md` of the `deliver` skill.
 
+## Preflight
+
+Before the first PBI `deliver` checks the repository and prints one line per check (ok, fixed or action needed): the stack skills of `detect-techstack` are installed in the project and not older than the global ones (missing: `skills-manage`, after one question; unattended the run continues with the global skills), `git`, `gh`, `pwsh <skill-dir>/scripts/*` and the verify commands of `AGENTS.md` are on the allowlist (missing lines are listed, interactive offers to add them), and worktrees of merged or deleted PBI branches are removed (others are listed). `--no-preflight` skips it. Details: `references/preflight.md` of the `deliver` skill.
+
 ## A release in fresh sessions
 
 One session over a whole release grows large. `Invoke-DeliverLoop.ps1` starts a fresh `claude -p "/deliver … --unattended --max 1"` per PBI and reads the progress from GitHub. `skills-manage` offers the `deliver-loop` shim (`Install-LoopShim.ps1`), so you start it from any shell:
