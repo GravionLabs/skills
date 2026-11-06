@@ -1,0 +1,8 @@
+
+##############################
+# TypeScript, JavaScript, Angular and web files
+##############################
+[*.{ts,tsx,js,jsx,mjs,cjs,json,jsonc,html,css,scss,md,yml,yaml}]
+indent_style = space
+indent_size = 2
+tab_width = 2

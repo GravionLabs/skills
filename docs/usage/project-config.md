@@ -61,6 +61,8 @@ By default `Format-Changed.ps1 -Language <lang>` runs the built-in commands of `
 - `extensions`: files to keep (optional; absent needs `-Extensions` on the call).
 - `format` (entry): command for the format step; `check`: command for the read-only check (what CI or the caller runs). Each is a string or an array run in order; the first non-zero exit stops. `{files}` is replaced by the changed files, repo-relative, one argument each; inside a token (`--include={files}`) the files are joined by `;`.
 
+`/project-setup` (skill `project-setup`) writes the `format` key for you: it asks per detected language for the formatter and writes only the non-default choices.
+
 ## Precedence
 
 An entry for a language replaces all default commands of that language. With an entry the script runs once per mode with `-Language <lang>` only. It ignores `-Command`/`-Requires`, so a caller that runs the script several times repeats the override commands; keep them idempotent. The script prints a `notice:` on stderr when it runs commands from the file; the file is repo-controlled, review it like code. Languages without an entry keep their defaults; entries for other languages are ignored.

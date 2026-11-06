@@ -46,7 +46,8 @@
     "detect-techstack",
     "diagnose",
     "implementation",
-    "lessons"
+    "lessons",
+    "project-setup"
   ],
   "skill-tooling": [
     "skill-audit",
