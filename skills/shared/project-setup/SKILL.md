@@ -1,6 +1,6 @@
 ---
 name: project-setup
-description: 'Set up a project: ask per detected language for the formatter and linter and write the format and lint keys of .agents/config.json, create .editorconfig. Use for "/project-setup", "set up formatting or linting" or a new repository.'
+description: 'Set up a project: ask per detected language for the formatter and linter and write the format and lint keys of .agents/config.json, create .editorconfig, .gitattributes, .gitignore and the pre-commit hook. Use for "/project-setup", "set up formatting or linting" or a new repository.'
 disable-model-invocation: true
 metadata:
   opencode/autoinvoke: 'false'
@@ -22,6 +22,7 @@ User-invoked: `/project-setup [dry-run]`. It detects the stack, lets the user pi
 5. Tool in `warnings` (e.g. `jb`): report it with its install hint (`dotnet tool install -g JetBrains.ReSharper.GlobalTools`); never install it. Ask whether to continue.
 6. `dry-run` argument: stop here. Otherwise ask for confirmation, then repeat the same call with `-Apply`.
 7. Report what was written: `format`, `lint` and `governance` (`written`, `unchanged`, `skipped: ...`) and `editorconfig.result`.
+8. Base files (`.gitattributes`, `.gitignore`, pre-commit hook): dry run `pwsh scripts/Add-BaseFiles.ps1 -ProjectRoot .`, show `gitattributes`, `gitignore` and `hook` (incl. `hook.warnings`), ask for confirmation, then repeat with `-Apply`. `hook.action: delegate` means: run the skill `hook.skill`. Details: `references/base-files.md`.
 
 ## What is written
 

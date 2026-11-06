@@ -1,0 +1,4 @@
+# Created by project-setup. Runs the format check of every language on the staged files.
+pre-commit:
+  commands:
+    # {{commands}}

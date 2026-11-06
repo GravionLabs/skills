@@ -275,6 +275,28 @@ describe.skipIf(!hasPwsh || process.platform === 'win32')('Format-Changed.ps1', 
     expect(calls()).toEqual([['fmt', ...argv]]);
   });
 
+  it('-Staged passes only the staged files (no unstaged, untracked or branch files)', async () => {
+    const r = await go(repo.work, [
+      '-Extensions',
+      '.ts',
+      '-Command',
+      'fmt {files}',
+      '-Requires',
+      'fmt --version',
+      '-Staged',
+      '-Base',
+      'main',
+    ]);
+    expect(r).toMatchObject({ status: 0, stdout: 'formatted: 1 files\n' });
+    expect(calls()).toEqual([['fmt', 'staged.ts']]);
+  });
+
+  it('-Staged without staged files skips', async () => {
+    const r = await go(repo.clean, ['-Language', 'ts', '-Check', '-Staged']);
+    expect(r).toMatchObject({ status: 0, stdout: 'skipped: no changed files\n' });
+    expect(calls()).toEqual([]);
+  });
+
   it.each([
     [
       'a failing default probe (ruff, not uv)',
