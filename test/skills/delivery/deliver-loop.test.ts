@@ -14,6 +14,7 @@ const hasPwsh = spawnSync('pwsh', ['-NoProfile', '-Command', '1']).status === 0;
 type Issue = {
   body?: string;
   state?: string;
+  milestone?: string;
   labels?: string[];
   children?: number[];
   blockers?: { number: number; state: string }[];
@@ -60,7 +61,7 @@ describe.skipIf(!hasPwsh || process.platform === 'win32')('Invoke-DeliverLoop.ps
         let m = /^repos\\/\\{owner\\}\\/\\{repo\\}\\/issues\\/(\\d+)$/.exec(a[1] || '');
         if (a[0] === 'api' && m) {
           const i = get(m[1]);
-          return { rest: { number: Number(m[1]), body: i.body || '', state: (i.state || 'OPEN').toLowerCase(), labels: (i.labels || []).map((name) => ({ name })) } };
+          return { rest: { number: Number(m[1]), body: i.body || '', state: (i.state || 'OPEN').toLowerCase(), labels: (i.labels || []).map((name) => ({ name })), milestone: i.milestone ? { title: i.milestone } : null } };
         }
         // #127: the milestone is read over REST (Get-Milestones.ps1 -Mode issues), never with gh issue list
         if (/\\/milestones\\?/.test(a[1] || '')) {
@@ -224,6 +225,37 @@ fs.writeFileSync(f, JSON.stringify(s));`,
       expect(r.status).toBe(2);
       expect(r.stdout).toContain('loop result: blocked');
       expect(harnessCalls()).toEqual([]);
+    });
+
+    it('-Milestone skips a PBI below a Feature of the milestone that has no or another milestone, and counts the same set (#327)', async () => {
+      const gh = setup({
+        issues: {
+          20: { labels: ['feature'], children: [21, 22, 23] },
+          21: pbi({ milestone: 'M4' }),
+          22: pbi(),
+          23: pbi({ milestone: 'M5' }),
+        },
+        milestones: { M4: [20] },
+        effect: 'close-first',
+      });
+      const r = await run(gh, ['-Milestone', 'M4']);
+      expect(r.status).toBe(0);
+      expect(r.stdout).toContain('#22 select: outside M4 (milestone: none), skipped');
+      expect(r.stdout).toContain('#23 select: outside M4 (milestone: M5), skipped');
+      expect(r.stdout).not.toContain('#21 select: outside');
+      // 21 is delivered, then nothing is left: done, not "no progress"
+      expect(r.stdout).toContain('loop result: done');
+      expect(harnessCalls()).toHaveLength(1);
+    });
+
+    it('/deliver <feature> without -Milestone still takes its PBIs without a milestone (#327)', async () => {
+      const gh = setup({
+        issues: { 20: { labels: ['feature'], children: [22] }, 22: pbi() },
+        effect: 'close-first',
+      });
+      const r = await run(gh, ['20']);
+      expect(r.stdout).not.toContain('outside');
+      expect(r.stdout).toContain('loop result: done');
     });
 
     it('-Milestone selects a bug like a PBI, delivers it in one fresh process, ends done when no open and no paused issue is left, reads the milestone M4 with one batched REST call (#103, #127, #235)', async () => {
