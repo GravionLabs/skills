@@ -61,6 +61,14 @@ describe('deliver SKILL.md', () => {
     ).toContain('## Feedback during a run');
   });
 
+  it('does not pin the session model on the loop by default (#348)', () => {
+    const control = fs.readFileSync(path.join(skillDir, 'references/control.md'), 'utf8');
+    const step = control.split('\n').find((l) => l.startsWith('2. Start the loop')) ?? '';
+    expect(step).not.toContain("this session's model");
+    expect(step).toContain('no `-Model`');
+    expect(step).toContain('tier');
+  });
+
   it('hands interactive runs over many PBIs to a control session over the loop (#321)', () => {
     const control = fs.readFileSync(path.join(skillDir, 'references/control.md'), 'utf8');
     expect(body).toContain('--inline');
