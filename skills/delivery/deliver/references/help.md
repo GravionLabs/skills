@@ -27,14 +27,14 @@ Delivers the open PBIs and Bugs of the given issues in dependency order: a subag
 One fresh `claude -p "/deliver … --unattended --max 1"` (`copilot -p …` with `-Harness copilot`) per PBI:
 
 ```powershell
-pwsh scripts/Invoke-DeliverLoop.ps1 -Target 12,14 -Milestone M4 -Max 5 -Model sonnet
+pwsh scripts/Invoke-DeliverLoop.ps1 -Target 12,14 -Milestone M4 -Max 5
 pwsh scripts/Invoke-DeliverLoop.ps1 -Milestone M4 -Harness copilot -Model gpt-5
 ```
 
 - `-Target <nr…>`: issue numbers, as `<nr>` above
 - `-Milestone <name>`: as `--milestone` (`M<n>`, before and after the rename)
 - `-Max <n>`: stop after `n` iterations
-- `-Model <name>`: model of the orchestrating session (default `sonnet`)
+- `-Model <name>`: overrides the model for every PBI (default: per PBI by tier, fast haiku, standard sonnet, strong opus; copilot: `auto`)
 - Shell command `deliver-loop` (offered by `skills-manage`) runs the installed script from any directory of the repository, always in the git toplevel (so logs and state live in the repository root; outside a git repository it keeps the current directory), with the same flags, e.g. `deliver-loop -Milestone M4 -Max 5`. In herdr it opens the workspace `<repo> · deliver` (tab `deliver-loop`).
 - Also `-LogPane` (opens the herdr log pane; off by default, `-NoPane` is a deprecated no-op) and `-NoColor` (no `.ansi.log`, plain stdout). Stdout is colored on a terminal. Exit 0 done or max reached, 1 no progress, 2 blocked, 64 bad arguments.
 
