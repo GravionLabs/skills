@@ -32,6 +32,8 @@ metadata:
 
 5. After the `delivery` group was installed (project or global): offer the `deliver-loop` shell command. Ask first; show `pwsh scripts/Install-LoopShim.ps1 -DryRun` (profile and block), then run it without `-DryRun` on a yes. A second run reports `unchanged`. It never touches a profile unasked; `-Shell zsh|bash|pwsh`, `-ProfilePath <file>`.
 
+6. After a project install (not `-g`) that brought the `shared` group (or already had `project-setup`): ask whether to run `/project-setup` (formatter, linter, base files, `.editorconfig`). On yes, load the `project-setup` skill and run it, no logic here. On no, say it runs later with `/project-setup`. Never run it unasked.
+
 ## Update
 
 `/skills-manage update [dry-run] [<group>...] [-g]` (`-Update`): `pwsh scripts/Install-Skills.ps1 -Update -DryRun [-Global]` runs `npx skills check` and shows its output as `check`. Ask for confirmation, then run it without `-DryRun`: `npx skills update` runs, then the script starts itself in a new process (refreshed `groups.json`) and lists the skills new in the installed groups as `newMembers`. Offer them: dry run and confirmation as for an install, `-Groups <groups>` without `-Update`.

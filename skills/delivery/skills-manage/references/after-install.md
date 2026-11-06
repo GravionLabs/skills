@@ -46,6 +46,10 @@ deliver-loop -Target 12,14 -Harness copilot -Model gpt-5
 
 In herdr (`HERDR_ENV=1`) it starts the loop in its own workspace `<repo> · deliver` (tab `deliver-loop`); elsewhere in the current terminal.
 
+## project-setup offer
+
+After a project install (not `-g`) of `shared`, which carries `project-setup`, `skills-manage` asks whether to run `/project-setup` (formatter, linter, base files, `.editorconfig`). Yes delegates to that skill, no leaves it for later. A global install never asks: the choices are per project.
+
 ## Coming from apm-hub
 
 GravionLabs/skills replaces GravionLabs/apm-hub (archived; its last release `v3.3.x` stays installable with apm). The skills keep their names; `apm-install` is now `skills-manage`.
