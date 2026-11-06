@@ -52,6 +52,7 @@ Load `go-test` for table-driven tests, testify, parallelism, race detector and b
 
 ## Review rules
 
+- 🔴 Lint run (`Format-Changed.ps1 -Lint -Language go`, golangci-lint) exits non-zero: error-level findings; 🟡 warning-level findings
 - 🔴 Ignored error (`_ = f()` or unchecked return) on fallible calls; `panic` for expected failures
 - 🔴 Data race: shared state written from goroutines without a mutex, channel or atomic
 - 🔴 Hardcoded secrets; SQL built by string formatting

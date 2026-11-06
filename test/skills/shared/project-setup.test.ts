@@ -123,6 +123,83 @@ describe.skipIf(!hasPwsh)('Set-ProjectSetup.ps1', () => {
     });
   });
 
+  describe('lint key', () => {
+    it('plans the lint options per language without writing in a dry run', async () => {
+      use(['dotnet', 'py']);
+      write('App.slnx');
+      const r = await run(['-LintChoice', 'dotnet=jb']);
+      expect(lang(r.json, 'py').lint).toMatchObject({
+        default: 'ruff',
+        options: ['ruff', 'pyright', 'mypy', 'custom'],
+        write: false,
+      });
+      expect(lang(r.json, 'dotnet').lint.options).toEqual(['dotnet-analyzers', 'jb', 'custom']);
+      expect(lang(r.json, 'dotnet').lint.entry.command).toBe(
+        'jb inspectcode App.slnx --no-build --include={files} -o=obj/inspect.sarif',
+      );
+      expect(exists('.agents/config.json')).toBe(false);
+    });
+
+    it('writes only non-default choices under lint and keeps other keys', async () => {
+      use(['dotnet', 'py', 'rust']);
+      write('App.slnx');
+      write('.agents/config.json', JSON.stringify({ format: { go: { format: 'x' } } }));
+      const r = await run(['-Apply', '-LintChoice', 'dotnet=jb'], withFakeJb());
+      expect(r.json.lint).toBe('written');
+      expect(JSON.parse(read('.agents/config.json'))).toEqual({
+        format: { go: { format: 'x' } },
+        lint: {
+          dotnet: {
+            extensions: ['.cs'],
+            command: 'jb inspectcode App.slnx --no-build --include={files} -o=obj/inspect.sarif',
+          },
+        },
+      });
+      expect(r.json.warnings).toEqual([]);
+    });
+
+    it('custom lint needs a command; the written entry validates against the schema', async () => {
+      use(['py']);
+      const bad = await run(['-LintChoice', 'py=custom']);
+      expect(bad.status).toBe(1);
+      expect(bad.stderr).toContain('-LintCommand');
+      const r = await run([
+        '-Apply',
+        '-LintChoice',
+        'py=custom',
+        '-LintCommand',
+        'py=uv run pylint {files}',
+      ]);
+      expect(r.json.lint).toBe('written');
+      const cfg = JSON.parse(read('.agents/config.json'));
+      expect(cfg.lint.py.command).toBe('uv run pylint {files}');
+      expect(validate(cfg)).toBe(true);
+    });
+
+    it('jb without a solution file, an unknown option and lint false are handled', async () => {
+      use(['dotnet']);
+      const nosln = await run(['-LintChoice', 'dotnet=jb']);
+      expect(nosln.status).toBe(1);
+      expect(nosln.stderr).toContain('solution');
+      const unknown = await run(['-LintChoice', 'dotnet=nope']);
+      expect(unknown.status).toBe(1);
+      write('App.slnx');
+      write('.agents/config.json', '{"lint": false}');
+      const off = await run(['-Apply', '-LintChoice', 'dotnet=jb']);
+      expect(off.json.lint).toMatch(/^skipped: lint is false/);
+      expect(JSON.parse(read('.agents/config.json'))).toEqual({ lint: false });
+    });
+
+    it('reports a missing jb with its install hint', async () => {
+      use(['dotnet']);
+      write('App.slnx');
+      const r = await run(['-LintChoice', 'dotnet=jb'], { ...process.env, PATH: pathWithout() });
+      expect(r.json.warnings.join(' ')).toContain(
+        'dotnet tool install -g JetBrains.ReSharper.GlobalTools',
+      );
+    });
+  });
+
   describe('format key', () => {
     it('dry run writes nothing', async () => {
       ts();
