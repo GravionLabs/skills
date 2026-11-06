@@ -10,7 +10,7 @@
   Observability: every stream record goes to .agents/deliver-loop/<run>/<nr>.jsonl (<nr> is the first PBI that was ready
   at the start of the iteration), a summary line per step to .agents/deliver-loop.log (plain) and stdout, the same line
   with ANSI colors to .agents/deliver-loop.ansi.log (long text is cut to the terminal width, 120 characters when redirected), desktop notifications for the attention steps (macOS osascript,
-  Windows toast), the herdr pane tokens deliver, deliver_step, deliver_pr when HERDR_ENV=1 and, with -LogPane in herdr on a terminal,
+  Windows toast), the pane tokens deliver, deliver_step, deliver_pr, deliver_progress (herdr HERDR_ENV=1, poimen POIMEN_SOCKET + POIMEN_TERMINAL_ID), a progress line per step and status.json (-Milestone; references/loop.md) and, with -LogPane in herdr on a terminal,
   a split pane labeled deliver-log below the session that tails the log (TerminalBackend.ps1; never closed by the loop).
   Stdout carries the colors of the .ansi.log when it is a terminal and neither -NoColor nor NO_COLOR is set; otherwise it is plain.
   Machine-readable progress for a control session (`deliver` `references/control.md`): .agents/deliver-loop/<run>/progress.jsonl,
@@ -135,14 +135,18 @@ function Send-Notice([string]$text) {
 
 $PanePbi = ''
 $PanePr = ''
+$PaneStep = ''
+$PaneProgress = ''
 function Set-Pane([string]$Nr = '', [string]$Step = '', [switch]$Clear) {
-  # pane tokens (#16): deliver=#<nr>, deliver_step=<pos>/<total> <step>[: <result>], deliver_pr=#<pr>; values <= 80 chars
-  if ($Clear) { Clear-LoopTokens -Pane $Pane -Name 'deliver', 'deliver_step', 'deliver_pr' -Backend $Backend; return }
+  # pane tokens (#16): deliver=#<nr>, deliver_step=<pos>/<total> <step>[: <result>], deliver_pr=#<pr>, deliver_progress=<closed>/<total> (#329); values <= 80 chars
+  if ($Clear) { Clear-LoopTokens -Pane $Pane -Name 'deliver', 'deliver_step', 'deliver_pr', 'deliver_progress' -Backend $Backend; return }
   if ($Nr -ne $script:PanePbi) { $script:PanePbi = $Nr; $script:PanePr = '' }
   if ($Step -match '^\d+/\d+ pr: .*?#(\d+)') { $script:PanePr = $Matches[1] }
+  $script:PaneStep = $Step
   $value = if ($Step.Length -gt 80) { $Step.Substring(0, 79) + '…' } else { $Step }
   $tokens = [ordered]@{ deliver = "#$Nr"; deliver_step = $value }
   if ($script:PanePr) { $tokens['deliver_pr'] = "#$($script:PanePr)" }
+  if ($script:PaneProgress) { $tokens['deliver_progress'] = $script:PaneProgress }
   Set-LoopTokens -Pane $Pane -Token $tokens -TtlMs 3600000 -Backend $Backend
 }
 
@@ -160,6 +164,122 @@ function Set-AgentState([string]$State = '', [switch]$Release) {
 # Get-Milestones.ps1 of github-milestone: sibling skill (installed) or skills/github (repository)
 $MilestoneScript = @('../../github-milestone', '../../../github/github-milestone' | ForEach-Object { Join-Path $PSScriptRoot "$_/scripts/Get-Milestones.ps1" }) |
   Where-Object { Test-Path $_ } | Select-Object -First 1
+
+# Status (#329): the live state of the run for other tools (.agents/deliver-loop/status.json, schema/deliver-loop-status.schema.json)
+# and the progress line after each step. Counts come from Get-DeliverStatus.ps1 (read at the start and after each iteration, the
+# same set as the stop rules); between reads the step comes from the progress lines. Needs -Milestone; a failing read keeps the last status.
+$StatusFile = Join-Path (Get-Location) '.agents/deliver-loop/status.json'
+$StatusScript = Join-Path $PSScriptRoot 'Get-DeliverStatus.ps1'
+$StartedAt = (Get-Date).ToUniversalTime().ToString('o')
+$StepNumber = @{ select = 1; resume = 2; implement = 3; review = 4; fix = 5; pr = 6; ci = 7; merge = 7; merged = 7; cleanup = 7 }
+$Live = @{ Block = $null; Current = $null; Delivered = @(); Paused = @(); Pr = @{}; Model = $Model; Result = 'running' }
+
+function Get-RefNumber([string]$text) { if ($text -match '/(?:issues|pull)/(\d+)') { [int]$Matches[1] } else { 0 } }
+
+function Read-StatusBlock {
+  if (-not $Milestone -or -not $MilestoneScript) { return }
+  try {
+    $raw = & $StatusScript -Milestone $Milestone -Delivered ([int[]]@($Live.Delivered)) -MilestonesScript $MilestoneScript 2>$null
+    # no $LASTEXITCODE test: the script ends after a native call (the release PR lookup) that may fail on its own
+    if ($raw) { $Live.Block = ($raw | Out-String) | ConvertFrom-Json }
+  } catch { Write-Verbose "status block not read: $_" }
+}
+
+function Get-LoopProgressToken { if ($Live.Block) { "$($Live.Block.closed)/$($Live.Block.total)" } else { '' } }
+
+# M5 ▓▓▓▓░░░░ 7/19 · #322 review · 1 blocked · 1 needs you
+function Get-ProgressLine {
+  $b = $Live.Block
+  if (-not $b) { return '' }
+  $filled = if ($b.total -gt 0) { [Math]::Min(8, [int][Math]::Round(8 * $b.closed / $b.total)) } else { 0 }
+  $parts = @("$($b.key) $('▓' * $filled)$('░' * (8 - $filled)) $($b.closed)/$($b.total)")
+  $c = $Live.Current
+  if ($c) { $parts += "#$($c.number) $(($c.step.text -split ':')[0])".TrimEnd() }
+  if (@($b.waiting).Count) { $parts += "$(@($b.waiting).Count) blocked" }
+  $needs = @($b.needsYou).Count + @($Live.Paused).Count
+  if ($needs) { $parts += "$needs needs you" }
+  return $parts -join ' · '
+}
+
+function ConvertTo-StatusItem($ref, [string]$reason) {
+  [ordered]@{ number = [int]$ref.number; url = [string]$ref.url; reason = $(if ($reason) { $reason } else { 'waiting' }) }
+}
+
+function Write-LoopStatus {
+  $b = $Live.Block
+  if (-not $b -or -not $b.baseUrl) { return }
+  try {
+    $base = [string]$b.baseUrl
+    $current = $null
+    if ($Live.Current -and $Live.Result -eq 'running') { $current = $Live.Current }
+    $needs = @(@($b.needsYou) | ForEach-Object {
+        $n = Get-RefNumber $_
+        if ($n) { [ordered]@{ number = $n; url = [regex]::Match($_, 'https://\S+/(?:issues|pull)/\d+').Value; reason = ($_ -replace 'https://\S+', '').Trim(' :,') } }
+      })
+    $needs += @($Live.Paused)
+    $delivered = @(@($b.delivered) | ForEach-Object {
+        $pr = $Live.Pr["$($_.number)"]
+        [ordered]@{ pbi = [int]$_.number; url = [string]$_.url; prUrl = $(if ($pr) { "$base/pull/$pr" } else { [string]$_.url }) }
+      })
+    $doc = [ordered]@{
+      schemaVersion = 1
+      run = (Split-Path $RunDir -Leaf)
+      harness = $Harness
+      model = $(if ($Live.Model) { $Live.Model } else { 'default' })
+      repository = (($base -split '/')[-2..-1] -join '/')
+      milestone = [ordered]@{ key = [string]$b.key; title = [string]$b.milestone; url = [string]$b.milestoneUrl }
+      closed = [int]$b.closed
+      total = [int]$b.total
+      current = $current
+      delivered = $delivered
+      blocked = @(@($b.waiting) | ForEach-Object { ConvertTo-StatusItem $_ ([string]$_.reason) })
+      paused = @($Live.Paused)
+      needsYou = @($needs | ForEach-Object { [ordered]@{ number = $_.number; url = $(if ($_.url) { $_.url } else { "$base/issues/$($_.number)" }); reason = $(if ($_.reason) { $_.reason } else { 'needs you' }) } })
+      release = [ordered]@{ reviewRound = $b.release.round; prUrl = $b.release.pr }
+      startedAt = $StartedAt
+      updatedAt = (Get-Date).ToUniversalTime().ToString('o')
+      result = $Live.Result
+    }
+    New-Item -ItemType Directory -Force -Path (Split-Path $StatusFile) | Out-Null
+    $tmp = "$StatusFile.tmp"
+    [IO.File]::WriteAllText($tmp, ($doc | ConvertTo-Json -Depth 8))
+    Move-Item -LiteralPath $tmp -Destination $StatusFile -Force
+  } catch { Write-Verbose "status.json not written: $_" }
+}
+
+# Refresh after a change: status.json, the backend progress token, one progress line.
+function Publish-LoopStatus([switch]$Line) {
+  Write-LoopStatus
+  $script:PaneProgress = Get-LoopProgressToken
+  if ($Line) {
+    $text = Get-ProgressLine
+    if ($text) { Write-Step $text 'cyan' }
+  }
+}
+
+function Set-LiveCurrent([int]$nr) {
+  $b = $Live.Block
+  $base = if ($b) { [string]$b.baseUrl } else { '' }
+  $title = "#$nr"; $url = "$base/issues/$nr"
+  if ($b -and $b.ready.next -and [int]$b.ready.next.number -eq $nr) { $title = [string]$b.ready.next.title; $url = [string]$b.ready.next.url }
+  $Live.Current = [ordered]@{ number = $nr; title = $title; url = $url; step = [ordered]@{ n = 1; total = 7; text = 'select' }; prUrl = $null }
+}
+
+function Update-LiveStep([int]$nr, [string]$step, [string]$result) {
+  if (-not $Live.Current -or $Live.Current.number -ne $nr) { Set-LiveCurrent $nr }
+  $c = $Live.Current
+  if ($StepNumber.ContainsKey($step)) { $c.step.n = $StepNumber[$step] }
+  $c.step.text = $(if ($result) { "${step}: $result" } else { $step })
+  if ($step -eq 'pr' -and $result -match '#(\d+)') {
+    $Live.Pr["$nr"] = $Matches[1]
+    if ($Live.Block -and $Live.Block.baseUrl) { $c.prUrl = "$($Live.Block.baseUrl)/pull/$($Matches[1])" }
+  }
+  $why = Get-Attention $step $result
+  if ($why -in 'paused', 'blocked') {
+    $base = if ($Live.Block) { [string]$Live.Block.baseUrl } else { '' }
+    $Live.Paused = @(@($Live.Paused | Where-Object { $_.number -ne $nr }) + [ordered]@{ number = $nr; url = "$base/issues/$nr"; reason = $(if ($result) { $result } else { $why }) })
+  }
+}
 
 function Get-Json([string[]]$ghArgs, [switch]$Pwsh) {
   $out = if ($Pwsh) { & pwsh -NoProfile @ghArgs 2>$null } else { & gh @ghArgs 2>$null }
@@ -284,7 +404,10 @@ function Write-TextStep([string]$prefix, [string]$text, [int]$position, [int]$to
   if ($prefix) { return }
   foreach ($l in ($text -split "`r?`n")) {
     if ($l -match '^#(\d+) ([\w-]+): (.*)$') {
+      Update-LiveStep ([int]$Matches[1]) $Matches[2] $Matches[3]
+      $script:PaneProgress = Get-LoopProgressToken
       Set-Pane $Matches[1] "$position/$total $($Matches[2]): $($Matches[3])"
+      Publish-LoopStatus -Line
       $why = Get-Attention $Matches[2] $Matches[3]
       if ($why -in 'paused', 'blocked') { $script:Paused = $true; Set-AgentState 'blocked' }
       if ($why) { Send-Notice "#$($Matches[1]) $why" }
@@ -360,6 +483,9 @@ function Invoke-Iteration([int]$n, [int]$total, $state) {
   Write-Step "iteration $n/$total start: $prompt"
   Write-ProgressRecord 'iteration-start' @{ n = $n; total = $total; pbi = [int]$state.Ready[0]; open = $state.Open; model = $iterModel }
   $script:Paused = $false
+  $Live.Model = $iterModel
+  Set-LiveCurrent ([int]$state.Ready[0])
+  Publish-LoopStatus
   Set-AgentState 'working'
   Set-Pane "$($state.Ready[0])" "$n/$total starting"
   $saved = $env:HERDR_ENV
@@ -390,6 +516,8 @@ try {
     Write-Step 'agent state not reported: another agent runs in this pane (start the loop in its own pane)' 'yellow'
   }
   $state = Get-State
+  Read-StatusBlock
+  Publish-LoopStatus -Line
   Write-ProgressRecord 'start' @{ targets = @($Nrs); milestone = $Milestone; max = $Max; harness = $Harness; model = $Model; open = $state.Open }
   foreach ($sk in $state.Skipped) { Write-Step "#$($sk.Number) select: outside $Milestone (milestone: $($sk.Milestone)), skipped; set the milestone to deliver it" 'yellow' }
   $result = Get-StopReason $state
@@ -398,6 +526,12 @@ try {
     $i++
     Invoke-Iteration $i $total $state
     $after = Get-State
+    $gone = @($state.Eligible | Where-Object { $after.Eligible -notcontains $_ })
+    $Live.Delivered = @($Live.Delivered) + $gone
+    $Live.Paused = @($Live.Paused | Where-Object { $gone -notcontains $_.number })
+    $Live.Current = $null
+    Read-StatusBlock
+    Publish-LoopStatus -Line
     Write-ProgressRecord 'iteration-end' @{ n = $i; pbi = [int]$state.Ready[0]; delivered = (@($state.Eligible | Where-Object { $after.Eligible -notcontains $_ }) -join ','); open = $after.Open }
     if (($after.Eligible -join ',') -eq ($state.Eligible -join ',')) {
       $result = 'no progress'
@@ -412,6 +546,9 @@ try {
   $code = switch ($result) { 'no progress' { 1 } 'blocked' { 2 } default { 0 } }
   $color = if ($result -in 'done', 'max reached') { 'green' } else { 'yellow' }
   Write-Step "loop result: $result ($i iteration(s), $($state.Open) PBI(s) open)" $color
+  $Live.Result = $result
+  $Live.Current = $null
+  Publish-LoopStatus
   Write-ProgressRecord 'result' @{ result = $result; code = $code; iterations = $i; open = $state.Open }
   Send-Notice "loop result: $result"
   Set-AgentState $(if (($result -in 'blocked','no progress') -or $Paused) { 'blocked' } else { 'idle' })
