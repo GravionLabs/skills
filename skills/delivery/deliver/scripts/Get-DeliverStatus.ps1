@@ -63,7 +63,7 @@ foreach ($i in $work) {
   $tiers[$t]++
 }
 
-$doneRefs = @($all | Where-Object { $Delivered -contains [int]$_.number } | ForEach-Object { Get-Ref $_ })
+$doneRefs = @($all | Where-Object { $_.state -eq 'closed' -and $Delivered -contains [int]$_.number } | ForEach-Object { Get-Ref $_ })
 $ready = [System.Collections.Generic.List[object]]::new()
 $waiting = [System.Collections.Generic.List[object]]::new()
 $needs = [System.Collections.Generic.List[string]]::new()

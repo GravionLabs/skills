@@ -337,6 +337,7 @@ function Get-State {
     })
   [pscustomobject]@{
     Open     = $found.Count
+    OpenNrs  = @($found | ForEach-Object { $_.Number })
     Skipped  = @($skipped)
     Paused   = $paused
     Eligible = @($eligible | ForEach-Object { $_.Number } | Sort-Object)
@@ -526,13 +527,14 @@ try {
     $i++
     Invoke-Iteration $i $total $state
     $after = Get-State
-    $gone = @($state.Eligible | Where-Object { $after.Eligible -notcontains $_ })
+    # delivered = left the open set; a PBI that is only held (needs-decision) stays open and is paused (#346)
+    $gone = @($state.Eligible | Where-Object { $after.Eligible -notcontains $_ -and $after.OpenNrs -notcontains $_ })
     $Live.Delivered = @($Live.Delivered) + $gone
     $Live.Paused = @($Live.Paused | Where-Object { $gone -notcontains $_.number })
     $Live.Current = $null
     Read-StatusBlock
     Publish-LoopStatus -Line
-    Write-ProgressRecord 'iteration-end' @{ n = $i; pbi = [int]$state.Ready[0]; delivered = (@($state.Eligible | Where-Object { $after.Eligible -notcontains $_ }) -join ','); open = $after.Open }
+    Write-ProgressRecord 'iteration-end' @{ n = $i; pbi = [int]$state.Ready[0]; delivered = ($gone -join ','); open = $after.Open }
     if (($after.Eligible -join ',') -eq ($state.Eligible -join ',')) {
       $result = 'no progress'
       Write-Step 'no progress: the open PBIs did not change. Last log lines:' 'yellow'
