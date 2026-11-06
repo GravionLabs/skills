@@ -68,7 +68,7 @@ A blocked or paused PBI releases its claim: `gh issue edit <nr> --remove-assigne
 
 ## Status block
 
-With `--milestone`, after every delivered, blocked or paused PBI and at the end, print the block of `pwsh scripts/Get-DeliverStatus.ps1 -Milestone <name> -Delivered <nr…> -Text` (JSON without `-Text`; the loop, herdr and poimen read that): at most 10 lines with progress `<closed>/<total>`, delivered in this run, ready (count, next), waiting with reason, **needs you** as numbered items (decisions, `interactive`, manual tests, the release PR to merge), release state, next milestone. Every issue is a full URL with its title. One `Get-Milestones.ps1` read (REST).
+With `--milestone`, after every delivered, blocked or paused PBI and at the end, print the block of `pwsh scripts/Get-DeliverStatus.ps1 -Milestone <name> -Delivered <nr…> -Text` (JSON without `-Text`; the loop, herdr and poimen read that): at most 10 lines with progress `<closed>/<total>` (PBIs and Bugs only; Features and Epics do not count), delivered in this run, ready (count, next), waiting with reason, **needs you** as numbered items (decisions, `interactive`, manual tests, the release PR to merge), release state, next milestone. Every issue is a full URL with its title. One `Get-Milestones.ps1` read (REST).
 
 ## Report
 
