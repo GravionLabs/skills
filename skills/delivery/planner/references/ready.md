@@ -29,3 +29,7 @@ with `governance`: also `references/governance.md`
 ## Bug
 
 All PBI points, plus repro steps or a failing test to write first.
+
+## Milestone
+
+`refine M<n>`: read the open PBIs and Bugs of the milestone (`github-milestone` `Get-Milestones.ps1 -Mode issues`). Per item without a `Tier:` line add `Tier: <tier> — <reason>` (size table of `plan-schema.md`), then report `#<nr> Tier: <tier> — <reason>` for each changed item and `unchanged` for the rest.

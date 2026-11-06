@@ -97,6 +97,22 @@ describe('Get-DeliverStatus.ps1', () => {
     expect(j.next).toBe('M5');
   });
 
+  it('shows the tier distribution of the open items (Tier line, else size, else standard)', () => {
+    const fake = fixture('tiers', [
+      { number: 1, title: 'a', state: 'open', body: 'Tier: fast — docs' },
+      { number: 2, title: 'b', state: 'open', body: 'Size: S' },
+      { number: 3, title: 'c', state: 'open', body: 'Size: L' },
+      { number: 4, title: 'd', state: 'open', body: 'Size: L\nTier: standard — x' },
+      { number: 5, title: 'e', state: 'open' },
+      { number: 6, title: 'f', state: 'closed', body: 'Tier: strong — done' },
+    ]);
+    const j = JSON.parse(run(fake).stdout);
+    expect(j.tiers).toEqual({ fast: 2, standard: 2, strong: 1 });
+    expect(run(fake, ['-Text']).stdout.split('\n')[0]).toBe(
+      'Milestone M4: 1/6 closed · fast 2 · standard 2 · strong 1',
+    );
+  });
+
   it('prints at most 10 lines of text with full URLs and numbered needs-you items', () => {
     const issues: Issue[] = [{ number: 1, title: 'feat: one', state: 'closed' }];
     for (let n = 10; n < 16; n++)
@@ -109,7 +125,7 @@ describe('Get-DeliverStatus.ps1', () => {
     const r = run(fixture('many', issues), ['-Text']);
     const lines = r.stdout.trimEnd().split('\n');
     expect(lines.length).toBeLessThanOrEqual(10);
-    expect(lines[0]).toBe('Milestone M4: 1/7 closed');
+    expect(lines[0]).toBe('Milestone M4: 1/7 closed · standard 6');
     expect(r.stdout).toContain(`1. decision: ${base}/issues/10 feat: d10`);
     expect(r.stdout).toContain('(+3 more)');
     expect(r.stdout).not.toMatch(/(^|\s)#\d+/);
