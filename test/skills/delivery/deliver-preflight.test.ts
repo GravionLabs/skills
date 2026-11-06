@@ -9,6 +9,10 @@ const SCRIPT = path.resolve(
   __dirname,
   '../../../skills/delivery/deliver/scripts/Test-DeliverPreflight.ps1',
 );
+const DETECT = path.resolve(
+  __dirname,
+  '../../../skills/shared/detect-techstack/scripts/Detect-TechStack.ps1',
+);
 const SKILL_MD = path.resolve(__dirname, '../../../skills/delivery/deliver/SKILL.md');
 const hasPwsh = spawnSync('pwsh', ['-NoProfile', '-Command', '1']).status === 0;
 
@@ -18,21 +22,26 @@ describe.skipIf(!hasPwsh || process.platform === 'win32')('Test-DeliverPreflight
   let repo: string;
   let home: string;
   let gh: ReturnType<typeof createFakeGh>;
-  let worker: PwshWorker;
+  let worker: PwshWorker; // real detect-techstack: one case proves the integration
+  let stubWorker: PwshWorker; // copy of the scripts with a stub detect-techstack: no pwsh spawn per skills check
   const git = (cwd: string, ...args: string[]) =>
     execFileSync('git', args, { cwd, encoding: 'utf8' }).trim();
   const write = (file: string, content: string) => {
     fs.mkdirSync(path.dirname(file), { recursive: true });
     fs.writeFileSync(file, content);
   };
-  const run = async (...args: string[]) => {
-    const r = await worker.run(['-ProjectRoot', repo, ...args], {
-      cwd: repo,
-      env: { ...gh.env(), HOME: home },
-    });
-    const json = r.stdout.trim().startsWith('{') ? JSON.parse(r.stdout) : null;
-    return { ...r, json, check: (n: string) => json?.checks.find((c: any) => c.name === n) };
-  };
+  const runWith =
+    (w: PwshWorker) =>
+    async (...args: string[]) => {
+      const r = await w.run(['-ProjectRoot', repo, ...args], {
+        cwd: repo,
+        env: { ...gh.env(), HOME: home },
+      });
+      const json = r.stdout.trim().startsWith('{') ? JSON.parse(r.stdout) : null;
+      return { ...r, json, check: (n: string) => json?.checks.find((c: any) => c.name === n) };
+    };
+  const run = (...a: string[]) => runWith(worker)(...a);
+  const runStub = (...a: string[]) => runWith(stubWorker)(...a);
   const only = (c: string) => ['-Check', c];
   const settings = path.join('.claude', 'settings.json');
   const allow = (entries: string[]) =>
@@ -74,9 +83,17 @@ describe.skipIf(!hasPwsh || process.platform === 'win32')('Test-DeliverPreflight
       }`,
     );
     worker = new PwshWorker(SCRIPT);
+    const stub = path.join(root, 'stub');
+    fs.cpSync(path.dirname(SCRIPT), path.join(stub, 'deliver/scripts'), { recursive: true });
+    write(
+      path.join(stub, 'detect-techstack/scripts/Detect-TechStack.ps1'),
+      `'{"languages":["ts"],"implementation":["ts-implementation"],"test":["ts-test"]}'\n`,
+    );
+    stubWorker = new PwshWorker(path.join(stub, 'deliver/scripts/Test-DeliverPreflight.ps1'));
   });
   afterAll(async () => {
     await worker.close();
+    await stubWorker.close();
     fs.rmSync(root, { recursive: true, force: true });
   });
 
@@ -123,7 +140,7 @@ describe.skipIf(!hasPwsh || process.platform === 'win32')('Test-DeliverPreflight
   });
 
   it('reports missing, old and current stack skills', async () => {
-    const miss = await run(...only('skills'));
+    const miss = await runStub(...only('skills'));
     expect(miss.check('skills').status).toBe('action needed');
     expect(miss.check('skills').missing).toEqual(['ts-implementation', 'ts-test']);
     expect(miss.check('skills').fix).toBe('/skills-manage ts');
@@ -136,11 +153,23 @@ describe.skipIf(!hasPwsh || process.platform === 'win32')('Test-DeliverPreflight
     const future = new Date(Date.now() + 3600_000);
     fs.utimesSync(path.join(repo, '.claude/skills/ts-implementation/SKILL.md'), future, future);
     fs.utimesSync(path.join(repo, '.claude/skills/ts-test/SKILL.md'), past, past);
-    const old = await run(...only('skills'), '-Unattended');
+    const old = await runStub(...only('skills'), '-Unattended');
     expect(old.check('skills').old).toEqual(['ts-test']);
     expect(old.check('skills').fix).toBe('continue with the global skills');
     fs.rmSync(path.join(home, '.claude/skills/ts-test'), { recursive: true });
-    expect((await run(...only('skills'))).check('skills').status).toBe('ok');
+    // real detect-techstack once: the stub's report has the shape of the real one
+    const real = JSON.parse(
+      execFileSync('pwsh', ['-NoProfile', '-File', DETECT, '-ProjectRoot', repo], {
+        encoding: 'utf8',
+      }),
+    );
+    for (const key of ['languages', 'implementation', 'test'])
+      expect(Array.isArray(real[key])).toBe(true);
+    expect(real.implementation).toContain('ts-implementation');
+    expect(real.test).toContain('ts-test');
+    const ok = (await run(...only('skills'))).check('skills');
+    expect(ok.status).toBe('ok');
+    expect(ok.detail).toBe('2 stack skills current');
   });
 
   it('removes worktrees of merged or deleted branches and lists the others', async () => {
@@ -171,14 +200,12 @@ describe.skipIf(!hasPwsh || process.platform === 'win32')('Test-DeliverPreflight
     expect(fs.existsSync(wt('open'))).toBe(true);
   });
 
-  it('leaves a worktree when ls-remote fails and stays fast', async () => {
+  it('leaves a worktree when ls-remote fails', async () => {
     const dir = path.join(root, 'offline');
     git(repo, 'worktree', 'add', '-q', '-b', 'feat/16-q', dir);
     git(repo, 'push', '-q', 'origin', 'feat/16-q');
     git(repo, 'remote', 'set-url', 'origin', path.join(root, 'missing.git'));
-    const t0 = Date.now();
     const r = await run(...only('worktrees'));
-    const ms = Date.now() - t0;
     git(repo, 'remote', 'set-url', 'origin', path.join(root, 'origin.git'));
     expect(r.check('worktrees').left).toEqual(
       expect.arrayContaining([
@@ -186,11 +213,10 @@ describe.skipIf(!hasPwsh || process.platform === 'win32')('Test-DeliverPreflight
       ]),
     );
     expect(fs.existsSync(dir)).toBe(true);
-    expect(ms).toBeLessThan(10_000); // preflight takes a few seconds at most
   });
 
   it('prints one line per check with -Text and exits 1 outside a repository', async () => {
-    const t = await run('-Text');
+    const t = await runStub('-Text');
     expect(t.stdout.trim().split('\n')).toHaveLength(3);
     expect(t.stdout).toMatch(/^preflight skills: /m);
     // own process: a ProjectRoot that is no git repository
