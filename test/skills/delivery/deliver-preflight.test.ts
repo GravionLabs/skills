@@ -9,9 +9,9 @@ const SCRIPT = path.resolve(
   __dirname,
   '../../../skills/delivery/deliver/scripts/Test-DeliverPreflight.ps1',
 );
-const DETECT = path.resolve(
+const PERMISSIONS_MD = path.resolve(
   __dirname,
-  '../../../skills/shared/detect-techstack/scripts/Detect-TechStack.ps1',
+  '../../../skills/delivery/deliver/references/permissions.md',
 );
 const SKILL_MD = path.resolve(__dirname, '../../../skills/delivery/deliver/SKILL.md');
 const hasPwsh = spawnSync('pwsh', ['-NoProfile', '-Command', '1']).status === 0;
@@ -23,7 +23,7 @@ describe.skipIf(!hasPwsh || process.platform === 'win32')('Test-DeliverPreflight
   let home: string;
   let gh: ReturnType<typeof createFakeGh>;
   let worker: PwshWorker; // real detect-techstack: one case proves the integration
-  let stubWorker: PwshWorker; // copy of the scripts with a stub detect-techstack: no pwsh spawn per skills check
+  let stubWorker: PwshWorker; // copy of the scripts with a stub detect-techstack: saves the real detect run (the script still spawns pwsh for it)
   const git = (cwd: string, ...args: string[]) =>
     execFileSync('git', args, { cwd, encoding: 'utf8' }).trim();
   const write = (file: string, content: string) => {
@@ -139,12 +139,14 @@ describe.skipIf(!hasPwsh || process.platform === 'win32')('Test-DeliverPreflight
     expect(oc.check('allowlist').missing).not.toContain('git *');
   });
 
-  it('reports missing, old and current stack skills', async () => {
+  it('reports missing stack skills', async () => {
     const miss = await runStub(...only('skills'));
     expect(miss.check('skills').status).toBe('action needed');
     expect(miss.check('skills').missing).toEqual(['ts-implementation', 'ts-test']);
     expect(miss.check('skills').fix).toBe('/skills-manage ts');
+  });
 
+  it('reports stack skills older than the global ones', async () => {
     for (const s of ['ts-implementation', 'ts-test']) {
       write(path.join(repo, '.claude/skills', s, 'SKILL.md'), 'x');
       write(path.join(home, '.claude/skills', s, 'SKILL.md'), 'x');
@@ -156,17 +158,11 @@ describe.skipIf(!hasPwsh || process.platform === 'win32')('Test-DeliverPreflight
     const old = await runStub(...only('skills'), '-Unattended');
     expect(old.check('skills').old).toEqual(['ts-test']);
     expect(old.check('skills').fix).toBe('continue with the global skills');
+  });
+
+  it('accepts current stack skills with the real detect-techstack', async () => {
     fs.rmSync(path.join(home, '.claude/skills/ts-test'), { recursive: true });
-    // real detect-techstack once: the stub's report has the shape of the real one
-    const real = JSON.parse(
-      execFileSync('pwsh', ['-NoProfile', '-File', DETECT, '-ProjectRoot', repo], {
-        encoding: 'utf8',
-      }),
-    );
-    for (const key of ['languages', 'implementation', 'test'])
-      expect(Array.isArray(real[key])).toBe(true);
-    expect(real.implementation).toContain('ts-implementation');
-    expect(real.test).toContain('ts-test');
+    // the only real detect run of the file: its report must name both ts skills
     const ok = (await run(...only('skills'))).check('skills');
     expect(ok.status).toBe('ok');
     expect(ok.detail).toBe('2 stack skills current');
@@ -226,6 +222,13 @@ describe.skipIf(!hasPwsh || process.platform === 'win32')('Test-DeliverPreflight
     });
     fs.rmSync(plain, { recursive: true, force: true });
     expect(bad.status).toBe(1);
+  });
+
+  it('permissions.md names the number of command kinds of its table', () => {
+    const md = fs.readFileSync(PERMISSIONS_MD, 'utf8');
+    const rows = md.split('\n').filter((l) => l.startsWith('| ')).length - 2; // minus header and separator
+    const words = ['one', 'two', 'three', 'four', 'five', 'six', 'seven', 'eight', 'nine', 'ten'];
+    expect(md).toContain(`${words[rows - 1]} kinds of shell commands`);
   });
 
   it('is wired into the Start of deliver with --no-preflight', () => {

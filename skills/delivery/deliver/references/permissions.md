@@ -1,6 +1,6 @@
 # Permissions: shell allowlists per harness
 
-An `--unattended` run stops at the first permission prompt (spike #823, `docs/spikes/deliver.md` section 2). `deliver` and its subagents run six kinds of shell commands; each must be on the allowlist of the harness:
+An `--unattended` run stops at the first permission prompt (spike #823, `docs/spikes/deliver.md` section 2). `deliver` and its subagents run seven kinds of shell commands; each must be on the allowlist of the harness:
 
 | Commands                                                                                                                                                                                          | Used by                                                                                                 |
 | :------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ | :------------------------------------------------------------------------------------------------------ |
