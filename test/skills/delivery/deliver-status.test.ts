@@ -212,7 +212,9 @@ describe('Get-DeliverStatus.ps1', () => {
     const j = JSON.parse(run(fake).stdout);
     expect(j.closed).toBe(2);
     expect(j.total).toBe(3);
-    expect(run(fake, ['-Text']).stdout.split('\n')[0]).toBe('Milestone M4: 2/3 closed · standard 1');
+    expect(run(fake, ['-Text']).stdout.split('\n')[0]).toBe(
+      'Milestone M4: 2/3 closed · standard 1',
+    );
   });
 
   it('fails when the milestone cannot be read', () => {
