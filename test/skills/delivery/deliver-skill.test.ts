@@ -827,3 +827,17 @@ describe('M<n> milestones (#235)', () => {
     }
   });
 });
+
+describe('permissions.md terminal rows (#356)', () => {
+  const rows = permissions.split('\n');
+  const herdrRow = rows.find((l) => l.includes('printenv HERDR_ENV')) ?? '';
+  const poimenRow = rows.find((l) => l.startsWith('| `poimen-server report`')) ?? '';
+
+  it('limits the herdr row to herdr panes, without poimen-server', () => {
+    expect(herdrRow).toContain('inside a `herdr` pane');
+    expect(herdrRow).not.toContain('poimen-server');
+  });
+  it('gives poimen-server report its own row for a poimen terminal', () => {
+    expect(poimenRow).toContain('inside a poimen terminal');
+  });
+});
