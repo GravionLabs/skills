@@ -50,7 +50,8 @@ function Get-Stack {
   $frameworks = @($report.frameworks)
   $keys = [System.Collections.Generic.List[string]]::new()
   foreach ($l in @($report.languages)) {
-    $k = switch ($l) { 'js' { 'ts' } default { $l } }
+    # detect-techstack emits the short names ts, py, dotnet, js, rust, go; the long names are accepted too
+    $k = switch ($l) { { $_ -in 'js', 'javascript', 'typescript' } { 'ts' } 'python' { 'py' } 'csharp' { 'dotnet' } default { $l } }
     if ($k -eq 'ts' -and $frameworks -contains 'angular') { $k = 'ng' }
     if (@('ts', 'ng', 'py', 'dotnet', 'rust', 'go') -contains $k -and -not $keys.Contains($k)) { $keys.Add($k) }
   }
@@ -141,7 +142,7 @@ function Get-HookPlan([string[]]$Keys) {
   }
   $dir = $ImplementationDir.TrimEnd('/', '\').Replace('\', '/')
   $cmds = @($Keys | ForEach-Object {
-      "    format-${_}:`n      run: pwsh $dir/scripts/Format-Changed.ps1 -Language $_ -Check"
+      "    format-${_}:`n      run: pwsh $dir/scripts/Format-Changed.ps1 -Language $_ -Check -Staged"
     }) -join "`n"
   $template = [System.IO.File]::ReadAllText((Join-Path $skillDir 'templates/lefthook.yml'))
   [ordered]@{ action = 'create'; tool = 'lefthook'; skill = $null; languages = $Keys; content = $template.Replace('    # {{commands}}', $cmds); warnings = $warnings }
@@ -155,7 +156,7 @@ function Write-Hook($plan) {
 }
 
 # ---- run --------------------------------------------------------------------------------------------------------------
-$keys = Get-Stack
+$keys = @(Get-Stack)
 $attr = Get-AttributesPlan
 $ignore = Get-IgnorePlan $keys
 $hook = Get-HookPlan $keys

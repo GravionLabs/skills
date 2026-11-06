@@ -13,6 +13,6 @@ Per detected language the entries of `templates/gitignore/<lang>.gitignore` (`ts
 ## Pre-commit hook
 
 - Only ts/ng/js languages: `hook.action` is `delegate`, `hook.skill` is `setup-biome-husky`, or `setup-prettier-eslint-husky` for Angular or a repository with a prettier config. Run that skill; the script writes nothing.
-- Any other language present: one `lefthook.yml` (`templates/lefthook.yml`) for all languages incl. ts. `pre-commit` runs `pwsh <implementation dir>/scripts/Format-Changed.ps1 -Language <lang> -Check` per language; `-ImplementationDir` defaults to `.claude/skills/implementation` (use `.agents/skills/implementation` for OpenCode and Copilot installs).
+- Any other language present: one `lefthook.yml` (`templates/lefthook.yml`) for all languages incl. ts. `pre-commit` runs `pwsh <implementation dir>/scripts/Format-Changed.ps1 -Language <lang> -Check -Staged` (only the staged files) per language; `-ImplementationDir` defaults to `.claude/skills/implementation` (use `.agents/skills/implementation` for OpenCode and Copilot installs).
 - `.husky/` or `lefthook.yml` exists: `hook.action` is `exists`, reported, nothing changed. No migration from Husky to lefthook.
 - `lefthook` not on the PATH: `hook.warnings` carries the install hint (`brew install lefthook`, `winget install evilmartians.lefthook`, `npm i -D lefthook`); it is never installed. The user runs `lefthook install` once.

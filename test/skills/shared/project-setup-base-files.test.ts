@@ -114,6 +114,25 @@ describe.skipIf(!hasPwsh)('Add-BaseFiles.ps1', () => {
       );
       expect(yml).toContain('-Language py -Check');
     });
+    it('hook commands check only the staged files', async () => {
+      await run(['py'], ['-Apply']);
+      expect(read('lefthook.yml')).toContain('-Language py -Check -Staged');
+    });
+    it('detects the stack itself (no -StackJson): ts + py gets one lefthook.yml', async () => {
+      write('package.json', '{}');
+      write('tsconfig.json', '{}');
+      write('pyproject.toml', '[project]\nname = "x"\n');
+      const r = await worker.run(['-ProjectRoot', dir, '-Apply'], { cwd: dir });
+      const json = JSON.parse(r.stdout);
+      expect(json.languages).toEqual(['ts', 'py']);
+      expect(json.hook.tool).toBe('lefthook');
+      expect(read('lefthook.yml')).toContain('-Language py -Check -Staged');
+    });
+    it('detects a csharp repository as dotnet and keeps languages an array', async () => {
+      write('App.csproj', '<Project Sdk="Microsoft.NET.Sdk"></Project>');
+      const r = await worker.run(['-ProjectRoot', dir], { cwd: dir });
+      expect(JSON.parse(r.stdout).languages).toEqual(['dotnet']);
+    });
     it('does not write the hook in the dry run', async () => {
       await run(['py']);
       expect(exists('lefthook.yml')).toBe(false);

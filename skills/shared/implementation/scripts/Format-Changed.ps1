@@ -23,6 +23,8 @@
   Read-only intent: the command passed is the check command; the success line reads `checked: <n> files`.
 .PARAMETER Base
   Also include the files changed in `<Base>...HEAD`. Default: uncommitted changes only (staged, unstaged, untracked).
+.PARAMETER Staged
+  Only the staged files (`git diff --cached --name-only --diff-filter=ACMR`), for a pre-commit hook; unstaged and untracked files and -Base are ignored.
 .PARAMETER WhatIf
   Prints the resolved steps (override, -Command or defaults; -Check selects the check commands) as JSON
   `[{ tool, extensions, requires, commands }]` and exits 0 without probing or running anything.
@@ -35,6 +37,7 @@ param(
   [switch]$Lint,
   [string]$Requires,
   [string]$Base,
+  [switch]$Staged,
   [switch]$WhatIf
 )
 $ErrorActionPreference = 'Stop'
@@ -58,6 +61,10 @@ function Get-GitNames {
   Split-GitNames $out
 }
 function Get-ChangedFiles {
+if ($Staged) {
+  $st = @(Get-GitNames @('diff', '--cached', '--name-only', '-z', '--diff-filter=ACMR', '--'))
+  return @($st | Select-Object -Unique | Where-Object { $_ -and (Test-Path -LiteralPath (Join-Path $root $_) -PathType Leaf) })
+}
 $names = [System.Collections.Generic.List[string]]::new()
 if ($Base) {
   # a bad ref must fail loudly: a swallowed error would let -Check pass with nothing checked
@@ -98,6 +105,7 @@ if (-not $Language -and -not $Extensions -and -not $Command) {
     if ($Check) { $sp.Check = $true }
     if ($Lint) { $sp.Lint = $true }
     if ($Base) { $sp.Base = $Base }
+    if ($Staged) { $sp.Staged = $true }
     if ($WhatIf) { $sp.WhatIf = $true }
     if ($WhatIf) { $json = (& $PSCommandPath @sp | Out-String); if ($LASTEXITCODE -eq 0 -and $json.Trim()) { $all += @($json | ConvertFrom-Json) } }
     else { & $PSCommandPath @sp }
