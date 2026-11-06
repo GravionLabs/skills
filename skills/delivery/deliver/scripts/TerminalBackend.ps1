@@ -64,7 +64,11 @@ function Set-LoopTokens {
     $tokenArgs = @($Token.Keys | ForEach-Object { '--token'; "$_=$($Token[$_])" })
     switch ($Backend) {
       'herdr' { if ($Pane) { & herdr pane report-metadata $Pane --source deliver @tokenArgs --ttl-ms $TtlMs 2>$null | Out-Null } }
-      'poimen' { Invoke-Poimen (@('report', 'tokens', '--source', 'deliver') + $tokenArgs + @('--ttl-ms', "$TtlMs")) }
+      'poimen' {
+        $pairs = @($Token.Keys | ForEach-Object { "$_=$($Token[$_])" })
+        $ttlSec = [int][math]::Ceiling($TtlMs / 1000)
+        Invoke-Poimen (@('report', 'tokens', '--source', 'deliver', '--ttl', "$ttlSec") + $pairs)
+      }
       default { Write-BackendNotice $Backend 'tokens' }
     }
   } catch { Write-Verbose "$Backend failed: $_" }
@@ -77,7 +81,7 @@ function Clear-LoopTokens {
     $clearArgs = @($Name | ForEach-Object { '--clear-token'; $_ })
     switch ($Backend) {
       'herdr' { if ($Pane) { & herdr pane report-metadata $Pane --source deliver @clearArgs 2>$null | Out-Null } }
-      'poimen' { Invoke-Poimen (@('report', 'clear', '--source', 'deliver') + $clearArgs) }
+      'poimen' { Invoke-Poimen @('report', 'clear', '--source', 'deliver') }  # clears all tokens of the source
       default { Write-BackendNotice $Backend 'tokens' }
     }
   } catch { Write-Verbose "$Backend failed: $_" }
