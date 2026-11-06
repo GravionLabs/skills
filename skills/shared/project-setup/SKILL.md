@@ -24,12 +24,16 @@ User-invoked: `/project-setup [dry-run]`. It detects the stack, lets the user pi
 7. Report what was written: `format`, `lint` and `governance` (`written`, `unchanged`, `skipped: ...`) and `editorconfig.result`.
 8. Base files (`.gitattributes`, `.gitignore`, pre-commit hook): dry run `pwsh scripts/Add-BaseFiles.ps1 -ProjectRoot .`, show `gitattributes`, `gitignore` and `hook` (incl. `hook.warnings`), ask for confirmation, then repeat with `-Apply`. `hook.action: delegate` means: run the skill `hook.skill`. Details: `references/base-files.md`.
 
+9. Editor files, opt-in: ask whether to write them and for which editor (only `vscode` so far). Dry run `pwsh scripts/New-EditorConfig.ps1 -ProjectRoot . -Editor vscode`, show `files` (`action`, `missing` of an existing file) and `notes` (skipped languages or frameworks), confirm, then repeat with `-Apply`. Mapping: `references/launch-targets.md`.
+
 ## What is written
 
 - `.agents/config.json`, key `format`: only entries of non-default choices. Other keys stay, an entry of another language stays, `"format": false` is respected (skipped). A new file gets `$schema`. Schema: `schema/config.schema.json` of `implementation`, docs `docs/usage/project-config.md`.
 - `.agents/config.json`, key `lint`: the same for linters (`{ "command": ..., "extensions": [...] }`); `"lint": false` is respected. Runner and defaults: the lint reference of `implementation`.
 - `.agents/config.json`, key `governance` (only with `-Governance`): `adrDir`, `adrPaths` (`docker-compose.yml` and compose files, `infra/**`, `.github/workflows/**` where they exist), `specDir`, `specMap` (`apps/<name>/**` to `<specDir>/<name>.md` per folder of `apps/`), `specMode: warn`, `skipLabels: ["skip-adr"]`. Docs: `docs/usage/project-config.md`.
 - `.editorconfig`: the dotnet template (`templates/dotnet.editorconfig`, also used by `dotnet-create-solution`) or `templates/base.editorconfig`, plus `templates/sections/<lang>.editorconfig` for ts/ng, py, rust and go. An existing file is never overwritten: `editorconfig.diff` shows the difference, the user merges by hand.
+
+- `.vscode/settings.json`, `extensions.json`, `tasks.json`, `launch.json` (step 9): created when missing; an existing file is never changed.
 
 ## Gotchas
 
