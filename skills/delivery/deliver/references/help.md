@@ -17,7 +17,7 @@ Delivers the open PBIs and Bugs of the given issues in dependency order: a subag
 - `<nr> [<nr> …]`: PBI, Bug, Feature or Epic numbers; each open PBI or Bug below them is delivered once. Missing: asked once.
 - `--milestone <name>`: adds the open PBIs and Bugs of that milestone. Name it `M<n>`: `M4` finds the title `M4` and, after `github-milestone close`, `M4 (0.2.0)`; legacy titles such as `1.3.0` still work. When all are delivered, `github-release finish` opens the release PR into `main` after a release review; it is never merged by `deliver`. After that PR is merged and tagged, run `/github-milestone close M<n>`.
 - `--unattended`: never asks. A pause comments on the issue, adds `needs-decision` and goes on with the next independent PBI. Interactive (default): a pause or a blocked PBI asks in the chat (retry, skip or an instruction).
-- `--inline`: deliver all PBIs in this session. Without it an interactive run over more than `deliver.loopThreshold` (default 3) PBIs starts the loop and stays a control session (`references/control.md`).
+- `--inline`: deliver all PBIs in this session. Without it an interactive run over more than `deliver.loopThreshold` (default 3) PBIs starts the loop and stays a control session (`references/control.md`). `--no-preflight` skips the preflight (skills, allowlist, stale worktrees; `references/preflight.md`).
 - `--max <n>`: stops after `n` delivered, blocked or paused PBIs and prints the report.
 - Skipped: `needs-decision`; `needs-refinement` (hint `planner refine <nr>`); `interactive` (unattended only; `/deliver <nr>` in a session delivers it); PBIs claimed by another session.
 - `help`, `--help`, `-h`: print this file.

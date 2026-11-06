@@ -17,14 +17,14 @@ Delivers the open PBIs and Bugs of an issue (a work item = open issue labelled `
 `/deliver <nr> [<nr> …] [--milestone <name>] [--unattended] [--inline] [--max <n>]`: each number is a PBI, Bug, Feature or Epic; `--milestone <name>` (a release, `M<n>` or a legacy title) adds the open work items of that milestone (one batched read of the milestone (`pwsh <skill-dir>/../github-milestone/scripts/Get-Milestones.ps1 -Mode issues -Name <name> -State open`: REST, all pages, no PRs; the `github-milestone` lookup resolves `M4` to the title `M4` or, after `close`, `M4 (0.2.0)`; filter the returned list by label: `pbi`, `bug`), plus the work items below the Features and Epics in it). The `milestone.title` of that read is the title for `gh issue create --milestone`; `<key>` is its `M<n>` or sub-number `M<n>.<m>` (legacy: the title) and names the state file and the hints. Missing: ask once. `--max <n>` stops after `n` delivered, blocked or paused PBIs and prints the report (`scripts/Invoke-DeliverLoop.ps1` uses `--max 1` per fresh session, `references/loop.md`).
 
 - **Interactive** (default): a pause rule asks the user in the chat; a blocked PBI asks: retry, skip or an instruction.
-- **Control session**: interactive with more PBIs than `deliver.loopThreshold` (default 3), e.g. every `--milestone`: do not deliver them here, start `Invoke-DeliverLoop.ps1` and stay a thin session for decisions, `interactive` PBIs and step 9 (`references/control.md`). `--inline` delivers them all in this session (steps 1 to 9).
+- **Control session**: interactive with more PBIs than `deliver.loopThreshold` (default 3), e.g. every `--milestone`: do not deliver them here, start `Invoke-DeliverLoop.ps1` and stay a thin session for decisions, `interactive` PBIs and step 9 (`references/control.md`). `--inline` delivers them all in this session (steps 1 to 9). `--no-preflight` skips Start 3.
 - **`--unattended`** (`claude -p`, `opencode run`, `copilot -p`): never ask. A pause comments on the issue, adds the label `needs-decision` and continues with the next PBI that does not depend on it.
 
 ## Start
 
 1. `gh auth status` works and the repository has `release/next`.
 2. `gh api repos/{owner}/{repo}/rules/branches/release/next --jq '.[].type'`: no `required_status_checks` in the output → warn that red CI is mergeable here (ruleset of `github-release`), then go on.
-3. Unattended: `git`, `gh` and the verify commands of `AGENTS.md` must be on the harness allowlist, otherwise the run hangs at a prompt (entries per harness: `references/permissions.md`). Write commands without quoted `$(…)`; the permission check cannot see through them.
+3. Preflight (skipped by `--no-preflight`): `pwsh <skill-dir>/scripts/Test-DeliverPreflight.ps1 -Harness <claude|opencode|copilot> [-Unattended] -Text` prints one line per check, ok / fixed / action needed: stack skills, allowlist (`git`, `gh`, `pwsh <skill-dir>/scripts/*`, the verify commands of `AGENTS.md`; entries per harness: `references/permissions.md`, otherwise an unattended run hangs at a prompt), stale worktrees; reactions in `references/preflight.md`. Write commands without quoted `$(…)`; the permission check cannot see through them.
 4. Progress display: `printenv HERDR_ENV`. Only when it prints `1`, follow `references/herdr.md` at the start, after each progress line and after the report.
 
 ## Steps
