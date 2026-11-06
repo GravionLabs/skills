@@ -24,7 +24,7 @@ User-invoked: `/project-setup [dry-run]`. It detects the stack, lets the user pi
 7. Report what was written: `format`, `lint` and `governance` (`written`, `unchanged`, `skipped: ...`) and `editorconfig.result`.
 8. Base files (`.gitattributes`, `.gitignore`, pre-commit hook): dry run `pwsh scripts/Add-BaseFiles.ps1 -ProjectRoot .`, show `gitattributes`, `gitignore` and `hook` (incl. `hook.warnings`), ask for confirmation, then repeat with `-Apply`. `hook.action: delegate` means: run the skill `hook.skill`. Details: `references/base-files.md`.
 
-9. Editor files, opt-in: ask whether to write them and for which editor (`vscode` or `zed`). Dry run `pwsh scripts/New-EditorConfig.ps1 -ProjectRoot . -Editor <editor>`, show `files` (`action`, `missing` of an existing file) and `notes` (skipped languages or frameworks), confirm, then repeat with `-Apply`. Mapping: `references/launch-targets.md`.
+9. Editor files, opt-in: ask whether to write them and for which editor (`vscode`, `zed` or `jetbrains`). Dry run `pwsh scripts/New-EditorConfig.ps1 -ProjectRoot . -Editor <editor>`, show `files` (`action`, `missing` of an existing file) and `notes` (skipped languages or frameworks), confirm, then repeat with `-Apply`. Mapping: `references/launch-targets.md`.
 
 ## What is written
 
@@ -33,7 +33,7 @@ User-invoked: `/project-setup [dry-run]`. It detects the stack, lets the user pi
 - `.agents/config.json`, key `governance` (only with `-Governance`): `adrDir`, `adrPaths` (`docker-compose.yml` and compose files, `infra/**`, `.github/workflows/**` where they exist), `specDir`, `specMap` (`apps/<name>/**` to `<specDir>/<name>.md` per folder of `apps/`), `specMode: warn`, `skipLabels: ["skip-adr"]`. Docs: `docs/usage/project-config.md`.
 - `.editorconfig`: the dotnet template (`templates/dotnet.editorconfig`, also used by `dotnet-create-solution`) or `templates/base.editorconfig`, plus `templates/sections/<lang>.editorconfig` for ts/ng, py, rust and go. An existing file is never overwritten: `editorconfig.diff` shows the difference, the user merges by hand.
 
-- `.vscode/settings.json`, `extensions.json`, `tasks.json`, `launch.json` resp. `.zed/settings.json`, `tasks.json`, `debug.json` (step 9): created when missing; an existing file is never changed.
+- `.vscode/settings.json`, `extensions.json`, `tasks.json`, `launch.json` resp. `.zed/settings.json`, `tasks.json`, `debug.json` resp. `.run/*.run.xml` (step 9): created when missing; an existing file is never changed.
 
 ## Gotchas
 

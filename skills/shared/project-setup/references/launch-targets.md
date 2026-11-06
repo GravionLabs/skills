@@ -1,6 +1,6 @@
 # Launch targets
 
-The mapping language or framework to start target, build and test command and debugger type. `scripts/New-EditorConfig.ps1 -Editor vscode` turns it into `.vscode/` files, `-Editor zed` into `.zed/` files; JetBrains reuses the same mapping. Data: `templates/vscode/targets.json` (formatters, extensions, commands, shared by all editors), `templates/zed/targets.json` (Zed formatters); the start targets are in the script.
+The mapping language or framework to start target, build and test command and debugger type. `scripts/New-EditorConfig.ps1 -Editor vscode` turns it into `.vscode/` files, `-Editor zed` into `.zed/` files, `-Editor jetbrains` into `.run/` files. Data: `templates/vscode/targets.json` (formatters, extensions, commands, shared by all editors), `templates/zed/targets.json` (Zed formatters); the start targets are in the script.
 
 | Key (detect-techstack) | Start target                                                              | Build / test                              | Debugger type                          |
 | :--------------------- | :------------------------------------------------------------------------ | :---------------------------------------- | :------------------------------------- |
@@ -36,3 +36,12 @@ The mapping language or framework to start target, build and test command and de
 - `tasks.json`: array with `build: <key>` and `test: <key>`.
 - `debug.json`: array of the start targets with Zed adapters: ts/ng `JavaScript` (dev server, `Debug Vitest`), py `Debugpy`, rust `CodeLLDB`, go `Delve`. dotnet gets no debug entry (Zed has no built-in .NET adapter), with a note.
 - An existing file is never changed; the plan shows `missing` (settings keys, task labels, debug labels).
+
+## JetBrains files
+
+`-Editor jetbrains` writes shared run configurations to `.run/<name>.run.xml` (Rider, WebStorm, PyCharm, RustRover and GoLand read them) from the same mapping; templates in `templates/jetbrains/`.
+
+- `build_<key>` and `test_<key>`: shell script configurations with the same commands as the tasks.
+- Start targets (debug with the Debug button): the dotnet project (also the Aspire AppHost), the ts/ng npm script (`dev`, else `start`), rust `cargo run`, the go application (project directory).
+- py: no file for the start target (current file, JetBrains needs a script path), with a note; build and test stay.
+- An existing file is never overwritten; the plan shows `exists`. `.idea/` and plugins are not touched.

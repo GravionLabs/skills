@@ -1,6 +1,6 @@
 <#
 .SYNOPSIS
-  Plans (default, dry run) or writes the editor files of a project: for -Editor vscode .vscode/settings.json, extensions.json, tasks.json and launch.json; for -Editor zed .zed/settings.json, tasks.json and debug.json.
+  Plans (default, dry run) or writes the editor files of a project: for -Editor vscode .vscode/settings.json, extensions.json, tasks.json and launch.json; for -Editor zed .zed/settings.json, tasks.json and debug.json; for -Editor jetbrains .run/*.run.xml (shared run configurations).
 .DESCRIPTION
   Prints the plan as JSON. Without -Apply nothing is written. Content comes from templates/vscode/targets.json (commands, shared by all editors), templates/zed/targets.json (Zed formatters) and the mapping in references/launch-targets.md.
   A missing file is created. An existing file is never changed: the plan lists what it lacks (`missing`), the user merges by hand.
@@ -8,7 +8,7 @@
 .PARAMETER ProjectRoot
   Project root (default: current directory).
 .PARAMETER Editor
-  Editor to write for. `vscode` or `zed` (JetBrains follows with the same mapping).
+  Editor to write for. `vscode`, `zed` or `jetbrains` (Rider, WebStorm, PyCharm, RustRover, GoLand; shared run configurations in `.run/`, same mapping).
 .PARAMETER StackJson
   A detect-techstack report (JSON text) instead of running the detection.
 .PARAMETER Apply
@@ -28,7 +28,7 @@ function Fail([string]$Message) {
   Write-Error "New-EditorConfig: $Message" -ErrorAction Continue
   exit 1
 }
-if ($Editor -notin 'vscode', 'zed') { Fail "editor '$Editor' is not supported (vscode, zed)" }
+if ($Editor -notin 'vscode', 'zed', 'jetbrains') { Fail "editor '$Editor' is not supported (vscode, zed, jetbrains)" }
 
 $root = (Resolve-Path -LiteralPath $ProjectRoot).Path
 $skillDir = Split-Path -Parent $PSScriptRoot
@@ -107,6 +107,8 @@ $configs = [System.Collections.Generic.List[object]]::new()
 $zedSettings = [ordered]@{ format_on_save = 'on'; languages = [ordered]@{} }
 $zedTasks = [System.Collections.Generic.List[object]]::new()
 $zedDebug = [System.Collections.Generic.List[object]]::new()
+$jbConfigs = [System.Collections.Generic.List[object]]::new()
+$jbNoStart = $null
 function Add-Ext([string[]]$Ids) { foreach ($i in $Ids) { if (-not $extensions.Contains($i)) { $extensions.Add($i) } } }
 
 foreach ($k in $keys) {
@@ -141,6 +143,7 @@ foreach ($k in $keys) {
       }
       if ($proj) {
         $label = if ($aspire) { 'Debug Aspire AppHost' } else { 'Debug dotnet' }
+        $jbConfigs.Add(@{ tpl = 'dotnet'; name = "$label ($($proj.BaseName))"; project = (Get-Rel $proj.FullName) })
         $configs.Add([ordered]@{ name = "$label ($($proj.BaseName))"; type = 'dotnet'; request = 'launch'; projectPath = '${workspaceFolder}/' + (Get-Rel $proj.FullName) })
       } else { $notes.Add('dotnet: no startable project found (executable or Aspire AppHost), no launch configuration') }
     }
@@ -152,6 +155,7 @@ foreach ($k in $keys) {
       }
       $script = @('dev', 'start') | Where-Object { $scripts.ContainsKey($_) } | Select-Object -First 1
       if ($script) {
+        $jbConfigs.Add(@{ tpl = 'npm'; name = "Debug dev server ($script)"; script = $script })
         $configs.Add([ordered]@{ name = "Debug dev server ($script)"; type = 'node'; request = 'launch'; runtimeExecutable = $pm; runtimeArgs = @('run', $script); console = 'integratedTerminal' })
         $zedDebug.Add([ordered]@{ label = "Debug dev server ($script)"; adapter = 'JavaScript'; type = 'pwa-node'; request = 'launch'; runtimeExecutable = $pm; runtimeArgs = @('run', $script); cwd = '$ZED_WORKTREE_ROOT' })
       } else { $notes.Add("${k}: no dev or start script in package.json at the root, no dev server configuration") }
@@ -160,16 +164,41 @@ foreach ($k in $keys) {
         $zedDebug.Add([ordered]@{ label = 'Debug Vitest'; adapter = 'JavaScript'; type = 'pwa-node'; request = 'launch'; program = '$ZED_WORKTREE_ROOT/node_modules/vitest/vitest.mjs'; args = @('run'); cwd = '$ZED_WORKTREE_ROOT' })
       }
     }
-    'py' { $configs.Add([ordered]@{ name = 'Debug current Python file'; type = 'debugpy'; request = 'launch'; program = '${file}'; console = 'integratedTerminal' })
+    'py' { $jbNoStart = 'py: the start target is the current file, JetBrains needs a script path, no run configuration'
+      $configs.Add([ordered]@{ name = 'Debug current Python file'; type = 'debugpy'; request = 'launch'; program = '${file}'; console = 'integratedTerminal' })
       $zedDebug.Add([ordered]@{ label = 'Debug current Python file'; adapter = 'Debugpy'; request = 'launch'; program = '$ZED_FILE' }) }
-    'rust' { $configs.Add([ordered]@{ name = 'Debug cargo run'; type = 'lldb'; request = 'launch'; cargo = [ordered]@{ args = @('build') }; args = @(); cwd = '${workspaceFolder}' })
+    'rust' { $jbConfigs.Add(@{ tpl = 'cargo'; name = 'Debug cargo run' })
+      $configs.Add([ordered]@{ name = 'Debug cargo run'; type = 'lldb'; request = 'launch'; cargo = [ordered]@{ args = @('build') }; args = @(); cwd = '${workspaceFolder}' })
       $zedDebug.Add([ordered]@{ label = 'Debug cargo run'; adapter = 'CodeLLDB'; request = 'launch'; cargo = [ordered]@{ args = @('build') }; cwd = '$ZED_WORKTREE_ROOT' }) }
-    'go' { $configs.Add([ordered]@{ name = 'Debug Go'; type = 'go'; request = 'launch'; mode = 'auto'; program = '${workspaceFolder}' })
+    'go' { $jbConfigs.Add(@{ tpl = 'go'; name = 'Debug Go' })
+      $configs.Add([ordered]@{ name = 'Debug Go'; type = 'go'; request = 'launch'; mode = 'auto'; program = '${workspaceFolder}' })
       $zedDebug.Add([ordered]@{ label = 'Debug Go'; adapter = 'Delve'; request = 'launch'; mode = 'debug'; program = '$ZED_WORKTREE_ROOT' }) }
   }
 }
 
-if ($Editor -eq 'zed') {
+if ($Editor -eq 'jetbrains') {
+  if ($jbNoStart) { $notes.Add($jbNoStart) }
+  $dirName = '.run'
+  $files = [ordered]@{}
+  function Get-RunFile([string]$Tpl, [hashtable]$Values) {
+    $x = [System.IO.File]::ReadAllText((Join-Path $skillDir "templates/jetbrains/$Tpl.run.xml"))
+    foreach ($key in $Values.Keys) { $x = $x.Replace("{{$key}}", [System.Security.SecurityElement]::Escape([string]$Values[$key])) }
+    $x.TrimEnd() + "`n"
+  }
+  function Get-FileName([string]$Name) { ($Name -replace '[^A-Za-z0-9]+', '_').Trim('_') + '.run.xml' }
+  foreach ($k in $keys) {
+    foreach ($kind in 'build', 'test') {
+      if (-not $map[$k][$kind]) { continue }
+      $n = "${kind}: $k"
+      $files[(Get-FileName $n)] = Get-RunFile 'shell' @{ name = $n; command = $map[$k][$kind].Replace('{pm}', $pm) }
+    }
+  }
+  foreach ($c in $jbConfigs) {
+    $v = @{} + $c; $v.Remove('tpl')
+    if ($c.tpl -eq 'go') { $v.module = Split-Path -Leaf $root }
+    $files[(Get-FileName $c.name)] = Get-RunFile $c.tpl $v
+  }
+} elseif ($Editor -eq 'zed') {
   $dirName = '.zed'
   $files = [ordered]@{ 'settings.json' = $zedSettings; 'tasks.json' = @($zedTasks); 'debug.json' = @($zedDebug) }
 } else {
@@ -198,6 +227,20 @@ function Get-Missing([string]$Name, $Content, $Existing) {
 
 $dir = Join-Path $root $dirName
 $out = [ordered]@{}
+if ($Editor -eq 'jetbrains') {
+  foreach ($name in $files.Keys) {
+    $path = Join-Path $dir $name
+    if (Test-Path -LiteralPath $path) { $out[$name] = [ordered]@{ action = 'exists'; missing = @(); result = 'unchanged' }; continue }
+    $out[$name] = [ordered]@{ action = 'create'; content = $files[$name] }
+    if ($Apply) {
+      [void](New-Item -ItemType Directory -Force -Path $dir)
+      [System.IO.File]::WriteAllText($path, $files[$name], $utf8)
+      $out[$name].result = 'created'
+    }
+  }
+  if (-not $out.Count) { $out['run'] = [ordered]@{ action = 'skip'; reason = 'nothing to write' } }
+  $files = [ordered]@{}
+}
 foreach ($name in $files.Keys) {
   $path = Join-Path $dir $name
   $content = $files[$name]
