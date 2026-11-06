@@ -13,6 +13,8 @@
   Windows toast), the herdr pane tokens deliver, deliver_step, deliver_pr when HERDR_ENV=1 and, with -LogPane in herdr on a terminal,
   a split pane labeled deliver-log below the session that tails the log (LogPane.ps1; never closed by the loop).
   Stdout carries the colors of the .ansi.log when it is a terminal and neither -NoColor nor NO_COLOR is set; otherwise it is plain.
+  Machine-readable progress for a control session (`deliver` `references/control.md`): .agents/deliver-loop/<run>/progress.jsonl,
+  one JSON object per line (`start`, `iteration-start`, `iteration-end`, `result`), and .agents/deliver-loop/latest.txt with the path of the newest run directory.
   Run it from the repository root. Exit code: 0 done or max reached, 1 no progress, 2 blocked, 64 bad arguments.
 .PARAMETER Target
   Issue numbers (PBI, Feature or Epic), as for `/deliver`: `-Target 12,14` or `-Target 12 14` (a comma list also works
@@ -73,6 +75,7 @@ $Ansi = @{ dim = "$Esc[2m"; cyan = "$Esc[36m"; red = "$Esc[31m"; yellow = "$Esc[
 . (Join-Path $PSScriptRoot 'LogPane.ps1')
 $ColorStdout = [bool]$AnsiFile -and (Test-LoopTerminal)
 $RunDir = Join-Path (Get-Location) ".agents/deliver-loop/$((Get-Date).ToString('yyyyMMdd-HHmmss'))"
+$Progress = Join-Path $RunDir 'progress.jsonl'
 $Recent = [System.Collections.Generic.List[string]]::new()
 $AgentNames = @{}
 $Pane = if ($env:HERDR_ENV -eq '1') { $env:HERDR_PANE_ID } else { '' }
@@ -322,6 +325,18 @@ function Read-CopilotRecord([string]$line, [int]$position, [int]$total) {
   }
 }
 
+# One machine-readable record for the control session (progress.jsonl); never throws into the loop.
+function Write-ProgressRecord([string]$Name, [hashtable]$Data = @{}) {
+  try {
+    New-Item -ItemType Directory -Force -Path $RunDir | Out-Null
+    $rec = [ordered]@{ event = $Name; time = (Get-Date).ToUniversalTime().ToString('o') }
+    foreach ($k in $Data.Keys) { $rec[$k] = $Data[$k] }
+    [IO.File]::AppendAllText($Progress, ($rec | ConvertTo-Json -Compress -Depth 4) + "`n")
+    $latest = Join-Path (Split-Path $RunDir -Parent) 'latest.txt'
+    [IO.File]::WriteAllText($latest, $RunDir)
+  } catch { Write-Verbose "progress event not written: $_" }
+}
+
 function Invoke-Iteration([int]$n, [int]$total, $state) {
   New-Item -ItemType Directory -Force -Path $RunDir | Out-Null
   $jsonl = Join-Path $RunDir "$($state.Ready[0]).jsonl"
@@ -329,6 +344,7 @@ function Invoke-Iteration([int]$n, [int]$total, $state) {
   if ($Milestone) { $targets += @('--milestone', $Milestone) }
   $prompt = "/deliver $($targets -join ' ') --unattended --max 1"
   Write-Step "iteration $n/$total start: $prompt"
+  Write-ProgressRecord 'iteration-start' @{ n = $n; total = $total; pbi = [int]$state.Ready[0]; open = $state.Open }
   $script:Paused = $false
   Set-AgentState 'working'
   Set-Pane "$($state.Ready[0])" "$n/$total starting"
@@ -360,12 +376,14 @@ try {
     Write-Step 'herdr agent state not reported: another agent runs in this pane (start the loop in its own pane)' 'yellow'
   }
   $state = Get-State
+  Write-ProgressRecord 'start' @{ targets = @($Nrs); milestone = $Milestone; max = $Max; harness = $Harness; model = $Model; open = $state.Open }
   $result = Get-StopReason $state
   $total = if ($Max -gt 0) { [Math]::Min($Max, $state.Eligible.Count) } else { $state.Eligible.Count }
   while (-not $result) {
     $i++
     Invoke-Iteration $i $total $state
     $after = Get-State
+    Write-ProgressRecord 'iteration-end' @{ n = $i; pbi = [int]$state.Ready[0]; delivered = (@($state.Eligible | Where-Object { $after.Eligible -notcontains $_ }) -join ','); open = $after.Open }
     if (($after.Eligible -join ',') -eq ($state.Eligible -join ',')) {
       $result = 'no progress'
       Write-Step 'no progress: the open PBIs did not change. Last log lines:' 'yellow'
@@ -379,6 +397,7 @@ try {
   $code = switch ($result) { 'no progress' { 1 } 'blocked' { 2 } default { 0 } }
   $color = if ($result -in 'done', 'max reached') { 'green' } else { 'yellow' }
   Write-Step "loop result: $result ($i iteration(s), $($state.Open) PBI(s) open)" $color
+  Write-ProgressRecord 'result' @{ result = $result; code = $code; iterations = $i; open = $state.Open }
   Send-Notice "loop result: $result"
   Set-AgentState $(if (($result -in 'blocked','no progress') -or $Paused) { 'blocked' } else { 'idle' })
 } finally {

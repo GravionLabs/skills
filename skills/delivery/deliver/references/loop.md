@@ -26,8 +26,9 @@ Permissions on a live `-p` run: `--allow-all-tools` alone denies file access out
 
 ## Loop or one session
 
-- One `/deliver` session: a few PBIs, you watch, interactive questions are welcome.
-- The loop: a whole release or a Feature overnight. Each PBI starts with an empty context, a dead session (sleep, crash, rate limit) costs one PBI, and `deliver` keeps all state in GitHub, so there is no queue file.
+- `--inline` or a few PBIs (up to `deliver.loopThreshold`, default 3): one `/deliver` session delivers them, you watch, questions are welcome.
+- Interactive `/deliver --milestone` (or a Feature or Epic with more PBIs): the session starts the loop and stays a thin control session (`references/control.md`). It prints the progress and the status block between PBIs, brings `needs-decision` PBIs to you, delivers `interactive` PBIs itself and runs the release step once after the loop ends `done`. When its own context passes `deliver.controlContextTokens` (default 200000) it prints the status block and the resume command and stops.
+- The loop alone (`deliver-loop`): a whole release or a Feature overnight, unattended. Each PBI starts with an empty context, a dead session (sleep, crash, rate limit) costs one PBI, and `deliver` keeps all state in GitHub, so there is no queue file.
 
 ## Stop rules
 
@@ -42,6 +43,7 @@ Checked from GitHub (not from the output) before and after each iteration, on th
 
 ## Observability
 
+- `.agents/deliver-loop/<run>/progress.jsonl`: one record per `start`, `iteration-start`, `iteration-end` and `result` for a control session; `.agents/deliver-loop/latest.txt` holds the path of the newest run.
 - `.agents/deliver-loop/<run>/<nr>.jsonl`: every stream record as it arrives (git-ignored). `<nr>` is the first ready PBI at the start of the iteration.
 - `.agents/deliver-loop.log` (plain) and stdout (colored like the `.ansi.log` when stdout is a terminal and neither `-NoColor` nor `NO_COLOR` is set, else plain): `HH:MM:SS <tool> <description or file>`, short assistant text, tool errors with `✗`; subagent steps carry the agent description as prefix (`[Review PBI #401 diff] Bash …`). Long text is cut to the terminal width (minus 40 for time, prefix and tool, at least 120), to 120 characters when stdout is redirected.
 - `.agents/deliver-loop.ansi.log`: the same lines with ANSI colors (time dim, tool name cyan, `✗` and tool errors red; paused, blocked, CI red, no progress yellow; PR opened, merged, done green). `.agents/deliver-loop.log` stays plain text. `-NoColor` or a non-empty `NO_COLOR` writes no `.ansi.log` and colors no stdout.

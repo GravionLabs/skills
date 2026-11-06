@@ -27,6 +27,33 @@ describe('deliver SKILL.md', () => {
     expect(report).toContain('the release PR of step 9 as a full URL');
   });
 
+  it('hands interactive runs over many PBIs to a control session over the loop (#321)', () => {
+    const control = fs.readFileSync(path.join(skillDir, 'references/control.md'), 'utf8');
+    expect(body).toContain('--inline');
+    expect(body).toContain('references/control.md');
+    expect(body).toContain('deliver.loopThreshold');
+    for (const part of [
+      'progress.jsonl',
+      'needs-decision',
+      '`interactive`',
+      'step 9',
+      'deliver.controlContextTokens',
+      '200000',
+      'Get-DeliverStatus',
+      '--unattended',
+    ]) {
+      expect(control + body).toContain(part);
+    }
+    expect(control).toContain('status block');
+    expect(control).toContain('resume command');
+    expect(fs.readFileSync(path.join(skillDir, 'references/loop.md'), 'utf8')).toContain(
+      '`--inline`',
+    );
+    expect(fs.readFileSync(path.join(skillDir, 'references/help.md'), 'utf8')).toContain(
+      '--inline',
+    );
+  });
+
   it('stays under 100 lines', () => {
     expect(text.split('\n').length).toBeLessThan(100);
   });
@@ -109,7 +136,7 @@ describe('deliver SKILL.md', () => {
 
   it('takes several numbers and a milestone, skips needs-refinement, reports per number', () => {
     expect(body).toContain(
-      '`/deliver <nr> [<nr> …] [--milestone <name>] [--unattended] [--max <n>]`',
+      '`/deliver <nr> [<nr> …] [--milestone <name>] [--unattended] [--inline] [--max <n>]`',
     );
     expect(body).toContain('Get-Milestones.ps1 -Mode issues -Name <name> -State open');
     expect(body).toContain('filter the returned list by label');
