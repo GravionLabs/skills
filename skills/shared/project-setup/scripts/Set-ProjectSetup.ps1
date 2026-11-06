@@ -7,7 +7,7 @@
   Without -Apply nothing is written. With -Apply only non-default choices are written under `format` (other keys of the file stay,
   an existing entry of a language stays unless it gets a new non-default choice); an existing .editorconfig is never overwritten
   (the action is `exists` with a diff). A missing tool is reported with its install hint, never installed.
-  Extension points: one Get-*Plan function and one Apply-* function per part (format, editorconfig).
+  Extension points: one Get-*Plan function and one Write-* function per part (format, editorconfig).
 .PARAMETER ProjectRoot
   Project root (default: current directory).
 .PARAMETER Choice
@@ -216,7 +216,7 @@ function Test-FormatEntry($Entry, [string]$Lang) {
   foreach ($k in $Entry.Keys) { if ($k -notin 'extensions', 'format', 'check') { Fail "format.$Lang has unknown key $k" } }
 }
 
-function Apply-FormatPlan($Plan) {
+function Write-FormatPlan($Plan) {
   $todo = @($Plan | Where-Object { $_.write })
   if (-not $todo.Count) { return 'unchanged' }
   $cfg = Read-Config
@@ -271,7 +271,7 @@ function Get-EditorconfigPlan($Stack) {
   $plan
 }
 
-function Apply-Editorconfig($Plan, [string]$Text) {
+function Write-EditorconfigPlan($Plan, [string]$Text) {
   if ($Plan.action -ne 'create') { return $Plan.action }
   $path = Join-Path $root '.editorconfig'
   # never overwrite: -NoClobber semantics even if the file appeared since the plan
@@ -292,8 +292,8 @@ $ecPlan = Get-EditorconfigPlan $stack
 $ecText = Get-EditorconfigText $stack
 $result = [ordered]@{ mode = if ($Apply) { 'apply' } else { 'dry-run' }; languages = $formatPlan; editorconfig = $null; format = $null }
 if ($Apply) {
-  $result.format = Apply-FormatPlan $formatPlan
-  $ecPlan.result = Apply-Editorconfig $ecPlan $ecText
+  $result.format = Write-FormatPlan $formatPlan
+  $ecPlan.result = Write-EditorconfigPlan $ecPlan $ecText
 }
 $result.editorconfig = $ecPlan
 $warnings = @()
