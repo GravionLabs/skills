@@ -29,7 +29,7 @@ Prerequisites: `gh` authenticated, run from the repository root. Usage: `/github
    | needs-refinement | #15 title |                         |
    | claimed          | #16 title | @login                  |
 
-   Order the rows ready, blocked, needs-decision, needs-refinement, claimed; a blocker with `repository` is written `<repository>#<number>`, else `#<number>`; omit empty groups, and write `no open issues` instead of an empty table. `releasePr` set → end with `Release PR: #<number> <url>`.
+   Order the rows ready, blocked, needs-decision, needs-refinement, claimed; a blocker with `repository` is written `<repository>#<number>`, else `#<number>`; omit empty groups, and write `no open issues` instead of an empty table. `warnings[]` non-empty → a `Warnings` list below the table: `epic-in-milestone` as `Epic #n has a milestone, remove it`; `feature-incomplete` as `Feature #n: #a (M5), #b (none) are outside, move the PBIs into the milestone or clear the Feature's` (`github-issue` `references/milestones.md`). `releasePr` set → end with `Release PR: #<number> <url>`.
 
 4. `list` → one table `Milestone | State | Open | Closed | Progress | Due | Tag`, in the script's order (legacy semver, then M number, other titles last); `Tag` is `v<version>` (the version in the parentheses, legacy: the title) when `tagged`, else `—`. Below it `Latest release: <latestTag>`.
 5. `create [M<n> [<Topic>]]` → without a name the next free number. `created: true` reports `created milestone <title>`; `created: false` reports `milestone <title> exists (<state>)` and changes nothing.

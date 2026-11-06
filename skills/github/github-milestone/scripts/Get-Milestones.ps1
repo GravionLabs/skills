@@ -328,6 +328,17 @@ function Get-Detail($m) {
   $d = Get-Summary $m
   $groups = [ordered]@{ ready = @(); blocked = @(); needsDecision = @(); needsRefinement = @(); claimed = @() }
   $issues = @(Get-Paged "repos/$Repo/issues?milestone=$($m.number)&state=open&per_page=100" | Where-Object { $null -eq $_.pull_request })
+  # milestone rule (github-issue references/milestones.md): an Epic never has one; a Feature only when all its PBIs are in it
+  $warnings = @()
+  foreach ($i in ($issues | Sort-Object number)) {
+    $kinds = @($i.labels | ForEach-Object { $_.name })
+    if ($kinds -contains 'epic') { $warnings += , ([ordered]@{ type = 'epic-in-milestone'; number = $i.number; title = $i.title }) }
+    elseif ($kinds -contains 'feature') {
+      $outside = @(Get-Paged "repos/$Repo/issues/$($i.number)/sub_issues?per_page=100" | Where-Object { $_.state -eq 'open' -and ($null -eq $_.milestone -or $_.milestone.number -ne $m.number) } |
+          ForEach-Object { [ordered]@{ number = $_.number; title = $_.title; milestone = $(if ($_.milestone) { $_.milestone.title } else { 'none' }) } })
+      if ($outside.Count) { $warnings += , ([ordered]@{ type = 'feature-incomplete'; number = $i.number; title = $i.title; outside = $outside }) }
+    }
+  }
   foreach ($i in ($issues | Sort-Object number)) {
     $labels = @($i.labels | ForEach-Object { $_.name })
     $assignees = @($i.assignees | ForEach-Object { $_.login })
@@ -352,6 +363,7 @@ function Get-Detail($m) {
     $groups[$key] += , $item
   }
   $d.issues = $groups
+  $d.warnings = $warnings
   $d.releasePr = Get-ReleasePr
   $d
 }

@@ -182,18 +182,23 @@ function Get-Json([string[]]$ghArgs, [switch]$Pwsh) {
   return ($out -join "`n") | ConvertFrom-Json
 }
 
-function Add-Pbis([int]$nr, [hashtable]$seen, $found) {
+# $ms: title of the --milestone when the walk started at a Feature or Epic of it; a PBI or Bug below it with no or another milestone
+# is added to $skipped, not to $found (the same rule as deliver step 1: "select: outside M<n>, skipped").
+function Add-Pbis([int]$nr, [hashtable]$seen, $found, [string]$ms = '', $skipped = $null) {
   if ($seen.ContainsKey($nr)) { return }
   $seen[$nr] = $true
   # REST per issue: `gh issue view` runs on the GraphQL budget (#117)
   $issue = Get-Json @('api', "repos/{owner}/{repo}/issues/$nr")
   $labels = @($issue.labels | ForEach-Object { $_.name })
   if ($labels -contains 'pbi' -or $labels -contains 'bug') {
-    if ($issue.state -eq 'open') { $found.Add([pscustomobject]@{ Number = $nr; Labels = $labels }) }
+    if ($issue.state -eq 'open') {
+      if ($ms -and $issue.milestone.title -ne $ms) { $skipped.Add([pscustomobject]@{ Number = $nr; Milestone = $(if ($issue.milestone) { $issue.milestone.title } else { 'none' }) }) }
+      else { $found.Add([pscustomobject]@{ Number = $nr; Labels = $labels }) }
+    }
     return
   }
   foreach ($child in @(Get-Json @('api', "repos/{owner}/{repo}/issues/$nr/sub_issues?per_page=100"))) {
-    if ($child) { Add-Pbis ([int]$child.number) $seen $found }
+    if ($child) { Add-Pbis ([int]$child.number) $seen $found $ms $skipped }
   }
 }
 
@@ -201,6 +206,7 @@ function Add-Pbis([int]$nr, [hashtable]$seen, $found) {
 function Get-State {
   $seen = @{}
   $found = [System.Collections.Generic.List[object]]::new()
+  $skipped = [System.Collections.Generic.List[object]]::new()
   foreach ($nr in $Nrs) { Add-Pbis $nr $seen $found }
   if ($Milestone) {
     # one REST call lists the milestone (Get-Milestones.ps1 -Mode issues); PBIs and Bugs need no read of their own (#127)
@@ -209,7 +215,7 @@ function Get-State {
       if (-not $item) { continue }
       if ($item.labels -contains 'pbi' -or $item.labels -contains 'bug') {
         if (-not $seen.ContainsKey([int]$item.number)) { $seen[[int]$item.number] = $true; $found.Add([pscustomobject]@{ Number = [int]$item.number; Labels = @($item.labels) }) }
-      } else { Add-Pbis ([int]$item.number) $seen $found }
+      } else { Add-Pbis ([int]$item.number) $seen $found ([string]$list.milestone.title) $skipped }
     }
   }
   # release-review pause (references/release-review.md): nothing open, but a closed PBI or Bug of the milestone carries needs-decision
@@ -225,6 +231,7 @@ function Get-State {
     })
   [pscustomobject]@{
     Open     = $found.Count
+    Skipped  = @($skipped)
     Paused   = $paused
     Eligible = @($eligible | ForEach-Object { $_.Number } | Sort-Object)
     Ready    = @($ready | ForEach-Object { $_.Number } | Sort-Object)
@@ -398,6 +405,7 @@ try {
   }
   $state = Get-State
   Write-ProgressRecord 'start' @{ targets = @($Nrs); milestone = $Milestone; max = $Max; harness = $Harness; model = $Model; open = $state.Open }
+  foreach ($sk in $state.Skipped) { Write-Step "#$($sk.Number) select: outside $Milestone (milestone: $($sk.Milestone)), skipped; set the milestone to deliver it" 'yellow' }
   $result = Get-StopReason $state
   $total = if ($Max -gt 0) { [Math]::Min($Max, $state.Eligible.Count) } else { $state.Eligible.Count }
   while (-not $result) {

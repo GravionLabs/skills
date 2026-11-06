@@ -72,11 +72,27 @@ foreach ($name in ($pairs.name | Select-Object -Unique)) {
   $targets[$name] = if ($m) { $m.title } else { $null }
 }
 $current = @{}
+$labelsOf = @{}
 foreach ($p in $pairs) {
   $raw = & gh api "repos/$Repo/issues/$($p.issue)" 2>$null
   if ($LASTEXITCODE -ne 0) { Fail "issue #$($p.issue) not found: nothing was changed" }
-  $ms = ($raw | Out-String | ConvertFrom-Json).milestone
-  $current[$p.issue] = if ($ms) { $ms.title } else { $null }
+  $obj = $raw | Out-String | ConvertFrom-Json
+  $current[$p.issue] = if ($obj.milestone) { $obj.milestone.title } else { $null }
+  $labelsOf[$p.issue] = @($obj.labels | ForEach-Object { if ($_ -is [string]) { $_ } else { $_.name } })
+}
+# milestone rule (github-issue references/milestones.md): an Epic never has a milestone; a Feature only when all its open PBIs end up in the same one
+$byIssue = @{}
+foreach ($p in $pairs) { $byIssue[$p.issue] = $p }
+foreach ($p in $pairs) {
+  if ($labelsOf[$p.issue] -contains 'epic') { Fail "issue #$($p.issue) is an Epic: an Epic never has a milestone, nothing was changed" }
+  if ($labelsOf[$p.issue] -notcontains 'feature') { continue }
+  $subRaw = & gh api "repos/$Repo/issues/$($p.issue)/sub_issues?per_page=100" 2>$null
+  if ($LASTEXITCODE -ne 0) { Fail "sub-issues of #$($p.issue) not readable: nothing was changed" }
+  $outside = @(@($subRaw | Out-String | ConvertFrom-Json) | Where-Object { $_ -and $_.state -eq 'open' } | Where-Object {
+      if ($byIssue.ContainsKey([int]$_.number)) { $byIssue[[int]$_.number].name -ne $p.name }
+      else { -not ($targets[$p.name] -and $_.milestone -and $_.milestone.title -eq $targets[$p.name]) }
+    } | ForEach-Object { "#$($_.number)" })
+  if ($outside.Count) { Fail "Feature #$($p.issue) gets a milestone only when all its PBIs are in it; outside: $($outside -join ', '): nothing was changed" }
 }
 
 $created = [System.Collections.Generic.List[string]]::new()
