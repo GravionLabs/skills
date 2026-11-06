@@ -9,7 +9,7 @@ Interactive (no `--unattended`), no `--inline`, and the selected set (step 1) ha
 ## Start
 
 1. Step 1 (Select) runs here, read-only: count the PBIs, list the `interactive` ones (they stay with this session) and the paused ones.
-2. Start the loop in the background with the same targets and `--max`: the shim `deliver-loop` (`pwsh <skill-dir>/scripts/Invoke-DeliverLoop.ps1` without it), `-Harness` the harness of this session (`claude`, `copilot`), `-Model` this session's model name for `claude` (omitted for `copilot`, which picks `auto`). In herdr (`HERDR_ENV=1`) the shim opens its own workspace; elsewhere run it with the harness's background shell. Print `loop: started, log .agents/deliver-loop.log`.
+2. Start the loop in the background with the same targets and `--max`: the shim `deliver-loop` (`pwsh <skill-dir>/scripts/Invoke-DeliverLoop.ps1` without it), `-Harness` the harness of this session (`claude`, `copilot`), no `-Model` unless the user passed one (the loop then picks the model per PBI from its tier, `references/roles.md`; `copilot` picks `auto`). In herdr (`HERDR_ENV=1`) the shim opens its own workspace; elsewhere run it with the harness's background shell. Print `loop: started, log .agents/deliver-loop.log`.
 3. Claims (`references/claim.md`) keep this session and the loop from delivering the same PBI.
 
 ## Watch
