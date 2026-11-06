@@ -19,7 +19,7 @@ Read `.agents/deliver-loop/latest.txt` (path of the newest run) and its `progres
 | `event`           | Fields                                                                                   |
 | :---------------- | :--------------------------------------------------------------------------------------- |
 | `start`           | `targets`, `milestone`, `max`, `harness`, `model`, `open`                                |
-| `iteration-start` | `n`, `total`, `pbi`, `open`                                                              |
+| `iteration-start` | `n`, `total`, `pbi`, `open`, `model`                                                     |
 | `iteration-end`   | `n`, `pbi`, `delivered` (comma list), `open`                                             |
 | `result`          | `result` (`done`, `max reached`, `blocked`, `no progress`), `code`, `iterations`, `open` |
 
@@ -35,7 +35,7 @@ The loop skips `interactive` PBIs. When the loop ends (`done` with only `interac
 
 ## Release
 
-When the loop result is `done` and no `interactive` PBI is left, run step 9 once in this session (release review, release PR). `blocked` or `no progress`: report it, never release.
+When the loop result is `done` and no `interactive` PBI is left, run step 9 once in this session (release review, release PR). `max reached`: report the delivered count and, as open PBIs remain, offer to start the loop again; never release. `blocked` or `no progress`: report it, never release.
 
 ## Context guard
 
