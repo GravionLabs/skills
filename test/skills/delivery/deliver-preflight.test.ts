@@ -141,7 +141,7 @@ describe.skipIf(!hasPwsh || process.platform === 'win32')('Test-DeliverPreflight
     expect(old.check('skills').fix).toBe('continue with the global skills');
     fs.rmSync(path.join(home, '.claude/skills/ts-test'), { recursive: true });
     expect((await run(...only('skills'))).check('skills').status).toBe('ok');
-  }, 60_000); // three detect-techstack runs; slow when the whole suite runs in parallel
+  });
 
   it('removes worktrees of merged or deleted branches and lists the others', async () => {
     const wt = (n: string) => path.join(root, n);
@@ -149,17 +149,44 @@ describe.skipIf(!hasPwsh || process.platform === 'win32')('Test-DeliverPreflight
     git(repo, 'push', '-q', 'origin', 'feat/12-x');
     git(repo, 'worktree', 'add', '-q', '-b', 'feat/13-y', wt('open'));
     git(repo, 'push', '-q', 'origin', 'feat/13-y');
-    git(repo, 'worktree', 'add', '-q', '-b', 'feat/14-z', wt('gone'));
+    git(repo, 'worktree', 'add', '-q', '-b', 'feat/14-z', wt('neverpushed'));
+    git(repo, 'worktree', 'add', '-q', '-b', 'feat/15-w', wt('gone'));
+    git(repo, 'push', '-q', 'origin', 'feat/15-w');
+    git(path.join(root, 'origin.git'), 'branch', '-q', '-D', 'feat/15-w'); // deleted on origin
 
     const r = await run(...only('worktrees'));
     const c = r.check('worktrees');
     expect(c.status).toBe('action needed');
     expect(c.removed).toEqual(expect.arrayContaining([wt('merged'), wt('gone')]));
-    expect(c.left).toHaveLength(1);
-    expect(c.left[0]).toMatchObject({ path: wt('open'), reason: 'branch still open' });
+    expect(c.left).toHaveLength(2);
+    expect(c.left).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ path: wt('open'), reason: 'branch still open' }),
+        expect.objectContaining({ path: wt('neverpushed') }),
+      ]),
+    );
+    expect(fs.existsSync(wt('neverpushed'))).toBe(true);
     expect(fs.existsSync(wt('merged'))).toBe(false);
     expect(fs.existsSync(wt('gone'))).toBe(false);
     expect(fs.existsSync(wt('open'))).toBe(true);
+  });
+
+  it('leaves a worktree when ls-remote fails and stays fast', async () => {
+    const dir = path.join(root, 'offline');
+    git(repo, 'worktree', 'add', '-q', '-b', 'feat/16-q', dir);
+    git(repo, 'push', '-q', 'origin', 'feat/16-q');
+    git(repo, 'remote', 'set-url', 'origin', path.join(root, 'missing.git'));
+    const t0 = Date.now();
+    const r = await run(...only('worktrees'));
+    const ms = Date.now() - t0;
+    git(repo, 'remote', 'set-url', 'origin', path.join(root, 'origin.git'));
+    expect(r.check('worktrees').left).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ path: dir, reason: 'origin not reachable' }),
+      ]),
+    );
+    expect(fs.existsSync(dir)).toBe(true);
+    expect(ms).toBeLessThan(10_000); // preflight takes a few seconds at most
   });
 
   it('prints one line per check with -Text and exits 1 outside a repository', async () => {

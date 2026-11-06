@@ -11,7 +11,7 @@ An `--unattended` run stops at the first permission prompt (spike #823, `docs/sp
 | `pwsh` with `Get-Lessons.ps1` of the `lessons` skill: `.claude/skills/lessons/…`, `~/.claude/skills/lessons/…` or `.agents/skills/lessons/…`                                                      | implement, review and fix subagents (`implementation`, `code-review`) |
 | `printenv HERDR_ENV`, `printenv HERDR_PANE_ID`, `herdr pane report-metadata`                                                                                                                      | only when the run is inside a herdr pane (`references/herdr.md`)      |
 
-The other scripts of this skill (`Test-DeliverPreflight.ps1` at Start 3, `Get-DeliverStatus.ps1`) need `scripts/` of the installed skill as a whole: the `…/deliver/scripts/` entries below; the preflight checks them.
+The other scripts of this skill (`Test-DeliverPreflight.ps1` at Start 3, `Get-DeliverStatus.ps1`) need `scripts/` of the installed skill as a whole: the `…/deliver/scripts/` entries below; the preflight checks them. The whole-directory entry `…/deliver/scripts/:*` also permits `Invoke-DeliverLoop.ps1` and every other script of the skill.
 
 Replace the `pnpm` lines below with the commands of the repository's `AGENTS.md`. The deny entries block the common force-push and `--admin` forms; `deliver` needs neither, and the ruleset on `release/next` stays the real gate.
 

@@ -10,8 +10,8 @@
     allowed for -Harness (claude: permissions.allow of .claude/settings.json, settings.local.json, ~/.claude/settings.json;
     opencode: permission.bash of opencode.json; copilot: per-run flags, not checkable). Missing entries are listed in
     `missing` as exact settings lines; -AddAllowlist writes them to .claude/settings.json (claude) or opencode.json.
-  - worktrees: worktrees (not the main or current one) on a PBI branch whose PR is merged or whose branch is gone on
-    origin are removed with Remove-PbiWorktrees.ps1 (merged PR) or `git worktree remove` (clean, branch gone);
+  - worktrees: worktrees (not the main or current one) on a PBI branch whose PR is merged or whose branch was deleted
+    on origin (pushed once, absent now, no unpushed commits, ls-remote succeeded; one ls-remote for all) are removed with Remove-PbiWorktrees.ps1 (merged PR) or `git worktree remove` (clean, branch gone);
     the others are listed in `left`.
   Output: {actionNeeded, checks[{name, status, detail, fix, missing[], removed[], left[]}]}. Exit 1 only when the
   directory is not a git repository.
@@ -155,6 +155,10 @@ function Test-Worktrees {
   $rx = '^(?:[a-z]+/(\d+)-|wip-(\d+))'
   $cands = @($wts | Select-Object -Skip 1 | Where-Object { $_.branch -match $rx -and [IO.Path]::GetFullPath($_.path) -ne $self })
   if (-not $cands) { Add-Check 'worktrees' 'ok' 'no PBI worktrees'; return }
+  # one network call for all branches; a failed call (offline, auth) never counts as "branch gone"
+  $heads = @(& git -C $root ls-remote --heads origin 2>$null)
+  $lsOk = $LASTEXITCODE -eq 0
+  $onRemote = @($heads | ForEach-Object { ($_ -split "`t")[1] -replace '^refs/heads/', '' })
   $owner = try { ((& gh api 'repos/{owner}/{repo}' 2>$null) -join "`n" | ConvertFrom-Json).owner.login } catch { $null }
   $removed = @(); $left = @()
   $script = Join-Path $here 'Remove-PbiWorktrees.ps1'
@@ -162,22 +166,26 @@ function Test-Worktrees {
     $null = $w.branch -match $rx
     $issue = [int]$(if ($Matches[1]) { $Matches[1] } else { $Matches[2] })
     $prs = @()
-    if ($owner) {
+    # a merged PR needs a branch that was pushed once; never pushed: no api call
+    $tracked = (& git -C $root rev-parse --verify --quiet "refs/remotes/origin/$($w.branch)" 2>$null)
+    if ($owner -and ($tracked -or $onRemote -contains $w.branch)) {
       $list = try { (& gh api "repos/{owner}/{repo}/pulls?head=${owner}:$($w.branch)&state=closed" 2>$null) -join "`n" | ConvertFrom-Json } catch { @() }
       $prs = @($list | Where-Object { $_.merged_at } | ForEach-Object { $_.number })
     }
-    $remote = (& git -C $root ls-remote --heads origin $w.branch 2>$null)
+    # deleted = once on origin (tracking ref), ls-remote worked, absent now, nothing unpushed
+    $deleted = $lsOk -and $tracked -and ($onRemote -notcontains $w.branch) -and
+      ((& git -C $w.path rev-list --count "refs/remotes/origin/$($w.branch)..HEAD" 2>$null) -eq '0')
     $dirty = & git -C $w.path status --porcelain 2>$null
     if ($prs) {
       Push-Location $root
       try { $r = (& pwsh -NoProfile -File $script -Pr ([int]$prs[0]) -Issue $issue) -join "`n" | ConvertFrom-Json } finally { Pop-Location }
       $removed += @($r.removed)
       foreach ($l in @($r.left)) { if ($l) { $left += $l } }
-    } elseif (-not $remote -and -not $dirty) {
+    } elseif ($deleted -and -not $dirty) {
       & git -C $root worktree remove $w.path 2>$null
       if ($LASTEXITCODE -eq 0) { $removed += $w.path } else { $left += [ordered]@{ path = $w.path; reason = 'worktree remove failed'; command = "git worktree remove --force $($w.path)" } }
     } else {
-      $left += [ordered]@{ path = $w.path; branch = $w.branch; reason = $(if ($dirty) { 'uncommitted changes' } else { 'branch still open' }); command = "git worktree remove --force $($w.path)" }
+      $left += [ordered]@{ path = $w.path; branch = $w.branch; reason = $(if ($dirty) { 'uncommitted changes' } elseif (-not $lsOk) { 'origin not reachable' } else { 'branch still open' }); command = "git worktree remove --force $($w.path)" }
     }
   }
   $status = if ($left.Count) { 'action needed' } elseif ($removed.Count) { 'fixed' } else { 'ok' }
