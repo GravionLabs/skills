@@ -132,18 +132,18 @@ Before the first PBI `deliver` checks the repository and prints one line per che
 One session over a whole release grows large. `Invoke-DeliverLoop.ps1` starts a fresh `claude -p "/deliver … --unattended --max 1"` per PBI and reads the progress from GitHub. `skills-manage` offers the `deliver-loop` shim (`Install-LoopShim.ps1`), so you start it from any shell:
 
 ```powershell
-deliver-loop -Milestone M4 -Max 5 -Model sonnet
+deliver-loop -Milestone M4 -Max 5
 ```
 
 Without the shim, call the script by its full path:
 
 ```powershell
-pwsh .claude/skills/deliver/scripts/Invoke-DeliverLoop.ps1 -Milestone M4 -Max 5 -Model sonnet
+pwsh .claude/skills/deliver/scripts/Invoke-DeliverLoop.ps1 -Milestone M4 -Max 5
 ```
 
 It stops when everything is done or `-Max` is reached (exit 0), when no progress is made (1) or a PBI is blocked (2). The stream log is in `.agents/deliver-loop/`.
 
-- `-Harness copilot` runs `copilot -p … --unattended --max 1` instead. `-Model` is passed as given, and the default `sonnet` is a Claude name, so pass a Copilot model such as `gpt-5`.
+- `-Harness copilot` runs `copilot -p … --unattended --max 1` instead. Without `-Model` it uses `auto` (Copilot picks the model); `-Model` overrides it and is passed as given, so pass a Copilot model such as `gpt-5`, not a Claude name.
 - Console: stdout is colored on a terminal (`-NoColor` or `NO_COLOR` turn it off) and lines are cut to the terminal width (at least 120). The herdr log pane is opt-in with `-LogPane`.
 - In herdr the shim opens its own workspace and reports the loop as an agent: [herdr with the skills](herdr.md#the-loop-in-herdr).
 
