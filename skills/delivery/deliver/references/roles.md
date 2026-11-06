@@ -14,6 +14,8 @@ The skill gives its subagents `model` and `effort` of the roles `implement`, `re
 
 Tier (`Tier:` line of the PBI body; else the size: S fast, M standard, L strong; else standard): `fast` haiku/low, `standard` sonnet/medium, `strong` opus/high.
 
+The tier is shown before and during a run: the select line (`#<nr> select: next (tier standard → sonnet/medium)`; `tier from size M` or `default` when the body has no `Tier:` line), the tier distribution of the open items in the report, and the loop's `--model` per PBI (`references/loop.md`). The loop maps the tier to the model: `fast` haiku, `standard` sonnet, `strong` opus; `-Model` overrides it for all PBIs.
+
 ## Override
 
 `deliver.roles` in `.agents/config.json` (schema `schema/config.schema.json` of the `implementation` skill). A role entry replaces `model` and `effort` of that role; `tiers` (only `implement` and `fix`) replaces single tiers. Unset keys keep the default. `plan` has no default, so it uses the session model until configured.

@@ -12,6 +12,7 @@ const SCRIPT = path.resolve(
 const hasPwsh = spawnSync('pwsh', ['-NoProfile', '-Command', '1']).status === 0;
 
 type Issue = {
+  body?: string;
   state?: string;
   labels?: string[];
   children?: number[];
@@ -59,7 +60,7 @@ describe.skipIf(!hasPwsh || process.platform === 'win32')('Invoke-DeliverLoop.ps
         let m = /^repos\\/\\{owner\\}\\/\\{repo\\}\\/issues\\/(\\d+)$/.exec(a[1] || '');
         if (a[0] === 'api' && m) {
           const i = get(m[1]);
-          return { rest: { number: Number(m[1]), state: (i.state || 'OPEN').toLowerCase(), labels: (i.labels || []).map((name) => ({ name })) } };
+          return { rest: { number: Number(m[1]), body: i.body || '', state: (i.state || 'OPEN').toLowerCase(), labels: (i.labels || []).map((name) => ({ name })) } };
         }
         // #127: the milestone is read over REST (Get-Milestones.ps1 -Mode issues), never with gh issue list
         if (/\\/milestones\\?/.test(a[1] || '')) {
@@ -228,7 +229,11 @@ fs.writeFileSync(f, JSON.stringify(s));`,
     it('-Milestone selects a bug like a PBI, delivers it in one fresh process, ends done when no open and no paused issue is left, reads the milestone M4 with one batched REST call (#103, #127, #235)', async () => {
       const gh = setup({
         issues: {
-          10: { labels: ['bug'], blockers: [{ number: 5, state: 'closed' }] },
+          10: {
+            labels: ['bug'],
+            blockers: [{ number: 5, state: 'closed' }],
+            body: '## Summary\n\nTier: fast — one-line fix\n', // #325: the model of the tier (haiku)
+          },
         },
         milestones: { 'M4 (0.2.0)': [10] }, // a closed milestone renamed 'M<n> (x.y.z)' is still found by M4
         effect: 'close-first',
@@ -245,7 +250,7 @@ fs.writeFileSync(f, JSON.stringify(s));`,
           .filter((f) => /queue/i.test(f)),
       ).toEqual([]);
       expect(harnessCalls()).toEqual([
-        '-p /deliver --milestone M4 --unattended --max 1 --model sonnet --permission-mode auto --output-format stream-json --verbose',
+        '-p /deliver --milestone M4 --unattended --max 1 --model haiku --permission-mode auto --output-format stream-json --verbose',
       ]);
       expect(JSON.parse(read('state.json')).issues[10].state).toBe('CLOSED');
       expect(r.stdout).toContain('loop result: done');
@@ -257,7 +262,10 @@ fs.writeFileSync(f, JSON.stringify(s));`,
         paths.filter((c) => c.includes('issues?milestone=1&state=open&per_page=100 --paginate')),
       ).toHaveLength(2);
       expect(paths.filter((c) => /^issue /.test(c))).toEqual([]);
-      expect(paths.filter((c) => /issues\/\d+$/.test(c))).toEqual([]);
+      // one REST read of the picked PBI's body per iteration, for its tier (#325)
+      expect(paths.filter((c) => /issues\/\d+$/.test(c))).toEqual([
+        'api repos/{owner}/{repo}/issues/10',
+      ]);
     });
 
     it('expands a Feature to its open PBIs, passes -Model on, and stops with "no progress" and the last log lines when a PBI stays open', async () => {
@@ -280,6 +288,23 @@ fs.writeFileSync(f, JSON.stringify(s));`,
       ]);
       expect(r.stdout).toContain('no progress');
       expect(r.stdout).toMatch(/ {2}\d\d:\d\d:\d\d » working on it/);
+    });
+  });
+
+  describe('model per tier (#325)', () => {
+    const modelOf = () =>
+      harnessCalls()
+        .find((c) => c.includes('--model'))
+        ?.match(/--model (\S+)/)?.[1];
+    const body = (line: string) => `## Summary\n\n${line}\n\n## Acceptance criteria\n- [ ] x\n`;
+
+    // the Tier line -> haiku is asserted in the milestone case above; the -Model override in the Feature case
+    it('takes the model from the size when there is no Tier line', async () => {
+      const size = setup({ issues: { 61: pbi({ body: body('Size: L') }) }, effect: 'close-first' });
+      const s = await run(size, ['-Target', '61']);
+      expect(s.status).toBe(0);
+      expect(s.stdout).toContain('#61 tier strong (size L) → model opus');
+      expect(modelOf()).toBe('opus');
     });
   });
 

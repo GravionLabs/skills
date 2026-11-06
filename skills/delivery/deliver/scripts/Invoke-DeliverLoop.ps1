@@ -24,7 +24,8 @@
 .PARAMETER Max
   Stop after this many iterations (PBIs delivered, blocked or paused in total).
 .PARAMETER Model
-  Model of the orchestrating session. Default sonnet; with -Harness copilot and no -Model: auto (Copilot picks).
+  Model per PBI for every iteration. Without it, claude takes the model of the PBI's tier (fast haiku, standard sonnet,
+  strong opus; the `Tier:` line of the body, else the size S/M/L, else standard; `references/roles.md`), and copilot uses auto.
 .PARAMETER Harness
   claude (Claude Code, default) or copilot (GitHub Copilot CLI: `copilot -p … --model <model> --allow-all-tools
   --allow-all-paths --allow-all-urls --no-ask-user --output-format json`). Any other value fails before the first iteration.
@@ -40,7 +41,7 @@ param(
   [string[]]$Target = @(),
   [string]$Milestone = '',
   [ValidateRange(1, 10000)][int]$Max = 0,
-  [string]$Model = 'sonnet',
+  [string]$Model = '',
   [string]$Harness = 'claude',
   [switch]$LogPane,
   [switch]$NoPane,
@@ -57,7 +58,21 @@ if ($Harness -notin $Harnesses) {
 
 if ($NoPane) { [Console]::Error.WriteLine('deliver-loop: -NoPane is deprecated and does nothing (the log pane is off by default; -LogPane opens it).') }
 
-if ($Harness -eq 'copilot' -and -not $PSBoundParameters.ContainsKey('Model')) { $Model = 'auto' }
+if ($Harness -eq 'copilot' -and -not $Model) { $Model = 'auto' }
+
+# Model per tier (references/roles.md): the tier decides the model of an iteration when -Model is not given.
+$TierModels = @{ fast = 'haiku'; standard = 'sonnet'; strong = 'opus' }
+function Get-PbiTier([int]$nr) {
+  $issue = Get-Json @('api', "repos/{owner}/{repo}/issues/$nr")
+  $body = [string]$issue.body
+  $tier = $null; $from = 'default'
+  if ($body -match '(?m)^\s*(?:[-*]\s*)?\**Tier:?\**:?\s*(fast|standard|strong)\b') { $tier = $Matches[1]; $from = 'Tier line' }
+  elseif ($body -match '(?m)^\s*(?:[-*]\s*)?\**Size:?\**:?\s*([SML])\b') {
+    $tier = @{ S = 'fast'; M = 'standard'; L = 'strong' }[$Matches[1]]; $from = "size $($Matches[1])"
+  }
+  if (-not $tier) { $tier = 'standard' }
+  [pscustomobject]@{ Tier = $tier; Model = $TierModels[$tier]; From = $from }
+}
 
 $Nrs = @(($Target + $MoreTargets) | ForEach-Object { $_ -split '[,\s]+' } | Where-Object { $_ })
 if (($Nrs | Where-Object { $_ -notmatch '^\d+$' }) -or ($Nrs.Count -eq 0 -and -not $Milestone)) {
@@ -343,8 +358,14 @@ function Invoke-Iteration([int]$n, [int]$total, $state) {
   $targets = @($Nrs | ForEach-Object { "$_" })
   if ($Milestone) { $targets += @('--milestone', $Milestone) }
   $prompt = "/deliver $($targets -join ' ') --unattended --max 1"
+  $iterModel = $Model
+  if ($Harness -eq 'claude' -and -not $Model) {
+    $t = Get-PbiTier ([int]$state.Ready[0])
+    $iterModel = $t.Model
+    Write-Step "#$($state.Ready[0]) tier $($t.Tier) ($($t.From)) → model $iterModel"
+  }
   Write-Step "iteration $n/$total start: $prompt"
-  Write-ProgressRecord 'iteration-start' @{ n = $n; total = $total; pbi = [int]$state.Ready[0]; open = $state.Open }
+  Write-ProgressRecord 'iteration-start' @{ n = $n; total = $total; pbi = [int]$state.Ready[0]; open = $state.Open; model = $iterModel }
   $script:Paused = $false
   Set-AgentState 'working'
   Set-Pane "$($state.Ready[0])" "$n/$total starting"
@@ -352,9 +373,9 @@ function Invoke-Iteration([int]$n, [int]$total, $state) {
   $env:HERDR_ENV = ''
   try {
     $cli = if ($Harness -eq 'copilot') {
-      @('-p', $prompt, '--model', $Model, '--allow-all-tools', '--allow-all-paths', '--allow-all-urls', '--no-ask-user', '--output-format', 'json')
+      @('-p', $prompt, '--model', $iterModel, '--allow-all-tools', '--allow-all-paths', '--allow-all-urls', '--no-ask-user', '--output-format', 'json')
     } else {
-      @('-p', $prompt, '--model', $Model, '--permission-mode', 'auto', '--output-format', 'stream-json', '--verbose')
+      @('-p', $prompt, '--model', $iterModel, '--permission-mode', 'auto', '--output-format', 'stream-json', '--verbose')
     }
     & $Harness @cli 2>&1 | ForEach-Object {
       $line = "$_"
