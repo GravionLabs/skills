@@ -70,12 +70,15 @@ function Get-Str($element, [string]$name) {
   return $null
 }
 
-# The reducer's JSON of one file, as a string (the reducer writes to stderr only for a seq gap).
+# The reducer's JSON of one file, as a string, or $null when the reducer has no complete event to fold (it exits 1).
+# The reducer writes to stderr only for a seq gap.
 function Invoke-Fold([string]$File) {
   $reducerArgs = @{ Path = $File }
   if ($Now) { $reducerArgs['Now'] = $Now }
   if ($NoPidCheck) { $reducerArgs['NoPidCheck'] = $true }
-  return (& $reducer @reducerArgs | Out-String)
+  $json = (& $reducer @reducerArgs | Out-String)
+  if ($LASTEXITCODE -ne 0) { return $null }
+  return $json
 }
 
 function Get-Root([string]$Json) { return [System.Text.Json.JsonDocument]::Parse($Json).RootElement }
@@ -100,8 +103,10 @@ if ($dir -and (Test-Path -LiteralPath $dir -PathType Container)) {
 
 if ($List) {
   $entries = foreach ($f in $files) {
+    $json = Invoke-Fold $f.FullName
+    if ($null -eq $json) { continue }
     $events = @(Get-Events $f.FullName)
-    $root = Get-Root (Invoke-Fold $f.FullName)
+    $root = Get-Root $json
     $last = $events | Select-Object -Last 1
     [pscustomobject][ordered]@{
       run = $f.BaseName
@@ -118,7 +123,9 @@ if ($List) {
 
 if ($NeedsAttention) {
   $items = foreach ($f in $files) {
-    $root = Get-Root (Invoke-Fold $f.FullName)
+    $json = Invoke-Fold $f.FullName
+    if ($null -eq $json) { continue }
+    $root = Get-Root $json
     if ((Get-Str $root 'result') -ne 'running') { continue }
     foreach ($n in $root.GetProperty('needsYou').EnumerateArray()) {
       [pscustomobject][ordered]@{
@@ -137,9 +144,13 @@ if ($NeedsAttention) {
 $file = $null
 if ($Run -match '^[\w.-]+$' -and $dir) { $file = Join-Path $dir "$Run.jsonl" }
 if (-not $file -or -not (Test-Path -LiteralPath $file -PathType Leaf)) { Exit-Unknown "unknown run '$Run'" }
+$events = @(Get-Events $file)
+if (-not $events.Count) { Exit-Unknown "run '$Run' has no complete event" }
 if ($PSBoundParameters.ContainsKey('After')) {
-  foreach ($e in Get-Events $file) { if ($null -ne $e.Seq -and $e.Seq -gt $After) { $e.Line } }
+  foreach ($e in $events) { if ($null -ne $e.Seq -and $e.Seq -gt $After) { $e.Line } }
   exit 0
 }
-Write-Output (Invoke-Fold $file)
+$json = Invoke-Fold $file
+if ($null -eq $json) { Exit-Unknown "run '$Run' has no complete event" }
+Write-Output $json
 exit 0

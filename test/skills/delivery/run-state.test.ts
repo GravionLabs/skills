@@ -208,6 +208,68 @@ describe.skipIf(!hasPwsh || process.platform === 'win32')('Get-RunState.ps1 (#41
     ]);
   });
 
+  describe('event files without a complete event', () => {
+    let broken: string;
+    const live =
+      '{"v":1,"seq":1,"ts":"2026-11-07T10:00:00.000Z","run":"live","type":"run.started","tone":"neutral","source":"loop"}\n' +
+      '{"v":1,"seq":2,"ts":"2026-11-07T11:00:00.000Z","run":"live","type":"attention","tone":"warning","needsYou":true,"kind":"needs_you","reason":"decide the key","issue":{"number":372,"url":"https://github.com/GravionLabs/skills/issues/372"}}\n';
+
+    beforeAll(() => {
+      broken = path.join(tmp, 'broken');
+      fs.mkdirSync(broken);
+      fs.writeFileSync(path.join(broken, 'live.jsonl'), live);
+      fs.writeFileSync(path.join(broken, 'empty.jsonl'), '');
+      fs.writeFileSync(path.join(broken, 'partial.jsonl'), '{"v":1,"seq":1,"ts":"2026-11-07T10:0');
+    });
+
+    const brokenEnv = (): NodeJS.ProcessEnv => ({ ...process.env, AGENT_EVENTS_DIR: broken });
+
+    it('-List: skips the empty and the partial-line files, lists the valid run', async () => {
+      const r = await run(['-List', ...FIXED], { env: brokenEnv() });
+      expect(r.status).toBe(0);
+      expect(JSON.parse(r.stdout).map((e: { run: string }) => e.run)).toEqual(['live']);
+    });
+
+    it('-NeedsAttention: skips the empty and the partial-line files, lists the valid run item', async () => {
+      const r = await run(['-NeedsAttention', ...FIXED], { env: brokenEnv() });
+      expect(r.status).toBe(0);
+      expect(JSON.parse(r.stdout)).toEqual([
+        {
+          run: 'live',
+          number: 372,
+          url: 'https://github.com/GravionLabs/skills/issues/372',
+          reason: 'decide the key',
+        },
+      ]);
+    });
+
+    it.each(['empty', 'partial'])(
+      '-Run <id> on the %s file: exit 1 with one line on stderr',
+      (name) => {
+        // a single spawn: the worker does not capture what the script writes to the process's own stderr
+        const r = spawnSync('pwsh', ['-NoProfile', '-File', SCRIPT, '-Run', name, ...FIXED], {
+          cwd: tmp,
+          env: brokenEnv(),
+          encoding: 'utf8',
+        });
+        expect(r.status).toBe(1);
+        expect(r.stdout.trim()).toBe('');
+        expect(r.stderr.trim().split('\n')).toEqual([`run '${name}' has no complete event`]);
+      },
+    );
+
+    it('-Run <id> -After on the empty file: exit 1 with one line on stderr', () => {
+      const r = spawnSync(
+        'pwsh',
+        ['-NoProfile', '-File', SCRIPT, '-Run', 'empty', '-After', '0', ...FIXED],
+        { cwd: tmp, env: brokenEnv(), encoding: 'utf8' },
+      );
+      expect(r.status).toBe(1);
+      expect(r.stdout.trim()).toBe('');
+      expect(r.stderr.trim().split('\n')).toEqual(["run 'empty' has no complete event"]);
+    });
+  });
+
   it('never writes or deletes an event file', async () => {
     const before = snapshot(events);
     await run(['-List', ...FIXED]);
