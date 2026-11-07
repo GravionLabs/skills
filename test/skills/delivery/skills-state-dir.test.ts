@@ -25,7 +25,7 @@ describe('delivery and shared skills keep no state under .agents/', () => {
         fs
           .readFileSync(f, 'utf8')
           .replace(
-            /\.opencode\|\.agents\||~\/\.agents|\.agents\/(format|config)\.json|\.agents\/lessons[./*a-z]*|\.agents\/\*|\.agents\/state\/((release-)?review-<(nr|key)>|findings)\.json|\.agents\/state\/(?=`)|\.agents\/deliver-loop[./<>a-z]*|subagents\.agents\.general-purpose\.model|ui\.sidebar\.agents/g,
+            /\.opencode\|\.agents\||~\/\.agents|\.agents\/(format|config)\.json|\.agents\/lessons[./*a-z]*|\.agents\/\*|\.agents\/state\/((release-)?review-<(nr|key)>|findings)\.json|\.agents\/state\/(?=`)|\.agents\/deliver-loop[./<>a-z]*|\.agents\/events\/(<run>\.jsonl)?|subagents\.agents\.general-purpose\.model|ui\.sidebar\.agents/g,
             '',
           ),
       ),
