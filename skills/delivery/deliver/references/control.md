@@ -35,7 +35,7 @@ The loop skips `interactive` PBIs. When the loop ends (`done` with only `interac
 
 ## Release
 
-When the loop result is `done` and no `interactive` PBI is left, run step 9 once in this session (release review, release PR). `max reached`: report the delivered count and, as open PBIs remain, offer to start the loop again; never release. `blocked` or `no progress`: report it, never release.
+When the loop result is `done` and no `interactive` PBI is left, run step 9 once in this session (release review, release PR). The control session does not wait for the RC test: step 9 cuts the RC, opens the release PR and ends the run with `needs you: RC test` (`release.test.gate: true` keeps the old gate). `max reached`: report the delivered count and, as open PBIs remain, offer to start the loop again; never release. `blocked` or `no progress`: report it, never release.
 
 ## Context guard
 

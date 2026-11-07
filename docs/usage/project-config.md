@@ -10,6 +10,10 @@ By default `Format-Changed.ps1 -Language <lang>` runs the built-in commands of `
 
 `deliver.roles` sets `model` and `effort` per role: the `deliver` skill uses `implement`, `review`, `fix` and `release-review` (the release review before the release PR, default opus/high) for its subagents when the harness takes a model per call; the schema also knows `select`, `plan`, `create`, `gate`, `pr` and `ci`, which the skill does not use; `implement` and `fix` also take `tiers` (`fast`, `standard`, `strong`). Unset keys keep the defaults, see `references/roles.md` of the `deliver` skill.
 
+## Release test
+
+`release.prerelease` is the command that cuts a release candidate, for example `gh workflow run release.yml --ref release/next -f prerelease=true`; without it step 9 of `deliver` cuts no RC and the `release-test` comment names `release/next` at its SHA. `release.test.gate` (default `false`): with `true`, `deliver` stops after posting the RC and `github-release finish` refuses while the `release-test` issue is open; with `false` the release PR opens beside the running RC test. See `references/release-review.md` of `deliver`.
+
 ## Governance
 
 `governance` names where ADRs and specs live and which changes need them. It is read by `adr`, `github-issue`, `planner`, `implementation`, `code-review`, `deliver` and `detect-techstack`, and the CI checks `adr` and `spec` of GravionLabs/ci read the same names. How they work together: [ADRs and specs](governance.md). Without the key, `adr` works on request with `docs/adr` and no change is held to an ADR or spec rule.
