@@ -13,7 +13,7 @@ Why: `deliver --milestone` takes the open PBIs and Bugs of the milestone plus th
 
 ## Release test
 
-One `release-test` per milestone (label `pbi` + `release-test`, usually `interactive`): the manual platform test on the release candidate. Rule: one `release-test` per milestone, always last, never a gate unless `release.test.gate` is true (then the RC test blocks the release; see `release-review.md`, `project-config.md`). `deliver` selects it only when it is the last open `pbi`/`bug` of the milestone (an implicit blocked-by, no links needed on the other issues); `interactive` stays on it so unattended runs skip it.
+One `release-test` per milestone (label `pbi` + `release-test`, usually `interactive`): the manual platform test on the release candidate. Rule: one `release-test` per milestone, always last, never a gate unless `release.test.gate` is true (then the RC test blocks the release; see `release-review.md`, `project-config.md`). `deliver` never selects it as work: step 9 cuts the RC once no other `pbi`/`bug` of the milestone is open and posts it on the release-test issue, which stays open for the human (`select: release test, left for step 9`; with open items before, `release test, waits for <n> open items`); `interactive` stays on it.
 
 ## Closing
 
