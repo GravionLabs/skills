@@ -287,6 +287,12 @@ if ($Mode -eq 'issues') {
             })
         }
         $item.blockedBy = $bl
+        # release-test: has the RC been posted on it (comment marker <!-- release-test-rc -->)
+        if ($item.labels -contains 'release-test') {
+          # a failed read counts as not posted
+          $cm = & gh api "repos/$Repo/issues/$($_.number)/comments" --paginate --jq '.[].body' 2>$null
+          $item.rcPosted = ($LASTEXITCODE -eq 0) -and (($cm | Out-String) -match '<!-- release-test-rc -->')
+        }
       }
       $item
     })

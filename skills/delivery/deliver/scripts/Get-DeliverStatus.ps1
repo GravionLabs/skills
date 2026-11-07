@@ -69,6 +69,7 @@ $ready = [System.Collections.Generic.List[object]]::new()
 $waiting = [System.Collections.Generic.List[object]]::new()
 $needs = [System.Collections.Generic.List[string]]::new()
 
+$others = @($work | Where-Object { -not (Test-Label $_ 'release-test') })
 foreach ($i in $work) {
   $ref = Get-Ref $i
   if ($null -ne $i.PSObject.Properties['blockedBy']) {
@@ -78,7 +79,13 @@ foreach ($i in $work) {
     $blockers = @([regex]::Matches([string]$i.body, '(?im)^\W*(?:Depends on|Blocked by)[:\s]+(.*)$') | ForEach-Object {
         [regex]::Matches($_.Groups[1].Value, '#(\d+)') | ForEach-Object { [int]$_.Groups[1].Value } } | Where-Object { $openNumbers -contains $_ } | ForEach-Object { "$BaseUrl/issues/$_" })
   }
-  if (Test-Label $i 'needs-decision') { $needs.Add("decision: $(Format-Ref $ref)") }
+  if (Test-Label $i 'release-test') {
+    # one per milestone, always the last open item (an implicit blocked-by on all other open PBIs and Bugs)
+    if ($others.Count) { $ref.reason = "release test, waits for $($others.Count) open items"; $waiting.Add($ref) }
+    elseif (($i.PSObject.Properties['rcPosted'] -and $i.rcPosted) -or [string]$i.body -match '<!-- release-test-rc -->') { $needs.Add("RC test $(Format-Ref $ref)") }
+    else { $ref.reason = 'release test'; $waiting.Add($ref) }
+  }
+  elseif (Test-Label $i 'needs-decision') { $needs.Add("decision: $(Format-Ref $ref)") }
   elseif (Test-Label $i 'interactive') { $needs.Add("interactive, run /deliver $($i.number) in a session: $(Format-Ref $ref)") }
   elseif (Test-Label $i 'manual-test') { $needs.Add("manual test: $(Format-Ref $ref)") }
   elseif (Test-Label $i 'needs-refinement') { $ref.reason = 'needs refinement'; $waiting.Add($ref) }
