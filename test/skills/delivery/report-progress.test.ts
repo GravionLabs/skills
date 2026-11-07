@@ -101,6 +101,8 @@ describe.skipIf(!hasPwsh || process.platform === 'win32')('Report-Progress.ps1',
         'https://x/400',
         '-PrUrl',
         'https://x/pull/9',
+        '-ReviewRound',
+        '2',
       ],
       ['-Type', 'run.finished', '-RunResult', 'done'],
     ];
@@ -138,6 +140,7 @@ describe.skipIf(!hasPwsh || process.platform === 'win32')('Report-Progress.ps1',
       rcVersion: '1.2.0-rc.1',
       testIssue: { number: 400, url: 'https://x/400' },
       prUrl: 'https://x/pull/9',
+      reviewRound: 2,
     });
   });
 

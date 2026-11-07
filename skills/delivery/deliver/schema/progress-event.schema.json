@@ -64,6 +64,7 @@
         "herdrPane": { "type": "string" }
       }
     },
+    "reviewRound": { "type": "integer", "minimum": 1, "description": "release.updated: round of the release review" },
     "rcUrl": { "type": "string" },
     "rcVersion": { "type": "string" },
     "testIssue": {
