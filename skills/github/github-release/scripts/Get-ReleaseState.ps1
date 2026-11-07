@@ -186,6 +186,11 @@ if ($Mode -eq 'finish' -and $Milestone) {
   $releaseTest = @($raw | ConvertFrom-Json) | Select-Object -First 1
   $raw = & gh issue list --label release-test --state open --json number,url,milestone 2>$null
   if ($LASTEXITCODE -ne 0) { Fail 'gh issue list failed' }
+  $allIssues = @($raw | ConvertFrom-Json)
+  # #409: gh needs the exact title; M<n> is also the key of a milestone titled `M<n> <Topic>`
+  if (-not $releaseTest -and $Milestone -match '^M\d+(\.\d+)?$') {
+    $releaseTest = $allIssues | Where-Object { $_.milestone.title -match "^$([regex]::Escape($Milestone))(\s|$)" } | Select-Object -First 1
+  }
   # #399: only issues of a lower milestone (M-number, else due date) are replaced; no milestone = skipped
   $curDue = if ($releaseTest -and $releaseTest.milestone.dueOn) { [datetime]$releaseTest.milestone.dueOn } else { $null }
   $msNum = {
@@ -200,7 +205,7 @@ if ($Mode -eq 'finish' -and $Milestone) {
     if ($m.dueOn -and $curDue) { return ([datetime]$m.dueOn) -lt $curDue }
     return $false
   }
-  $olderReleaseTests = @(@($raw | ConvertFrom-Json) | Where-Object { & $isOlder $_.milestone } |
+  $olderReleaseTests = @($allIssues | Where-Object { & $isOlder $_.milestone } |
       ForEach-Object { [ordered]@{ number = $_.number; url = $_.url } })
   if (Test-Path .agents/config.json) {
     $cfg = Get-Content .agents/config.json -Raw | ConvertFrom-Json

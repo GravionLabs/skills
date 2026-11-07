@@ -85,6 +85,16 @@ describe('Get-ReleaseState.ps1 -Milestone (RC test)', () => {
     });
   });
 
+  it('finds the release-test issue of a topic milestone by M<n> (#409)', async () => {
+    const all =
+      '[{"number":9,"url":"https://x/issues/9","milestone":{"title":"M4 Topic"}},{"number":8,"url":"https://x/issues/8","milestone":{"title":"M40"}}]';
+    expect(await finish('[]', true, 'M4', all)).toMatchObject({
+      action: 'stop: release.test.gate is true, close the RC test https://x/issues/9 first',
+      releaseTest: { number: 9 },
+      warning: 'RC test open: https://x/issues/9',
+    });
+  });
+
   it('asks gh for the open release-test issues of the milestone', async () => {
     await finish('[]');
     const call = fake.calls().find((c) => c.args[0] === 'issue')!;
