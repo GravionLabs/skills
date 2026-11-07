@@ -31,7 +31,7 @@ A PBI that got `needs-decision` is shown here: its question (the last `deliver p
 
 ## Interactive PBIs
 
-The loop skips `interactive` PBIs. When the loop ends (`done` with only `interactive` PBIs open, or `blocked`), deliver them in this session with steps 2 to 8, then start the loop again if PBIs became ready.
+The loop skips `interactive` PBIs. When the loop ends (`done` with only `interactive` PBIs open, or `blocked`), deliver them (never the `release-test` issue, it stays open for step 9) in this session with steps 2 to 8, then start the loop again if PBIs became ready.
 
 ## Release
 
