@@ -29,7 +29,7 @@ Delivers the open PBIs and Bugs of an issue (a work item = open issue labelled `
 
 ## Steps
 
-Print one line per step in the chat: `#<nr> <step>: <result>` (`#12 review: 1 blocking → fix 1/2`). Report each line: `pwsh <skill-dir>/scripts/Report-Progress.ps1 -Type step.finished -Issue <nr> -Step <step> -Result "<result>" [-Pr <url>]`. A pause, a blocked PBI or a point that needs the user: `-Type attention` (`-Kind paused`, `blocked` or `needs_you`, `-Reason`) instead. After each PBI `-Type issue.finished -Issue <nr> -Outcome <outcome>`.
+Print one line per step in the chat: `#<nr> <step>: <result>` (`#12 review: 1 blocking → fix 1/2`). Report each line: `pwsh <skill-dir>/scripts/Report-Progress.ps1 -Type step.finished -Issue <nr> -Step <step> -Result "<result>" [-Pr <url>]`. Also `-Type attention` (`-Kind pr_opened` with `-Pr <url>` after step 6, `review_fix` when a review or CI round starts a fix round, `ci_red` when step 7 is red; `-Reason`): the loop's notifications come only from these events. A pause, a blocked PBI or a point that needs the user: `-Type attention` (`-Kind paused`, `blocked` or `needs_you`, `-Reason`) instead. After each PBI `-Type issue.finished -Issue <nr> -Outcome <outcome>`.
 
 Every PR and issue the chat names is written as its full URL (`https://github.com/<owner>/<repo>/pull/<n>`, `.../issues/<n>`), not as a bare `#<n>`: a bare number is not a link in the terminal. This holds for the progress lines, the questions to the user and the report, in particular for the release PR (step 9), which the user has to merge. Get the URL from `gh` (`html_url`), never build it from memory.
 
