@@ -5,6 +5,42 @@ Versioning follows [Semantic Versioning](https://semver.org/).
 
 ---
 
+## [3.2.0] — 2026-11-07
+
+### Bug Fixes
+- **delivery**: A nested harness session ends the loop's run early with its own run.finished (#397) (#403)
+- Release-test PBI is delivered as work before step 9, so the RC is never cut first (#398) (#404)
+- OlderReleaseTests also includes the release-test issues of newer milestones (#399) (#405)
+- Nothing emits the attention kinds pr_opened, review_fix and ci_red (#400) (#406)
+- An interactive session's run.started records a pid that has already exited (#401) (#407)
+- Release-test rule in milestones.md says the gate is not yet implemented (#402) (#408)
+- Finish looks up the release-test issue by exact milestone title, topic milestones skip the RC gate (#409) (#410)
+- A nested harness session's run.started is appended to the loop's run and a nested run.finished is not stopped (#411) (#419)
+- Release-test rule in milestones.md still says deliver selects it as the last open item (#412) (#421)
+
+
+### Documentation
+- **adr**: Agent progress events replace status.json (#381) (#380)
+- **github-release**: Issues close on merge into release/next (#382) (#396)
+- **adr**: Displays read the progress events (#420) (#418)
+
+
+### Features
+- **delivery**: Progress event schema with tone and the Report-Progress emitter (#369) (#384)
+- **delivery**: ConvertFrom-ProgressEvents reducer with run-state schema and paired fixtures (#370) (#386)
+- **delivery**: Terminal sink in Report-Progress with tokens, agent state and deliver_tone (#371) (#387)
+- **delivery**: Deliver reports every progress line through Report-Progress in any backend (#373) (#389)
+- **delivery**: Retention for event files and stream recordings (#375) (#391)
+- **delivery**: Release-test label, always the last item of a milestone, cuts the RC (#377) (#392)
+- **delivery**: Step 9 cuts the RC and opens the release PR without waiting for the RC test (#378) (#393)
+- **github-milestone**: Create the release-test issue with the milestone (#379) (#394)
+
+
+### Refactoring
+- **delivery**: Loop writes run events and status.json from the projection (#372) (#388)
+- **delivery**: Console, ansi log and notifications from events, progress-line regex removed (#374) (#390)
+
+
 ## [3.1.0] — 2026-11-06
 
 ### Bug Fixes
@@ -17,6 +53,10 @@ Versioning follows [Semantic Versioning](https://semver.org/).
 - **delivery**: Describe closed and total of the status schema as PBIs and Bugs (#357) (#362)
 - **docs**: Remove the repeated preflight sentence from the AGENTS.md delivery row (#359) (#364)
 - **delivery**: Control session handles the loop result max reached (#360) (#365)
+
+
+### Documentation
+- Update CHANGELOG.md for v3.1.0 [skip ci]
 
 
 ### Features
