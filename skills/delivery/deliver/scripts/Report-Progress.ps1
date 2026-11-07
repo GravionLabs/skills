@@ -155,6 +155,8 @@ try {
     exit 0
   }
   $run = if ($Run) { $Run } else { $env:AGENT_EVENTS_RUN }
+  # a nested emitter (inherited AGENT_EVENTS_RUN without the owner marker, no -Run) neither starts nor finishes the owner's run (#411)
+  if (-not $PSBoundParameters.ContainsKey('Run') -and $env:AGENT_EVENTS_RUN -and $env:AGENT_EVENTS_TERMINAL -ne 'owner' -and $Type -in 'run.started', 'run.finished') { exit 0 }
   $created = $false
   if (-not $run) {
     if ($Type -ne 'run.started') { exit 0 }

@@ -81,7 +81,11 @@ describe.skipIf(!hasPwsh || process.platform === 'win32')('Report-Progress.ps1',
     );
     expect(start.status).toBe(0);
     const run = /^AGENT_EVENTS_RUN=(\d{8}-\d{6}-[0-9a-f]{4})$/m.exec(start.stdout)![1];
-    const env = baseEnv({ AGENT_EVENTS_DIR: dir, AGENT_EVENTS_RUN: run });
+    const env = baseEnv({
+      AGENT_EVENTS_DIR: dir,
+      AGENT_EVENTS_RUN: run,
+      AGENT_EVENTS_TERMINAL: 'owner',
+    });
     const calls: string[][] = [
       ['-Type', 'milestone.progress', '-Closed', '7', '-Total', '19'],
       ['-Type', 'issue.started', '-Issue', '322', '-Title', 'x', '-Url', 'https://x/322'],
@@ -156,6 +160,40 @@ describe.skipIf(!hasPwsh || process.platform === 'win32')('Report-Progress.ps1',
     });
   });
 
+  it('a nested session with an inherited AGENT_EVENTS_RUN neither starts nor finishes the run (#411)', async () => {
+    const dir = path.join(root, 'ev-nested');
+    // empty marker: the worker keeps variables a previous call set
+    const env = baseEnv({
+      AGENT_EVENTS_DIR: dir,
+      AGENT_EVENTS_RUN: 'loop-run',
+      AGENT_EVENTS_TERMINAL: '',
+    });
+    const own = baseEnv({
+      AGENT_EVENTS_DIR: dir,
+      AGENT_EVENTS_RUN: 'loop-run',
+      AGENT_EVENTS_TERMINAL: 'owner',
+    });
+    expect(
+      (await worker.run(['-Type', 'run.started', '-Source', 'loop'], { cwd: repo, env: own }))
+        .status,
+    ).toBe(0);
+    for (const c of [
+      ['-Type', 'run.started', '-Source', 'session'],
+      ['-Type', 'step.finished', '-Step', 'review', '-Result', 'clean'],
+      ['-Type', 'run.finished', '-RunResult', 'done'],
+    ])
+      expect((await worker.run(c, { cwd: repo, env })).status).toBe(0);
+    // the nested run.started and run.finished are no-ops; other nested events still land
+    expect(events(dir, 'loop-run').map((e) => e.type)).toEqual(['run.started', 'step.finished']);
+    // the owner finishes its run
+    await worker.run(['-Type', 'run.finished', '-RunResult', 'done'], { cwd: repo, env: own });
+    expect(events(dir, 'loop-run').map((e) => e.type)).toEqual([
+      'run.started',
+      'step.finished',
+      'run.finished',
+    ]);
+  });
+
   it('does not fold a live interactive session run to abandoned, a loop run keeps its pid (#401)', async () => {
     const reducer = path.resolve(
       __dirname,
@@ -194,7 +232,11 @@ describe.skipIf(!hasPwsh || process.platform === 'win32')('Report-Progress.ps1',
 
   it('writes the tone and needsYou of the ADR table', async () => {
     const dir = path.join(root, 'ev2');
-    const env = baseEnv({ AGENT_EVENTS_DIR: dir, AGENT_EVENTS_RUN: 'tones' });
+    const env = baseEnv({
+      AGENT_EVENTS_DIR: dir,
+      AGENT_EVENTS_RUN: 'tones',
+      AGENT_EVENTS_TERMINAL: 'owner',
+    });
     const cases: [string[], string, boolean?][] = [
       [['-Type', 'attention', '-Kind', 'pr_opened'], 'success'],
       [['-Type', 'attention', '-Kind', 'review_fix'], 'warning'],
