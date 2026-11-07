@@ -75,7 +75,7 @@ describe('closing docs (#382)', () => {
     expect(doc).toContain('ships with <milestone>');
     expect(doc).toContain('close-release-issues');
     expect(doc).toMatch(/reverted[\s\S]*reopen its issues by hand/);
-    expect(doc).toMatch(/`workflow_dispatch`[\s\S]*`merged`/);
+    expect(doc).toMatch(/`merged`[\s\S]*`workflow_dispatch`/);
     expect(doc).toMatch(/GravionLabs\/ci#55/);
     expect(doc).toMatch(/gh issue view 55 -R GravionLabs\/ci/);
     expect(
