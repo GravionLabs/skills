@@ -5,7 +5,7 @@ A group is a plugin in `.claude-plugin/marketplace.json` of GravionLabs/skills; 
 | Group        | Brings                                                                                                  | Install         |
 | :----------- | :------------------------------------------------------------------------------------------------------ | :-------------- |
 | `shared`     | `implementation`, `detect-techstack`, `diagnose`, `code-review`, `check-prerequisites`, `project-setup` | project or `-g` |
-| `github`     | `github-issue`, `github-pull-request`, `github-release`                                                 | project or `-g` |
+| `github`     | `github-issue`, `github-pull-request`, `github-release`, `github-milestone`, `github-project`           | project or `-g` |
 | `delivery`   | `deliver`, `planner`, `grill-me`, `retro`, `skills-manage`; uses `github` and `shared`                  | project or `-g` |
 | `statusline` | `context-statusline` (status line and subagent status line)                                             | `-g`            |
 | `ts`, `py`   | `<lang>-implementation`, `<lang>-test`, project scaffolding                                             | per project     |

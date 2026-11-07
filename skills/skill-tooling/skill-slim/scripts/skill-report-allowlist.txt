@@ -21,3 +21,5 @@ skills-manage: dotnet-pinvoke
 skills-manage: deliver-loop
 # ng-ag-grid-developer is the former name of ng-ag-grid, named in the rename section of references/after-install.md, not a skill
 skills-manage: ng-ag-grid-developer
+# project-url is the input of the reusable issues.yml of GravionLabs/ci, not a skill
+github-project: project-url
