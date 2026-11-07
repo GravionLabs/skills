@@ -24,6 +24,8 @@ Issues follow this hierarchy (the repository's `.github/ISSUE_TEMPLATE/` holds t
 | `pbi`     | `[PBI] feat(scope): …`, `[PBI] refactor: …` | —          |
 | `bug`     | `[Bug] fix: <symptom>`                      | —          |
 
+Label `release-test` (together with `pbi`, usually `interactive`) marks the RC test of a milestone: one per milestone, always the last item (`references/milestones.md`).
+
 Titles are always written with the bracket prefix. Legacy titles (`Epic: …`, `Feature: …`, `[EPIC] …`) are still recognized when reading, never written. `[Task]` issues (label `task`) of older plans are read and closed together with their PBI, never created (`references/sub-issues.md`, "Legacy Task issues").
 
 Parent/child links are **native GitHub sub-issues** — see `references/sub-issues.md` for how to

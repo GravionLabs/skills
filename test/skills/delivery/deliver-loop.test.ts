@@ -293,6 +293,23 @@ fs.writeFileSync(f, JSON.stringify(s));`,
       expect(r.stdout).toContain('loop result: done');
     });
 
+    it('-Milestone: an open release-test issue as the last item is not delivered and ends the loop done, not blocked (#377)', async () => {
+      const gh = setup({
+        issues: {
+          10: { labels: ['bug'] },
+          11: { labels: ['pbi', 'interactive', 'release-test'] },
+        },
+        milestones: { M4: [10, 11] },
+        effect: 'close-first',
+      });
+      const r = await run(gh, ['-Milestone', 'M4']);
+      expect(r.stdout + r.stderr).toContain('loop result: done');
+      expect(r.status).toBe(0);
+      const st = JSON.parse(read('state.json')).issues;
+      expect(st[10].state).toBe('CLOSED');
+      expect(st[11].state ?? 'OPEN').toBe('OPEN');
+    });
+
     it('-Milestone selects a bug like a PBI, delivers it in one fresh process, ends done when no open and no paused issue is left, reads the milestone M4 with one batched REST call (#103, #127, #235)', async () => {
       const gh = setup({
         issues: {

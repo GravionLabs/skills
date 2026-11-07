@@ -11,6 +11,10 @@ A milestone is a release and holds the work items that are delivered. The rule i
 
 Why: `deliver --milestone` takes the open PBIs and Bugs of the milestone plus the work items below the Features in it. A Feature in the milestone with PBIs outside of it pulls those in, and they then do not count in the milestone progress. `deliver` therefore skips such an item (`#<nr> select: outside M<n>, skipped`); `/deliver <feature>` without `--milestone` delivers all its PBIs as before.
 
+## Release test
+
+One `release-test` per milestone (label `pbi` + `release-test`, usually `interactive`): the manual platform test on the release candidate. Rule: one `release-test` per milestone, always last, never a gate unless `release.test.gate` is true. `deliver` selects it only when it is the last open `pbi`/`bug` of the milestone (an implicit blocked-by, no links needed on the other issues); `interactive` stays on it so unattended runs skip it.
+
 ## Closing
 
 Closing does not depend on the milestone. After the release PR is merged into `main`, `close-release-issues` (GravionLabs/ci) closes the issues with `Closes #n`, their open sub-issues, and the PBI or Feature parents whose sub-issues are all closed, repeating upwards. An Epic is never closed this way.

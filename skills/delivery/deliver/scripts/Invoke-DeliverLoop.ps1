@@ -382,6 +382,8 @@ function Get-State {
       } else { Add-Pbis ([int]$item.number) $seen $found ([string]$list.milestone.title) $skipped }
     }
   }
+  # release-test (the RC test of the milestone, always last and manual): not part of the stop-rule set, so it neither keeps the loop from done nor makes it blocked
+  $found = [System.Collections.Generic.List[object]]::new(@($found | Where-Object { $_.Labels -notcontains 'release-test' }))
   # release-review pause (references/release-review.md): nothing open, but a closed PBI or Bug of the milestone carries needs-decision
   $paused = $false
   if ($Milestone -and $found.Count -eq 0) {

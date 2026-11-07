@@ -38,6 +38,8 @@ Permissions on a live `-p` run: `--allow-all-tools` alone denies file access out
 
 Checked from GitHub (not from the output) before and after each iteration, on the open PBIs of the targets without `needs-decision` / `needs-refinement` / `interactive` (unattended, `deliver` skips `interactive` PBIs; they count as held):
 
+An open `release-test` issue is not part of that set: as the last open item it neither keeps the loop from `done` nor makes it `blocked`. `Get-DeliverStatus.ps1` counts it in `total`, as waiting (`release test`, or `release test, waits for <n> open items`) and, once an RC is posted on it (comment marker `<!-- release-test-rc -->`), as needs you `RC test <issue URL>`.
+
 | Result      | When                                                                                | Exit |
 | :---------- | :---------------------------------------------------------------------------------- | :--- |
 | done        | no open PBI left                                                                    | 0    |
