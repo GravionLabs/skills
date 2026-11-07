@@ -1,0 +1,62 @@
+[
+  {
+    "seq": 1,
+    "tokens": {
+      "deliver": null,
+      "deliver_step": null,
+      "deliver_pr": null,
+      "deliver_progress": null,
+      "deliver_tone": null
+    },
+    "agent": null,
+    "pane": "w1:p2"
+  },
+  {
+    "seq": 2,
+    "tokens": {
+      "deliver": null,
+      "deliver_step": null,
+      "deliver_pr": null,
+      "deliver_progress": null,
+      "deliver_tone": null
+    },
+    "agent": null,
+    "pane": "w1:p2"
+  },
+  {
+    "seq": 3,
+    "tokens": {
+      "deliver": null,
+      "deliver_step": null,
+      "deliver_pr": null,
+      "deliver_progress": null,
+      "deliver_tone": null
+    },
+    "agent": null,
+    "pane": "w1:p2"
+  },
+  {
+    "seq": 4,
+    "tokens": {
+      "deliver": null,
+      "deliver_step": null,
+      "deliver_pr": null,
+      "deliver_progress": null,
+      "deliver_tone": null
+    },
+    "agent": null,
+    "pane": "w1:p2"
+  },
+  {
+    "seq": 5,
+    "tokens": {
+      "deliver": null,
+      "deliver_step": null,
+      "deliver_pr": null,
+      "deliver_progress": "9/9",
+      "deliver_tone": null
+    },
+    "agent": null,
+    "pane": "w1:p2"
+  }
+]

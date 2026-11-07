@@ -16,15 +16,9 @@ The tokens `deliver`, `deliver_step`, `deliver_pr`, `deliver_progress` (`<closed
 
 ## Terminal sink of Report-Progress
 
-After appending, `scripts/Report-Progress.ps1` shows the event through the same functions, so herdr and poimen get tokens and state in interactive sessions too:
+After appending, `scripts/Report-Progress.ps1` shows the event through the same functions, so herdr and poimen get tokens and state in interactive sessions too.
 
-| Event                               | Backend call                                                                                                                                                           |
-| :---------------------------------- | :--------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `step.finished`                     | `Set-LoopTokens`: `deliver=#<nr>`, `deliver_step=[<n>/<total> ]<step>[: <result>]` (at most 80 characters), `deliver_pr=#<pr>` once a PR exists, `deliver_tone=<tone>` |
-| `milestone.progress`                | `Set-LoopTokens`: `deliver_progress=<closed>/<total>`                                                                                                                  |
-| `issue.started`                     | `Set-LoopAgentState working`                                                                                                                                           |
-| `attention` kind `paused`/`blocked` | `Set-LoopAgentState blocked`                                                                                                                                           |
-| `run.finished`                      | `Clear-LoopTokens` (all five tokens), `Set-LoopAgentState idle` (`blocked` for result `blocked` or `no progress`), then `Clear-LoopAgentState`                         |
+The mapping from events to tokens and agent state is checked in as token fixtures, not as a table here (ADR 0002): `test/skills/delivery/fixtures/progress-events/<case>.tokens.json` next to `<case>.jsonl` holds, per event `seq`, the five tokens after it (a cleared token is `null`), the agent state (`working`, `blocked`, `idle`, `released`) and the pane (`host.herdrPane` of `run.started`); an abandoned run ends with an entry that clears all five and releases the agent. The format is `schema/progress-tokens.schema.json`. `test/skills/delivery/progress-tokens.test.ts` feeds every fixture through this sink (`Report-Progress.ps1 -SinkEvent`), so sink and fixtures cannot drift; a token reader such as the herdr plugin tests against the same fixtures. A new event type or token comes with a fixture.
 
 `deliver_tone` is `neutral`, `info`, `success`, `warning` or `danger` (the tone of the event). Only the outermost emitter reports: the process that writes `run.started` prints `AGENT_EVENTS_TERMINAL=owner` next to `AGENT_EVENTS_RUN` and reports; an emitter that has a run but no `owner` value (a nested one) skips the sink, so the owner overrides or unsets the variable for the processes it starts. The owner (whoever wrote `run.started`) must export `AGENT_EVENTS_RUN` and `AGENT_EVENTS_TERMINAL=owner`; a session that exports only the run id counts as nested. A session without a run owner (`AGENT_EVENTS_RUN` unset, interactive `/deliver`) reports itself. The agent state follows `Test-LoopAgentConflict` (no report in a pane with another agent). Backend `none` or a failing call: no-op, the event is written anyway.
 
