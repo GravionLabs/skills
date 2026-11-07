@@ -3,6 +3,7 @@ import * as fs from 'fs';
 import * as os from 'os';
 import * as path from 'path';
 import { createFakeGh } from '../../helpers/fake-gh';
+import { PwshWorker } from '../../helpers/pwsh-worker';
 
 const SCRIPT = path.resolve(
   __dirname,
@@ -121,19 +122,24 @@ interface Action {
 
 describe.skipIf(!hasPwsh)('Set-ProjectStandard.ps1 -StateFile', () => {
   let dir: string;
+  let worker: PwshWorker;
+  beforeAll(() => {
+    worker = new PwshWorker(SCRIPT);
+  });
+  afterAll(() => worker.close());
   beforeEach(() => {
     dir = fs.mkdtempSync(path.join(os.tmpdir(), 'projstd-'));
   });
   afterEach(() => fs.rmSync(dir, { recursive: true, force: true }));
 
-  const plan = (s: unknown, ...flags: string[]): Action[] => {
+  const exec = (args: string[]) => worker.run(args, { cwd: dir });
+  // the worker does not capture the error stream of a failing run: cases that read stderr stay single spawns
+  const spawnExec = (args: string[]) =>
+    spawnSync('pwsh', ['-NoProfile', '-File', SCRIPT, ...args], { cwd: dir, encoding: 'utf8' });
+  const plan = async (s: unknown, ...flags: string[]): Promise<Action[]> => {
     const file = path.join(dir, 'state.json');
     fs.writeFileSync(file, JSON.stringify({ projectId: 'P', ownerType: 'User', ...(s as object) }));
-    const r = spawnSync(
-      'pwsh',
-      ['-NoProfile', '-File', SCRIPT, '-StateFile', file, '-DryRun', '-Json', ...flags],
-      { cwd: dir, encoding: 'utf8' },
-    );
+    const r = await exec(['-StateFile', file, '-DryRun', '-Json', ...flags]);
     expect(r.status, r.stderr + r.stdout).toBe(0);
     return JSON.parse(r.stdout).actions;
   };
@@ -144,29 +150,26 @@ describe.skipIf(!hasPwsh)('Set-ProjectStandard.ps1 -StateFile', () => {
       status: { name: 'Todo' },
       level: null,
     });
-    const sync = (itemPages: unknown[]) => {
+    const sync = async (itemPages: unknown[], spawn = false) => {
       const file = path.join(dir, 'walk.json');
       fs.writeFileSync(
         file,
         JSON.stringify({ projectId: 'P', ownerType: 'User', ...state(), itemPages }),
       );
-      return spawnSync(
-        'pwsh',
-        ['-NoProfile', '-File', SCRIPT, '-StateFile', file, '-DryRun', '-Sync', '-Json'],
-        { cwd: dir, encoding: 'utf8' },
-      );
+      const args = ['-StateFile', file, '-DryRun', '-Sync', '-Json'];
+      return spawn ? spawnExec(args) : await exec(args);
     };
 
-    it('reports the counts of a complete walk', () => {
-      const r = sync([{ totalCount: 1, pageInfo: { hasNextPage: false }, nodes: [node(1)] }]);
+    it('reports the counts of a complete walk', async () => {
+      const r = await sync([{ totalCount: 1, pageInfo: { hasNextPage: false }, nodes: [node(1)] }]);
       expect(r.status, r.stderr).toBe(0);
       expect(JSON.parse(r.stdout)).toMatchObject({ itemsRead: 1, itemsTotal: 1 });
     });
 
-    it('does not plan an archived item and counts it in skippedArchived', () => {
+    it('does not plan an archived item and counts it in skippedArchived', async () => {
       const archived = { ...node(2), isArchived: true };
       archived.content = { ...archived.content, labels: { nodes: [{ name: 'pbi' }] } } as any;
-      const r = sync([
+      const r = await sync([
         { totalCount: 2, pageInfo: { hasNextPage: false }, nodes: [node(1), archived] },
       ]);
       expect(r.status, r.stderr).toBe(0);
@@ -175,13 +178,16 @@ describe.skipIf(!hasPwsh)('Set-ProjectStandard.ps1 -StateFile', () => {
       expect(out.actions.filter((x: Action) => x.number === 2)).toEqual([]);
     });
 
-    it('refuses to report No changes on a short page (nodes empty, hasNextPage false, totalCount higher)', () => {
-      const r = sync([
-        { totalCount: 3, pageInfo: { hasNextPage: true, endCursor: 'c' }, nodes: [node(1)] },
-        { totalCount: 3, pageInfo: { hasNextPage: false }, nodes: [] },
-      ]);
+    it('refuses to report No changes on a short page (nodes empty, hasNextPage false, totalCount higher)', async () => {
+      const r = await sync(
+        [
+          { totalCount: 3, pageInfo: { hasNextPage: true, endCursor: 'c' }, nodes: [node(1)] },
+          { totalCount: 3, pageInfo: { hasNextPage: false }, nodes: [] },
+        ],
+        true,
+      );
       expect(r.status).toBe(1);
-      expect(r.stderr).toContain('read 1 of 3');
+      expect(r.stderr + r.stdout).toContain('read 1 of 3');
     });
   });
 
@@ -192,11 +198,17 @@ describe.skipIf(!hasPwsh)('Set-ProjectStandard.ps1 -StateFile', () => {
       ['default set', DEFAULT_STATUS],
       ['Helix set', HELIX_STATUS],
       ['old standard with In release', [opt('Todo'), opt('In release'), opt('Done')]],
-    ])('leaves the Status options alone without -RemoveInReleaseStatus (%s)', (_n, status) => {
-      const a = plan(state({ status, items: [item(1, { status: 'In release' })] }), '-Sync');
-      expect(a.filter((x) => x.field === 'Status')).toEqual([]);
-      expect(ofType(a, 'UpdateStatusOptions')).toEqual([]);
-    });
+    ])(
+      'leaves the Status options alone without -RemoveInReleaseStatus (%s)',
+      async (_n, status) => {
+        const a = await plan(
+          state({ status, items: [item(1, { status: 'In release' })] }),
+          '-Sync',
+        );
+        expect(a.filter((x) => x.field === 'Status')).toEqual([]);
+        expect(ofType(a, 'UpdateStatusOptions')).toEqual([]);
+      },
+    );
   });
 
   describe('-RemoveInReleaseStatus (#182)', () => {
@@ -204,8 +216,8 @@ describe.skipIf(!hasPwsh)('Set-ProjectStandard.ps1 -StateFile', () => {
     const remove = (items: Item[], status: Opt[] = OLD) =>
       plan(state({ status, items }), '-RemoveInReleaseStatus');
 
-    it('moves In release items to Done (closed) or Todo (open), then removes the option keeping the other ids', () => {
-      const a = remove([
+    it('moves In release items to Done (closed) or Todo (open), then removes the option keeping the other ids', async () => {
+      const a = await remove([
         item(1, { status: 'In release' }),
         item(2, { state: 'CLOSED', status: 'In release' }),
         item(3, { status: 'In Progress' }),
@@ -223,18 +235,18 @@ describe.skipIf(!hasPwsh)('Set-ProjectStandard.ps1 -StateFile', () => {
       ]);
     });
 
-    it('removes an unused option without moving items', () => {
-      expect(remove([item(1, { status: 'Todo' })]).map((x) => x.type)).toEqual([
+    it('removes an unused option without moving items', async () => {
+      expect((await remove([item(1, { status: 'Todo' })])).map((x) => x.type)).toEqual([
         'RemoveStatusOption',
       ]);
     });
 
-    it('is a no-op for a project without In release', () => {
-      expect(remove([item(1, { status: 'Todo' })], DEFAULT_STATUS)).toEqual([]);
+    it('is a no-op for a project without In release', async () => {
+      expect(await remove([item(1, { status: 'Todo' })], DEFAULT_STATUS)).toEqual([]);
     });
 
-    it('falls back to the first other option without Todo and to the last one without Done', () => {
-      const a = remove(
+    it('falls back to the first other option without Todo and to the last one without Done', async () => {
+      const a = await remove(
         [item(1, { status: 'In release' }), item(2, { state: 'CLOSED', status: 'In release' })],
         [opt('Backlog'), opt('In release'), opt('Shipped')],
       );
@@ -244,7 +256,7 @@ describe.skipIf(!hasPwsh)('Set-ProjectStandard.ps1 -StateFile', () => {
       ]);
     });
 
-    it('fails when In release is the only Status option', () => {
+    it('fails when In release is the only Status option', async () => {
       const file = path.join(dir, 'only.json');
       fs.writeFileSync(
         file,
@@ -254,18 +266,12 @@ describe.skipIf(!hasPwsh)('Set-ProjectStandard.ps1 -StateFile', () => {
           ...state({ status: [opt('In release')] }),
         }),
       );
-      const r = spawnSync(
-        'pwsh',
-        ['-NoProfile', '-File', SCRIPT, '-StateFile', file, '-RemoveInReleaseStatus'],
-        {
-          encoding: 'utf8',
-        },
-      );
+      const r = await exec(['-StateFile', file, '-RemoveInReleaseStatus']);
       expect(r.status).not.toBe(0);
       expect(r.stderr + r.stdout).toContain("Status has no option besides 'In release'.");
     });
 
-    it('lists the moves and the removal in the text dry run', () => {
+    it('lists the moves and the removal in the text dry run', async () => {
       const file = path.join(dir, 'rm.json');
       fs.writeFileSync(
         file,
@@ -275,13 +281,7 @@ describe.skipIf(!hasPwsh)('Set-ProjectStandard.ps1 -StateFile', () => {
           ...state({ status: OLD, items: [item(5, { state: 'CLOSED', status: 'In release' })] }),
         }),
       );
-      const r = spawnSync(
-        'pwsh',
-        ['-NoProfile', '-File', SCRIPT, '-StateFile', file, '-RemoveInReleaseStatus'],
-        {
-          encoding: 'utf8',
-        },
-      );
+      const r = await exec(['-StateFile', file, '-RemoveInReleaseStatus']);
       expect(r.status, r.stderr).toBe(0);
       expect(r.stdout).toContain('Planned 2 action(s):');
       expect(r.stdout).toContain('#5 Status -> Done');
@@ -290,7 +290,7 @@ describe.skipIf(!hasPwsh)('Set-ProjectStandard.ps1 -StateFile', () => {
       );
     });
 
-    it('fails on an incomplete item walk instead of removing the option', () => {
+    it('fails on an incomplete item walk instead of removing the option', async () => {
       const file = path.join(dir, 'short.json');
       const node = (num: number) => ({
         id: `N-${num}`,
@@ -310,21 +310,17 @@ describe.skipIf(!hasPwsh)('Set-ProjectStandard.ps1 -StateFile', () => {
           ],
         }),
       );
-      const r = spawnSync(
-        'pwsh',
-        ['-NoProfile', '-File', SCRIPT, '-StateFile', file, '-RemoveInReleaseStatus', '-Json'],
-        { encoding: 'utf8' },
-      );
+      const r = spawnExec(['-StateFile', file, '-RemoveInReleaseStatus', '-Json']);
       expect(r.status).toBe(1);
-      expect(r.stderr).toContain('read 1 of 2');
+      expect(r.stderr + r.stdout).toContain('read 1 of 2');
     });
   });
 
   describe('Level', () => {
-    it('creates the field with five options when missing', () => {
+    it('creates the field with five options when missing', async () => {
       const s = state();
       s.fields = s.fields.filter((f: any) => f.name !== 'Level');
-      const [a] = ofType(plan(s), 'CreateField');
+      const [a] = ofType(await plan(s), 'CreateField');
       expect(a.name).toBe('Level');
       expect(a.options.map((o: Opt) => `${o.name}:${o.color}`)).toEqual([
         'Epic:PURPLE',
@@ -335,8 +331,8 @@ describe.skipIf(!hasPwsh)('Set-ProjectStandard.ps1 -StateFile', () => {
       ]);
     });
 
-    it('keeps an existing field untouched', () => {
-      expect(ofType(plan(state()), 'CreateField')).toHaveLength(0);
+    it('keeps an existing field untouched', async () => {
+      expect(ofType(await plan(state()), 'CreateField')).toHaveLength(0);
     });
   });
 
@@ -347,14 +343,14 @@ describe.skipIf(!hasPwsh)('Set-ProjectStandard.ps1 -StateFile', () => {
       return s;
     };
 
-    it('creates the single-select field with the option Yes (GREEN) when missing', () => {
-      const [a] = ofType(plan(withoutCurrent()), 'CreateField');
+    it('creates the single-select field with the option Yes (GREEN) when missing', async () => {
+      const [a] = ofType(await plan(withoutCurrent()), 'CreateField');
       expect(a.name).toBe('Current');
       expect(a.options.map((o: Opt) => `${o.name}:${o.color}`)).toEqual(['Yes:GREEN']);
     });
 
-    it('keeps an existing field and its option ids untouched', () => {
-      const acts = plan(state());
+    it('keeps an existing field and its option ids untouched', async () => {
+      const acts = await plan(state());
       expect(ofType(acts, 'CreateField')).toHaveLength(0);
       expect(ofType(acts, 'UpdateFieldOptions')).toHaveLength(0);
     });
@@ -367,8 +363,8 @@ describe.skipIf(!hasPwsh)('Set-ProjectStandard.ps1 -StateFile', () => {
       return s;
     };
 
-    it('creates the field with seven options in order when missing', () => {
-      const [a] = ofType(plan(withoutNeeds()), 'CreateField');
+    it('creates the field with seven options in order when missing', async () => {
+      const [a] = ofType(await plan(withoutNeeds()), 'CreateField');
       expect(a.name).toBe('Needs');
       expect(a.options.map((o: Opt) => `${o.name}:${o.color}`)).toEqual([
         'Planning:BLUE',
@@ -381,11 +377,11 @@ describe.skipIf(!hasPwsh)('Set-ProjectStandard.ps1 -StateFile', () => {
       ]);
     });
 
-    it('adds only the missing options, keeping existing ids first', () => {
+    it('adds only the missing options, keeping existing ids first', async () => {
       const have = [opt('Ready', 'TEAL'), opt('Planning')];
       const s = state();
       s.fields = s.fields.map((f: any) => (f.name === 'Needs' ? select('Needs', have) : f));
-      const acts = plan(s).filter((a) => a.type === 'UpdateFieldOptions');
+      const acts = (await plan(s)).filter((a) => a.type === 'UpdateFieldOptions');
       expect(acts).toHaveLength(1);
       const names = acts[0].options.map((o: Opt) => o.name);
       expect(names).toEqual([
@@ -401,24 +397,24 @@ describe.skipIf(!hasPwsh)('Set-ProjectStandard.ps1 -StateFile', () => {
       expect(acts[0].options[0]).toMatchObject(have[0]);
       expect(acts[0].options[1]).toMatchObject(have[1]);
       expect(acts[0].options[2].id).toBeUndefined();
-      expect(ofType(plan(s), 'CreateField')).toHaveLength(0);
+      expect(ofType(await plan(s), 'CreateField')).toHaveLength(0);
     });
 
-    it('does nothing for a complete field', () => {
-      const a = plan(state());
+    it('does nothing for a complete field', async () => {
+      const a = await plan(state());
       expect(ofType(a, 'UpdateFieldOptions')).toHaveLength(0);
       expect(ofType(a, 'CreateField')).toHaveLength(0);
     });
   });
 
   describe('-Sync', () => {
-    const sync = (items: Item[], status?: Opt[]) =>
-      plan(state({ items, status }), '-Sync').filter((a) => a.type === 'SetItem');
+    const sync = async (items: Item[], status?: Opt[]) =>
+      (await plan(state({ items, status }), '-Sync')).filter((a) => a.type === 'SetItem');
     const set = (a: Action[], n: number, field: string) =>
       a.find((x) => x.number === n && x.field === field)?.option;
 
-    it('derives Level from labels in order epic|feature|pbi|task|bug, then title prefix', () => {
-      const a = sync([
+    it('derives Level from labels in order epic|feature|pbi|task|bug, then title prefix', async () => {
+      const a = await sync([
         item(1, { labels: ['task', 'feature'] }),
         item(2, { labels: ['bug'] }),
         item(3, { title: '[PBI] something' }),
@@ -432,8 +428,8 @@ describe.skipIf(!hasPwsh)('Set-ProjectStandard.ps1 -StateFile', () => {
       expect(set(a, 5, 'Level')).toBeUndefined();
     });
 
-    it('never syncs the Status from the label merged (#182)', () => {
-      const a = sync(
+    it('never syncs the Status from the label merged (#182)', async () => {
+      const a = await sync(
         [
           item(1, { labels: ['merged'], status: 'Todo', level: 'PBI' }),
           item(2, { labels: ['merged'], status: 'In release', level: 'PBI' }),
@@ -444,8 +440,8 @@ describe.skipIf(!hasPwsh)('Set-ProjectStandard.ps1 -StateFile', () => {
       expect(a).toEqual([]);
     });
 
-    it('sets Level on closed items but never their Status', () => {
-      const a = sync([
+    it('sets Level on closed items but never their Status', async () => {
+      const a = await sync([
         item(1, { state: 'CLOSED', labels: ['merged', 'pbi'], status: 'Done' }),
         item(2, { state: 'CLOSED', status: 'In release' }),
       ]);
@@ -455,9 +451,9 @@ describe.skipIf(!hasPwsh)('Set-ProjectStandard.ps1 -StateFile', () => {
       expect(a).toHaveLength(1);
     });
 
-    it('does nothing without -Sync', () => {
+    it('does nothing without -Sync', async () => {
       expect(
-        ofType(plan(state({ items: [item(1, { labels: ['pbi'] })] })), 'SetItem'),
+        ofType(await plan(state({ items: [item(1, { labels: ['pbi'] })] })), 'SetItem'),
       ).toHaveLength(0);
     });
   });
@@ -474,11 +470,11 @@ describe.skipIf(!hasPwsh)('Set-ProjectStandard.ps1 -StateFile', () => {
       description: 'Waiting for an owner review',
     };
     const repo = (nameWithOwner: string, labels: object[] = []) => ({ nameWithOwner, labels });
-    const labels = (repositories: object[] | undefined, ...flags: string[]) =>
-      ofType(plan({ ...state(), repositories }, ...flags), 'EnsureLabel');
+    const labels = async (repositories: object[] | undefined, ...flags: string[]) =>
+      ofType(await plan({ ...state(), repositories }, ...flags), 'EnsureLabel');
 
-    it('emits both labels with exact colour and description for every repository', () => {
-      const a = labels([repo('o/a'), repo('o/b')], '-Sync');
+    it('emits both labels with exact colour and description for every repository', async () => {
+      const a = await labels([repo('o/a'), repo('o/b')], '-Sync');
       expect(a).toEqual(
         ['o/a', 'o/b'].flatMap((r) =>
           [PLANNED, NEEDS_REVIEW].map((l) => ({ type: 'EnsureLabel', repo: r, ...l })),
@@ -486,36 +482,36 @@ describe.skipIf(!hasPwsh)('Set-ProjectStandard.ps1 -StateFile', () => {
       );
     });
 
-    it('emits nothing for matching labels, colour compared case-insensitively', () => {
+    it('emits nothing for matching labels, colour compared case-insensitively', async () => {
       expect(
-        labels([repo('o/a', [PLANNED, { ...NEEDS_REVIEW, color: 'fbca04' }])], '-Sync'),
+        await labels([repo('o/a', [PLANNED, { ...NEEDS_REVIEW, color: 'fbca04' }])], '-Sync'),
       ).toEqual([]);
     });
 
-    it('emits one action for a differing colour or description', () => {
+    it('emits one action for a differing colour or description', async () => {
       expect(
-        labels([repo('o/a', [{ ...PLANNED, color: 'FFFFFF' }, NEEDS_REVIEW])], '-Sync'),
+        await labels([repo('o/a', [{ ...PLANNED, color: 'FFFFFF' }, NEEDS_REVIEW])], '-Sync'),
       ).toEqual([{ type: 'EnsureLabel', repo: 'o/a', ...PLANNED }]);
       expect(
-        labels([repo('o/a', [PLANNED, { ...NEEDS_REVIEW, description: 'x' }])], '-Sync'),
+        await labels([repo('o/a', [PLANNED, { ...NEEDS_REVIEW, description: 'x' }])], '-Sync'),
       ).toEqual([{ type: 'EnsureLabel', repo: 'o/a', ...NEEDS_REVIEW }]);
     });
 
-    it('emits nothing without -Sync', () => {
-      expect(labels([repo('o/a')])).toEqual([]);
+    it('emits nothing without -Sync', async () => {
+      expect(await labels([repo('o/a')])).toEqual([]);
     });
 
-    it('emits nothing for a state without repositories', () => {
-      expect(labels(undefined, '-Sync')).toEqual([]);
-      expect(labels([], '-Sync')).toEqual([]);
+    it('emits nothing for a state without repositories', async () => {
+      expect(await labels(undefined, '-Sync')).toEqual([]);
+      expect(await labels([], '-Sync')).toEqual([]);
     });
   });
 
   describe('views', () => {
-    it('creates only the missing standard views with field names and grouping', () => {
+    it('creates only the missing standard views with field names and grouping', async () => {
       const views = ALL_VIEWS.filter((v) => v.name !== 'Board' && v.name !== 'Backlog');
       const creates = ofType(
-        plan(state({ views: [...views, { id: 'V-x', name: 'Mine' }] })),
+        await plan(state({ views: [...views, { id: 'V-x', name: 'Mine' }] })),
         'CreateView',
       );
       expect(creates.map((c) => c.name)).toEqual(['Board', 'Backlog']);
@@ -531,9 +527,9 @@ describe.skipIf(!hasPwsh)('Set-ProjectStandard.ps1 -StateFile', () => {
       });
     });
 
-    it('creates the milestone views and the Needs views, but not Release next', () => {
+    it('creates the milestone views and the Needs views, but not Release next', async () => {
       const s = state({ views: [] });
-      const creates = ofType(plan(s), 'CreateView');
+      const creates = ofType(await plan(s), 'CreateView');
       const by = (n: string) => creates.find((c) => c.name === n)!;
       expect(creates.map((c) => c.name)).toEqual([
         'Hierarchy',
@@ -588,12 +584,10 @@ describe.skipIf(!hasPwsh)('Set-ProjectStandard.ps1 -StateFile', () => {
       });
     });
 
-    it('lists the sorting and auto-archive manual steps', () => {
+    it('lists the sorting and auto-archive manual steps', async () => {
       const file = path.join(dir, 'm.json');
       fs.writeFileSync(file, JSON.stringify({ projectId: 'P', ownerType: 'User', ...state() }));
-      const r = spawnSync('pwsh', ['-NoProfile', '-File', SCRIPT, '-StateFile', file, '-Json'], {
-        encoding: 'utf8',
-      });
+      const r = await exec(['-StateFile', file, '-Json']);
       const steps: string[] = JSON.parse(r.stdout).manualSteps;
       expect(steps).toContain('Milestones view: sort by Milestone, ascending (no API).');
       expect(steps).toContain('Project Workflows: enable "Item closed" -> Status Done.');
@@ -605,8 +599,8 @@ describe.skipIf(!hasPwsh)('Set-ProjectStandard.ps1 -StateFile', () => {
       expect(steps.some((t) => t.includes('Release next'))).toBe(false);
     });
 
-    it('never deletes foreign views', () => {
-      const a = plan(
+    it('never deletes foreign views', async () => {
+      const a = await plan(
         state({ views: [...ALL_VIEWS, { id: 'V-x', name: 'Mine' }] }),
         '-RemoveDefaultViews',
       );
@@ -623,27 +617,27 @@ describe.skipIf(!hasPwsh)('Set-ProjectStandard.ps1 -StateFile', () => {
       { id: 'V5', name: 'View of mine' },
     ];
 
-    it('deletes View <n> and Probe when all standard views exist', () => {
-      const a = plan(state({ views: [...ALL_VIEWS, ...defaults] }), '-RemoveDefaultViews');
+    it('deletes View <n> and Probe when all standard views exist', async () => {
+      const a = await plan(state({ views: [...ALL_VIEWS, ...defaults] }), '-RemoveDefaultViews');
       expect(ofType(a, 'DeleteView').map((d) => d.id)).toEqual(['V1', 'V2', 'V3', 'V4']);
     });
 
-    it('deletes Release next only with the flag and the new views in place', () => {
+    it('deletes Release next only with the flag and the new views in place', async () => {
       const RN = { id: 'V-rn', name: 'Release next' };
-      const ids = (views: { id: string; name: string }[], flag = '-RemoveDefaultViews') =>
-        ofType(plan(state({ views }), flag), 'DeleteView').map((d) => d.id);
-      expect(ids([...ALL_VIEWS, RN])).toEqual(['V-rn']);
-      expect(ids([...ALL_VIEWS, RN], '')).toEqual([]);
+      const ids = async (views: { id: string; name: string }[], flag = '-RemoveDefaultViews') =>
+        ofType(await plan(state({ views }), flag), 'DeleteView').map((d) => d.id);
+      expect(await ids([...ALL_VIEWS, RN])).toEqual(['V-rn']);
+      expect(await ids([...ALL_VIEWS, RN], '')).toEqual([]);
       const noMilestones = [...ALL_VIEWS, RN].filter((v) => v.name !== 'Milestones');
-      const a = plan(state({ views: noMilestones }), '-RemoveDefaultViews');
+      const a = await plan(state({ views: noMilestones }), '-RemoveDefaultViews');
       expect(ofType(a, 'CreateView').map((c) => c.name)).toEqual(['Milestones']);
       expect(a.findIndex((x) => x.type === 'CreateView')).toBeLessThan(
         a.findIndex((x) => x.type === 'DeleteView'),
       );
     });
 
-    it('plans the missing standard view before any deletion (it counts as existing afterwards)', () => {
-      const guard = plan(
+    it('plans the missing standard view before any deletion (it counts as existing afterwards)', async () => {
+      const guard = await plan(
         state({ views: [...ALL_VIEWS.slice(0, 3), ...ALL_VIEWS.slice(4), ...defaults] }),
         '-RemoveDefaultViews',
       );
@@ -660,36 +654,38 @@ describe.skipIf(!hasPwsh)('Set-ProjectStandard.ps1 -StateFile', () => {
         { id: 'V-sn', name: 'Sprint next' },
         { id: 'V-sp', name: 'Sprint planning' },
       ];
-      const del = (views: { id: string; name: string }[]) =>
-        ofType(plan(state({ views }), '-RemoveDefaultViews'), 'DeleteView').map((d) => d.id);
+      const del = async (views: { id: string; name: string }[]) =>
+        ofType(await plan(state({ views }), '-RemoveDefaultViews'), 'DeleteView').map((d) => d.id);
 
-      it('deletes Sprint, Sprint next and Sprint planning', () => {
-        expect(del([...ALL_VIEWS, ...SV])).toEqual(['V-s', 'V-sn', 'V-sp']);
+      it('deletes Sprint, Sprint next and Sprint planning', async () => {
+        expect(await del([...ALL_VIEWS, ...SV])).toEqual(['V-s', 'V-sn', 'V-sp']);
       });
 
-      it('deletes them without precondition on the other views', () => {
-        expect(del([...SV])).toEqual(['V-s', 'V-sn', 'V-sp']);
+      it('deletes them without precondition on the other views', async () => {
+        expect(await del([...SV])).toEqual(['V-s', 'V-sn', 'V-sp']);
       });
 
-      it('deletes only the ones that exist', () => {
-        expect(del([...ALL_VIEWS, SV[2]])).toEqual(['V-sp']);
+      it('deletes only the ones that exist', async () => {
+        expect(await del([...ALL_VIEWS, SV[2]])).toEqual(['V-sp']);
       });
 
-      it('is kept without the flag', () => {
-        expect(ofType(plan(state({ views: [...ALL_VIEWS, ...SV] })), 'DeleteView')).toHaveLength(0);
+      it('is kept without the flag', async () => {
+        expect(
+          ofType(await plan(state({ views: [...ALL_VIEWS, ...SV] })), 'DeleteView'),
+        ).toHaveLength(0);
       });
 
-      it('never deletes Backlog, Hierarchy or Release next', () => {
-        const ids = del([...ALL_VIEWS, ...SV]);
+      it('never deletes Backlog, Hierarchy or Release next', async () => {
+        const ids = await del([...ALL_VIEWS, ...SV]);
         expect(ids).not.toContain('V-Backlog');
         expect(ids).not.toContain('V-Hierarchy');
         expect(ids).not.toContain('V-Release next');
       });
     });
 
-    it('deletes nothing without the flag', () => {
+    it('deletes nothing without the flag', async () => {
       expect(
-        ofType(plan(state({ views: [...ALL_VIEWS, ...defaults] })), 'DeleteView'),
+        ofType(await plan(state({ views: [...ALL_VIEWS, ...defaults] })), 'DeleteView'),
       ).toHaveLength(0);
     });
   });
@@ -702,22 +698,22 @@ describe.skipIf(!hasPwsh)('Set-ProjectStandard.ps1 -StateFile', () => {
       dataType: 'ITERATION',
     };
 
-    it('plans the deletion of the iteration field Sprint', () => {
-      const a = plan(state({ fields: [SPRINT] }), '-RemoveSprintField');
+    it('plans the deletion of the iteration field Sprint', async () => {
+      const a = await plan(state({ fields: [SPRINT] }), '-RemoveSprintField');
       expect(ofType(a, 'DeleteField')).toEqual([
         { type: 'DeleteField', name: 'Sprint', id: 'F-Sprint' },
       ]);
     });
 
-    it('keeps the field without the switch', () => {
-      expect(ofType(plan(state({ fields: [SPRINT] })), 'DeleteField')).toHaveLength(0);
+    it('keeps the field without the switch', async () => {
+      expect(ofType(await plan(state({ fields: [SPRINT] })), 'DeleteField')).toHaveLength(0);
     });
 
-    it('plans nothing when the field is absent', () => {
-      expect(ofType(plan(state(), '-RemoveSprintField'), 'DeleteField')).toHaveLength(0);
+    it('plans nothing when the field is absent', async () => {
+      expect(ofType(await plan(state(), '-RemoveSprintField'), 'DeleteField')).toHaveLength(0);
     });
 
-    it('is listed in the text dry run', () => {
+    it('is listed in the text dry run', async () => {
       const file = path.join(dir, 'sf.json');
       fs.writeFileSync(
         file,
@@ -727,18 +723,12 @@ describe.skipIf(!hasPwsh)('Set-ProjectStandard.ps1 -StateFile', () => {
           ...state({ fields: [SPRINT] }),
         }),
       );
-      const r = spawnSync(
-        'pwsh',
-        ['-NoProfile', '-File', SCRIPT, '-StateFile', file, '-RemoveSprintField'],
-        {
-          encoding: 'utf8',
-        },
-      );
+      const r = await exec(['-StateFile', file, '-RemoveSprintField']);
       expect(r.stdout).toContain('Delete field Sprint');
     });
   });
 
-  it('is idempotent: a standard state yields no actions', () => {
+  it('is idempotent: a standard state yields no actions', async () => {
     const items = [
       item(1, { labels: ['pbi'], status: 'Todo', level: 'PBI' }),
       item(2, { labels: ['task'], status: 'In Progress', level: 'Task' }),
@@ -746,20 +736,20 @@ describe.skipIf(!hasPwsh)('Set-ProjectStandard.ps1 -StateFile', () => {
     ];
     const status = [opt('Todo'), opt('In Progress'), opt('Done')];
     expect(
-      plan(state({ status, items }), '-Sync', '-RemoveDefaultViews').filter(
+      (await plan(state({ status, items }), '-Sync', '-RemoveDefaultViews')).filter(
         (a) => a.type !== 'syncNeeds',
       ),
     ).toEqual([]);
   });
 
   describe('Needs sync', () => {
-    it('lists the syncNeeds action with -Sync', () => {
-      const a = plan(state({}), '-Sync', '-Owner', 'o', '-Number', '17');
+    it('lists the syncNeeds action with -Sync', async () => {
+      const a = await plan(state({}), '-Sync', '-Owner', 'o', '-Number', '17');
       expect(ofType(a, 'syncNeeds')).toEqual([{ type: 'syncNeeds', owner: 'o', number: 17 }]);
     });
 
-    it('has no syncNeeds action without -Sync', () => {
-      expect(ofType(plan(state({})), 'syncNeeds')).toHaveLength(0);
+    it('has no syncNeeds action without -Sync', async () => {
+      expect(ofType(await plan(state({})), 'syncNeeds')).toHaveLength(0);
     });
   });
 });
@@ -768,6 +758,11 @@ describe.skipIf(!hasPwsh || spawnSync('node', ['-v']).status !== 0 || process.pl
   'Set-ProjectStandard.ps1 -Sync live',
   () => {
     let dir: string;
+    let worker: PwshWorker;
+    beforeAll(() => {
+      worker = new PwshWorker(SCRIPT);
+    });
+    afterAll(() => worker.close());
     beforeEach(() => {
       dir = fs.mkdtempSync(path.join(os.tmpdir(), 'projstd-live-'));
     });
@@ -794,18 +789,17 @@ describe.skipIf(!hasPwsh || spawnSync('node', ['-v']).status !== 0 || process.pl
       if (q.includes('repositories(first')) return { node: { repositories: { nodes: [] } } };
       return {};
     }`;
-    const sync = (failNeeds: boolean) => {
+    const sync = async (failNeeds: boolean) => {
       const gh = createFakeGh(dir, handler(failNeeds));
-      const r = spawnSync(
-        'pwsh',
-        ['-NoProfile', '-File', SCRIPT, '-Owner', 'o', '-Number', '1', '-Sync', '-DryRun'],
-        { cwd: dir, encoding: 'utf8', env: gh.env() },
-      );
+      const r = await worker.run(['-Owner', 'o', '-Number', '1', '-Sync', '-DryRun'], {
+        cwd: dir,
+        env: gh.env(),
+      });
       return { r, gh };
     };
 
-    it('runs the Needs sync after its own plan', () => {
-      const { r, gh } = sync(false);
+    it('runs the Needs sync after its own plan', async () => {
+      const { r, gh } = await sync(false);
       expect(r.status, r.stderr + r.stdout).toBe(0);
       expect(r.stdout).not.toContain('Needs sync failed');
       expect(gh.calls().some((c) => c.args.some((a) => a.includes('/projectsV2/1/items')))).toBe(
@@ -813,8 +807,8 @@ describe.skipIf(!hasPwsh || spawnSync('node', ['-v']).status !== 0 || process.pl
       );
     });
 
-    it('a failing Needs sync is one warning and the run still exits 0', () => {
-      const { r } = sync(true);
+    it('a failing Needs sync is one warning and the run still exits 0', async () => {
+      const { r } = await sync(true);
       expect(r.status, r.stderr + r.stdout).toBe(0);
       expect(r.stdout.match(/Warning: Needs sync failed/g)).toHaveLength(1);
     });
