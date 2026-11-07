@@ -170,6 +170,8 @@ const restItem = (nr: number, needs: string | null, o: Record<string, any> = {})
       : []),
   ],
 });
+// Cases that do not test the sub-issue read: no sub-issues and the label planned give the same Ready as one Task sub-issue, without the gh call.
+const planned = { sub_issues_summary: { total: 0 }, labels: [{ name: 'planned' }] };
 const dep = (nr: number, repo = 'o/r', state = 'open', labels: string[] = []) => ({
   number: nr,
   state,
@@ -262,7 +264,7 @@ describe.skipIf(!hasPwsh || !hasNode || process.platform === 'win32')(
         restItem(nr, state === 'open' ? 'Ready' : null, {
           repo,
           current,
-          content: { state, milestone: milestone ? { title: milestone } : null },
+          content: { ...planned, state, milestone: milestone ? { title: milestone } : null },
         });
 
       it('reads milestones once per repository via REST and the tags only when a legacy x.y.z milestone is open, writes only the changed items, adds no GraphQL call', async () => {
@@ -300,38 +302,10 @@ describe.skipIf(!hasPwsh || !hasNode || process.platform === 'win32')(
       });
     });
 
-    describe('Status reset and scope report (#169)', () => {
-      it('resets stale In Progress to Todo / Done through REST, keeps the one with a PR, updates and clears Needs, reports items without Level', async () => {
-        const { r, mutations } = await run({
-          repos: [
-            { full_name: 'o/r', open_issues_count: 2 },
-            { full_name: 'o/lonely', open_issues_count: 5 },
-          ],
-          prs: { 'o/r': ['feat/2-x'] },
-          items: [
-            restItem(1, 'In progress', { status: 'In Progress' }),
-            restItem(2, 'In progress', { status: 'In Progress' }),
-            restItem(3, null, { status: 'In Progress', content: { state: 'closed' } }),
-            restItem(4, 'Ready', { level: null, content: { title: 'plain' } }),
-            restItem(5, 'Ready', { content: { state: 'closed' } }),
-          ],
-        });
-        expect(r.status).toBe(0);
-        expect(r.stdout).toContain('Without Level: o/r: 1 open');
-        expect(r.stderr).toContain('o/lonely');
-        expect(r.stdout).toContain('#1: Status In Progress -> Todo');
-        expect(r.stdout).toContain('#3: Status In Progress -> Done');
-        expect(mutations.map((m) => [m.args[3], m.body])).toEqual([
-          ['users/o/projectsV2/1/items/1', { fields: [{ id: 101, value: 'O-todo' }] }],
-          ['users/o/projectsV2/1/items/1', { fields: [{ id: 103, value: 'O-Ready' }] }],
-          ['users/o/projectsV2/1/items/3', { fields: [{ id: 101, value: 'O-done' }] }],
-          ['users/o/projectsV2/1/items/5', { fields: [{ id: 103, value: null }] }],
-        ]);
-      });
-    });
-
     it('fails with a clear message when the item has no database id', async () => {
-      const { r } = await run({ items: [{ ...restItem(4, null), id: null }] });
+      const { r } = await run({
+        items: [{ ...restItem(4, null, { content: planned }), id: null }],
+      });
       expect(r.status).toBe(1);
       expect(r.stdout).toContain('Needs sync failed');
       expect(r.stdout).toContain('has no databaseId');
@@ -348,7 +322,13 @@ describe.skipIf(!hasPwsh || !hasNode || process.platform === 'win32')(
       spawnSync('git', ['init', '-q'], { cwd: tmp });
       spawnSync('git', ['remote', 'add', 'origin', 'git@github.com:o/r.git'], { cwd: tmp });
       const { r, mutations, itemCalls } = await run(
-        { items: [restItem(7, null), restItem(9, null), restItem(5, null, { repo: 'o/x' })] },
+        {
+          items: [
+            restItem(7, null, { content: planned }),
+            restItem(9, null),
+            restItem(5, null, { repo: 'o/x' }),
+          ],
+        },
         ['-Issue', '7', '-DryRun'],
       );
       expect(restPath(itemCalls[0])).toContain('&q=repo:o/r');
@@ -414,8 +394,8 @@ describe.skipIf(!hasPwsh || !hasNode || process.platform === 'win32')(
       };
       const items = () => [
         restItem(1, null),
-        restItem(2, null, { repo: 'o/x' }),
-        restItem(3, null, { repo: 'o/x', ...blockedByOne }),
+        restItem(2, null, { repo: 'o/x', content: planned }),
+        restItem(3, null, { repo: 'o/x', content: { ...blockedByOne.content, ...planned } }),
         restItem(4, 'Ready', { repo: 'o/y' }),
         restItem(5, 'Ready', { repo: 'o/y', content: { state: 'closed' } }),
         // PR heads, blocked-by links and linked pull requests of o/r
@@ -423,14 +403,17 @@ describe.skipIf(!hasPwsh || !hasNode || process.platform === 'win32')(
         restItem(8, null, {
           content: { ...blockedByOpen(1, 2).content, sub_issues_summary: { total: 0 } },
         }),
-        restItem(9, null, blockedByOpen(0, 1)),
+        restItem(9, null, { content: { ...blockedByOpen(0, 1).content, ...planned } }),
         restItem(10, null, {
           linked: [{ number: 5, state: 'open', head: { ref: 'x' } }],
           content: { sub_issues_summary: { total: 0 } },
         }),
-        restItem(11, null, { linked: [{ number: 6, state: 'closed', head: { ref: 'y' } }] }),
+        restItem(11, null, {
+          linked: [{ number: 6, state: 'closed', head: { ref: 'y' } }],
+          content: planned,
+        }),
         // #182: a blocker blocks while open (the Status of its item plays no part); with the label merged it counts as resolved
-        restItem(21, null, blockedByOpen(1, 1)),
+        restItem(21, null, { content: { ...blockedByOpen(1, 1).content, ...planned } }),
       ];
       const blockedByOpen = (open: number, total: number) => ({
         content: {
@@ -536,7 +519,8 @@ describe.skipIf(!hasPwsh || !hasNode || process.platform === 'win32')(
       expect(paths.some((p) => p.includes('/issues/12/dependencies/blocking'))).toBe(false);
     });
 
-    it('takes sub-issue levels from title, type or the Level of items already read; reads the issue type of a legacy issue; skips sub-issues of an issue without any; an item archived at the read is never planned, one archived before the write is skipped with a warning (no retry, exit 0)', async () => {
+    // One run for the Status reset and scope report (#169) and the sub-issue levels / archived items: they need no flags of their own.
+    it('resets stale In Progress to Todo / Done, keeps the one with a PR, updates and clears Needs, reports items without Level; takes sub-issue levels from title, type or the Level of items already read; reads the issue type of a legacy issue; skips sub-issues of an issue without any; an item archived at the read is never planned, one archived before the write is skipped with a warning (no retry, exit 0)', async () => {
       const feature = (nr: number) =>
         restItem(nr, null, { level: 'Feature', content: { title: '[Feature] f' } });
       const sub = (nr: number, over: object = {}) => ({
@@ -546,35 +530,59 @@ describe.skipIf(!hasPwsh || !hasNode || process.platform === 'win32')(
         ...over,
       });
       const items = [
-        feature(1),
-        feature(2),
-        feature(3),
-        feature(4),
-        restItem(51, 'Ready'),
-        restItem(6, 'Planning', { level: null, content: { title: 'plain' } }),
-        restItem(8, null, { content: { sub_issues_summary: { total: 0 } } }),
-        { ...restItem(9, null), archived_at: '2026-01-01T00:00:00Z' },
+        // #169: stale Status, scope report
+        restItem(1, 'In progress', { status: 'In Progress', content: planned }),
+        restItem(2, 'In progress', { status: 'In Progress', content: planned }),
+        restItem(3, null, { status: 'In Progress', content: { state: 'closed' } }),
+        restItem(4, 'Ready', { level: null, content: { title: 'plain' } }),
+        restItem(5, 'Ready', { content: { state: 'closed' } }),
+        // sub-issue levels and archived items
+        feature(11),
+        feature(12),
+        feature(13),
+        feature(14),
+        restItem(61, 'Ready'),
+        restItem(16, 'Planning', { level: null, content: { title: 'plain' } }),
+        restItem(18, null, { content: { sub_issues_summary: { total: 0 } } }),
+        { ...restItem(19, null), archived_at: '2026-01-01T00:00:00Z' },
       ];
       const { r, paths, mutations } = await run({
         items,
-        archivedItem: 4,
+        archivedItem: 14,
+        repos: [
+          { full_name: 'o/r', open_issues_count: 2 },
+          { full_name: 'o/lonely', open_issues_count: 5 },
+        ],
+        prs: { 'o/r': ['feat/2-x'] },
         subIssues: {
-          'o/r#1': [sub(51)],
-          'o/r#2': [sub(52, { title: '[PBI] x' })],
-          'o/r#3': [sub(53, { type: { name: 'PBI' } })],
-          'o/r#4': [sub(54)],
-          'o/r#6': [{ number: 60, title: '[Feature] f' }],
+          'o/r#11': [sub(61)],
+          'o/r#12': [sub(52, { title: '[PBI] x' })],
+          'o/r#13': [sub(53, { type: { name: 'PBI' } })],
+          'o/r#14': [sub(54)],
+          'o/r#16': [{ number: 60, title: '[Feature] f' }],
         },
-        issueTypes: { 'o/r#6': 'Epic' },
+        issueTypes: { 'o/r#16': 'Epic' },
       });
       expect(r.status).toBe(0);
-      expect(r.stdout).not.toMatch(/#[123]:/);
-      expect(r.stdout).toContain('#4: (none) -> Planning');
-      expect(r.stdout).toContain('#6: Planning -> (clear)');
-      expect(paths).toContain('repos/o/r/issues/6');
-      expect(paths.some((p) => p.includes('/issues/8/sub_issues'))).toBe(false);
-      // #9 archived at the read: not planned; #4 archived before the write: tried once, skipped, #6 and #8 still written
-      expect(mutations.map(itemNr)).toEqual([4, 6, 8]);
+      expect(r.stdout).toContain('Without Level: o/r: 2 open');
+      expect(r.stderr).toContain('o/lonely');
+      expect(r.stdout).toContain('#1: Status In Progress -> Todo');
+      expect(r.stdout).toContain('#3: Status In Progress -> Done');
+      expect(r.stdout).not.toMatch(/#1[123]:/);
+      expect(r.stdout).toContain('#14: (none) -> Planning');
+      expect(r.stdout).toContain('#16: Planning -> (clear)');
+      expect(paths).toContain('repos/o/r/issues/16');
+      expect(paths.some((p) => p.includes('/issues/18/sub_issues'))).toBe(false);
+      // #19 archived at the read: not planned; #14 archived before the write: tried once, skipped; #16 and #18 still written
+      expect(mutations.map((m) => [m.args[3], m.body])).toEqual([
+        ['users/o/projectsV2/1/items/1', { fields: [{ id: 101, value: 'O-todo' }] }],
+        ['users/o/projectsV2/1/items/1', { fields: [{ id: 103, value: 'O-Ready' }] }],
+        ['users/o/projectsV2/1/items/3', { fields: [{ id: 101, value: 'O-done' }] }],
+        ['users/o/projectsV2/1/items/5', { fields: [{ id: 103, value: null }] }],
+        ['users/o/projectsV2/1/items/14', { fields: [{ id: 103, value: 'O-Planning' }] }],
+        ['users/o/projectsV2/1/items/16', { fields: [{ id: 103, value: null }] }],
+        ['users/o/projectsV2/1/items/18', { fields: [{ id: 103, value: 'O-Planning' }] }],
+      ]);
       expect(r.stdout).toContain('skipped (archived): 2');
       expect(r.stderr + r.stdout).toContain('is archived and cannot be updated; skipped.');
     });
@@ -587,7 +595,10 @@ describe.skipIf(!hasPwsh || !hasNode || process.platform === 'win32')(
     });
 
     it('exits 1 with one line after 4 failed tries', async () => {
-      const { r, mutations } = await run({ items: [restItem(1, null)], failMutation: 99 });
+      const { r, mutations } = await run({
+        items: [restItem(1, null, { content: planned })],
+        failMutation: 99,
+      });
       expect(r.status).toBe(1);
       expect(mutations).toHaveLength(4);
       expect(r.stdout).toMatch(/Needs sync failed: Needs update failed for o\/r#1/);
