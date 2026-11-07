@@ -66,6 +66,17 @@
           "type": "object",
           "additionalProperties": false,
           "properties": {
+            "platforms": {
+              "description": "Platforms of the RC test, e.g. [\"macOS\", \"Linux\", \"Windows\"]; with template, github-milestone create/insert makes the release-test issue.",
+              "type": "array",
+              "items": { "type": "string", "minLength": 1 },
+              "minItems": 1
+            },
+            "template": {
+              "description": "Body template of the release-test issue ({milestone}, {platforms}), e.g. docs/manual-acceptance.md or .github/release-test.md.",
+              "type": "string",
+              "minLength": 1
+            },
             "gate": {
               "description": "true: no release PR while the release-test issue is open (default false).",
               "type": "boolean",
