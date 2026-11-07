@@ -14,6 +14,8 @@
   attention kind: pr_opened, review_fix, ci_red, paused, blocked, needs_you or release_test.
 .PARAMETER Outcome
   issue.finished: delivered, blocked, paused or skipped.
+.PARAMETER ReviewRound
+  release.updated: the round of the release review (1, 2, ...).
 .PARAMETER RunResult
   run.finished result: done, max reached, blocked, no progress, ...
 #>
@@ -44,7 +46,8 @@ param(
   [string]$RcVersion,
   [int]$TestIssue,
   [string]$TestIssueUrl,
-  [string]$PrUrl
+  [string]$PrUrl,
+  [int]$ReviewRound
 )
 $ErrorActionPreference = 'Stop'
 
@@ -149,6 +152,7 @@ try {
     Add-If $ev rcUrl $RcUrl; Add-If $ev rcVersion $RcVersion
     if ($TestIssue) { $t = [ordered]@{ number = $TestIssue }; Add-If $t url $TestIssueUrl; $ev.testIssue = $t }
     Add-If $ev prUrl $PrUrl
+    if ($ReviewRound) { $ev.reviewRound = $ReviewRound }
   }
 
   # lock the file while the lines are counted and the new one is appended (seq without gaps), one write call
