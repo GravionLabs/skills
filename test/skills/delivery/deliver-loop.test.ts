@@ -2,6 +2,7 @@ import { spawnSync } from 'child_process';
 import * as fs from 'fs';
 import * as os from 'os';
 import * as path from 'path';
+import { reportEventCmd } from '../../helpers/report-progress';
 import { createFakeGh } from '../../helpers/fake-gh';
 import { PwshWorker } from '../../helpers/pwsh-worker';
 
@@ -10,6 +11,28 @@ const SCRIPT = path.resolve(
   '../../../skills/delivery/deliver/scripts/Invoke-DeliverLoop.ps1',
 );
 const hasPwsh = spawnSync('pwsh', ['-NoProfile', '-Command', '1']).status === 0;
+
+const PR = 'https://github.com/acme/app/pull/55';
+const step = (nr: number, name: string, result: string, pr = '') => [
+  '-Type',
+  'step.finished',
+  '-Issue',
+  String(nr),
+  '-Step',
+  name,
+  '-Result',
+  result,
+  ...(pr ? ['-Pr', pr] : []),
+];
+const attention = (nr: number, kind: string, reason = '') => [
+  '-Type',
+  'attention',
+  '-Issue',
+  String(nr),
+  '-Kind',
+  kind,
+  ...(reason ? ['-Reason', reason] : []),
+];
 
 type Issue = {
   body?: string;
@@ -24,6 +47,7 @@ type Fixture = {
   milestones?: Record<string, number[]>;
   effect?: 'none' | 'close-first' | 'hold-first';
   stream?: object[];
+  events?: string[][]; // Report-Progress.ps1 arguments the harness stub runs after its stream
 };
 
 // #893: stop rules and observability of Invoke-DeliverLoop.ps1 with gh, claude, herdr and osascript as stubs on PATH.
@@ -49,7 +73,7 @@ describe.skipIf(!hasPwsh || process.platform === 'win32')('Invoke-DeliverLoop.ps
     cwd = path.join(dir, `case-${++seq}`);
     fs.mkdirSync(cwd, { recursive: true });
     const state = path.join(cwd, 'state.json');
-    const full = { effect: 'none', milestones: {}, stream: [], ...fx };
+    const full = { effect: 'none', milestones: {}, stream: [], events: [], ...fx };
     fs.writeFileSync(state, JSON.stringify(full));
     const gh = createFakeGh(
       cwd,
@@ -95,15 +119,16 @@ fs.writeFileSync(f, JSON.stringify(s));`,
       full.stream.map((r) => JSON.stringify(r)).join('\n') + '\n',
     );
     const bin = path.join(cwd, 'bin');
+    const events = full.events.map((e) => reportEventCmd(e) + '\n').join('');
     const stub = (name: string, body: string) =>
       fs.writeFileSync(path.join(gh.bin, name), `#!/bin/sh\n${body}\n`, { mode: 0o755 });
     stub(
       'claude',
-      `echo "$*" >> ${cwd}/harness-calls.txt\necho "herdr_env=[$HERDR_ENV]" >> ${cwd}/harness-calls.txt\ncat ${cwd}/stream.jsonl\nnode ${cwd}/effect.js`,
+      `echo "$*" >> ${cwd}/harness-calls.txt\necho "herdr_env=[$HERDR_ENV]" >> ${cwd}/harness-calls.txt\ncat ${cwd}/stream.jsonl\n${events}node ${cwd}/effect.js`,
     );
     stub(
       'copilot',
-      `echo "$*" >> ${cwd}/harness-calls.txt\necho "herdr_env=[$HERDR_ENV]" >> ${cwd}/harness-calls.txt\ncat ${cwd}/stream.jsonl\nnode ${cwd}/effect.js`,
+      `echo "$*" >> ${cwd}/harness-calls.txt\necho "herdr_env=[$HERDR_ENV]" >> ${cwd}/harness-calls.txt\ncat ${cwd}/stream.jsonl\n${events}node ${cwd}/effect.js`,
     );
     stub('herdr', `echo "$*" >> ${cwd}/herdr-calls.txt`);
     stub('osascript', `echo "$*" >> ${cwd}/notices.txt`);
@@ -186,6 +211,12 @@ fs.writeFileSync(f, JSON.stringify(s));`,
         issues: { 7: pbi() },
         effect: 'close-first',
         stream: [...live, ...events],
+        events: [
+          step(7, 'pr', 'opened #55', PR),
+          attention(7, 'pr_opened', 'opened #55'),
+          step(7, 'ci', 'red', PR),
+          attention(7, 'ci_red', 'red'),
+        ],
       });
       const r = await run(gh, ['-Target', '7', '-Harness', 'copilot'], {
         HERDR_ENV: '1',
@@ -197,7 +228,9 @@ fs.writeFileSync(f, JSON.stringify(s));`,
       ]);
       expect(read('harness-calls.txt')).toContain('herdr_env=[]');
       const lines = read('.agents/deliver-loop.log');
+      // assistant text is logged as it is; the step line comes from the event
       expect(lines).toMatch(/\d\d:\d\d:\d\d » #7 pr: opened #55/);
+      expect(lines).toMatch(/\d\d:\d\d:\d\d #7 pr: opened #55\n/);
       expect(lines).toMatch(/\d\d:\d\d:\d\d bash ls -la/);
       expect(lines).toMatch(/\d\d:\d\d:\d\d \[subagent\] view src\/a\.ts/);
       expect(lines).toMatch(/\d\d:\d\d:\d\d ✗ boom/);
@@ -454,6 +487,14 @@ fs.writeFileSync(f, JSON.stringify(s));`,
         },
         effect: 'hold-first',
         stream,
+        events: [
+          step(401, 'pr', 'opened #55', PR),
+          attention(401, 'pr_opened', 'opened #55'),
+          step(401, 'review', 'x'.repeat(90), PR),
+          step(401, 'ci', 'red', PR),
+          attention(401, 'ci_red', 'red'),
+          step(401, 'merged', 'squash', PR),
+        ],
       });
       const r = await run(gh, ['-Target', '401,402,403,404'], {
         HERDR_ENV: '1',
@@ -507,12 +548,16 @@ fs.writeFileSync(f, JSON.stringify(s));`,
       expect(ansi).toMatch(new RegExp(`${ESC}\\[2m\\d\\d:\\d\\d:\\d\\d${ESC}\\[0m `));
       expect(ansi).toContain(`${ESC}[36mRead${ESC}[0m src/a.ts`);
       expect(ansi).toContain(`${ESC}[31m✗ boom${ESC}[0m`);
-      expect(ansi).toContain(`${ESC}[33m» #401 ci: red${ESC}[0m`);
-      expect(ansi).toContain(`${ESC}[32m» #401 merged: squash${ESC}[0m`);
+      // step lines are colored by the tone of the event; assistant text is logged uncolored
+      expect(ansi).toContain(`${ESC}[31m#401 ci: red${ESC}[0m`);
+      expect(ansi).toContain(`${ESC}[32m#401 merged: squash${ESC}[0m`);
+      expect(ansi).toContain(`${ESC}[32m#401 pr: opened #55${ESC}[0m`);
+      expect(ansi).toContain(`${ESC}[0m » #401 ci: red`);
       if (process.platform === 'darwin') {
         // osascript stub: attention step and loop result
         const notes = read('notices.txt');
         expect(notes).toContain('#401 PR opened');
+        expect(notes).toContain('#401 CI red');
         expect(notes).toContain('loop result: blocked');
       }
     });

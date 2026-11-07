@@ -3,6 +3,7 @@ import { spawnSync } from 'child_process';
 import * as fs from 'fs';
 import * as os from 'os';
 import * as path from 'path';
+import { REPORT_PROGRESS } from '../../helpers/report-progress';
 import { createFakeGh } from '../../helpers/fake-gh';
 import { PwshWorker } from '../../helpers/pwsh-worker';
 
@@ -41,7 +42,7 @@ describe.skipIf(!hasPwsh || process.platform === 'win32')(
       fs.rmSync(dir, { recursive: true, force: true });
     });
 
-    // milestone M4: #5 closed, #10 and #11 open, #12 open with needs-decision. Iteration 1 prints '#10 pr: opened #55',
+    // milestone M4: #5 closed, #10 and #11 open, #12 open with needs-decision. Iteration 1 reports step pr 'opened #55' of #10,
     // appends a nested run.started with a pid that does not live and closes #10; iteration 2 labels #11 needs-refinement.
     const setup = (opts: { failOpenRead?: boolean } = {}) => {
       cwd = path.join(dir, `case-${++seq}`);
@@ -81,13 +82,16 @@ fs.appendFileSync(path.join(cwd, 'harness-env.jsonl'), JSON.stringify({ run: env
 fs.copyFileSync(path.join(cwd, '.agents/deliver-loop/status.json'), path.join(cwd, 'snap' + n + '-status.json'));
 fs.copyFileSync(ev, path.join(cwd, 'snap' + n + '-events.jsonl'));
 const f = ${JSON.stringify(state)}; const s = JSON.parse(fs.readFileSync(f, 'utf8'));
+// the harness reports its steps itself (deliver SKILL.md): Report-Progress.ps1, nested in the loop's run
+const report = (nr, step, result, pr) => require('child_process').execFileSync('pwsh', ['-NoProfile', '-File', ${JSON.stringify(REPORT_PROGRESS)}, '-Type', 'step.finished', '-Issue', String(nr), '-Step', step, '-Result', result, ...(pr ? ['-Pr', pr] : [])]);
 if (n === 1) {
   const lines = fs.readFileSync(ev, 'utf8').trim().split('\\n').length;
   fs.appendFileSync(ev, JSON.stringify({ v: 1, seq: lines + 1, ts: new Date().toISOString(), run: env.AGENT_EVENTS_RUN, type: 'run.started', tone: 'neutral', source: 'session', pid: 2000000000 }) + '\\n');
-  console.log(JSON.stringify({ type: 'assistant', message: { content: [{ type: 'text', text: '#10 pr: opened #55' }] } }));
+  report(10, 'pr', 'opened #55', '${BASE}/pull/55');
+  require('child_process').execFileSync('pwsh', ['-NoProfile', '-File', ${JSON.stringify(REPORT_PROGRESS)}, '-Type', 'attention', '-Issue', '10', '-Kind', 'pr_opened', '-Reason', 'opened #55', '-Pr', '${BASE}/pull/55']);
   s.issues[10].state = 'closed';
 } else {
-  console.log(JSON.stringify({ type: 'assistant', message: { content: [{ type: 'text', text: '#11 review: clean' }] } }));
+  report(11, 'review', 'clean', '');
   s.issues[11].labels = ['pbi', 'needs-refinement'];
 }
 fs.writeFileSync(f, JSON.stringify(s));`,

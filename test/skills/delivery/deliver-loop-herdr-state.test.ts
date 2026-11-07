@@ -2,6 +2,7 @@ import { spawnSync } from 'child_process';
 import * as fs from 'fs';
 import * as os from 'os';
 import * as path from 'path';
+import { reportEventCmd } from '../../helpers/report-progress';
 import { createFakeGh } from '../../helpers/fake-gh';
 import { PwshWorker } from '../../helpers/pwsh-worker';
 
@@ -35,7 +36,7 @@ describe.skipIf(!hasPwsh || process.platform === 'win32')(
     const setup = (opts: {
       open: number[];
       close?: boolean;
-      text?: string;
+      event?: string[];
       herdrFails?: boolean;
       paneAgent?: string;
     }) => {
@@ -78,12 +79,15 @@ fs.writeFileSync(f, JSON.stringify(s));`,
         path.join(cwd, 'stream.jsonl'),
         JSON.stringify({
           type: 'assistant',
-          message: { content: [{ type: 'text', text: opts.text ?? 'working' }] },
+          message: { content: [{ type: 'text', text: 'working' }] },
         }) + '\n',
       );
       const stub = (name: string, body: string) =>
         fs.writeFileSync(path.join(gh.bin, name), `#!/bin/sh\n${body}\n`, { mode: 0o755 });
-      stub('claude', `cat ${cwd}/stream.jsonl\nnode ${cwd}/effect.js`);
+      stub(
+        'claude',
+        `cat ${cwd}/stream.jsonl\n${opts.event ? reportEventCmd(opts.event) + '\n' : ''}node ${cwd}/effect.js`,
+      );
       const paneGet = opts.paneAgent
         ? `\n[ "$1 $2" = "pane get" ] && echo '{"result":{"pane":{"pane_id":"p7","agent":"${opts.paneAgent}"}}}'`
         : '';
@@ -124,7 +128,20 @@ fs.writeFileSync(f, JSON.stringify(s));`,
       expect(stuck.status).toBe(1);
       expect(calls()).toEqual([report('working'), report('blocked'), release]);
       const paused = await run(
-        setup({ open: [1], close: true, text: '#1 paused: needs a decision' }),
+        setup({
+          open: [1],
+          close: true,
+          event: [
+            '-Type',
+            'attention',
+            '-Issue',
+            '1',
+            '-Kind',
+            'paused',
+            '-Reason',
+            'needs a decision',
+          ],
+        }),
         ['-Target', '1'],
       );
       expect(paused.status).toBe(0);
