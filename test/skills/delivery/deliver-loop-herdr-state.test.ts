@@ -128,7 +128,8 @@ fs.writeFileSync(f, JSON.stringify(s));`,
         ['-Target', '1'],
       );
       expect(paused.status).toBe(0);
-      expect(calls()).toEqual([report('working'), report('blocked'), report('blocked'), release]);
+      // #372: the terminal sink of Report-Progress sets the state: attention paused → blocked, run.finished done → idle
+      expect(calls()).toEqual([report('working'), report('blocked'), report('idle'), release]);
     });
 
     it('reports nothing in a pane with another agent (it would compete) and says so', async () => {
@@ -147,7 +148,8 @@ fs.writeFileSync(f, JSON.stringify(s));`,
     it('releases on error, ignores herdr failures and calls nothing outside herdr', async () => {
       const err = await run(setup({ open: [1] }), ['-Target', '1,99']);
       expect(err.status).not.toBe(0);
-      expect(calls()).toEqual([release]);
+      // #372: the finally ends the run with run.finished no progress: blocked, then release
+      expect(calls()).toEqual([report('blocked'), release]);
       const failing = await run(setup({ open: [1], close: true, herdrFails: true }), [
         '-Target',
         '1',

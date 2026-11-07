@@ -87,7 +87,16 @@ describe.skipIf(!hasPwsh || process.platform === 'win32')('Report-Progress.ps1',
       ['-Type', 'issue.started', '-Issue', '322', '-Title', 'x', '-Url', 'https://x/322'],
       ['-Type', 'step.finished', '-Issue', '322', '-Step', 'review', '-Result', 'clean'],
       ['-Type', 'attention', '-Issue', '322', '-Kind', 'pr_opened', '-Pr', 'https://x/pull/5'],
-      ['-Type', 'issue.finished', '-Issue', '322', '-Outcome', 'delivered'],
+      [
+        '-Type',
+        'issue.finished',
+        '-Issue',
+        '322',
+        '-Outcome',
+        'blocked',
+        '-Reason',
+        'open blocker',
+      ],
       [
         '-Type',
         'release.updated',
@@ -135,6 +144,8 @@ describe.skipIf(!hasPwsh || process.platform === 'win32')('Report-Progress.ps1',
     expect(typeof evs[0].pid).toBe('number');
     expect(evs[1]).toMatchObject({ closed: 7, total: 19 });
     expect(evs[3].step).toMatchObject({ name: 'review', n: 4, total: 7, text: 'clean' });
+    // #372: issue.finished carries the reason (the projection's blocked and paused reason)
+    expect(evs[5]).toMatchObject({ outcome: 'blocked', reason: 'open blocker', tone: 'danger' });
     expect(evs[6]).toMatchObject({
       rcUrl: 'https://x/rc',
       rcVersion: '1.2.0-rc.1',

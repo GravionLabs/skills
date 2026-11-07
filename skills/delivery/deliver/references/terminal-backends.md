@@ -12,7 +12,7 @@ The deliver scripts call the terminal only through `scripts/TerminalBackend.ps1`
 | `Open-LogPane`         | `herdr pane list`, `pane split`, `pane run`, `pane rename`                       | notice only                                                                  | poimen, none |
 | `Switch-LogPane`       | `herdr pane list`, `pane close` or `Open-LogPane`                                | notice only                                                                  | poimen, none |
 
-The loop reports the tokens `deliver`, `deliver_step`, `deliver_pr` and `deliver_progress` (`<closed>/<total>` of the milestone, e.g. `7/19`) through `Set-LoopTokens`, and the lifecycle through `Set-LoopAgentState`; `Clear-LoopTokens` removes all four on exit. poimen gets the same tokens and state through `poimen-server` (`terminal.report_tokens`); a missing server or method warns once on stderr (`Invoke-Poimen`) and the loop goes on. The status file `.agents/deliver-loop/status.json` is written whatever the backend (`loop.md` "Observability").
+The tokens `deliver`, `deliver_step`, `deliver_pr`, `deliver_progress` (`<closed>/<total>` of the milestone, e.g. `7/19`) and `deliver_tone` go through `Set-LoopTokens`, the lifecycle through `Set-LoopAgentState`; the loop sends events and its terminal sink (below) makes these calls, `Clear-LoopTokens` removes all five with `run.finished`. poimen gets the same tokens and state through `poimen-server` (`terminal.report_tokens`); a missing server or method warns once on stderr (`Invoke-Poimen`) and the loop goes on. The status file `.agents/deliver-loop/status.json` is written whatever the backend (`loop.md` "Observability").
 
 ## Terminal sink of Report-Progress
 
@@ -32,7 +32,7 @@ Only `Test-LoopAgentConflict` (`herdr pane get`, herdr only) reads state. The se
 
 Only when `printenv HERDR_ENV` prints `1` (the session runs in a herdr pane). Without herdr nothing here runs.
 
-When `scripts/Invoke-DeliverLoop.ps1` started this session it owns the pane display: it runs the harness with `HERDR_ENV` empty (so `printenv HERDR_ENV` prints nothing and this file is skipped), reports the same tokens per progress line with the loop position in the step (`deliver_step=3/7 review: clean`) and clears them at the end (`references/loop.md`).
+When `scripts/Invoke-DeliverLoop.ps1` started this session it owns the pane display: it runs the harness with `HERDR_ENV` and `AGENT_EVENTS_TERMINAL` empty (so `printenv HERDR_ENV` prints nothing and this file is skipped), sends a `step.finished` per progress line, whose sink sets the same tokens (`deliver_step=4/7 review: clean`), and clears them with `run.finished` (`references/loop.md`).
 
 ## Start
 

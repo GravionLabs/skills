@@ -1,0 +1,235 @@
+import Ajv from 'ajv/dist/2020';
+import { spawnSync } from 'child_process';
+import * as fs from 'fs';
+import * as os from 'os';
+import * as path from 'path';
+import { createFakeGh } from '../../helpers/fake-gh';
+import { PwshWorker } from '../../helpers/pwsh-worker';
+
+// #372: Invoke-DeliverLoop.ps1 opens a run (run.started), emits the events it knows, ends it with exactly one run.finished
+// (also on error) and writes status.json as the projection of the event file (ConvertFrom-ProgressEvents.ps1).
+// gh and claude are stubs on PATH; the claude stub snapshots status.json and the event file at the start of each iteration.
+const ROOT = path.resolve(__dirname, '../../..');
+const SCRIPTS = path.join(ROOT, 'skills/delivery/deliver/scripts');
+const schema = JSON.parse(
+  fs.readFileSync(
+    path.join(ROOT, 'skills/delivery/deliver/schema/deliver-loop-status.schema.json'),
+    'utf8',
+  ),
+);
+const validate = new Ajv({ allErrors: true }).compile(schema);
+const hasPwsh = spawnSync('pwsh', ['-NoProfile', '-Command', '1']).status === 0;
+const BASE = 'https://github.com/acme/app';
+
+describe.skipIf(!hasPwsh || process.platform === 'win32')(
+  'Invoke-DeliverLoop.ps1 run events and status.json',
+  () => {
+    let dir: string;
+    let cwd: string;
+    let seq = 0;
+    let loop: PwshWorker;
+    let reducer: PwshWorker;
+
+    beforeAll(() => {
+      dir = fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(), 'loop-events-')));
+      loop = new PwshWorker(path.join(SCRIPTS, 'Invoke-DeliverLoop.ps1'));
+      reducer = new PwshWorker(path.join(SCRIPTS, 'ConvertFrom-ProgressEvents.ps1'));
+    });
+    afterAll(() => {
+      loop.close();
+      reducer.close();
+      fs.rmSync(dir, { recursive: true, force: true });
+    });
+
+    // milestone M4: #5 closed, #10 and #11 open, #12 open with needs-decision. Iteration 1 prints '#10 pr: opened #55',
+    // appends a nested run.started with a pid that does not live and closes #10; iteration 2 labels #11 needs-refinement.
+    const setup = (opts: { failOpenRead?: boolean } = {}) => {
+      cwd = path.join(dir, `case-${++seq}`);
+      fs.mkdirSync(cwd, { recursive: true });
+      const state = path.join(cwd, 'state.json');
+      const issues: Record<string, any> = {
+        5: { state: 'closed', title: 'done before' },
+        10: { state: 'open', title: 'first' },
+        11: { state: 'open', title: 'second' },
+        12: { state: 'open', title: 'decide', labels: ['needs-decision', 'pbi'] },
+      };
+      fs.writeFileSync(state, JSON.stringify({ issues }));
+      const gh = createFakeGh(
+        cwd,
+        `(call) => {
+        const fs = require('fs');
+        const s = JSON.parse(fs.readFileSync(${JSON.stringify(state)}, 'utf8'));
+        const a = call.args[1] || '';
+        const row = (n) => ({ number: Number(n), title: s.issues[n].title, state: s.issues[n].state, closed_at: null, body: '',
+          labels: (s.issues[n].labels || ['pbi']).map((name) => ({ name })), assignees: [], issue_dependencies_summary: { blocked_by: s.issues[n].blocker ? 1 : 0 } });
+        if (/\\/milestones\\?/.test(a)) return { rest: [[{ number: 4, title: 'M4 Status', state: 'open', html_url: '${BASE}/milestone/4' }]] };
+        if (${opts.failOpenRead ? 'true' : 'false'} && /state=open/.test(a)) throw new Error('rate limited');
+        let m = /issues\\?milestone=4&state=(open|closed|all)/.exec(a);
+        if (m) return { rest: [Object.keys(s.issues).filter((n) => m[1] === 'all' || s.issues[n].state === m[1]).map(row)] };
+        m = /issues\\/(\\d+)\\/dependencies\\/blocked_by/.exec(a);
+        if (m) { const b = s.issues[m[1]].blocker; return { rest: [b ? [{ number: b, state: 'open', repository_url: 'x' }] : []] }; }
+        throw new Error('unexpected gh ' + call.args.join(' '));
+      }`,
+      );
+      fs.writeFileSync(
+        path.join(cwd, 'harness.js'),
+        `const fs = require('fs'); const path = require('path'); const cwd = ${JSON.stringify(cwd)};
+const nFile = path.join(cwd, 'iteration'); const n = (fs.existsSync(nFile) ? Number(fs.readFileSync(nFile, 'utf8')) : 0) + 1;
+fs.writeFileSync(nFile, String(n));
+const env = process.env; const ev = path.join(env.AGENT_EVENTS_DIR, env.AGENT_EVENTS_RUN + '.jsonl');
+fs.appendFileSync(path.join(cwd, 'harness-env.jsonl'), JSON.stringify({ run: env.AGENT_EVENTS_RUN, terminal: env.AGENT_EVENTS_TERMINAL || '', dir: env.AGENT_EVENTS_DIR, herdr: env.HERDR_ENV || '' }) + '\\n');
+fs.copyFileSync(path.join(cwd, '.agents/deliver-loop/status.json'), path.join(cwd, 'snap' + n + '-status.json'));
+fs.copyFileSync(ev, path.join(cwd, 'snap' + n + '-events.jsonl'));
+const f = ${JSON.stringify(state)}; const s = JSON.parse(fs.readFileSync(f, 'utf8'));
+if (n === 1) {
+  const lines = fs.readFileSync(ev, 'utf8').trim().split('\\n').length;
+  fs.appendFileSync(ev, JSON.stringify({ v: 1, seq: lines + 1, ts: new Date().toISOString(), run: env.AGENT_EVENTS_RUN, type: 'run.started', tone: 'neutral', source: 'session', pid: 2000000000 }) + '\\n');
+  console.log(JSON.stringify({ type: 'assistant', message: { content: [{ type: 'text', text: '#10 pr: opened #55' }] } }));
+  s.issues[10].state = 'closed';
+} else {
+  console.log(JSON.stringify({ type: 'assistant', message: { content: [{ type: 'text', text: '#11 review: clean' }] } }));
+  s.issues[11].labels = ['pbi', 'needs-refinement'];
+}
+fs.writeFileSync(f, JSON.stringify(s));`,
+      );
+      fs.writeFileSync(path.join(gh.bin, 'claude'), `#!/bin/sh\nnode ${cwd}/harness.js\n`, {
+        mode: 0o755,
+      });
+      fs.writeFileSync(path.join(gh.bin, 'osascript'), '#!/bin/sh\ntrue\n', { mode: 0o755 });
+      return gh;
+    };
+    const run = (gh: ReturnType<typeof createFakeGh>) =>
+      loop.run(['-Milestone', 'M4', '-Model', 'sonnet'], {
+        cwd,
+        env: {
+          ...gh.env(),
+          HERDR_ENV: '',
+          POIMEN_SOCKET: '',
+          DELIVER_TERMINAL_BACKEND: '',
+          NO_COLOR: '1',
+          AGENT_EVENTS_RUN: 'stale-run-of-the-shell',
+          AGENT_EVENTS_TERMINAL: 'owner',
+        },
+      });
+    const eventFile = () => {
+      const files = fs.readdirSync(path.join(cwd, '.agents/events'));
+      expect(files).toHaveLength(1);
+      return path.join(cwd, '.agents/events', files[0]);
+    };
+    const events = (file: string) =>
+      fs
+        .readFileSync(file, 'utf8')
+        .trim()
+        .split('\n')
+        .map((l) => JSON.parse(l));
+    const json = (f: string) => JSON.parse(fs.readFileSync(path.join(cwd, f), 'utf8'));
+    const project = async (file: string, pidCheck = false) => {
+      const r = await reducer.run(['-Path', file, ...(pidCheck ? [] : ['-NoPidCheck'])], { cwd });
+      expect(r.status).toBe(0);
+      return JSON.parse(r.stdout);
+    };
+    const withoutVersion = ({ schemaVersion, ...rest }: Record<string, any>) => {
+      expect(schemaVersion).toBe(1);
+      return rest;
+    };
+
+    it('emits the run events, hands the run to the harness as nested and keeps status.json the projection of the event file', async () => {
+      const r = await run(setup());
+      expect(r.status).toBe(2);
+      const file = eventFile();
+      const id = path.basename(file, '.jsonl');
+      expect(id).not.toBe('stale-run-of-the-shell');
+      expect(fs.existsSync(path.join(cwd, '.agents/deliver-loop', id, 'progress.jsonl'))).toBe(
+        true,
+      );
+      const all = events(file);
+      expect(all.map((e) => e.type)).toEqual([
+        'run.started',
+        'milestone.progress',
+        'attention', // #12 needs-decision
+        'issue.started',
+        'run.started', // nested, written by the harness stub
+        'step.finished',
+        'attention', // pr_opened
+        'issue.finished', // #10 delivered
+        'milestone.progress',
+        'issue.started',
+        'step.finished',
+        'issue.finished', // #11 blocked, from the GitHub state; the status block lists it with the same reason
+        'milestone.progress',
+        'run.finished',
+      ]);
+      expect(all.map((e) => e.seq)).toEqual(all.map((_e, i) => i + 1));
+      expect(all[0]).toMatchObject({
+        source: 'loop',
+        harness: 'claude',
+        model: 'sonnet',
+        repository: 'acme/app',
+        milestone: { key: 'M4', title: 'M4 Status', url: `${BASE}/milestone/4` },
+        pid: expect.any(Number),
+      });
+      expect(all.filter((e) => e.type === 'milestone.progress')).toMatchObject([
+        { closed: 1, total: 4 },
+        { closed: 2, total: 4 },
+        { closed: 2, total: 4 },
+      ]);
+      expect(all.filter((e) => e.type === 'issue.finished')).toMatchObject([
+        { issue: { number: 10 }, outcome: 'delivered', prUrl: `${BASE}/pull/55` },
+        { issue: { number: 11 }, outcome: 'blocked', reason: 'needs refinement' },
+      ]);
+      expect(all.filter((e) => e.type === 'run.finished')).toEqual([
+        expect.objectContaining({ result: 'blocked' }),
+      ]);
+      // the harness gets the run and the events directory, but not the owner marker (nested: its events skip the sink)
+      const envs = fs
+        .readFileSync(path.join(cwd, 'harness-env.jsonl'), 'utf8')
+        .trim()
+        .split('\n')
+        .map((l) => JSON.parse(l));
+      expect(envs).toEqual([
+        { run: id, terminal: '', dir: path.dirname(file), herdr: '' },
+        { run: id, terminal: '', dir: path.dirname(file), herdr: '' },
+      ]);
+
+      // iteration 1 start: status.json is the projection of the event file at that time
+      const snap1 = json('snap1-status.json');
+      expect(validate(snap1), JSON.stringify(validate.errors)).toBe(true);
+      expect(withoutVersion(snap1)).toEqual(await project(path.join(cwd, 'snap1-events.jsonl')));
+      expect(snap1).toMatchObject({ result: 'running', current: { number: 10, title: 'first' } });
+      // iteration 2 start: the nested run.started names a pid that does not live, the projection is abandoned,
+      // status.json says running (schema version 1 has no abandoned)
+      const snap2 = json('snap2-status.json');
+      expect(validate(snap2), JSON.stringify(validate.errors)).toBe(true);
+      const abandoned = await project(path.join(cwd, 'snap2-events.jsonl'), true);
+      expect(abandoned.result).toBe('abandoned');
+      expect(withoutVersion(snap2)).toEqual({ ...abandoned, result: 'running' });
+      // the end
+      const doc = json('.agents/deliver-loop/status.json');
+      expect(validate(doc), JSON.stringify(validate.errors)).toBe(true);
+      expect(withoutVersion(doc)).toEqual(await project(file, true));
+      expect(doc).toMatchObject({
+        run: id,
+        result: 'blocked',
+        current: null,
+        delivered: [{ pbi: 10, url: `${BASE}/issues/10`, prUrl: `${BASE}/pull/55` }],
+        blocked: [{ number: 11, url: `${BASE}/issues/11`, reason: 'needs refinement' }],
+        needsYou: [
+          { number: 12, url: `${BASE}/issues/12`, reason: expect.stringContaining('decision') },
+        ],
+      });
+    });
+
+    it('an error after run.started still ends the run with exactly one run.finished, and status.json shows it', async () => {
+      const r = await run(setup({ failOpenRead: true }));
+      expect(r.status).not.toBe(0);
+      const all = events(eventFile());
+      expect(all[0].type).toBe('run.started');
+      expect(all.filter((e) => e.type === 'run.finished')).toHaveLength(1);
+      expect(all.at(-1)).toMatchObject({ type: 'run.finished', result: 'no progress' });
+      const doc = json('.agents/deliver-loop/status.json');
+      expect(validate(doc), JSON.stringify(validate.errors)).toBe(true);
+      expect(withoutVersion(doc)).toEqual(await project(eventFile(), true));
+      expect(doc.result).toBe('no progress');
+    });
+  },
+);
