@@ -1,6 +1,6 @@
 # ADR 0001: Agent progress events replace status.json
 
-- Status: Accepted
+- Status: Accepted; the terminal sink of the emitter superseded in part by [ADR 0002](0002-displays-read-the-progress-events.md)
 - Date: 2026-11-07
 - Issues: #368, #329, #331, #332
 - Builds on: the terminal backend adapter of #331 (`scripts/TerminalBackend.ps1`)
