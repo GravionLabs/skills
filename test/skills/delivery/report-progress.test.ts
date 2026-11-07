@@ -141,7 +141,8 @@ describe.skipIf(!hasPwsh || process.platform === 'win32')('Report-Progress.ps1',
       milestone: { key: 'M5' },
       host: { poimenTerminal: 't-1', herdrPane: 'p-2' },
     });
-    expect(typeof evs[0].pid).toBe('number');
+    // #401: a session's run.started comes from a separate process that exits at once, so it records no pid
+    expect(evs[0].pid).toBeUndefined();
     expect(evs[1]).toMatchObject({ closed: 7, total: 19 });
     expect(evs[3].step).toMatchObject({ name: 'review', n: 4, total: 7, text: 'clean' });
     // #372: issue.finished carries the reason (the projection's blocked and paused reason)
@@ -153,6 +154,42 @@ describe.skipIf(!hasPwsh || process.platform === 'win32')('Report-Progress.ps1',
       prUrl: 'https://x/pull/9',
       reviewRound: 2,
     });
+  });
+
+  it('does not fold a live interactive session run to abandoned, a loop run keeps its pid (#401)', async () => {
+    const reducer = path.resolve(
+      __dirname,
+      '../../../skills/delivery/deliver/scripts/ConvertFrom-ProgressEvents.ps1',
+    );
+    const dir = path.join(root, 'ev401');
+    const env = baseEnv({ AGENT_EVENTS_DIR: dir });
+    const start = (src: string) => {
+      const r = spawnSync(
+        'pwsh',
+        ['-NoProfile', '-File', SCRIPT, '-Type', 'run.started', '-Source', src],
+        { cwd: repo, env, encoding: 'utf8' },
+      );
+      return /AGENT_EVENTS_RUN=(\S+)/.exec(r.stdout)![1];
+    };
+    const session = start('session');
+    const loop = start('loop');
+    const result = (run: string) => {
+      const r = spawnSync(
+        'pwsh',
+        [
+          '-NoProfile',
+          '-Command',
+          `Get-Content -LiteralPath '${path.join(dir, `${run}.jsonl`)}' | & '${reducer}'`,
+        ],
+        { cwd: repo, env, encoding: 'utf8' },
+      );
+      return JSON.parse(r.stdout).result;
+    };
+    expect(events(dir, session)[0].pid).toBeUndefined();
+    expect(typeof events(dir, loop)[0].pid).toBe('number');
+    // the writing process has exited; the session run is still running, the loop run (dead pid) is abandoned
+    expect(result(session)).toBe('running');
+    expect(result(loop)).toBe('abandoned');
   });
 
   it('writes the tone and needsYou of the ADR table', async () => {
