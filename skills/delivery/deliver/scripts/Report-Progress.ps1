@@ -9,9 +9,11 @@
   The host (POIMEN_TERMINAL_ID, HERDR_PANE_ID) is read from the environment, never passed by the agent.
   Terminal sink: after the append the event is shown in the terminal (tokens and agent state through TerminalBackend.ps1,
   mapping table in references/terminal-backends.md). Only the outermost emitter reports: the process that writes run.started
-  prints `AGENT_EVENTS_TERMINAL=owner` next to the run id and keeps it in its own environment; an emitter with a run but without
-  `owner` (a nested one) skips the sink, so the owner strips or overrides the variable for the processes it starts. Without a run
-  (a run.started creates it) the process is the owner. Backend none or a failing call: no-op, the event is written anyway.
+  prints `AGENT_EVENTS_TERMINAL=owner` next to the run id (this script only prints the line). The owner, whoever wrote
+  run.started, must export AGENT_EVENTS_RUN and AGENT_EVENTS_TERMINAL=owner and must override or unset AGENT_EVENTS_TERMINAL
+  for every child process it starts. An emitter reports when it has no AGENT_EVENTS_RUN (no run owner, interactive /deliver),
+  created the run, or has `owner`; an emitter with a run but without `owner` (a nested one) skips the sink. An interactive
+  session that exports only AGENT_EVENTS_RUN is therefore treated as nested. Backend none or a failing call: no-op, the event is written anyway.
   Never fails the caller: an I/O error prints one line to stderr and the exit code is 0.
 .PARAMETER Type
   run.started, milestone.progress, issue.started, step.finished, attention, issue.finished, release.updated or run.finished.
@@ -98,8 +100,10 @@ function Send-TerminalSink($ev, [string]$prUrl) {
   $backend = Get-TerminalBackend
   if ($backend -eq 'none') { return }
   $pane = Get-LoopPane $backend
-  $state = { param($s) if (-not $script:SinkConflict) { Set-LoopAgentState -Pane $pane -State $s -Backend $backend } }
-  $script:SinkConflict = Test-LoopAgentConflict -Pane $pane -Backend $backend
+  $script:SinkConflict = $null
+  # Evaluated lazily: only an event that sets or releases an agent state asks the pane for another agent.
+  $conflict = { if ($null -eq $script:SinkConflict) { $script:SinkConflict = [bool](Test-LoopAgentConflict -Pane $pane -Backend $backend) }; $script:SinkConflict }
+  $state = { param($s) if (-not (& $conflict)) { Set-LoopAgentState -Pane $pane -State $s -Backend $backend } }
   switch ($ev.type) {
     'step.finished' {
       $t = [ordered]@{}
@@ -123,7 +127,7 @@ function Send-TerminalSink($ev, [string]$prUrl) {
     'run.finished' {
       Clear-LoopTokens -Pane $pane -Name 'deliver', 'deliver_step', 'deliver_pr', 'deliver_progress', 'deliver_tone' -Backend $backend
       & $state $(if ($ev.result -in 'blocked', 'no progress') { 'blocked' } else { 'idle' })
-      if (-not $script:SinkConflict) { Clear-LoopAgentState -Pane $pane -Backend $backend }
+      if (-not (& $conflict)) { Clear-LoopAgentState -Pane $pane -Backend $backend }
     }
   }
 }
@@ -215,7 +219,7 @@ try {
     $fs.Flush()
   } finally { $fs.Dispose() }
   if ($created) { Write-Output "AGENT_EVENTS_RUN=$run"; Write-Output 'AGENT_EVENTS_TERMINAL=owner' }
-  if ($created -or $env:AGENT_EVENTS_TERMINAL -eq 'owner') {
+  if (-not $env:AGENT_EVENTS_RUN -or $created -or $env:AGENT_EVENTS_TERMINAL -eq 'owner') {
     try { Send-TerminalSink ([pscustomobject]($ev | ConvertTo-Json -Depth 6 | ConvertFrom-Json)) $Pr } catch { Write-Verbose "terminal sink: $_" }
   }
 } catch {

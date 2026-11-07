@@ -154,6 +154,40 @@ describe.skipIf(!hasPwsh || process.platform === 'win32')(
       expect(r.stdout).toMatch(/AGENT_EVENTS_RUN=\S+\s+AGENT_EVENTS_TERMINAL=owner/);
     });
 
+    it('no run env: run.started reports itself without stray pane calls; other types write nothing', async () => {
+      const none = { AGENT_EVENTS_RUN: '', AGENT_EVENTS_TERMINAL: '' };
+      const r = await emit(['-Type', 'run.started'], none);
+      expect(r.stdout).toContain('AGENT_EVENTS_TERMINAL=owner');
+      expect(recorded()).toEqual([]);
+      await emit(['-Type', 'step.finished', '-Issue', '1', '-Step', 'pr'], none);
+      expect(recorded()).toEqual([]);
+    });
+
+    it('run set without owner: nothing, including run.finished and issue.started', async () => {
+      const nested = { AGENT_EVENTS_TERMINAL: '' };
+      await emit(['-Type', 'issue.started', '-Issue', '4'], nested);
+      await emit(['-Type', 'run.finished', '-RunResult', 'done'], nested);
+      expect(recorded()).toEqual([]);
+    });
+
+    it('the conflict check runs only when an agent state is set', async () => {
+      await emit(['-Type', 'step.finished', '-Issue', '1', '-Step', 'pr']);
+      await emit(['-Type', 'milestone.progress', '-Closed', '1', '-Total', '2']);
+      expect(recorded().some((l) => l.includes('pane get'))).toBe(false);
+      await emit(['-Type', 'issue.started', '-Issue', '4']);
+      expect(recorded().some((l) => l.includes('pane get'))).toBe(true);
+    });
+
+    it('poimen: run.finished clears the tokens', async () => {
+      await emit(['-Type', 'run.finished', '-RunResult', 'done'], {
+        DELIVER_TERMINAL_BACKEND: 'poimen',
+        POIMEN_TERMINAL_ID: 't1',
+      });
+      expect(recorded().some((l) => l.startsWith('poimen-server') && l.includes('deliver'))).toBe(
+        true,
+      );
+    });
+
     it('a herdr pane with another agent gets tokens but no agent state', async () => {
       stub('herdr', `[ "$2" = get ] && echo '{"result":{"pane":{"agent":"claude"}}}'`);
       await emit(['-Type', 'issue.started', '-Issue', '4']);
