@@ -1,6 +1,6 @@
 # ADR 0002: Displays read the progress events
 
-- Status: Proposed
+- Status: Accepted
 - Date: 2026-11-07
 - Issues: #413, #395
 - Supersedes in part: [ADR 0001](0001-agent-progress-events.md) (the terminal sink of the emitter; the event format, `tone`, the location, the retention and the reference reducer stay)
@@ -75,7 +75,7 @@ For one minor release the sink stays behind `DELIVER_TERMINAL_SINK=1` (default o
   - Users of herdr need the plugin for the deliver tokens; without it the sidebar shows no deliver state (the events are written anyway).
   - Agents without a shell still cannot read runs until the MCP server comes.
 - Follow-ups:
-  - skills (Feature #413): token fixtures (#414); `Get-RunState.ps1` with allowlist entry (#415); sink behind `DELIVER_TERMINAL_SINK` (#416), then removal of the sink, the owner rule and the token functions of `TerminalBackend.ps1` (#417); docs with each PBI. ADR 0001 gets its Status line once this ADR is accepted.
+  - skills (Feature #413): token fixtures (#414); `Get-RunState.ps1` with allowlist entry (#415); sink behind `DELIVER_TERMINAL_SINK` (#416), then removal of the sink, the owner rule and the token functions of `TerminalBackend.ps1` (#417); docs with each PBI.
   - herdr-plugins: event watcher with tokens and agent state, tested against the token fixtures (GravionLabs/herdr-plugins#221).
   - poimen: #480 reads the events; drop the deliver use of `poimen-server report`.
   - #395 stays open as the deferred MCP server.
