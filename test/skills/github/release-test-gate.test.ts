@@ -100,4 +100,33 @@ describe('Get-ReleaseState.ps1 -Milestone (RC test)', () => {
     expect(r.olderReleaseTests).toEqual([{ number: 3, url: 'https://x/issues/3' }]);
     expect((await finish('[]')).olderReleaseTests).toEqual([]);
   });
+
+  // #399: only issues of a lower milestone are replaced, newer ones and issues without a milestone stay.
+  it('replaces only release-test issues of lower milestones', async () => {
+    const all = JSON.stringify([
+      { number: 3, url: 'u3', milestone: { title: 'M3' } },
+      { number: 5, url: 'u5', milestone: { title: 'M5' } },
+      { number: 9, url: 'u9', milestone: null },
+      { number: 10, url: 'u10', milestone: { title: 'M10' } },
+      { number: 2, url: 'u2', milestone: { title: 'M3.5' } },
+      { number: 4, url: 'u4', milestone: { title: 'M4' } },
+    ]);
+    const r = await finish(open, undefined, 'M4', all);
+    expect(r.olderReleaseTests).toEqual([
+      { number: 3, url: 'u3' },
+      { number: 2, url: 'u2' },
+    ]);
+  });
+
+  it('compares by due date when the milestones are not M<n> titles', async () => {
+    const all = JSON.stringify([
+      { number: 1, url: 'u1', milestone: { title: '1.0.0', dueOn: '2026-01-01T00:00:00Z' } },
+      { number: 2, url: 'u2', milestone: { title: '3.0.0', dueOn: '2026-09-01T00:00:00Z' } },
+      { number: 3, url: 'u3', milestone: { title: '0.9.0' } },
+    ]);
+    const cur =
+      '[{"number":7,"url":"u7","milestone":{"title":"2.0.0","dueOn":"2026-05-01T00:00:00Z"}}]';
+    const r = await finish(cur, undefined, '2.0.0', all);
+    expect(r.olderReleaseTests).toEqual([{ number: 1, url: 'u1' }]);
+  });
 });
