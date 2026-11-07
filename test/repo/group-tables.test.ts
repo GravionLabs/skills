@@ -30,3 +30,14 @@ describe('group tables of AGENTS.md and README.md (#229)', () => {
     expect(row).toMatch(/--move-to/);
   });
 });
+
+describe('github-project is part of this repository (#428)', () => {
+  it.each(['AGENTS.md', 'README.md', 'skills/delivery/skills-manage/references/groups.md'])(
+    '%s does not say github-project is outside the repository',
+    (file) => {
+      const text = fs.readFileSync(path.join(root, file), 'utf-8');
+      expect(text).not.toMatch(/not in this repository/);
+      expect(text).not.toMatch(/github-project[^.;|]*ships from GravionLabs\/ci/);
+    },
+  );
+});
