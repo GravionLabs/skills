@@ -218,5 +218,62 @@ describe.skipIf(!hasPwsh || process.platform === 'win32')(
       expect(bad.status).toBe(0);
       expect(fs.readFileSync(path.join(root, 'ev', 'r1.jsonl'), 'utf8')).toContain('"merge"');
     });
+
+    // #416: DELIVER_TERMINAL_SINK=0 switches the sink off; unset or any other value keeps it.
+    it.each([
+      ['0', 0],
+      ['', 1],
+      ['1', 1],
+      ['off', 1],
+    ])('DELIVER_TERMINAL_SINK=%j: sink calls %i', async (value, calls) => {
+      await emit(['-Type', 'step.finished', '-Issue', '12', '-Step', 'pr'], {
+        DELIVER_TERMINAL_SINK: value,
+      });
+      expect(metadata().length).toBe(calls);
+    });
+
+    it('DELIVER_TERMINAL_SINK=0 skips the -SinkEvent path and writes nothing', async () => {
+      const json = JSON.stringify({
+        type: 'step.finished',
+        issue: { number: 12 },
+        step: { name: 'pr' },
+        tone: 'success',
+      });
+      const r = await emit(['-Type', 'step.finished', '-SinkEvent', json], {
+        DELIVER_TERMINAL_SINK: '0',
+      });
+      expect(r.status).toBe(0);
+      expect(recorded()).toEqual([]);
+      const on = await emit(['-Type', 'step.finished', '-SinkEvent', json]);
+      expect(on.status).toBe(0);
+      expect(metadata().length).toBe(1);
+    });
+
+    it('events are written identically with and without the sink', async () => {
+      const file = path.join(root, 'ev', 'r1.jsonl');
+      const args = [
+        '-Type',
+        'step.finished',
+        '-Issue',
+        '12',
+        '-Step',
+        'review',
+        '-Result',
+        'fix needed',
+      ];
+      const read = () => {
+        const { ts: _ts, ...rest } = JSON.parse(
+          fs.readFileSync(file, 'utf8').trim().split('\n').pop()!,
+        );
+        return rest;
+      };
+      fs.rmSync(file, { force: true });
+      await emit(args, { DELIVER_TERMINAL_SINK: '0' });
+      const off = read();
+      fs.rmSync(file, { force: true });
+      await emit(args);
+      expect(read()).toEqual(off);
+      expect(metadata().length).toBe(1);
+    });
   },
 );

@@ -108,7 +108,9 @@ function Get-Tone([string]$type, [string]$step, [string]$result, [string]$kind, 
 . (Join-Path $PSScriptRoot 'ProgressRetention.ps1')
 
 # Terminal sink: tokens and agent state of one event. Mapping: the token fixtures (references/terminal-backends.md).
+# Deprecated (ADR 0002): DELIVER_TERMINAL_SINK=0 switches it off; unset or any other value keeps it.
 function Send-TerminalSink($ev, [string]$prUrl) {
+  if ($env:DELIVER_TERMINAL_SINK -eq '0') { return }
   $backend = Get-TerminalBackend
   if ($backend -eq 'none') { return }
   $pane = Get-LoopPane $backend

@@ -224,7 +224,7 @@ function Send-Event([hashtable]$Fields) {
 
 # One followed event through the terminal sink only (tokens and agent state), as Send-Event sets the environment.
 function Send-SinkEvent([string]$Json, [string]$Pr) {
-  if (-not $RunId) { return }
+  if (-not $RunId -or $env:DELIVER_TERMINAL_SINK -eq '0') { return }
   $herdr = $env:HERDR_ENV; $term = $env:AGENT_EVENTS_TERMINAL
   $env:HERDR_ENV = $LoopHerdrEnv; $env:AGENT_EVENTS_TERMINAL = 'owner'
   try { & $ReportScript -Type step.finished -SinkEvent $Json -Pr $Pr | Out-Null } catch { Write-Verbose "sink event not shown: $_" }

@@ -5,6 +5,13 @@ Versioning follows [Semantic Versioning](https://semver.org/).
 
 ---
 
+## [Unreleased]
+
+### Deprecated
+- **delivery**: The terminal sink of Report-Progress (tokens and agent state), the owner rule and `Set-LoopTokens`/`Set-LoopAgentState` are deprecated and removed in v3.4.0; `DELIVER_TERMINAL_SINK=0` switches the sink off, use the herdr event watcher or poimen#480 (#416)
+
+---
+
 ## [3.2.0] — 2026-11-07
 
 ### Bug Fixes

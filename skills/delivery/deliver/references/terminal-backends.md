@@ -14,7 +14,9 @@ The deliver scripts call the terminal only through `scripts/TerminalBackend.ps1`
 
 The tokens `deliver`, `deliver_step`, `deliver_pr`, `deliver_progress` (`<closed>/<total>` of the milestone, e.g. `7/19`) and `deliver_tone` go through `Set-LoopTokens`, the lifecycle through `Set-LoopAgentState`; the loop sends events and its terminal sink (below) makes these calls, `Clear-LoopTokens` removes all five with `run.finished`. poimen gets the same tokens and state through `poimen-server` (`terminal.report_tokens`); a missing server or method warns once on stderr (`Invoke-Poimen`) and the loop goes on. The status file `.agents/deliver-loop/status.json` is written whatever the backend (`loop.md` "Observability").
 
-## Terminal sink of Report-Progress
+## Terminal sink of Report-Progress (deprecated)
+
+Deprecated (ADR 0002): the sink, the owner rule (`AGENT_EVENTS_TERMINAL`) and `Set-LoopTokens`/`Set-LoopAgentState` (with their `Clear-*` counterparts) are removed in v3.4.0, the minor release after the one that marks them. Until then `DELIVER_TERMINAL_SINK=0` switches the sink off (unset or any other value keeps it); the events are written the same either way. Use the herdr event watcher (herdr-plugins, GravionLabs/herdr-plugins#221) or poimen's event reader (poimen#480) instead.
 
 After appending, `scripts/Report-Progress.ps1` shows the event through the same functions, so herdr and poimen get tokens and state in interactive sessions too.
 
