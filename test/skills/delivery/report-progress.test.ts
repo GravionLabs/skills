@@ -24,7 +24,10 @@ describe.skipIf(!hasPwsh || process.platform === 'win32')('Report-Progress.ps1',
     return ajv.compile(JSON.parse(fs.readFileSync(SCHEMA, 'utf8')));
   })();
   const git = (cwd: string, ...args: string[]) =>
-    execFileSync('git', args, { cwd, encoding: 'utf8' }).trim();
+    execFileSync('git', ['-c', 'user.name=Test', '-c', 'user.email=test@example.com', ...args], {
+      cwd,
+      encoding: 'utf8',
+    }).trim();
   const baseEnv = (extra: Record<string, string> = {}) => {
     const env: NodeJS.ProcessEnv = { ...process.env, ...extra };
     for (const k of ['AGENT_EVENTS_RUN', 'AGENT_EVENTS_DIR', 'POIMEN_TERMINAL_ID', 'HERDR_PANE_ID'])
@@ -48,7 +51,7 @@ describe.skipIf(!hasPwsh || process.platform === 'win32')('Report-Progress.ps1',
     worker = new PwshWorker(SCRIPT);
   });
   afterAll(() => {
-    worker.close();
+    worker?.close();
     fs.rmSync(root, { recursive: true, force: true });
   });
 
