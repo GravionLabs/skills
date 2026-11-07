@@ -9,14 +9,14 @@ An `--unattended` run stops at the first permission prompt (spike #823, `docs/sp
 | `gh` (`auth status`, `api`, `issue`, `pr`, `label`, `repo view`)                                                                                                                                  | this session, `github-pull-request`                                                                     |
 | `pwsh` with `scripts/Remove-PbiWorktrees.ps1` of this skill: the path of the installed skill, e.g. `.claude/skills/deliver/…` in the project or `~/.claude/skills/deliver/…` for a global install | this session, step 8 (cleanup)                                                                          |
 | `pwsh` with `Get-Lessons.ps1` of the `lessons` skill: `.claude/skills/lessons/…`, `~/.claude/skills/lessons/…` or `.agents/skills/lessons/…`                                                      | implement, review and fix subagents (`implementation`, `code-review`)                                   |
-| `printenv HERDR_ENV`, `printenv HERDR_PANE_ID`, `herdr pane report-metadata`                                                                                                                      | only when the run is inside a `herdr` pane (`references/terminal-backends.md`)                          |
+| `pwsh` with `scripts/Report-Progress.ps1` of this skill                                                                                                                                           | this session, every progress line (`references/terminal-backends.md`)                                   |
 | `poimen-server report`                                                                                                                                                                            | only when the run is inside a poimen terminal (`POIMEN_TERMINAL_ID`, `references/terminal-backends.md`) |
 
 The other scripts of this skill (`Test-DeliverPreflight.ps1` at Start 3, `Get-DeliverStatus.ps1`) need `scripts/` of the installed skill as a whole: the `…/deliver/scripts/` entries below; the preflight checks them. The whole-directory entry `…/deliver/scripts/:*` also permits `Invoke-DeliverLoop.ps1` and every other script of the skill.
 
 Replace the `pnpm` lines below with the commands of the repository's `AGENTS.md`. The deny entries block the common force-push and `--admin` forms; `deliver` needs neither, and the ruleset on `release/next` stays the real gate.
 
-Claude Code denies any command with a quoted `$(…)` substitution even when its prefix is allowed ("Quoted text in this command can't be checked before it runs"). The same holds for any variable expansion: `herdr pane report-metadata $HERDR_PANE_ID …` is denied with or without quotes, the same call with the literal pane id passes (checked headless with `--permission-mode default`, 2026-10-29). Skill text and subagent prompts write simple commands only.
+Claude Code denies any command with a quoted `$(…)` substitution even when its prefix is allowed ("Quoted text in this command can't be checked before it runs"). The same holds for any variable expansion (checked headless with `--permission-mode default`, 2026-10-29). Skill text and subagent prompts write simple commands only.
 
 ## Claude Code
 
@@ -32,12 +32,10 @@ Claude Code denies any command with a quoted `$(…)` substitution even when its
       "Bash(gh issue:*)",
       "Bash(gh pr:*)",
       "Bash(pwsh .claude/skills/deliver/scripts/Remove-PbiWorktrees.ps1:*)",
+      "Bash(pwsh .claude/skills/deliver/scripts/Report-Progress.ps1:*)",
       "Bash(pwsh .claude/skills/deliver/scripts/:*)",
       "Bash(pwsh .claude/skills/lessons/scripts/Get-Lessons.ps1:*)",
       "Bash(pwsh ~/.claude/skills/lessons/scripts/Get-Lessons.ps1:*)",
-      "Bash(printenv HERDR_ENV)",
-      "Bash(printenv HERDR_PANE_ID)",
-      "Bash(herdr pane report-metadata:*)",
       "Bash(poimen-server report:*)",
       "Bash(pnpm install)",
       "Bash(pnpm run build)",
@@ -70,11 +68,9 @@ Headless: `claude -p "/deliver <nr> --unattended"` reads the same file; `--allow
       "gh issue *": "allow",
       "gh pr *": "allow",
       "pwsh *deliver/scripts/Remove-PbiWorktrees.ps1*": "allow",
+      "pwsh *deliver/scripts/Report-Progress.ps1*": "allow",
       "pwsh *deliver/scripts/*": "allow",
       "pwsh *lessons/scripts/Get-Lessons.ps1*": "allow",
-      "printenv HERDR_ENV": "allow",
-      "printenv HERDR_PANE_ID": "allow",
-      "herdr pane report-metadata*": "allow",
       "poimen-server report*": "allow",
       "pnpm install": "allow",
       "pnpm run build": "allow",
@@ -114,9 +110,6 @@ copilot -p "/deliver <nr> --unattended" `
   --allow-tool 'shell(gh label)' `
   --allow-tool 'shell(gh repo view)' `
   --allow-tool 'shell(pwsh)' `
-  --allow-tool 'shell(printenv HERDR_ENV)' `
-  --allow-tool 'shell(printenv HERDR_PANE_ID)' `
-  --allow-tool 'shell(herdr pane report-metadata)' `
   --allow-tool 'shell(poimen-server report)' `
   --allow-tool 'shell(pnpm install)' `
   --allow-tool 'shell(pnpm run build)' `
@@ -135,7 +128,6 @@ Trial #5 (Copilot CLI 1.0.105, `-p` mode):
 - The `--deny-tool` lines did not block `git push --force --dry-run origin release/next` while `shell(git push)` was allowed. The ruleset on `release/next` is the gate.
 - `-p` gives up on the background CI watch after 600 s and ends before the merge. Set `COPILOT_TASK_WAIT_TIMEOUT_SECONDS=3600` for `-p` runs; `copilot --resume=<id> -p "continue"` finishes a run that ended early.
 - The model per subagent is set only in `~/.copilot/settings.json` (`subagents.agents.general-purpose.model`), not per repository.
-- `herdr pane report-metadata` with quoted arguments was denied, so the herdr display stays empty on Copilot. No workaround is required.
 
 Live check of the unattended flags (Copilot CLI 1.0.105, `-p --no-ask-user`): `--allow-all-tools` alone denies `view` of paths outside the cwd (worktrees of subagents) and shell commands with URLs; adding `--allow-all-paths --allow-all-urls` allows both, in the orchestrator and in subagents. `Invoke-DeliverLoop.ps1 -Harness copilot` passes these three flags (`references/loop.md`); the per-tool list above is for runs that must stay narrower.
 

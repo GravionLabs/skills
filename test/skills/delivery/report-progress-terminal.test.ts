@@ -154,6 +154,16 @@ describe.skipIf(!hasPwsh || process.platform === 'win32')(
       expect(r.stdout).toMatch(/AGENT_EVENTS_RUN=\S+\s+AGENT_EVENTS_TERMINAL=owner/);
     });
 
+    it('-Run carries the run id without AGENT_EVENTS_RUN and reports to the terminal', async () => {
+      const none = { AGENT_EVENTS_RUN: '', AGENT_EVENTS_TERMINAL: '' };
+      const r = await emit(
+        ['-Type', 'step.finished', '-Issue', '1', '-Step', 'pr', '-Run', 'r9'],
+        none,
+      );
+      expect(r.stderr).toBe('');
+      expect(fs.readFileSync(path.join(root, 'ev', 'r9.jsonl'), 'utf8')).toContain('step.finished');
+    });
+
     it('no run env: run.started reports itself without stray pane calls; other types write nothing', async () => {
       const none = { AGENT_EVENTS_RUN: '', AGENT_EVENTS_TERMINAL: '' };
       const r = await emit(['-Type', 'run.started'], none);

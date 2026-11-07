@@ -8,6 +8,7 @@
       "Bash(gh pr:*)",
       "Bash(pwsh ~/.claude/skills/deliver/scripts/Remove-PbiWorktrees.ps1:*)",
       "Bash(pwsh .claude/skills/deliver/scripts/Remove-PbiWorktrees.ps1:*)",
+      "Bash(pwsh .claude/skills/deliver/scripts/Report-Progress.ps1:*)",
       "Bash(pwsh .claude/skills/deliver/scripts/:*)",
       "Bash(pwsh ~/.claude/skills/deliver/scripts/:*)",
       "Bash(pwsh ~/.claude/skills/lessons/scripts/Get-Lessons.ps1:*)",
@@ -21,9 +22,6 @@
       "Bash(pnpm run format:*)",
       "Bash(pnpm run lint:ps)",
       "Bash(pnpm run check)",
-      "Bash(printenv HERDR_ENV)",
-      "Bash(printenv HERDR_PANE_ID)",
-      "Bash(herdr pane report-metadata:*)",
       "Bash(poimen-server report:*)",
       "Edit",
       "Write"

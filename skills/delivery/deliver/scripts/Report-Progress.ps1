@@ -25,6 +25,10 @@
   release.updated: the round of the release review (1, 2, ...).
 .PARAMETER RunResult
   run.finished result: done, max reached, blocked, no progress, ...
+.PARAMETER Run
+  Run id to write to; the fallback is AGENT_EVENTS_RUN. An interactive session passes the id printed by run.started with
+  every later call (Bash calls share no shell state, and an env prefix would not match the permission allowlist). -Run
+  alone does not make the emitter nested: without AGENT_EVENTS_RUN it still reports to the terminal.
 #>
 param(
   [Parameter(Mandatory)][string]$Type,
@@ -54,7 +58,8 @@ param(
   [int]$TestIssue,
   [string]$TestIssueUrl,
   [string]$PrUrl,
-  [int]$ReviewRound
+  [int]$ReviewRound,
+  [string]$Run
 )
 $ErrorActionPreference = 'Stop'
 
@@ -137,7 +142,7 @@ $stepNumbers = @{ select = 1; resume = 2; implement = 3; review = 4; fix = 5; pr
 function Add-If($h, [string]$k, $v) { if ($null -ne $v -and "$v" -ne '') { $h[$k] = $v } }
 
 try {
-  $run = $env:AGENT_EVENTS_RUN
+  $run = if ($Run) { $Run } else { $env:AGENT_EVENTS_RUN }
   $created = $false
   if (-not $run) {
     if ($Type -ne 'run.started') { exit 0 }
