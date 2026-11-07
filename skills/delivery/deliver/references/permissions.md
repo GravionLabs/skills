@@ -1,6 +1,6 @@
 # Permissions: shell allowlists per harness
 
-An `--unattended` run stops at the first permission prompt (spike #823, `docs/spikes/deliver.md` section 2). `deliver` and its subagents run seven kinds of shell commands; each must be on the allowlist of the harness:
+An `--unattended` run stops at the first permission prompt (spike #823, `docs/spikes/deliver.md` section 2). `deliver` and its subagents run eight kinds of shell commands; each must be on the allowlist of the harness:
 
 | Commands                                                                                                                                                                                          | Used by                                                                                                 |
 | :------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ | :------------------------------------------------------------------------------------------------------ |
@@ -10,6 +10,7 @@ An `--unattended` run stops at the first permission prompt (spike #823, `docs/sp
 | `pwsh` with `scripts/Remove-PbiWorktrees.ps1` of this skill: the path of the installed skill, e.g. `.claude/skills/deliver/…` in the project or `~/.claude/skills/deliver/…` for a global install | this session, step 8 (cleanup)                                                                          |
 | `pwsh` with `Get-Lessons.ps1` of the `lessons` skill: `.claude/skills/lessons/…`, `~/.claude/skills/lessons/…` or `.agents/skills/lessons/…`                                                      | implement, review and fix subagents (`implementation`, `code-review`)                                   |
 | `pwsh` with `scripts/Report-Progress.ps1` of this skill                                                                                                                                           | this session, every progress line (`references/terminal-backends.md`)                                   |
+| `pwsh` with `scripts/Get-RunState.ps1` of this skill (read-only run reader)                                                                                                                       | agents with a shell that read a run (`references/loop.md`, "Reading a run")                             |
 | `poimen-server report`                                                                                                                                                                            | only when the run is inside a poimen terminal (`POIMEN_TERMINAL_ID`, `references/terminal-backends.md`) |
 
 The other scripts of this skill (`Test-DeliverPreflight.ps1` at Start 3, `Get-DeliverStatus.ps1`) need `scripts/` of the installed skill as a whole: the `…/deliver/scripts/` entries below; the preflight checks them. The whole-directory entry `…/deliver/scripts/:*` also permits `Invoke-DeliverLoop.ps1` and every other script of the skill.
@@ -33,6 +34,7 @@ Claude Code denies any command with a quoted `$(…)` substitution even when its
       "Bash(gh pr:*)",
       "Bash(pwsh .claude/skills/deliver/scripts/Remove-PbiWorktrees.ps1:*)",
       "Bash(pwsh .claude/skills/deliver/scripts/Report-Progress.ps1:*)",
+      "Bash(pwsh .claude/skills/deliver/scripts/Get-RunState.ps1:*)",
       "Bash(pwsh .claude/skills/deliver/scripts/:*)",
       "Bash(pwsh .claude/skills/lessons/scripts/Get-Lessons.ps1:*)",
       "Bash(pwsh ~/.claude/skills/lessons/scripts/Get-Lessons.ps1:*)",
@@ -69,6 +71,7 @@ Headless: `claude -p "/deliver <nr> --unattended"` reads the same file; `--allow
       "gh pr *": "allow",
       "pwsh *deliver/scripts/Remove-PbiWorktrees.ps1*": "allow",
       "pwsh *deliver/scripts/Report-Progress.ps1*": "allow",
+      "pwsh *deliver/scripts/Get-RunState.ps1*": "allow",
       "pwsh *deliver/scripts/*": "allow",
       "pwsh *lessons/scripts/Get-Lessons.ps1*": "allow",
       "poimen-server report*": "allow",

@@ -9,6 +9,7 @@
       "Bash(pwsh ~/.claude/skills/deliver/scripts/Remove-PbiWorktrees.ps1:*)",
       "Bash(pwsh .claude/skills/deliver/scripts/Remove-PbiWorktrees.ps1:*)",
       "Bash(pwsh .claude/skills/deliver/scripts/Report-Progress.ps1:*)",
+      "Bash(pwsh .claude/skills/deliver/scripts/Get-RunState.ps1:*)",
       "Bash(pwsh .claude/skills/deliver/scripts/:*)",
       "Bash(pwsh ~/.claude/skills/deliver/scripts/:*)",
       "Bash(pwsh ~/.claude/skills/lessons/scripts/Get-Lessons.ps1:*)",
