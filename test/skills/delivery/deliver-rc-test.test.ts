@@ -33,9 +33,13 @@ describe('deliver step 9: RC test', () => {
 
   // #398: the release-test issue is never delivered as work.
   it('never selects the release-test issue as work, also not interactively or in the control session', () => {
-    expect(skill).toContain('is never selected as work, not in steps 1 to 8 and not in the control session');
+    expect(skill).toContain(
+      'is never selected as work, not in steps 1 to 8 and not in the control session',
+    );
     expect(skill).toContain('release test, left for step 9');
     expect(skill).not.toContain('is selected only when it is the last open');
-    expect(read('references/control.md')).toContain('never the `release-test` issue, it stays open for step 9');
+    expect(read('references/control.md')).toContain(
+      'never the `release-test` issue, it stays open for step 9',
+    );
   });
 });
