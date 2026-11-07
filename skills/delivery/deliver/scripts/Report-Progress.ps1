@@ -14,6 +14,9 @@
   for every child process it starts. An emitter reports when it has no AGENT_EVENTS_RUN (no run owner, interactive /deliver),
   created the run, or has `owner`; an emitter with a run but without `owner` (a nested one) skips the sink. An interactive
   session that exports only AGENT_EVENTS_RUN is therefore treated as nested. Backend none or a failing call: no-op, the event is written anyway.
+  Retention: -Type run.started deletes finished and abandoned runs older than AGENT_EVENTS_KEEP_DAYS (default 7) and all
+  beyond the newest AGENT_EVENTS_KEEP (default 100), in the events dir and in .agents/deliver-loop/<run>/ (ProgressRetention.ps1).
+  Running runs (live pid) and the current run are kept.
   Never fails the caller: an I/O error prints one line to stderr and the exit code is 0.
 .PARAMETER Type
   run.started, milestone.progress, issue.started, step.finished, attention, issue.finished, release.updated or run.finished.
@@ -102,6 +105,7 @@ function Get-Tone([string]$type, [string]$step, [string]$result, [string]$kind, 
 }
 
 . (Join-Path $PSScriptRoot 'TerminalBackend.ps1')
+. (Join-Path $PSScriptRoot 'ProgressRetention.ps1')
 
 # Terminal sink: tokens and agent state of one event. Table in references/terminal-backends.md.
 function Send-TerminalSink($ev, [string]$prUrl) {
@@ -233,6 +237,11 @@ try {
     $fs.Write($line, 0, $line.Length)
     $fs.Flush()
   } finally { $fs.Dispose() }
+  if ($Type -eq 'run.started') {
+    # retention: old event files and stream recordings (next to the events dir and under the current directory)
+    $loopDirs = @((Join-Path (Split-Path $dir -Parent) 'deliver-loop'), (Join-Path (Get-Location).Path '.agents/deliver-loop'))
+    Invoke-ProgressRetention -EventsDir $dir -LoopDirs $loopDirs -CurrentRun $run
+  }
   if ($created) { Write-Output "AGENT_EVENTS_RUN=$run"; Write-Output 'AGENT_EVENTS_TERMINAL=owner' }
   if (-not $env:AGENT_EVENTS_RUN -or $created -or $env:AGENT_EVENTS_TERMINAL -eq 'owner') {
     try { Send-TerminalSink ([pscustomobject]($ev | ConvertTo-Json -Depth 6 | ConvertFrom-Json)) $Pr } catch { Write-Verbose "terminal sink: $_" }
