@@ -1,4 +1,4 @@
-# Terminal backends and the herdr progress display
+# Terminal backends and the progress display
 
 The deliver scripts call the terminal only through `scripts/TerminalBackend.ps1`. `Get-TerminalBackend` picks the backend: `DELIVER_TERMINAL_BACKEND` (`herdr`, `poimen`, `none`) wins; else `POIMEN_TERMINAL_ID` and `POIMEN_SOCKET` set: `poimen`; else `HERDR_ENV=1`: `herdr`; else `none`. `none` and an unsupported operation are no-ops with one notice per run on stderr; a failing backend call never fails the loop.
 
@@ -12,42 +12,29 @@ The deliver scripts call the terminal only through `scripts/TerminalBackend.ps1`
 | `Open-LogPane`         | `herdr pane list`, `pane split`, `pane run`, `pane rename`                       | notice only                                                                  | poimen, none |
 | `Switch-LogPane`       | `herdr pane list`, `pane close` or `Open-LogPane`                                | notice only                                                                  | poimen, none |
 
-The loop reports the tokens `deliver`, `deliver_step`, `deliver_pr` and `deliver_progress` (`<closed>/<total>` of the milestone, e.g. `7/19`) through `Set-LoopTokens`, and the lifecycle through `Set-LoopAgentState`; `Clear-LoopTokens` removes all four on exit. poimen gets the same tokens and state through `poimen-server` (`terminal.report_tokens`); a missing server or method warns once on stderr (`Invoke-Poimen`) and the loop goes on. The status file `.agents/deliver-loop/status.json` is written whatever the backend (`loop.md` "Observability").
+The tokens `deliver`, `deliver_step`, `deliver_pr`, `deliver_progress` (`<closed>/<total>` of the milestone, e.g. `7/19`) and `deliver_tone` go through `Set-LoopTokens`, the lifecycle through `Set-LoopAgentState`; the loop sends events and its terminal sink (below) makes these calls, `Clear-LoopTokens` removes all five with `run.finished`. poimen gets the same tokens and state through `poimen-server` (`terminal.report_tokens`); a missing server or method warns once on stderr (`Invoke-Poimen`) and the loop goes on. The status file `.agents/deliver-loop/status.json` is written whatever the backend (`loop.md` "Observability").
+
+## Terminal sink of Report-Progress
+
+After appending, `scripts/Report-Progress.ps1` shows the event through the same functions, so herdr and poimen get tokens and state in interactive sessions too:
+
+| Event                               | Backend call                                                                                                                                                           |
+| :---------------------------------- | :--------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `step.finished`                     | `Set-LoopTokens`: `deliver=#<nr>`, `deliver_step=[<n>/<total> ]<step>[: <result>]` (at most 80 characters), `deliver_pr=#<pr>` once a PR exists, `deliver_tone=<tone>` |
+| `milestone.progress`                | `Set-LoopTokens`: `deliver_progress=<closed>/<total>`                                                                                                                  |
+| `issue.started`                     | `Set-LoopAgentState working`                                                                                                                                           |
+| `attention` kind `paused`/`blocked` | `Set-LoopAgentState blocked`                                                                                                                                           |
+| `run.finished`                      | `Clear-LoopTokens` (all five tokens), `Set-LoopAgentState idle` (`blocked` for result `blocked` or `no progress`), then `Clear-LoopAgentState`                         |
+
+`deliver_tone` is `neutral`, `info`, `success`, `warning` or `danger` (the tone of the event). Only the outermost emitter reports: the process that writes `run.started` prints `AGENT_EVENTS_TERMINAL=owner` next to `AGENT_EVENTS_RUN` and reports; an emitter that has a run but no `owner` value (a nested one) skips the sink, so the owner overrides or unsets the variable for the processes it starts. The owner (whoever wrote `run.started`) must export `AGENT_EVENTS_RUN` and `AGENT_EVENTS_TERMINAL=owner`; a session that exports only the run id counts as nested. A session without a run owner (`AGENT_EVENTS_RUN` unset, interactive `/deliver`) reports itself. The agent state follows `Test-LoopAgentConflict` (no report in a pane with another agent). Backend `none` or a failing call: no-op, the event is written anyway.
 
 Only `Test-LoopAgentConflict` (`herdr pane get`, herdr only) reads state. The sections below describe herdr.
 
-Only when `printenv HERDR_ENV` prints `1` (the session runs in a herdr pane). Without herdr nothing here runs.
-
-When `scripts/Invoke-DeliverLoop.ps1` started this session it owns the pane display: it runs the harness with `HERDR_ENV` empty (so `printenv HERDR_ENV` prints nothing and this file is skipped), reports the same tokens per progress line with the loop position in the step (`deliver_step=3/7 review: clean`) and clears them at the end (`references/loop.md`).
-
-## Start
-
-`printenv HERDR_PANE_ID` once and keep the pane id. Every later call carries the id as a literal: Claude Code denies any command with `$HERDR_PANE_ID` in it, quoted or not (checked headless with `--permission-mode default`, 2026-10-29).
-
-## Per step
-
-After the progress line of a step, report it as pane tokens:
-
-```powershell
-herdr pane report-metadata <pane> --source deliver --token deliver=#12 --token "deliver_step=review: 1 blocking" --token deliver_pr=#55 --ttl-ms 3600000
-```
-
-- `deliver=#<nr>`: the PBI or Bug of the progress line.
-- `deliver_step=<step>[: <result>]`: the step and its result from the progress line, at most 80 characters (cut longer ones).
-- `deliver_pr=#<pr>`: only once the PR exists (from the `pr` step on).
-- `deliver_progress=<closed>/<total>`: set by the loop only (not by a session following this file).
-
-The tokens never replace the agent name: the sidebar keeps showing the harness (`claude`, `opencode`). herdr keeps them per source for the TTL (one hour), so a crashed run does not leave them forever. Token names are 1–32 ASCII letters, digits, `_` or `-`; at most 16 per report.
-
-## End
-
-After the report:
-
-```powershell
-herdr pane report-metadata <pane> --source deliver --clear-token deliver --clear-token deliver_step --clear-token deliver_pr
-```
+The session does not call herdr itself: `SKILL.md` sends every progress line through `scripts/Report-Progress.ps1`, whose sink (above) sets the tokens. When `scripts/Invoke-DeliverLoop.ps1` started the session it owns the display (`references/loop.md`).
 
 ## Sidebar layout
+
+The tokens never replace the agent name: the sidebar keeps showing the harness (`claude`, `opencode`). herdr keeps them per source for the TTL (one hour), so a crashed run does not leave them forever.
 
 The Agent sidebar shows a token only where one of its rows names it as `$<name>`. Every repository is its own herdr space (`workspace`) with the tabs `agent` and `terminal`. The proposed layout starts with the space and its state, then the agent and its terminal title (Claude Code writes its current topic there), and the `deliver` tokens last (propose it, never write it):
 
@@ -88,7 +75,7 @@ description = "toggle deliver log"
 
 `type = "shell"` runs detached from the focused pane's cwd with `HERDR_ACTIVE_TAB_ID`, `HERDR_ACTIVE_PANE_ID` and `HERDR_ACTIVE_PANE_CWD` set; these count as in herdr even without `HERDR_ENV`. With a herdr plugin, `type = "plugin_action"` takes its place and the script reads `HERDR_TAB_ID` and `HERDR_PANE_ID` (with `HERDR_ENV=1`).
 
-The allowlist entries (`printenv HERDR_ENV`, `printenv HERDR_PANE_ID`, `herdr pane report-metadata`) are in `references/permissions.md`.
+The allowlist entry for `Report-Progress.ps1` is in `references/permissions.md`.
 
 ## Verified against a live herdr
 

@@ -32,6 +32,8 @@
   the renames. Result: renames[], references[] (what is not rewritten: issue bodies of the shifted milestones, ROADMAP.md, release-review-<M<n>>.json state files).
 .PARAMETER Mode
   current, list, show, create, issues, close, rename or insert.
+.PARAMETER NoReleaseTest
+  create, insert: skip the release-test issue (New-ReleaseTestIssue.ps1 makes it only when .agents/config.json has release.test, never twice per milestone; result key releaseTest).
 .PARAMETER DryRun
   insert: list the renames and the references that need a manual check, write nothing.
 .PARAMETER Name
@@ -52,6 +54,7 @@
 #>
 param(
   [Parameter(Mandatory)][ValidateSet('current', 'list', 'show', 'create', 'issues', 'close', 'rename', 'insert')][string]$Mode,
+  [switch]$NoReleaseTest,
   [string]$Name,
   [string]$To,
   [string]$MoveTo,
@@ -105,6 +108,14 @@ function Find-Milestone($all, [string]$name) {
   $hit
 }
 
+# release-test issue of a new milestone; $null without release.test or with -NoReleaseTest
+function New-ReleaseTest($ms) {
+  if ($NoReleaseTest) { return $null }
+  $raw = & (Join-Path $PSScriptRoot 'New-ReleaseTestIssue.ps1') -Milestone $ms.title -MilestoneNumber $ms.number -Repo $Repo
+  if ($LASTEXITCODE -ne 0) { Fail "creating the release-test issue of $($ms.title) failed" }
+  if ($raw) { $raw | Out-String | ConvertFrom-Json }
+}
+
 $milestones = @(Get-Paged "repos/$Repo/milestones?state=all&per_page=100")
 
 if ($Mode -eq 'create') {
@@ -125,8 +136,9 @@ if ($Mode -eq 'create') {
     if ($LASTEXITCODE -ne 0) { Fail "creating milestone $title failed" }
     $existing = $raw | ConvertFrom-Json
   }
-  [ordered]@{ created = $created; milestone = [ordered]@{ number = $existing.number; title = $existing.title; state = $existing.state; url = $existing.html_url } } |
-    ConvertTo-Json -Depth 4
+  $res = [ordered]@{ created = $created; milestone = [ordered]@{ number = $existing.number; title = $existing.title; state = $existing.state; url = $existing.html_url } }
+  if ($created) { $rt = New-ReleaseTest $existing; if ($rt) { $res.releaseTest = $rt } }
+  $res | ConvertTo-Json -Depth 4
   exit 0
 }
 
@@ -191,6 +203,8 @@ if ($Mode -eq 'insert') {
     $c = $raw | ConvertFrom-Json
     $res.inserted = $true
     $res.milestone = [ordered]@{ number = $c.number; title = $c.title; state = $c.state; url = $c.html_url }
+    $rt = New-ReleaseTest $c
+    if ($rt) { $res.releaseTest = $rt }
   }
   $res | ConvertTo-Json -Depth 5
   exit 0
@@ -287,6 +301,12 @@ if ($Mode -eq 'issues') {
             })
         }
         $item.blockedBy = $bl
+        # release-test: has the RC been posted on it (comment marker <!-- release-test-rc -->)
+        if ($item.labels -contains 'release-test') {
+          # a failed read counts as not posted
+          $cm = & gh api "repos/$Repo/issues/$($_.number)/comments" --paginate --jq '.[].body' 2>$null
+          $item.rcPosted = ($LASTEXITCODE -eq 0) -and (($cm | Out-String) -match '<!-- release-test-rc -->')
+        }
       }
       $item
     })

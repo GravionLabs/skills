@@ -238,3 +238,39 @@ describe('deliver status docs', () => {
     expect(help).toContain('Get-DeliverStatus.ps1');
   });
 });
+
+describe('release-test label (#377)', () => {
+  const rc = {
+    number: 9,
+    title: 'test: RC',
+    state: 'open' as const,
+    labels: ['pbi', 'interactive', 'release-test'],
+  };
+
+  it('waits while other PBIs or Bugs are open, counted in total, not as needs you', () => {
+    const fake = fixture('rc-wait', [
+      { number: 2, title: 'feat: two', state: 'open' },
+      { number: 3, title: 'fix: three', state: 'open', labels: ['bug'] },
+      rc,
+    ]);
+    const j = JSON.parse(run(fake).stdout);
+    expect(j.total).toBe(3);
+    expect(j.needsYou).toEqual([]);
+    const w = j.waiting.find((x: { number: number }) => x.number === 9);
+    expect(w.reason).toBe('release test, waits for 2 open items');
+  });
+
+  it('as the last item: waiting "release test" without an RC, needs you "RC test <url>" once posted', () => {
+    const none = JSON.parse(
+      run(fixture('rc-last', [{ number: 1, title: 'a', state: 'closed' }, rc])).stdout,
+    );
+    expect(none.waiting[0].reason).toBe('release test');
+    expect(none.needsYou).toEqual([]);
+    const posted = JSON.parse(
+      run(fixture('rc-posted', [{ ...rc, rcPosted: true } as never])).stdout,
+    );
+    expect(posted.needsYou).toEqual([`RC test ${base}/issues/9 test: RC`]);
+    expect(posted.waiting).toEqual([]);
+    expect(posted.total).toBe(1);
+  });
+});

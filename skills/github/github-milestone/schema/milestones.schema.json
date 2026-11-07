@@ -129,7 +129,8 @@
             "properties": { "where": { "type": "string" }, "name": { "type": "string" }, "hint": { "type": "string" } }
           }
         },
-        "milestone": { "$ref": "#/$defs/milestoneRef", "description": "The created M<n>; absent on a dry run." }
+        "milestone": { "$ref": "#/$defs/milestoneRef", "description": "The created M<n>; absent on a dry run." },
+        "releaseTest": { "$ref": "#/$defs/releaseTest", "description": "Only with release.test in .agents/config.json and without -NoReleaseTest." }
       },
       "additionalProperties": false
     },
@@ -148,12 +149,23 @@
             "state": { "enum": ["open", "closed"] },
             "url": { "type": ["string", "null"] }
           }
-        }
+        },
+        "releaseTest": { "$ref": "#/$defs/releaseTest", "description": "Only with release.test in .agents/config.json and without -NoReleaseTest." }
       },
       "additionalProperties": false
     }
   ],
   "$defs": {
+    "releaseTest": {
+      "type": "object",
+      "required": ["created", "number", "url"],
+      "properties": {
+        "created": { "type": "boolean", "description": "false: a release-test issue already existed in the milestone." },
+        "number": { "type": "integer" },
+        "url": { "type": ["string", "null"] }
+      },
+      "additionalProperties": false
+    },
     "milestoneRef": {
       "type": "object",
       "required": ["number", "title", "state", "url"],

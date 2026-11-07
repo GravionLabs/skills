@@ -14,10 +14,19 @@ const claim = fs.readFileSync(path.join(skillDir, 'references/claim.md'), 'utf8'
 
 describe('deliver SKILL.md', () => {
   const body = text.slice(text.indexOf('\n---', 3) + 4);
+  const herdrCalls = [...herdr.matchAll(/^(herdr .+)$/gm)].map((m) => m[1]);
 
   it('is user-invoked only', () => {
     expect(text).toContain('disable-model-invocation: true');
     expect(text).toContain("opencode/autoinvoke: 'false'");
+  });
+
+  it('emits the attention kinds the loop notifications depend on (#400)', () => {
+    const steps = body.slice(body.indexOf('## Steps'), body.indexOf('1. **Select.**'));
+    for (const kind of ['pr_opened', 'review_fix', 'ci_red', 'paused', 'blocked', 'needs_you']) {
+      expect(steps).toMatch(new RegExp('-Kind[^)]*\\b' + kind + '\\b'));
+    }
+    expect(steps).toContain('only from these events');
   });
 
   it('names PRs and issues as full URLs, the release PR included', () => {
@@ -402,29 +411,48 @@ describe('deliver SKILL.md', () => {
     expect(roles).not.toContain('workflow.js');
   });
 
-  describe('herdr progress (#855)', () => {
+  describe('progress through Report-Progress (#373)', () => {
     const start = body.slice(body.indexOf('## Start'), body.indexOf('## Steps'));
-    const herdrCalls = [...herdr.matchAll(/^(herdr .+)$/gm)].map((m) => m[1]);
+    const steps = body.slice(body.indexOf('## Steps'), body.indexOf('1. **Select.**'));
+    const report = body.slice(body.indexOf('## Report'), body.indexOf('## Rules'));
 
-    it('loads the herdr reference only when HERDR_ENV is 1', () => {
-      expect(start).toContain(
-        '`printenv HERDR_ENV`. Only when it prints `1`, follow `references/terminal-backends.md`',
+    it('contains no herdr, HERDR or backend command', () => {
+      expect(body).not.toMatch(/herdr/i);
+      expect(body).not.toContain('report-metadata');
+      expect(body).not.toContain('poimen-server');
+    });
+
+    it('Start 4 starts a session run and keeps the run id', () => {
+      expect(start).toContain('`AGENT_EVENTS_RUN`');
+      expect(start).toContain('Report-Progress.ps1 -Type run.started -Source session');
+      expect(start).toContain('keep the printed run id');
+    });
+
+    it('Start 4 hands the run id to every later call with -Run <id>', () => {
+      const line = start.split('\n').find((l) => l.includes('keep the printed run id')) ?? '';
+      expect(line).toContain('Add `-Run <id>` to every later call');
+      for (const t of ['step.finished', 'attention', 'issue.finished', 'run.finished'])
+        expect(line).toContain(t);
+    });
+
+    it('every progress-line rule names Report-Progress with its type', () => {
+      expect(steps).toContain(
+        'Report-Progress.ps1 -Type step.finished -Issue <nr> -Step <step> -Result "<result>" [-Pr <url>]',
       );
-      expect(herdr).toContain('Only when `printenv HERDR_ENV` prints `1`');
+      expect(steps).toContain('`-Type attention`');
+      expect(steps).toContain('-Type issue.finished');
+      expect(report).toContain('Report-Progress.ps1 -Type run.finished');
     });
 
-    it('names no herdr command in SKILL.md itself', () => {
-      expect(body).not.toMatch(/`herdr /);
+    it('run.finished is sent only when Start 4 created the run (#397)', () => {
+      expect(report).toContain('only when Start 4 created the run');
+      expect(report).toContain('never closes the loop');
     });
 
-    it('reads the pane id once, reports the step as pane tokens and clears them at the end (#16)', () => {
-      expect(herdr).toContain('`printenv HERDR_PANE_ID` once');
-      expect(herdrCalls).toEqual([
-        'herdr pane report-metadata <pane> --source deliver --token deliver=#12 --token "deliver_step=review: 1 blocking" --token deliver_pr=#55 --ttl-ms 3600000',
-        'herdr pane report-metadata <pane> --source deliver --clear-token deliver --clear-token deliver_step --clear-token deliver_pr',
-      ]);
-      expect(herdr.indexOf('--clear-token', herdr.indexOf('## End'))).toBeGreaterThan(-1);
-      expect(herdr).toContain('at most 80 characters');
+    it('the herdr reference no longer has Start, Per step or End steps', () => {
+      for (const h of ['## Start', '## Per step', '## End']) expect(herdr).not.toContain(h);
+      expect(herdr).not.toContain('`printenv HERDR_PANE_ID` once');
+      expect(herdrCalls).toEqual([]);
     });
 
     it('never uses --display-agent in deliver; the agent name stays the harness (#16)', () => {
@@ -447,10 +475,6 @@ describe('deliver SKILL.md', () => {
         expect(herdr).toContain(alt);
       }
       expect(herdr).toContain('propose it, never write it');
-    });
-
-    it('never expands a variable in a herdr call', () => {
-      for (const c of herdrCalls) expect(c).not.toContain('$');
     });
   });
 
@@ -563,15 +587,10 @@ describe('deliver permissions.md (#862)', () => {
   });
 
   it('names the command groups deliver needs', () => {
-    for (const c of [
-      '`AGENTS.md`',
-      '`git`',
-      '`gh`',
-      '`printenv HERDR_ENV`',
-      '`printenv HERDR_PANE_ID`',
-      '`herdr pane report-metadata`',
-    ])
+    for (const c of ['`AGENTS.md`', '`git`', '`gh`', '`scripts/Report-Progress.ps1`'])
       expect(permissions).toContain(c);
+    expect(permissions).not.toContain('report-metadata');
+    expect(permissions).not.toContain('printenv HERDR');
   });
 
   it('Claude Code: permissions.allow in .claude/settings.json', () => {
@@ -582,7 +601,7 @@ describe('deliver permissions.md (#862)', () => {
       expect.arrayContaining([
         'Bash(git:*)',
         'Bash(gh pr:*)',
-        'Bash(herdr pane report-metadata:*)',
+        'Bash(pwsh .claude/skills/deliver/scripts/Report-Progress.ps1:*)',
       ]),
     );
   });
@@ -631,7 +650,6 @@ describe('deliver permissions.md (#862)', () => {
     expect(copilot).toContain(
       '`~/.copilot/settings.json` (`subagents.agents.general-purpose.model`)',
     );
-    expect(copilot).toContain('`herdr pane report-metadata` with quoted arguments was denied');
   });
 
   it('the gh row of the table names label and repo view', () => {
@@ -830,13 +848,8 @@ describe('M<n> milestones (#235)', () => {
 
 describe('permissions.md terminal rows (#356)', () => {
   const rows = permissions.split('\n');
-  const herdrRow = rows.find((l) => l.includes('printenv HERDR_ENV')) ?? '';
   const poimenRow = rows.find((l) => l.startsWith('| `poimen-server report`')) ?? '';
 
-  it('limits the herdr row to herdr panes, without poimen-server', () => {
-    expect(herdrRow).toContain('inside a `herdr` pane');
-    expect(herdrRow).not.toContain('poimen-server');
-  });
   it('gives poimen-server report its own row for a poimen terminal', () => {
     expect(poimenRow).toContain('inside a poimen terminal');
   });

@@ -246,9 +246,9 @@ describe('planner without removed dependencies', () => {
     for (const t of ['fast', 'standard', 'strong']) expect(tiers).toContain(`\`${t}\``);
   });
 
-  it('has no instruction to close, edit or create an issue and reports merged children', () => {
+  it('has no instruction to close, edit or create an issue and no merged-children lines', () => {
     expect(md).not.toMatch(/gh issue (close|edit|create)|\bclose them\b/);
-    expect(md).toContain('already merged: #<nr>');
+    expect(md).not.toContain('already merged');
     expect(md).not.toContain('#<task>');
   });
 });

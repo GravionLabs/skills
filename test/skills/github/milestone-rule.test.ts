@@ -12,6 +12,8 @@ describe('milestone rule (#327)', () => {
     expect(ref).toMatch(/\| Feature\s+\| Only when all its PBIs are in that same milestone/);
     expect(ref).toMatch(/\| Epic\s+\| Never/);
     expect(ref).toContain('close-release-issues');
+    expect(ref).toContain('ships with <milestone>');
+    expect(ref).not.toMatch(/label `merged`|labelled merged|labeled merged/);
     expect(read('skills/github/github-issue/SKILL.md')).toContain('references/milestones.md');
   });
 

@@ -23,11 +23,16 @@
   With base: the explicit base_branch input, returned unchanged.
 .PARAMETER Issue
   base only: issue number whose body (and parents) may carry a `Release branch:` line.
+.PARAMETER Milestone
+  finish only: milestone title. Adds releaseTest (the open issue labeled `release-test` of it: number, url; or null),
+  olderReleaseTests (open release-test issues of lower milestones, to close as superseded), gate (`release.test.gate` of .agents/config.json, default false) and warning (`RC test open: <url>`). With gate true
+  and an open release-test issue `action` becomes a stop.
 #>
 param(
   [Parameter(Mandatory)][ValidateSet('cut', 'finish', 'base')][string]$Mode,
   [string]$Branch,
-  [int]$Issue
+  [int]$Issue,
+  [string]$Milestone
 )
 $ErrorActionPreference = 'Stop'
 
@@ -174,8 +179,47 @@ if ($Mode -eq 'finish' -and $onOrigin) {
   if ($LASTEXITCODE -eq 0) { $releasePr = @($raw | ConvertFrom-Json) | Select-Object -First 1 }
 }
 
+$olderReleaseTests = @(); $releaseTest = $null; $gate = $false; $warning = $null
+if ($Mode -eq 'finish' -and $Milestone) {
+  $raw = & gh issue list --label release-test --state open --milestone $Milestone --json number,url,milestone 2>$null
+  if ($LASTEXITCODE -ne 0) { Fail 'gh issue list failed' }
+  $releaseTest = @($raw | ConvertFrom-Json) | Select-Object -First 1
+  $raw = & gh issue list --label release-test --state open --json number,url,milestone 2>$null
+  if ($LASTEXITCODE -ne 0) { Fail 'gh issue list failed' }
+  $allIssues = @($raw | ConvertFrom-Json)
+  # #409: gh needs the exact title; M<n> is also the key of a milestone titled `M<n> <Topic>`
+  if (-not $releaseTest -and $Milestone -match '^M\d+(\.\d+)?$') {
+    $releaseTest = $allIssues | Where-Object { $_.milestone.title -match "^$([regex]::Escape($Milestone))(\s|$)" } | Select-Object -First 1
+  }
+  # #399: only issues of a lower milestone (M-number, else due date) are replaced; no milestone = skipped
+  $curDue = if ($releaseTest -and $releaseTest.milestone.dueOn) { [datetime]$releaseTest.milestone.dueOn } else { $null }
+  $msNum = {
+    param($t)
+    if ($t -match '^M(\d+)(?:\.(\d+))?') { [double]("$($Matches[1]).$(if ($Matches[2]) { $Matches[2] } else { '0' })") } else { $null }
+  }
+  $isOlder = {
+    param($m)
+    if (-not $m -or -not $m.title -or $m.title -eq $Milestone) { return $false }
+    $a = & $msNum $m.title; $b = & $msNum $Milestone
+    if ($null -ne $a -and $null -ne $b) { return $a -lt $b }
+    if ($m.dueOn -and $curDue) { return ([datetime]$m.dueOn) -lt $curDue }
+    return $false
+  }
+  $olderReleaseTests = @($allIssues | Where-Object { & $isOlder $_.milestone } |
+      ForEach-Object { [ordered]@{ number = $_.number; url = $_.url } })
+  if (Test-Path .agents/config.json) {
+    $cfg = Get-Content .agents/config.json -Raw | ConvertFrom-Json
+    $gate = [bool]($cfg.release.test.gate -eq $true)
+  }
+  if ($releaseTest) {
+    $warning = "RC test open: $($releaseTest.url)"
+    if ($gate -and $action -eq 'release-pr') { $action = "stop: release.test.gate is true, close the RC test $($releaseTest.url) first" }
+  }
+}
+
 [ordered]@{
   default = $default; branch = $Branch; state = $state; openPrs = @($openPrs); localAhead = $localAhead
   staleLines = @($staleLines); deleteAllowed = $deleteAllowed; action = $action
   hasMajorCommit = $major; defaultIsAncestor = $defaultIsAncestor; mergeConflicts = $mergeConflicts; releaseWorkflow = $workflow; releasePr = $releasePr
+  releaseTest = $releaseTest; olderReleaseTests = @($olderReleaseTests); gate = $gate; warning = $warning
 } | ConvertTo-Json -Depth 4

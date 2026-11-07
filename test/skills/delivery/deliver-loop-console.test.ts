@@ -147,4 +147,136 @@ esac
       expect(paneCalls()).toEqual([]);
     });
   });
+
+  // Lines, colors and notifications come from the events the harness writes (tone, attention, issue.finished); the stream's
+  // assistant text is logged uncolored and never parsed. The claude stub appends raw events to the loop's run and closes #401.
+  describe('events', () => {
+    type Ev = Record<string, unknown>;
+    const ev = (type: string, tone: string, extra: Ev = {}): Ev => ({
+      v: 1,
+      type,
+      tone,
+      issue: { number: 401 },
+      ...extra,
+    });
+    const stepEv = (name: string, text: string, tone: string) =>
+      ev('step.finished', tone, { step: { name, text } });
+    const attention = (kind: string, tone: string) =>
+      ev('attention', tone, { kind, reason: 'why' });
+
+    const open = (events: Ev[], text = 'working') => {
+      cwd = path.join(dir, `case-${++seq}`);
+      fs.mkdirSync(cwd, { recursive: true });
+      const state = path.join(cwd, 'state.json');
+      fs.writeFileSync(state, JSON.stringify({ state: 'open' }));
+      const gh = createFakeGh(
+        cwd,
+        `(call) => {
+          if (/^repos\\/\\{owner\\}\\/\\{repo\\}\\/issues\\/401$/.test(call.args[1] || '')) {
+            const s = JSON.parse(require('fs').readFileSync(${JSON.stringify(state)}, 'utf8'));
+            return { rest: { number: 401, state: s.state, labels: [{ name: 'pbi' }] } };
+          }
+          if (/sub_issues|blocked_by/.test(call.args[1] || '')) return { rest: [] };
+          throw new Error('unexpected gh ' + call.args.join(' '));
+        }`,
+      );
+      fs.writeFileSync(
+        path.join(cwd, 'harness.js'),
+        `const fs = require('fs'); const path = require('path'); const env = process.env;
+const file = path.join(env.AGENT_EVENTS_DIR, env.AGENT_EVENTS_RUN + '.jsonl');
+for (const e of ${JSON.stringify(events)}) fs.appendFileSync(file, JSON.stringify({ ...e, ts: new Date().toISOString(), run: env.AGENT_EVENTS_RUN }) + '\\n');
+console.log(JSON.stringify({ type: 'assistant', message: { content: [{ type: 'text', text: ${JSON.stringify(text)} }] } }));
+fs.writeFileSync(${JSON.stringify(state)}, JSON.stringify({ state: 'closed' }));`,
+      );
+      const stub = (name: string, body: string) =>
+        fs.writeFileSync(path.join(gh.bin, name), `#!/bin/sh\n${body}\n`, { mode: 0o755 });
+      stub('claude', `node ${cwd}/harness.js`);
+      stub('osascript', `echo "$*" >> ${cwd}/notices.txt`);
+      stub('herdr', 'true');
+      return gh;
+    };
+    const tty = { DELIVER_LOOP_ASSUME_TTY: '1' };
+
+    it('colors a step line by the tone of its event, neutral stays uncolored', async () => {
+      const gh = open([
+        stepEv('pr', 'opened #55', 'success'),
+        stepEv('select', 'ready', 'info'),
+        stepEv('review', 'fix 1/2', 'warning'),
+        stepEv('ci', 'red', 'danger'),
+        stepEv('implement', 'started', 'neutral'),
+      ]);
+      const r = await worker.run(['-Target', '401', '-Model', 'sonnet'], {
+        cwd,
+        env: { ...gh.env(), HERDR_ENV: '', NO_COLOR: '', ...tty },
+      });
+      expect(r.status).toBe(0);
+      const ansi = read('.agents/deliver-loop.ansi.log');
+      expect(ansi).toContain(`${ESC}[32m#401 pr: opened #55${ESC}[0m`);
+      expect(ansi).toContain(`${ESC}[36m#401 select: ready${ESC}[0m`);
+      expect(ansi).toContain(`${ESC}[33m#401 review: fix 1/2${ESC}[0m`);
+      expect(ansi).toContain(`${ESC}[31m#401 ci: red${ESC}[0m`);
+      expect(ansi).toMatch(new RegExp(`${ESC}\\[0m #401 implement: started\\n`));
+      expect(read('.agents/deliver-loop.log')).toMatch(/\d\d:\d\d:\d\d #401 ci: red\n/);
+      expect(read('.agents/deliver-loop.log')).not.toContain(ESC);
+      expect(r.stdout).toContain(`${ESC}[31m#401 ci: red`);
+    });
+
+    it('stays plain with -NoColor but still writes the step lines', async () => {
+      const gh = open([stepEv('ci', 'red', 'danger')]);
+      const r = await worker.run(['-Target', '401', '-Model', 'sonnet', '-NoColor'], {
+        cwd,
+        env: { ...gh.env(), HERDR_ENV: '', NO_COLOR: '', ...tty },
+      });
+      expect(r.status).toBe(0);
+      expect(r.stdout).toMatch(/\d\d:\d\d:\d\d #401 ci: red/);
+      expect(r.stdout).not.toContain(ESC);
+      expect(read('.agents/deliver-loop.ansi.log')).toBe('');
+    });
+
+    it.skipIf(process.platform !== 'darwin')(
+      'notifies per attention kind and delivered issue, with the urgency from the tone',
+      async () => {
+        const gh = open([
+          attention('pr_opened', 'success'),
+          attention('review_fix', 'warning'),
+          attention('ci_red', 'danger'),
+          attention('paused', 'warning'),
+          attention('blocked', 'danger'),
+          attention('needs_you', 'warning'),
+          ev('issue.finished', 'success', { outcome: 'delivered' }),
+        ]);
+        await worker.run(['-Target', '401', '-Model', 'sonnet'], {
+          cwd,
+          env: { ...gh.env(), HERDR_ENV: '', NO_COLOR: '' },
+        });
+        const notes = read('notices.txt').trim().split('\n');
+        expect(notes).toHaveLength(7);
+        expect(notes[0]).toContain('#401 PR opened');
+        expect(notes[0]).not.toContain('sound name');
+        expect(notes[1]).toContain('#401 review fix round');
+        expect(notes[1]).toContain('sound name "Ping"');
+        expect(notes[2]).toContain('#401 CI red');
+        expect(notes[2]).toContain('sound name "Basso"');
+        expect(notes[3]).toContain('#401 paused');
+        expect(notes[4]).toContain('#401 blocked');
+        expect(notes[5]).toContain('#401 merged');
+        expect(notes[6]).toContain('loop result: done');
+      },
+    );
+
+    it('writes no step line from assistant text alone, neither color nor notification', async () => {
+      const gh = open([], '#401 pr: opened #55\n#401 ci: red\n#401 paused: x');
+      const r = await worker.run(['-Target', '401', '-Model', 'sonnet'], {
+        cwd,
+        env: { ...gh.env(), HERDR_ENV: '', NO_COLOR: '', ...tty },
+      });
+      expect(r.status).toBe(0);
+      const log = read('.agents/deliver-loop.log');
+      expect(log).toContain('» #401 pr: opened #55');
+      expect(log).not.toMatch(/\d\d:\d\d:\d\d #401 (pr|ci|paused)/);
+      expect(read('.agents/deliver-loop.ansi.log')).not.toContain(`${ESC}[31m`);
+      expect(read('.agents/deliver-loop.ansi.log')).not.toContain(`${ESC}[33m`);
+      expect(read('notices.txt')).not.toMatch(/PR opened|CI red|paused/);
+    });
+  });
 });

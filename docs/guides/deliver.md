@@ -37,7 +37,7 @@ Fix rounds are at most 2 per PBI, shared by review and CI; a third is a pause. T
 /deliver 42
 ```
 
-`deliver` prints one line per step and ends with a report (shortened):
+`deliver` prints one line per step and ends with a report (shortened). Each line is also reported as a progress event through `Report-Progress.ps1`, whatever the terminal: herdr and poimen show it in their sidebar, other terminals ignore it.
 
 ```text
 #42 select: next, claimed
@@ -77,7 +77,7 @@ A Feature or Epic expands to its open PBIs and Bugs. They are ordered by their b
 
 Name the milestone `M<n>`: `M4` finds the open `M4` and, after `/github-milestone close M4` renamed it, `M4 (0.2.0)`, so the same command and the same release-review state work before and after the rename. A legacy title such as `1.3.0` works as before; to move a repository to `M<n>` see [Migrate legacy milestones](release.md#migrate-legacy-milestones), the old `release-review-<title>.json` files stay as history.
 
-Delivers every open PBI and Bug of the milestone. A PBI or Bug that you reach only through a Feature or Epic of the milestone, and that has no or another milestone, is reported (`#42 select: outside M4, skipped`) and not delivered: set its milestone, or move it into `M4`. `/deliver <feature>` without `--milestone` still delivers all the PBIs of the Feature. The rule is explained in the [issue model](../concepts/issue-model.md#milestones). When none is left, `deliver` runs a release review of the whole release diff. Without blocking findings it opens the release PR into `main` and stops: you review and merge that one. With blocking findings it files one Bug per finding in the milestone; run the command again to deliver them. With the release PR `deliver` ends with the hint to run `/github-milestone close M4` once that PR is merged and tagged.
+Delivers every open PBI and Bug of the milestone. A PBI or Bug that you reach only through a Feature or Epic of the milestone, and that has no or another milestone, is reported (`#42 select: outside M4, skipped`) and not delivered: set its milestone, or move it into `M4`. `/deliver <feature>` without `--milestone` still delivers all the PBIs of the Feature. The rule is explained in the [issue model](../concepts/issue-model.md#milestones). When none is left, `deliver` runs a release review of the whole release diff. Without blocking findings it cuts the release candidate, posts it on the `release-test` issue and opens the release PR into `main` without waiting for the RC test (`release.test.gate: true` in `.agents/config.json` waits for it) and stops: you review and merge that one. With blocking findings it files one Bug per finding in the milestone; run the command again to deliver them. With the release PR `deliver` ends with the hint to run `/github-milestone close M4` once that PR is merged and tagged.
 
 ## Interactive or unattended
 

@@ -2,6 +2,7 @@ import { spawnSync } from 'child_process';
 import * as fs from 'fs';
 import * as os from 'os';
 import * as path from 'path';
+import { reportEventCmd } from '../../helpers/report-progress';
 import { createFakeGh } from '../../helpers/fake-gh';
 import { PwshWorker } from '../../helpers/pwsh-worker';
 
@@ -10,6 +11,28 @@ const SCRIPT = path.resolve(
   '../../../skills/delivery/deliver/scripts/Invoke-DeliverLoop.ps1',
 );
 const hasPwsh = spawnSync('pwsh', ['-NoProfile', '-Command', '1']).status === 0;
+
+const PR = 'https://github.com/acme/app/pull/55';
+const step = (nr: number, name: string, result: string, pr = '') => [
+  '-Type',
+  'step.finished',
+  '-Issue',
+  String(nr),
+  '-Step',
+  name,
+  '-Result',
+  result,
+  ...(pr ? ['-Pr', pr] : []),
+];
+const attention = (nr: number, kind: string, reason = '') => [
+  '-Type',
+  'attention',
+  '-Issue',
+  String(nr),
+  '-Kind',
+  kind,
+  ...(reason ? ['-Reason', reason] : []),
+];
 
 type Issue = {
   body?: string;
@@ -24,6 +47,7 @@ type Fixture = {
   milestones?: Record<string, number[]>;
   effect?: 'none' | 'close-first' | 'hold-first';
   stream?: object[];
+  events?: string[][]; // Report-Progress.ps1 arguments the harness stub runs after its stream
 };
 
 // #893: stop rules and observability of Invoke-DeliverLoop.ps1 with gh, claude, herdr and osascript as stubs on PATH.
@@ -49,7 +73,7 @@ describe.skipIf(!hasPwsh || process.platform === 'win32')('Invoke-DeliverLoop.ps
     cwd = path.join(dir, `case-${++seq}`);
     fs.mkdirSync(cwd, { recursive: true });
     const state = path.join(cwd, 'state.json');
-    const full = { effect: 'none', milestones: {}, stream: [], ...fx };
+    const full = { effect: 'none', milestones: {}, stream: [], events: [], ...fx };
     fs.writeFileSync(state, JSON.stringify(full));
     const gh = createFakeGh(
       cwd,
@@ -95,15 +119,16 @@ fs.writeFileSync(f, JSON.stringify(s));`,
       full.stream.map((r) => JSON.stringify(r)).join('\n') + '\n',
     );
     const bin = path.join(cwd, 'bin');
+    const events = full.events.map((e) => reportEventCmd(e) + '\n').join('');
     const stub = (name: string, body: string) =>
       fs.writeFileSync(path.join(gh.bin, name), `#!/bin/sh\n${body}\n`, { mode: 0o755 });
     stub(
       'claude',
-      `echo "$*" >> ${cwd}/harness-calls.txt\necho "herdr_env=[$HERDR_ENV]" >> ${cwd}/harness-calls.txt\ncat ${cwd}/stream.jsonl\nnode ${cwd}/effect.js`,
+      `echo "$*" >> ${cwd}/harness-calls.txt\necho "herdr_env=[$HERDR_ENV]" >> ${cwd}/harness-calls.txt\ncat ${cwd}/stream.jsonl\n${events}node ${cwd}/effect.js`,
     );
     stub(
       'copilot',
-      `echo "$*" >> ${cwd}/harness-calls.txt\necho "herdr_env=[$HERDR_ENV]" >> ${cwd}/harness-calls.txt\ncat ${cwd}/stream.jsonl\nnode ${cwd}/effect.js`,
+      `echo "$*" >> ${cwd}/harness-calls.txt\necho "herdr_env=[$HERDR_ENV]" >> ${cwd}/harness-calls.txt\ncat ${cwd}/stream.jsonl\n${events}node ${cwd}/effect.js`,
     );
     stub('herdr', `echo "$*" >> ${cwd}/herdr-calls.txt`);
     stub('osascript', `echo "$*" >> ${cwd}/notices.txt`);
@@ -186,6 +211,12 @@ fs.writeFileSync(f, JSON.stringify(s));`,
         issues: { 7: pbi() },
         effect: 'close-first',
         stream: [...live, ...events],
+        events: [
+          step(7, 'pr', 'opened #55', PR),
+          attention(7, 'pr_opened', 'opened #55'),
+          step(7, 'ci', 'red', PR),
+          attention(7, 'ci_red', 'red'),
+        ],
       });
       const r = await run(gh, ['-Target', '7', '-Harness', 'copilot'], {
         HERDR_ENV: '1',
@@ -197,12 +228,16 @@ fs.writeFileSync(f, JSON.stringify(s));`,
       ]);
       expect(read('harness-calls.txt')).toContain('herdr_env=[]');
       const lines = read('.agents/deliver-loop.log');
+      // assistant text is logged as it is; the step line comes from the event
       expect(lines).toMatch(/\d\d:\d\d:\d\d » #7 pr: opened #55/);
+      expect(lines).toMatch(/\d\d:\d\d:\d\d #7 pr: opened #55\n/);
       expect(lines).toMatch(/\d\d:\d\d:\d\d bash ls -la/);
       expect(lines).toMatch(/\d\d:\d\d:\d\d \[subagent\] view src\/a\.ts/);
       expect(lines).toMatch(/\d\d:\d\d:\d\d ✗ boom/);
       expect(read('.agents/deliver-loop.ansi.log')).toContain('\u001b[36mbash\u001b[0m');
-      expect(read('herdr-calls.txt')).toContain('deliver_step=1/1 ci: red --token deliver_pr=#55');
+      expect(read('herdr-calls.txt')).toContain(
+        'deliver_step=7/7 ci: red --token deliver_pr=#55 --token deliver_tone=danger',
+      );
       if (process.platform === 'darwin') {
         // osascript stub: notifications exist only on macOS
         expect(read('notices.txt')).toContain('#7 PR opened');
@@ -256,6 +291,35 @@ fs.writeFileSync(f, JSON.stringify(s));`,
       const r = await run(gh, ['20']);
       expect(r.stdout).not.toContain('outside');
       expect(r.stdout).toContain('loop result: done');
+    });
+
+    it('-Milestone: an open release-test issue as the last item is not delivered and ends the loop done, not blocked (#377)', async () => {
+      const gh = setup({
+        issues: {
+          10: { labels: ['bug'] },
+          11: { labels: ['pbi', 'interactive', 'release-test'] },
+        },
+        milestones: { M4: [10, 11] },
+        effect: 'close-first',
+      });
+      const r = await run(gh, ['-Milestone', 'M4']);
+      expect(r.stdout + r.stderr).toContain('loop result: done');
+      expect(r.status).toBe(0);
+      const st = JSON.parse(read('state.json')).issues;
+      expect(st[10].state).toBe('CLOSED');
+      expect(st[11].state ?? 'OPEN').toBe('OPEN');
+    });
+
+    it('an explicitly passed release-test Target is dropped, never delivered, and the loop ends done (#377)', async () => {
+      const gh = setup({
+        issues: { 11: { labels: ['pbi', 'interactive', 'release-test'] } },
+        effect: 'close-first',
+      });
+      const r = await run(gh, ['11']);
+      expect(r.stdout + r.stderr).toContain('loop result: done');
+      expect(r.status).toBe(0);
+      expect(harnessCalls()).toEqual([]);
+      expect(JSON.parse(read('state.json')).issues[11].state ?? 'OPEN').toBe('OPEN');
     });
 
     it('-Milestone selects a bug like a PBI, delivers it in one fresh process, ends done when no open and no paused issue is left, reads the milestone M4 with one batched REST call (#103, #127, #235)', async () => {
@@ -440,7 +504,7 @@ fs.writeFileSync(f, JSON.stringify(s));`,
       { type: 'assistant', message: { content: [{ type: 'text', text: '#401 merged: squash' }] } },
     ];
 
-    it('logs one line per step with the agent prefix, tool errors, writes every record to the jsonl and owns the herdr display: harness runs without HERDR_ENV, pane tokens with the position per progress line, cleared at the end (#16)', async () => {
+    it('logs one line per step with the agent prefix, tool errors, writes every record to the jsonl and owns the herdr display: harness runs without HERDR_ENV, pane tokens per progress line through the sink, cleared at the end (#16, #372)', async () => {
       // 401 is paused by the run (needs-decision) and counts as progress; 402 (open blocker), 403 (needs-refinement) and
       // 404 (interactive) stay behind, so the loop ends blocked
       const gh = setup({
@@ -452,6 +516,14 @@ fs.writeFileSync(f, JSON.stringify(s));`,
         },
         effect: 'hold-first',
         stream,
+        events: [
+          step(401, 'pr', 'opened #55', PR),
+          attention(401, 'pr_opened', 'opened #55'),
+          step(401, 'review', 'x'.repeat(90), PR),
+          step(401, 'ci', 'red', PR),
+          attention(401, 'ci_red', 'red'),
+          step(401, 'merged', 'squash', PR),
+        ],
       });
       const r = await run(gh, ['-Target', '401,402,403,404'], {
         HERDR_ENV: '1',
@@ -484,15 +556,18 @@ fs.writeFileSync(f, JSON.stringify(s));`,
         .trim()
         .split('\n')
         .filter((l) => l.includes('report-metadata'));
-      const tokens = '--ttl-ms 3600000';
+      // #372: the terminal sink of Report-Progress sets the tokens per step.finished: deliver step n/7 and the tone
+      const p =
+        'pane report-metadata p7 --source deliver --token deliver=#401 --token deliver_step=';
+      const pr = '--token deliver_pr=#55';
+      const ttl = '--ttl-ms 3600000';
       expect(calls).toEqual([
-        `pane report-metadata p7 --source deliver --token deliver=#401 --token deliver_step=1/2 starting ${tokens}`,
-        `pane report-metadata p7 --source deliver --token deliver=#401 --token deliver_step=1/2 pr: opened #55 --token deliver_pr=#55 ${tokens}`,
+        `${p}6/7 pr: opened #55 ${pr} --token deliver_tone=success ${ttl}`,
         // the PR token stays for later steps; the step value is cut at 80 characters
-        `pane report-metadata p7 --source deliver --token deliver=#401 --token deliver_step=1/2 review: ${'x'.repeat(67)}… --token deliver_pr=#55 ${tokens}`,
-        `pane report-metadata p7 --source deliver --token deliver=#401 --token deliver_step=1/2 ci: red --token deliver_pr=#55 ${tokens}`,
-        `pane report-metadata p7 --source deliver --token deliver=#401 --token deliver_step=1/2 merged: squash --token deliver_pr=#55 ${tokens}`,
-        'pane report-metadata p7 --source deliver --clear-token deliver --clear-token deliver_step --clear-token deliver_pr --clear-token deliver_progress',
+        `${p}4/7 review: ${'x'.repeat(68)} ${pr} --token deliver_tone=neutral ${ttl}`,
+        `${p}7/7 ci: red ${pr} --token deliver_tone=danger ${ttl}`,
+        `${p}7/7 merged: squash ${pr} --token deliver_tone=success ${ttl}`,
+        'pane report-metadata p7 --source deliver --clear-token deliver --clear-token deliver_step --clear-token deliver_pr --clear-token deliver_progress --clear-token deliver_tone',
       ]);
       expect(calls.join('\n')).not.toContain('display-agent');
       // no -LogPane: opens no pane (a TTY and a herdr pane are present); the plain log has no escape codes, the ANSI log is colored
@@ -502,12 +577,16 @@ fs.writeFileSync(f, JSON.stringify(s));`,
       expect(ansi).toMatch(new RegExp(`${ESC}\\[2m\\d\\d:\\d\\d:\\d\\d${ESC}\\[0m `));
       expect(ansi).toContain(`${ESC}[36mRead${ESC}[0m src/a.ts`);
       expect(ansi).toContain(`${ESC}[31m✗ boom${ESC}[0m`);
-      expect(ansi).toContain(`${ESC}[33m» #401 ci: red${ESC}[0m`);
-      expect(ansi).toContain(`${ESC}[32m» #401 merged: squash${ESC}[0m`);
+      // step lines are colored by the tone of the event; assistant text is logged uncolored
+      expect(ansi).toContain(`${ESC}[31m#401 ci: red${ESC}[0m`);
+      expect(ansi).toContain(`${ESC}[32m#401 merged: squash${ESC}[0m`);
+      expect(ansi).toContain(`${ESC}[32m#401 pr: opened #55${ESC}[0m`);
+      expect(ansi).toContain(`${ESC}[0m » #401 ci: red`);
       if (process.platform === 'darwin') {
         // osascript stub: attention step and loop result
         const notes = read('notices.txt');
         expect(notes).toContain('#401 PR opened');
+        expect(notes).toContain('#401 CI red');
         expect(notes).toContain('loop result: blocked');
       }
     });
