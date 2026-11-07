@@ -5,12 +5,18 @@ Versioning follows [Semantic Versioning](https://semver.org/).
 
 ---
 
-## [Unreleased]
+## [3.3.0] — 2026-11-07
 
-### Deprecated
-- **delivery**: The terminal sink of Report-Progress (tokens and agent state), the owner rule and `Set-LoopTokens`/`Set-LoopAgentState` are deprecated and removed in v3.4.0; `DELIVER_TERMINAL_SINK=0` switches the sink off, use the herdr event watcher or poimen#480 (#416)
+### Bug Fixes
+- **docs**: AGENTS.md says github-project is not in this repository (#428) (#430)
+- Github-project live tests exceed the time budget and hit the worker timeout (#429) (#431)
 
----
+
+### Features
+- **delivery**: Get-RunState.ps1 lists runs, folds one and tails its events (#415) (#426)
+- **delivery**: Terminal sink behind DELIVER_TERMINAL_SINK, marked deprecated (#416) (#427)
+- **github**: Add the github-project skill from GravionLabs/ci (#424)
+
 
 ## [3.2.0] — 2026-11-07
 
@@ -30,6 +36,7 @@ Versioning follows [Semantic Versioning](https://semver.org/).
 - **adr**: Agent progress events replace status.json (#381) (#380)
 - **github-release**: Issues close on merge into release/next (#382) (#396)
 - **adr**: Displays read the progress events (#420) (#418)
+- Update CHANGELOG.md for v3.2.0 [skip ci]
 
 
 ### Features
