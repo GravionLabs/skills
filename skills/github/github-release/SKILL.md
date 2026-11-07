@@ -32,7 +32,7 @@ The script is read-only and prints JSON: `default`, `branch`, `state`, `openPrs`
 1. `action: create`: create `release/next` from the default branch and push it with upstream.
 2. `action: recreate`: delete `release/next` on origin (`git push origin --delete release/next`; the guardrail allows exactly this), then `git checkout -B release/next origin/<default>` and push with upstream. No force push, no `+semver` commit.
 3. Each `staleLines` entry was released and is never reused. Report it with `git push origin --delete release/<x.y>`; the owner runs it (the guardrail blocks it in a session). Continue with the cut.
-4. `releaseWorkflow` false: tell the user the repo does not label merged issues and offer to copy `templates/release-branch.yml` to `.github/workflows/release-branch.yml` (never silently, one PR per repo, `references/merged-label.md`). A GitHub Project mirrors the label as status `In release` via `github-project sync`.
+4. `releaseWorkflow` false: tell the user the repo does not close issues at merge into `release/*` and offer to copy `templates/release-branch.yml` to `.github/workflows/release-branch.yml` (never silently, one PR per repo, `references/closing.md`).
 5. With `--feature <nr>`: insert `Release branch: release/next` as the second line of that issue's body (`gh issue view <nr> --json body`, then `gh issue edit <nr> --body-file -`), the `Parent ...` line stays first.
 
 ## finish
@@ -51,7 +51,7 @@ The script is read-only and prints JSON: `default`, `branch`, `state`, `openPrs`
 ## Gotchas
 
 - Never merge the release PR yourself; the push to `main` builds, regenerates the changelog and closes the delivered issues.
-- The `merged` label lifecycle: `references/merged-label.md`. A repo without `cliff.toml` gets no changelog from CI: `references/cliff-setup.md`.
+- Issues close at merge into `release/next`: `references/closing.md`. A repo without `cliff.toml` gets no changelog from CI: `references/cliff-setup.md`.
 - Hotfixes bypass this skill (`fix/<nr>-<slug>` from `main`, merge commit into `main`); afterwards run the back-merge (`references/back-merge.md`: merge commit PR, never squash).
 - Workflows reference `GravionLabs/ci` at the major tag `@v<major>` (today `@v1`, as `templates/release-branch.yml`), never `@main` or a commit SHA; third-party actions stay SHA-pinned where the repository requires it.
 - A release branch is never continued after its merge. The CI release PR title may show the branch name, not the version (`release-branches.md`).

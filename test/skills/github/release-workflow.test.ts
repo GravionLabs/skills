@@ -14,6 +14,7 @@ describe.each(Object.entries(files))('release-branch caller %s (#358)', (_name, 
 
   it('is valid YAML triggered by release branches', () => {
     expect(wf.on.push.branches).toEqual(['release/**']);
+    expect(wf.on.workflow_dispatch.inputs['dry-run'].type).toBe('boolean');
   });
 
   it('has no permissions at the top and grants the job what the reusable workflow requests', () => {
@@ -32,6 +33,8 @@ describe.each(Object.entries(files))('release-branch caller %s (#358)', (_name, 
       GH_PAT: '${{ secrets.GH_PAT }}',
       PROJECT_TOKEN: '${{ secrets.PROJECT_TOKEN }}',
     });
+    expect(job.with).not.toHaveProperty('label');
+    expect(job.with).not.toHaveProperty('project-status');
     expect(job.steps).toBeUndefined();
   });
 });
@@ -64,22 +67,27 @@ describe('release workflow and template call the same reusable workflow (#489)',
   });
 });
 
-describe('In release status docs (#489)', () => {
+describe('closing docs (#382)', () => {
   const read = (p: string) => fs.readFileSync(path.join(root, 'skills', 'github', p), 'utf-8');
 
-  it('merged-label.md documents PROJECT_TOKEN, scope project and the release/next limit', () => {
-    const doc = read('github-release/references/merged-label.md');
-    expect(doc).toMatch(/PROJECT_TOKEN/);
-    expect(doc).toMatch(/scope `project`/);
-    expect(doc).toMatch(/GH_PAT[\s\S]*read access to the repository/);
-    expect(doc).not.toMatch(/only needs the project scope/);
-    // Fine-grained tokens have no Projects permission for user accounts; the doc must not offer them as an option.
-    expect(doc).toMatch(/classic PAT with scope `project`/);
-    expect(doc).not.toMatch(/or fine-grained with Projects/);
-    expect(doc).toMatch(/fine-grained token does not work for a user-owned project/);
-    expect(doc).toMatch(/release\/next[\s\S]*GravionLabs\/ci#55/);
-    expect(doc).toMatch(/Checked \d{4}-\d{2}-\d{2}: GravionLabs\/ci#55 is \w+/);
+  it('closing.md covers the close at merge, the safety net, a reverted PR and the one-time dispatch', () => {
+    const doc = read('github-release/references/closing.md');
+    expect(doc).toContain('ships with <milestone>');
+    expect(doc).toContain('close-release-issues');
+    expect(doc).toMatch(/reverted[\s\S]*reopen its issues by hand/);
+    expect(doc).toMatch(/`merged`[\s\S]*`workflow_dispatch`/);
+    expect(doc).toMatch(/GravionLabs\/ci#55/);
     expect(doc).toMatch(/gh issue view 55 -R GravionLabs\/ci/);
+    expect(
+      fs.existsSync(path.join(root, 'skills/github/github-release/references/merged-label.md')),
+    ).toBe(false);
+  });
+
+  it('github-release links closing.md and no skill or doc names the merged label', () => {
+    expect(read('github-release/SKILL.md')).toContain('references/closing.md');
+    expect(read('github-release/references/help.md')).toContain('references/closing.md');
+    expect(read('github-issue/references/release-branches.md')).toContain('references/closing.md');
+    expect(read('github-issue/references/milestones.md')).toMatch(/closed milestone/);
   });
 });
 
@@ -91,7 +99,7 @@ describe('github-release skill (#358, #769)', () => {
     expect(skill).toContain('releaseWorkflow');
     expect(skill).toContain('templates/release-branch.yml');
     expect(skill).toContain('never silently');
-    expect(fs.existsSync(path.join(skillDir, 'references/merged-label.md'))).toBe(true);
+    expect(fs.existsSync(path.join(skillDir, 'references/closing.md'))).toBe(true);
   });
 
   it('is at most 60 lines and has no shell control flow, grep, $( or &&', () => {
