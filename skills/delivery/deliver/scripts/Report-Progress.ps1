@@ -187,7 +187,8 @@ try {
     if ($Milestone -or $MilestoneTitle -or $MilestoneUrl) {
       $m = [ordered]@{}; Add-If $m key $Milestone; Add-If $m title $MilestoneTitle; Add-If $m url $MilestoneUrl; $ev.milestone = $m
     }
-    $ev.pid = $PID
+    # a session starts its run with a separate call: this process exits at once, so no pid (the one-hour rule covers it)
+    if ($Source -ne 'session') { $ev.pid = $PID }
     $h = [ordered]@{}; Add-If $h poimenTerminal $env:POIMEN_TERMINAL_ID; Add-If $h herdrPane $env:HERDR_PANE_ID
     if ($h.Count) { $ev.host = $h }
   }
