@@ -492,7 +492,7 @@ fs.writeFileSync(f, JSON.stringify(s));`,
         `pane report-metadata p7 --source deliver --token deliver=#401 --token deliver_step=1/2 review: ${'x'.repeat(67)}… --token deliver_pr=#55 ${tokens}`,
         `pane report-metadata p7 --source deliver --token deliver=#401 --token deliver_step=1/2 ci: red --token deliver_pr=#55 ${tokens}`,
         `pane report-metadata p7 --source deliver --token deliver=#401 --token deliver_step=1/2 merged: squash --token deliver_pr=#55 ${tokens}`,
-        'pane report-metadata p7 --source deliver --clear-token deliver --clear-token deliver_step --clear-token deliver_pr --clear-token deliver_progress',
+        'pane report-metadata p7 --source deliver --clear-token deliver --clear-token deliver_step --clear-token deliver_pr --clear-token deliver_progress --clear-token deliver_tone',
       ]);
       expect(calls.join('\n')).not.toContain('display-agent');
       // no -LogPane: opens no pane (a TTY and a herdr pane are present); the plain log has no escape codes, the ANSI log is colored
