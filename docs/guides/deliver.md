@@ -37,7 +37,7 @@ Fix rounds are at most 2 per PBI, shared by review and CI; a third is a pause. T
 /deliver 42
 ```
 
-`deliver` prints one line per step and ends with a report (shortened):
+`deliver` prints one line per step and ends with a report (shortened). Each line is also reported as a progress event through `Report-Progress.ps1`, whatever the terminal: herdr and poimen show it in their sidebar, other terminals ignore it.
 
 ```text
 #42 select: next, claimed
