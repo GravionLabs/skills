@@ -17,7 +17,7 @@ One `release-test` per milestone (label `pbi` + `release-test`, usually `interac
 
 ## Closing
 
-Closing does not depend on the milestone. After the release PR is merged into `main`, `close-release-issues` (GravionLabs/ci) closes the issues with `Closes #n`, their open sub-issues, and the PBI or Feature parents whose sub-issues are all closed, repeating upwards. An Epic is never closed this way.
+An issue closes when its PR is merged into `release/next` (comment "ships with <milestone>", `release-branch.yml` of GravionLabs/ci), also its PBI or Feature parent once all sub-issues are closed; an Epic is never closed this way. `close-release-issues` (GravionLabs/ci) is the safety net when the release lands on `main`. "Released" means a closed milestone (`github-milestone close`), not a label. A reverted PR: reopen its issues by hand (`github-release` `references/closing.md`).
 
 ## Checks
 

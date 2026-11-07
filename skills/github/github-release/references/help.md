@@ -39,5 +39,5 @@ none
 
 ## See also
 
-- `references/cliff-setup.md`, `references/merged-label.md`
+- `references/cliff-setup.md`, `references/closing.md`
 - `github-issue` (`references/release-branches.md`), `github-pull-request`, `github-milestone`
