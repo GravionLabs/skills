@@ -166,9 +166,9 @@ const s = JSON.parse(fs.readFileSync(f, 'utf8')); s.issues[10].state = 'closed';
             l.includes(' deliver=#10'),
         ),
       ).toBe(true);
-      expect(
-        calls.some((l) => l.includes(' deliver_step=') && l.includes(' deliver_progress=1/2')),
-      ).toBe(true);
+      // #372: the sink reports deliver_progress with milestone.progress, the step tokens with step.finished
+      expect(calls.some((l) => l.includes(' deliver_step='))).toBe(true);
+      expect(calls.some((l) => l.includes(' deliver_progress=1/2'))).toBe(true);
       expect(calls.some((l) => l.startsWith('report agent --state working'))).toBe(true);
       expect(calls).toContain('report clear --source deliver');
       expect(calls.some((l) => l.includes('--token') || l.includes('--ttl-ms'))).toBe(false);

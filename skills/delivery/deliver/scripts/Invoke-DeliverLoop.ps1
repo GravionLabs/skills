@@ -10,7 +10,9 @@
   Observability: every stream record goes to .agents/deliver-loop/<run>/<nr>.jsonl (<nr> is the first PBI that was ready
   at the start of the iteration), a summary line per step to .agents/deliver-loop.log (plain) and stdout, the same line
   with ANSI colors to .agents/deliver-loop.ansi.log (long text is cut to the terminal width, 120 characters when redirected), desktop notifications for the attention steps (macOS osascript,
-  Windows toast), the pane tokens deliver, deliver_step, deliver_pr, deliver_progress (herdr HERDR_ENV=1, poimen POIMEN_SOCKET + POIMEN_TERMINAL_ID), a progress line per step and status.json (-Milestone; references/loop.md) and, with -LogPane in herdr on a terminal,
+  Windows toast), progress events (Report-Progress.ps1: run.started, issue.started, step.finished, attention, milestone.progress,
+  issue.finished, release.updated, run.finished; its terminal sink sets the pane tokens and the agent state), a progress line per step
+  and status.json (deprecated; the projection of the events, -Milestone; references/loop.md) and, with -LogPane in herdr on a terminal,
   a split pane labeled deliver-log below the session that tails the log (TerminalBackend.ps1; never closed by the loop).
   Stdout carries the colors of the .ansi.log when it is a terminal and neither -NoColor nor NO_COLOR is set; otherwise it is plain.
   Machine-readable progress for a control session (`deliver` `references/control.md`): .agents/deliver-loop/<run>/progress.jsonl,
@@ -89,11 +91,12 @@ $Ansi = @{ dim = "$Esc[2m"; cyan = "$Esc[36m"; red = "$Esc[31m"; yellow = "$Esc[
 # stdout gets the colors of the .ansi.log when it is a terminal (Test-LoopTerminal in TerminalBackend.ps1 defines "terminal").
 . (Join-Path $PSScriptRoot 'TerminalBackend.ps1')
 $ColorStdout = [bool]$AnsiFile -and (Test-LoopTerminal)
+# named after the run id once run.started is written (Start-Run); the time stamp is the fallback
 $RunDir = Join-Path (Get-Location) ".agents/deliver-loop/$((Get-Date).ToString('yyyyMMdd-HHmmss'))"
 $Progress = Join-Path $RunDir 'progress.jsonl'
 $Recent = [System.Collections.Generic.List[string]]::new()
 $AgentNames = @{}
-# resolved once: the harness runs with HERDR_ENV blanked, the progress callbacks still report
+# resolved once, for the log pane and the agent conflict notice; tokens and agent state go through the sink of Report-Progress.ps1
 $Backend = Get-TerminalBackend
 $Pane = Get-LoopPane $Backend
 
@@ -133,152 +136,197 @@ function Send-Notice([string]$text) {
   } catch { Write-Verbose "notification failed: $_" }
 }
 
-$PanePbi = ''
-$PanePr = ''
-$PaneStep = ''
-$PaneProgress = ''
-function Set-Pane([string]$Nr = '', [string]$Step = '', [switch]$Clear) {
-  # pane tokens (#16): deliver=#<nr>, deliver_step=<pos>/<total> <step>[: <result>], deliver_pr=#<pr>, deliver_progress=<closed>/<total> (#329); values <= 80 chars
-  if ($Clear) { Clear-LoopTokens -Pane $Pane -Name 'deliver', 'deliver_step', 'deliver_pr', 'deliver_progress', 'deliver_tone' -Backend $Backend; return }
-  if ($Nr -ne $script:PanePbi) { $script:PanePbi = $Nr; $script:PanePr = '' }
-  if ($Step -match '^\d+/\d+ pr: .*?#(\d+)') { $script:PanePr = $Matches[1] }
-  $script:PaneStep = $Step
-  $value = if ($Step.Length -gt 80) { $Step.Substring(0, 79) + '…' } else { $Step }
-  $tokens = [ordered]@{ deliver = "#$Nr"; deliver_step = $value }
-  if ($script:PanePr) { $tokens['deliver_pr'] = "#$($script:PanePr)" }
-  if ($script:PaneProgress) { $tokens['deliver_progress'] = $script:PaneProgress }
-  Set-LoopTokens -Pane $Pane -Token $tokens -TtlMs 3600000 -Backend $Backend
-}
-
-# Agent state (#191): the loop reports its own lifecycle (source deliver-loop, agent deliver); the terminal tracks only the pane's agent, not the claude -p children.
-# working per iteration, blocked on a pause/blocked step or when the loop ends blocked / no progress, idle at the end, then release. Any backend failure is ignored.
-# report-agent replaces the state of another agent in the pane and release does not restore it, so the loop reports only
-# in a pane without another agent (Test-LoopAgentConflict, checked once; backend failure: reports as before).
-$Paused = $false
-$AgentStateOff = $false
-function Set-AgentState([string]$State = '', [switch]$Release) {
-  if ($AgentStateOff) { return }
-  if ($Release) { Clear-LoopAgentState -Pane $Pane -Backend $Backend } else { Set-LoopAgentState -Pane $Pane -State $State -Backend $Backend }
-}
-
 # Get-Milestones.ps1 of github-milestone: sibling skill (installed) or skills/github (repository)
 $MilestoneScript = @('../../github-milestone', '../../../github/github-milestone' | ForEach-Object { Join-Path $PSScriptRoot "$_/scripts/Get-Milestones.ps1" }) |
   Where-Object { Test-Path $_ } | Select-Object -First 1
 
-# Status (#329): the live state of the run for other tools (.agents/deliver-loop/status.json, schema/deliver-loop-status.schema.json)
-# and the progress line after each step. Counts come from Get-DeliverStatus.ps1 (read at the start and after each iteration, the
-# same set as the stop rules); between reads the step comes from the progress lines. Needs -Milestone; a failing read keeps the last status.
-$StatusFile = Join-Path (Get-Location) '.agents/deliver-loop/status.json'
+# Progress events (ADR 0001, #372): the loop opens the run (run.started), emits what it knows itself (issue.started,
+# step.finished from the progress lines, attention, milestone.progress and the waiting / needs-you items of
+# Get-DeliverStatus.ps1, issue.finished from the GitHub state, run.finished) and is the owner of the terminal sink of
+# Report-Progress.ps1: tokens and agent state come from there, never from the loop. The harness gets AGENT_EVENTS_RUN with an
+# empty AGENT_EVENTS_TERMINAL (nested: its own events skip the sink). status.json (deprecated) is the projection
+# (ConvertFrom-ProgressEvents.ps1) of the event file after every event; it needs -Milestone.
+$ReportScript = Join-Path $PSScriptRoot 'Report-Progress.ps1'
+$ReducerScript = Join-Path $PSScriptRoot 'ConvertFrom-ProgressEvents.ps1'
 $StatusScript = Join-Path $PSScriptRoot 'Get-DeliverStatus.ps1'
-$StartedAt = (Get-Date).ToUniversalTime().ToString('o')
-$StepNumber = @{ select = 1; resume = 2; implement = 3; review = 4; fix = 5; pr = 6; ci = 7; merge = 7; merged = 7; cleanup = 7 }
-$Live = @{ Block = $null; Current = $null; Delivered = @(); Paused = @(); Pr = @{}; Model = $Model; Result = 'running' }
+$StatusFile = Join-Path (Get-Location) '.agents/deliver-loop/status.json'
+# one events directory for the loop, Report-Progress and the harness: AGENT_EVENTS_DIR, else <git-common-dir>/.agents/events,
+# outside a git repository .agents/events
+if (-not $env:AGENT_EVENTS_DIR) {
+  $common = try { @(& git rev-parse --git-common-dir 2>$null)[0] } catch { $null }
+  $env:AGENT_EVENTS_DIR = if ($LASTEXITCODE -eq 0 -and $common) {
+    Join-Path ([IO.Path]::GetFullPath($common, (Get-Location).Path)) '.agents/events'
+  } else { Join-Path (Get-Location) '.agents/events' }
+}
+$LoopHerdrEnv = $env:HERDR_ENV
+$RunId = ''
+$EventFile = ''
+$Finished = $false
+$Projection = $null
+$Block = $null
+$Delivered = @()
+$Prs = @{}
+$LineOutcome = @{}
+$Reported = @{}
+$ReleaseKey = ''
+$AttentionKind = @{ 'PR opened' = 'pr_opened'; 'review fix round' = 'review_fix'; 'CI red' = 'ci_red'; paused = 'paused'; blocked = 'blocked' }
 
 function Get-RefNumber([string]$text) { if ($text -match '/(?:issues|pull)/(\d+)') { [int]$Matches[1] } else { 0 } }
 
-function Read-StatusBlock {
-  if (-not $Milestone -or -not $MilestoneScript) { return }
+function Get-BaseUrl {
+  if ($Block -and $Block.baseUrl) { return ([string]$Block.baseUrl).TrimEnd('/') }
+  if ($Projection -and $Projection.repository) { return "https://github.com/$($Projection.repository)" }
+  return ''
+}
+
+function Get-PrUrl([string]$n) { $base = Get-BaseUrl; if ($base) { "$base/pull/$n" } else { "#$n" } }
+
+# status.json: the projection of the event file plus schemaVersion 1; abandoned (a pid that no longer lives, e.g. of a
+# nested run.started) becomes running, its old updatedAt marks it stale. Atomic: temp file, then rename.
+function Update-Projection {
+  if (-not $EventFile -or -not (Test-Path -LiteralPath $EventFile)) { return }
   try {
-    $raw = & $StatusScript -Milestone $Milestone -Delivered ([int[]]@($Live.Delivered)) -MilestonesScript $MilestoneScript 2>$null
-    # no $LASTEXITCODE test: the script ends after a native call (the release PR lookup) that may fail on its own
-    if ($raw) { $Live.Block = ($raw | Out-String) | ConvertFrom-Json }
-  } catch { Write-Verbose "status block not read: $_" }
-}
-
-function Get-LoopProgressToken { if ($Live.Block) { "$($Live.Block.closed)/$($Live.Block.total)" } else { '' } }
-
-# M5 ▓▓▓▓░░░░ 7/19 · #322 review · 1 blocked · 1 needs you
-function Get-ProgressLine {
-  $b = $Live.Block
-  if (-not $b) { return '' }
-  $filled = if ($b.total -gt 0) { [Math]::Min(8, [int][Math]::Round(8 * $b.closed / $b.total)) } else { 0 }
-  $parts = @("$($b.key) $('▓' * $filled)$('░' * (8 - $filled)) $($b.closed)/$($b.total)")
-  $c = $Live.Current
-  if ($c) { $parts += "#$($c.number) $(($c.step.text -split ':')[0])".TrimEnd() }
-  if (@($b.waiting).Count) { $parts += "$(@($b.waiting).Count) blocked" }
-  $needs = @($b.needsYou).Count + @($Live.Paused).Count
-  if ($needs) { $parts += "$needs needs you" }
-  return $parts -join ' · '
-}
-
-function ConvertTo-StatusItem($ref, [string]$reason) {
-  [ordered]@{ number = [int]$ref.number; url = [string]$ref.url; reason = $(if ($reason) { $reason } else { 'waiting' }) }
-}
-
-function Write-LoopStatus {
-  $b = $Live.Block
-  if (-not $b -or -not $b.baseUrl) { return }
-  try {
-    $base = [string]$b.baseUrl
-    $current = $null
-    if ($Live.Current -and $Live.Result -eq 'running') { $current = $Live.Current }
-    $needs = @(@($b.needsYou) | ForEach-Object {
-        $n = Get-RefNumber $_
-        if ($n) { [ordered]@{ number = $n; url = [regex]::Match($_, 'https://\S+/(?:issues|pull)/\d+').Value; reason = ($_ -replace 'https://\S+', '').Trim(' :,') } }
-      })
-    $needs += @($Live.Paused)
-    $delivered = @(@($b.delivered) | ForEach-Object {
-        $pr = $Live.Pr["$($_.number)"]
-        [ordered]@{ pbi = [int]$_.number; url = [string]$_.url; prUrl = $(if ($pr) { "$base/pull/$pr" } else { [string]$_.url }) }
-      })
-    $doc = [ordered]@{
-      schemaVersion = 1
-      run = (Split-Path $RunDir -Leaf)
-      harness = $Harness
-      model = $(if ($Live.Model) { $Live.Model } else { 'default' })
-      repository = (($base -split '/')[-2..-1] -join '/')
-      milestone = [ordered]@{ key = [string]$b.key; title = [string]$b.milestone; url = [string]$b.milestoneUrl }
-      closed = [int]$b.closed
-      total = [int]$b.total
-      current = $current
-      delivered = $delivered
-      blocked = @(@($b.waiting) | ForEach-Object { ConvertTo-StatusItem $_ ([string]$_.reason) })
-      paused = @($Live.Paused)
-      needsYou = @($needs | ForEach-Object { [ordered]@{ number = $_.number; url = $(if ($_.url) { $_.url } else { "$base/issues/$($_.number)" }); reason = $(if ($_.reason) { $_.reason } else { 'needs you' }) } })
-      release = [ordered]@{ reviewRound = $b.release.round; prUrl = $b.release.pr }
-      startedAt = $StartedAt
-      updatedAt = (Get-Date).ToUniversalTime().ToString('o')
-      result = $Live.Result
-    }
+    $json = (@(& $ReducerScript -Path $EventFile 2>$null) -join "`n").Trim()
+    if (-not $json.StartsWith('{')) { return }
+    $script:Projection = $json | ConvertFrom-Json
+    $p = $script:Projection
+    if (-not $Milestone -or -not $p.milestone -or -not $p.milestone.title -or -not $p.repository) { return }
+    $doc = "{`n  `"schemaVersion`": 1," + $json.Substring(1)
+    $doc = $doc -replace '"result": "abandoned"(\s*)\}$', '"result": "running"$1}'
     New-Item -ItemType Directory -Force -Path (Split-Path $StatusFile) | Out-Null
     $tmp = "$StatusFile.tmp"
-    [IO.File]::WriteAllText($tmp, ($doc | ConvertTo-Json -Depth 8))
+    [IO.File]::WriteAllText($tmp, $doc)
     Move-Item -LiteralPath $tmp -Destination $StatusFile -Force
   } catch { Write-Verbose "status.json not written: $_" }
 }
 
-# Refresh after a change: status.json, the backend progress token, one progress line.
-function Publish-LoopStatus([switch]$Line) {
-  Write-LoopStatus
-  $script:PaneProgress = Get-LoopProgressToken
-  if ($Line) {
-    $text = Get-ProgressLine
-    if ($text) { Write-Step $text 'cyan' }
+# One event through Report-Progress.ps1 (in-process, so run.started records the pid of the loop). The sink sees the
+# loop's own HERDR_ENV and the owner marker, also while the harness runs with both blanked. Never throws into the loop.
+function Send-Event([hashtable]$Fields) {
+  if (-not $RunId -and $Fields.Type -ne 'run.started') { return }
+  $herdr = $env:HERDR_ENV; $term = $env:AGENT_EVENTS_TERMINAL
+  $env:HERDR_ENV = $LoopHerdrEnv
+  $env:AGENT_EVENTS_TERMINAL = if ($RunId) { 'owner' } else { $null }
+  $out = @()
+  try { $out = @(& $ReportScript @Fields) } catch { Write-Verbose "event $($Fields.Type) not written: $_" }
+  finally { $env:HERDR_ENV = $herdr; $env:AGENT_EVENTS_TERMINAL = $term }
+  if ($Fields.Type -eq 'run.started') {
+    $id = $out | Where-Object { "$_" -match '^AGENT_EVENTS_RUN=([\w.-]+)$' } | ForEach-Object { $Matches[1] } | Select-Object -First 1
+    if (-not $id) { return }
+    $script:RunId = $id
+    $script:EventFile = Join-Path $env:AGENT_EVENTS_DIR "$id.jsonl"
+    $env:AGENT_EVENTS_RUN = $id
+    $env:AGENT_EVENTS_TERMINAL = 'owner'
+    Update-Projection
+  } elseif ($Milestone) { Update-Projection }
+}
+
+function Start-Run {
+  # the loop always opens its own run, whatever the calling shell exported
+  $env:AGENT_EVENTS_RUN = $null; $env:AGENT_EVENTS_TERMINAL = $null
+  $f = @{ Type = 'run.started'; Source = 'loop'; Harness = $Harness; Model = $Model }
+  $base = Get-BaseUrl
+  if ($base) { $f.Repository = (($base -split '/')[-2..-1] -join '/') }
+  if ($Milestone) {
+    $f.Milestone = if ($Block -and $Block.key) { [string]$Block.key } else { $Milestone }
+    if ($Block) { $f.MilestoneTitle = [string]$Block.milestone; $f.MilestoneUrl = [string]$Block.milestoneUrl }
+  }
+  Send-Event $f
+  if ($RunId) {
+    $script:RunDir = Join-Path (Get-Location) ".agents/deliver-loop/$RunId"
+    $script:Progress = Join-Path $script:RunDir 'progress.jsonl'
   }
 }
 
-function Set-LiveCurrent([int]$nr) {
-  $b = $Live.Block
-  $base = if ($b) { [string]$b.baseUrl } else { '' }
-  $title = "#$nr"; $url = "$base/issues/$nr"
-  if ($b -and $b.ready.next -and [int]$b.ready.next.number -eq $nr) { $title = [string]$b.ready.next.title; $url = [string]$b.ready.next.url }
-  $Live.Current = [ordered]@{ number = $nr; title = $title; url = $url; step = [ordered]@{ n = 1; total = 7; text = 'select' }; prUrl = $null }
+# Exactly one run.finished per run: at the end of the loop, else in the finally (error, Ctrl+C).
+function Stop-Run([string]$RunResult) {
+  if ($Finished -or -not $RunId) { return }
+  $script:Finished = $true
+  Send-Event @{ Type = 'run.finished'; RunResult = $RunResult }
 }
 
-function Update-LiveStep([int]$nr, [string]$step, [string]$result) {
-  if (-not $Live.Current -or $Live.Current.number -ne $nr) { Set-LiveCurrent $nr }
-  $c = $Live.Current
-  if ($StepNumber.ContainsKey($step)) { $c.step.n = $StepNumber[$step] }
-  $c.step.text = $(if ($result) { "${step}: $result" } else { $step })
-  if ($step -eq 'pr' -and $result -match '#(\d+)') {
-    $Live.Pr["$nr"] = $Matches[1]
-    if ($Live.Block -and $Live.Block.baseUrl) { $c.prUrl = "$($Live.Block.baseUrl)/pull/$($Matches[1])" }
+function Read-StatusBlock {
+  if (-not $Milestone -or -not $MilestoneScript) { return }
+  try {
+    $raw = & $StatusScript -Milestone $Milestone -Delivered ([int[]]@($Delivered)) -MilestonesScript $MilestoneScript 2>$null
+    # no $LASTEXITCODE test: the script ends after a native call (the release PR lookup) that may fail on its own
+    if ($raw) { $script:Block = ($raw | Out-String) | ConvertFrom-Json }
+  } catch { Write-Verbose "status block not read: $_" }
+}
+
+# The status block as events: milestone.progress, the waiting items as issue.finished blocked, the needs-you items as
+# attention needs_you, the release round and PR as release.updated. Only changes are sent; an item that left the block
+# without being delivered is reset with issue.finished skipped.
+function Send-BlockEvents {
+  $b = $Block
+  if (-not $b) { return }
+  Send-Event @{ Type = 'milestone.progress'; Closed = [int]$b.closed; Total = [int]$b.total }
+  $now = [ordered]@{}
+  foreach ($w in @($b.waiting)) {
+    if ($w) { $now["$($w.number)"] = @{ Kind = 'blocked'; Reason = $(if ($w.reason) { [string]$w.reason } else { 'waiting' }); Url = [string]$w.url; Title = [string]$w.title } }
   }
-  $why = Get-Attention $step $result
-  if ($why -in 'paused', 'blocked') {
-    $base = if ($Live.Block) { [string]$Live.Block.baseUrl } else { '' }
-    $Live.Paused = @(@($Live.Paused | Where-Object { $_.number -ne $nr }) + [ordered]@{ number = $nr; url = "$base/issues/$nr"; reason = $(if ($result) { $result } else { $why }) })
+  foreach ($t in @($b.needsYou)) {
+    $n = Get-RefNumber $t
+    if (-not $n) { continue }
+    $reason = ($t -replace 'https://\S+', '').Trim(' :,')
+    $now["$n"] = @{ Kind = 'needs'; Reason = $(if ($reason) { $reason } else { 'needs you' }); Url = [regex]::Match($t, 'https://\S+/(?:issues|pull)/\d+').Value }
   }
+  foreach ($k in @($Reported.Keys)) {
+    if ($now.Contains($k) -and $now[$k].Kind -eq $Reported[$k].Kind) { continue }
+    if ($Delivered -notcontains [int]$k) { Send-Event @{ Type = 'issue.finished'; Issue = [int]$k; Outcome = 'skipped'; Reason = 'no longer waiting' } }
+    $Reported.Remove($k)
+  }
+  foreach ($k in $now.Keys) {
+    $x = $now[$k]
+    if ($Reported.ContainsKey($k) -and $Reported[$k].Reason -eq $x.Reason) { continue }
+    if ($x.Kind -eq 'needs') { Send-Event @{ Type = 'attention'; Kind = 'needs_you'; Issue = [int]$k; Url = $x.Url; Reason = $x.Reason } }
+    else { Send-Event @{ Type = 'issue.finished'; Issue = [int]$k; Title = $x.Title; Url = $x.Url; Outcome = 'blocked'; Reason = $x.Reason } }
+    $Reported[$k] = $x
+  }
+  $r = $b.release
+  $key = "$($r.round)|$($r.pr)"
+  if (($r.round -or $r.pr) -and $key -ne $ReleaseKey) {
+    $f = @{ Type = 'release.updated' }
+    if ($r.round) { $f.ReviewRound = [int]$r.round }
+    if ($r.pr) { $f.PrUrl = [string]$r.pr }
+    Send-Event $f
+    $script:ReleaseKey = $key
+  }
+}
+
+# Outcome of the iterated issue from GitHub: closed delivered; needs-decision or interactive paused; needs-refinement or an
+# open blocker blocked; else the paused/blocked progress line, else skipped (still open and ready: no progress).
+function Get-IssueOutcome([int]$nr, $after) {
+  $line = $LineOutcome["$nr"]
+  $labels = @($after.Labels[$nr])
+  $held = @($labels | Where-Object { $_ -in 'needs-decision', 'interactive' })
+  if ($held) { return @{ Outcome = 'paused'; Reason = $(if ($line) { $line.Reason } else { $held[0] }) } }
+  if ($labels -contains 'needs-refinement') { return @{ Outcome = 'blocked'; Reason = 'needs refinement' } }
+  if ($after.Eligible -contains $nr -and $after.Ready -notcontains $nr) { return @{ Outcome = 'blocked'; Reason = 'open blocker' } }
+  if ($line) { return $line }
+  return @{ Outcome = 'skipped'; Reason = 'no progress' }
+}
+
+function Send-IterationOutcome([int]$nr, [int[]]$gone, $after) {
+  foreach ($g in $gone) { Send-Event @{ Type = 'issue.finished'; Issue = $g; Outcome = 'delivered'; Pr = [string]$Prs["$g"] } }
+  if ($gone -contains $nr) { return }
+  $o = Get-IssueOutcome $nr $after
+  Send-Event @{ Type = 'issue.finished'; Issue = $nr; Outcome = $o.Outcome; Reason = $o.Reason; Pr = [string]$Prs["$nr"] }
+  # the status block lists it as waiting with the same reason: not sent twice
+  if ($o.Outcome -eq 'blocked') { $Reported["$nr"] = @{ Kind = 'blocked'; Reason = $o.Reason } }
+}
+
+# M5 ▓▓▓▓░░░░ 7/19 · #322 review · 1 blocked · 1 needs you (from the projection; needs a read milestone)
+function Write-ProgressLine {
+  $p = $Projection
+  if (-not $Milestone -or -not $p -or -not $p.milestone -or -not $p.milestone.title) { return }
+  $filled = if ($p.total -gt 0) { [Math]::Min(8, [int][Math]::Round(8 * $p.closed / $p.total)) } else { 0 }
+  $parts = @("$($p.milestone.key) $('▓' * $filled)$('░' * (8 - $filled)) $($p.closed)/$($p.total)")
+  if ($p.current) { $parts += "#$($p.current.number) $(([string]$p.current.step.text -split ':')[0])".TrimEnd() }
+  if (@($p.blocked).Count) { $parts += "$(@($p.blocked).Count) blocked" }
+  $needs = @($p.needsYou).Count + @($p.paused).Count
+  if ($needs) { $parts += "$needs needs you" }
+  Write-Step ($parts -join ' · ') 'cyan'
 }
 
 function Get-Json([string[]]$ghArgs, [switch]$Pwsh) {
@@ -335,9 +383,12 @@ function Get-State {
       $blockers = @(Get-Json @('api', "repos/{owner}/{repo}/issues/$($_.Number)/dependencies/blocked_by?per_page=100"))
       -not ($blockers | Where-Object { $_ -and $_.state -eq 'open' })
     })
+  $labelsOf = @{}
+  foreach ($f in $found) { $labelsOf[[int]$f.Number] = @($f.Labels) }
   [pscustomobject]@{
     Open     = $found.Count
     OpenNrs  = @($found | ForEach-Object { $_.Number })
+    Labels   = $labelsOf
     Skipped  = @($skipped)
     Paused   = $paused
     Eligible = @($eligible | ForEach-Object { $_.Number } | Sort-Object)
@@ -396,7 +447,9 @@ function Write-ToolStep([string]$prefix, [string]$name, $in) {
   Write-Step "$prefix$name $what" -Tool $name -ToolAt $prefix.Length
 }
 
-function Write-TextStep([string]$prefix, [string]$text, [int]$position, [int]$total) {
+# A progress line `#<nr> <step>: <result>` of deliver (top level only) becomes step.finished, plus attention for the
+# attention steps (merged has no kind). Removed with the console PBI, once the skill emits its steps itself.
+function Write-TextStep([string]$prefix, [string]$text) {
   $color = ''
   if (-not $prefix) {
     foreach ($l in ($text -split "`r?`n")) { if ($l -match '^#\d+ ([\w-]+): (.*)$') { $color = Get-StepColor $Matches[1] $Matches[2]; if ($color) { break } } }
@@ -404,20 +457,22 @@ function Write-TextStep([string]$prefix, [string]$text, [int]$position, [int]$to
   Write-Step "$prefix» $(Get-Short $text)" $color
   if ($prefix) { return }
   foreach ($l in ($text -split "`r?`n")) {
-    if ($l -match '^#(\d+) ([\w-]+): (.*)$') {
-      Update-LiveStep ([int]$Matches[1]) $Matches[2] $Matches[3]
-      $script:PaneProgress = Get-LoopProgressToken
-      Set-Pane $Matches[1] "$position/$total $($Matches[2]): $($Matches[3])"
-      Publish-LoopStatus -Line
-      $why = Get-Attention $Matches[2] $Matches[3]
-      if ($why -in 'paused', 'blocked') { $script:Paused = $true; Set-AgentState 'blocked' }
-      if ($why) { Send-Notice "#$($Matches[1]) $why" }
-    }
+    if ($l -notmatch '^#(\d+) ([\w-]+): (.*)$') { continue }
+    $nr = [int]$Matches[1]; $step = $Matches[2]; $res = $Matches[3]
+    if ($step -eq 'pr' -and $res -match '#(\d+)') { $Prs["$nr"] = Get-PrUrl $Matches[1] }
+    $pr = [string]$Prs["$nr"]
+    Send-Event @{ Type = 'step.finished'; Issue = $nr; Step = $step; Result = $res; Pr = $pr }
+    $why = Get-Attention $step $res
+    $reason = if ($res) { $res } else { [string]$why }
+    if ($why -and $AttentionKind.ContainsKey($why)) { Send-Event @{ Type = 'attention'; Kind = $AttentionKind[$why]; Issue = $nr; Reason = $reason; Pr = $pr } }
+    if ($why -in 'paused', 'blocked') { $LineOutcome["$nr"] = @{ Outcome = $why; Reason = $reason } }
+    Write-ProgressLine
+    if ($why) { Send-Notice "#$nr $why" }
   }
 }
 
 # One stream-json record of Claude Code: summary line, progress lines of deliver (top level only), tool errors.
-function Read-Record([string]$line, [int]$position, [int]$total) {
+function Read-Record([string]$line) {
   try { $rec = $line | ConvertFrom-Json } catch { Write-Step "? $(Get-Short $line)"; return }
   $parent = $rec.parent_tool_use_id
   $prefix = if ($parent -and $AgentNames.ContainsKey($parent)) { "[$($AgentNames[$parent])] " } elseif ($parent) { '[subagent] ' } else { '' }
@@ -427,7 +482,7 @@ function Read-Record([string]$line, [int]$position, [int]$total) {
       if ($c.name -in 'Agent', 'Task') { $AgentNames[$c.id] = Get-Short ([string]$c.input.description) 60 }
       Write-ToolStep $prefix $c.name $c.input
     } elseif ($rec.type -eq 'assistant' -and $c.type -eq 'text') {
-      Write-TextStep $prefix $c.text $position $total
+      Write-TextStep $prefix $c.text
     } elseif ($rec.type -eq 'user' -and $c.type -eq 'tool_result' -and $c.is_error) {
       $body = if ($c.content -is [string]) { $c.content } else { ($c.content | ForEach-Object { $_.text }) -join "`n" }
       Write-Step "$prefix✗ $(Get-Short $body)" 'red'
@@ -438,7 +493,7 @@ function Read-Record([string]$line, [int]$position, [int]$total) {
 # One JSONL event of Copilot CLI (--output-format json): {type, data}. Tool calls come as tool.execution_start,
 # failures as tool.execution_complete with success=false, text as assistant.message. Subagent steps get the
 # agentDisplayName of subagent.started as prefix (events with a parentToolCallId; [subagent] if unknown). Unknown event types are ignored (only logged to the jsonl).
-function Read-CopilotRecord([string]$line, [int]$position, [int]$total) {
+function Read-CopilotRecord([string]$line) {
   try { $rec = $line | ConvertFrom-Json } catch { Write-Step "? $(Get-Short $line)"; return }
   $d = $rec.data
   $prefix = if ($d.parentToolCallId -and $AgentNames.ContainsKey($d.parentToolCallId)) { "[$($AgentNames[$d.parentToolCallId])] " } elseif ($d.parentToolCallId) { '[subagent] ' } else { '' }
@@ -447,7 +502,7 @@ function Read-CopilotRecord([string]$line, [int]$position, [int]$total) {
     'tool.execution_start' {
       Write-ToolStep $prefix $d.toolName $d.arguments
     }
-    'assistant.message' { if ($d.content) { Write-TextStep $prefix ([string]$d.content) $position $total } }
+    'assistant.message' { if ($d.content) { Write-TextStep $prefix ([string]$d.content) } }
     'tool.execution_complete' {
       if ($d.success -eq $false) {
         $body = if ($d.error.message) { [string]$d.error.message } elseif ($d.result.content) { [string]$d.result.content } else { 'tool failed' }
@@ -483,14 +538,16 @@ function Invoke-Iteration([int]$n, [int]$total, $state) {
   }
   Write-Step "iteration $n/$total start: $prompt"
   Write-ProgressRecord 'iteration-start' @{ n = $n; total = $total; pbi = [int]$state.Ready[0]; open = $state.Open; model = $iterModel }
-  $script:Paused = $false
-  $Live.Model = $iterModel
-  Set-LiveCurrent ([int]$state.Ready[0])
-  Publish-LoopStatus
-  Set-AgentState 'working'
-  Set-Pane "$($state.Ready[0])" "$n/$total starting"
-  $saved = $env:HERDR_ENV
-  $env:HERDR_ENV = ''
+  $nr = [int]$state.Ready[0]
+  $LineOutcome.Remove("$nr")
+  $started = @{ Type = 'issue.started'; Issue = $nr }
+  $base = Get-BaseUrl
+  if ($base) { $started.Url = "$base/issues/$nr" }
+  if ($Block -and $Block.ready.next -and [int]$Block.ready.next.number -eq $nr) { $started.Title = [string]$Block.ready.next.title; $started.Url = [string]$Block.ready.next.url }
+  Send-Event $started
+  # the harness reports nothing to the terminal: HERDR_ENV empty, and nested for the sink (AGENT_EVENTS_RUN without the owner marker)
+  $savedHerdr = $env:HERDR_ENV; $savedTerminal = $env:AGENT_EVENTS_TERMINAL
+  $env:HERDR_ENV = ''; $env:AGENT_EVENTS_TERMINAL = ''
   try {
     $cli = if ($Harness -eq 'copilot') {
       @('-p', $prompt, '--model', $iterModel, '--allow-all-tools', '--allow-all-paths', '--allow-all-urls', '--no-ask-user', '--output-format', 'json')
@@ -501,24 +558,28 @@ function Invoke-Iteration([int]$n, [int]$total, $state) {
       $line = "$_"
       if ($_ -is [System.Management.Automation.ErrorRecord]) { Write-Step "stderr $(Get-Short $line)" 'red'; return }
       [IO.File]::AppendAllText($jsonl, $line + "`n")
-      if ($Harness -eq 'copilot') { Read-CopilotRecord $line $n $total } else { Read-Record $line $n $total }
+      if ($Harness -eq 'copilot') { Read-CopilotRecord $line } else { Read-Record $line }
     }
-    if ($LASTEXITCODE -ne 0) { Write-Step "$Harness exited with $LASTEXITCODE" 'red' }
-  } finally { $env:HERDR_ENV = $saved }
+    $exit = $LASTEXITCODE
+    if ($exit -ne 0) { Write-Step "$Harness exited with $exit" 'red' }
+  } finally { $env:HERDR_ENV = $savedHerdr; $env:AGENT_EVENTS_TERMINAL = $savedTerminal }
 }
 
-$result = 'done'
+$result = $null
 $code = 0
 $i = 0
+$state = $null
 try {
   if ($LogPane) { Open-LogPane -LogFile $(if ($AnsiFile) { $AnsiFile } else { $LogFile }) -Backend $Backend }
+  # the sink checks this itself per event; the loop only says why the pane shows no state
   if (Test-LoopAgentConflict -Pane $Pane -Backend $Backend) {
-    $script:AgentStateOff = $true
     Write-Step 'agent state not reported: another agent runs in this pane (start the loop in its own pane)' 'yellow'
   }
-  $state = Get-State
   Read-StatusBlock
-  Publish-LoopStatus -Line
+  Start-Run
+  Send-BlockEvents
+  $state = Get-State
+  Write-ProgressLine
   Write-ProgressRecord 'start' @{ targets = @($Nrs); milestone = $Milestone; max = $Max; harness = $Harness; model = $Model; open = $state.Open }
   foreach ($sk in $state.Skipped) { Write-Step "#$($sk.Number) select: outside $Milestone (milestone: $($sk.Milestone)), skipped; set the milestone to deliver it" 'yellow' }
   $result = Get-StopReason $state
@@ -529,11 +590,11 @@ try {
     $after = Get-State
     # delivered = left the open set; a PBI that is only held (needs-decision) stays open and is paused (#346)
     $gone = @($state.Eligible | Where-Object { $after.Eligible -notcontains $_ -and $after.OpenNrs -notcontains $_ })
-    $Live.Delivered = @($Live.Delivered) + $gone
-    $Live.Paused = @($Live.Paused | Where-Object { $gone -notcontains $_.number })
-    $Live.Current = $null
+    $Delivered = @($Delivered) + $gone
+    Send-IterationOutcome ([int]$state.Ready[0]) $gone $after
     Read-StatusBlock
-    Publish-LoopStatus -Line
+    Send-BlockEvents
+    Write-ProgressLine
     Write-ProgressRecord 'iteration-end' @{ n = $i; pbi = [int]$state.Ready[0]; delivered = ($gone -join ','); open = $after.Open }
     if (($after.Eligible -join ',') -eq ($state.Eligible -join ',')) {
       $result = 'no progress'
@@ -548,14 +609,11 @@ try {
   $code = switch ($result) { 'no progress' { 1 } 'blocked' { 2 } default { 0 } }
   $color = if ($result -in 'done', 'max reached') { 'green' } else { 'yellow' }
   Write-Step "loop result: $result ($i iteration(s), $($state.Open) PBI(s) open)" $color
-  $Live.Result = $result
-  $Live.Current = $null
-  Publish-LoopStatus
+  Stop-Run $result
   Write-ProgressRecord 'result' @{ result = $result; code = $code; iterations = $i; open = $state.Open }
   Send-Notice "loop result: $result"
-  Set-AgentState $(if (($result -in 'blocked','no progress') -or $Paused) { 'blocked' } else { 'idle' })
 } finally {
-  Set-Pane -Clear
-  Set-AgentState -Release
+  # error or Ctrl+C: the run ends here, as no progress (the sink clears the tokens and releases the agent state)
+  Stop-Run 'no progress'
 }
 exit $code
