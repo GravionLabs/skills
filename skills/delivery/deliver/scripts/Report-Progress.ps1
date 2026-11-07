@@ -25,6 +25,8 @@
   release.updated: the round of the release review (1, 2, ...).
 .PARAMETER RunResult
   run.finished result: done, max reached, blocked, no progress, ...
+.PARAMETER SinkEvent
+  JSON of an event already written: only the terminal sink shows it (used by Invoke-DeliverLoop.ps1 for the events of the harness).
 .PARAMETER Run
   Run id to write to; the fallback is AGENT_EVENTS_RUN. An interactive session passes the id printed by run.started with
   every later call (Bash calls share no shell state, and an env prefix would not match the permission allowlist). -Run
@@ -59,11 +61,12 @@ param(
   [string]$TestIssueUrl,
   [string]$PrUrl,
   [int]$ReviewRound,
-  [string]$Run
+  [string]$Run,
+  [string]$SinkEvent
 )
 $ErrorActionPreference = 'Stop'
 
-# Tone: neutral, info, success, warning, danger. Same rules as Get-Attention / Get-StepColor of Invoke-DeliverLoop.ps1.
+# Tone: neutral, info, success, warning, danger. The only place of the tone rules (the loop colors by the tone of the event).
 function Get-Tone([string]$type, [string]$step, [string]$result, [string]$kind, [string]$outcome, [string]$runResult) {
   switch ($type) {
     'attention' {
@@ -142,6 +145,11 @@ $stepNumbers = @{ select = 1; resume = 2; implement = 3; review = 4; fix = 5; pr
 function Add-If($h, [string]$k, $v) { if ($null -ne $v -and "$v" -ne '') { $h[$k] = $v } }
 
 try {
+  if ($SinkEvent) {
+    # -SinkEvent <json of an existing event>: only the terminal sink, nothing appended (the loop shows the harness's events)
+    Send-TerminalSink ($SinkEvent | ConvertFrom-Json) $Pr
+    exit 0
+  }
   $run = if ($Run) { $Run } else { $env:AGENT_EVENTS_RUN }
   $created = $false
   if (-not $run) {

@@ -3,6 +3,7 @@ import { spawnSync } from 'child_process';
 import * as fs from 'fs';
 import * as os from 'os';
 import * as path from 'path';
+import { reportEventCmd } from '../../helpers/report-progress';
 import { createFakeGh } from '../../helpers/fake-gh';
 import { PwshWorker } from '../../helpers/pwsh-worker';
 
@@ -39,7 +40,7 @@ describe.skipIf(!hasPwsh || process.platform === 'win32')(
     });
 
     // milestone M4: #5 closed, #10 open (the claude stub closes it); with blocked: #11 open, blocked by the open #12
-    const setup = (opts: { text?: string; backendFails?: boolean; blocked?: boolean } = {}) => {
+    const setup = (opts: { event?: string[]; backendFails?: boolean; blocked?: boolean } = {}) => {
       cwd = path.join(dir, `case-${++seq}`);
       fs.mkdirSync(cwd, { recursive: true });
       const state = path.join(cwd, 'state.json');
@@ -75,15 +76,26 @@ describe.skipIf(!hasPwsh || process.platform === 'win32')(
         `const fs = require('fs'); const f = ${JSON.stringify(state)};
 const s = JSON.parse(fs.readFileSync(f, 'utf8')); s.issues[10].state = 'closed'; fs.writeFileSync(f, JSON.stringify(s));`,
       );
-      const text = opts.text ?? '#10 review: clean';
+      const event = opts.event ?? [
+        '-Type',
+        'step.finished',
+        '-Issue',
+        '10',
+        '-Step',
+        'review',
+        '-Result',
+        'clean',
+      ];
       fs.writeFileSync(
         path.join(cwd, 'stream.jsonl'),
-        JSON.stringify({ type: 'assistant', message: { content: [{ type: 'text', text }] } }) +
-          '\n',
+        JSON.stringify({
+          type: 'assistant',
+          message: { content: [{ type: 'text', text: 'working' }] },
+        }) + '\n',
       );
       const stub = (name: string, body: string) =>
         fs.writeFileSync(path.join(gh.bin, name), `#!/bin/sh\n${body}\n`, { mode: 0o755 });
-      stub('claude', `cat ${cwd}/stream.jsonl\nnode ${cwd}/effect.js`);
+      stub('claude', `cat ${cwd}/stream.jsonl\n${reportEventCmd(event)}\nnode ${cwd}/effect.js`);
       stub('herdr', `echo "$*" >> ${cwd}/herdr-calls.txt`);
       stub(
         'poimen-server',
@@ -113,7 +125,23 @@ const s = JSON.parse(fs.readFileSync(f, 'utf8')); s.issues[10].state = 'closed';
       JSON.parse(fs.readFileSync(path.join(cwd, '.agents/deliver-loop/status.json'), 'utf8'));
 
     it('writes a schema-valid status.json atomically and prints the progress line outside herdr and poimen', async () => {
-      const r = await run(setup({ blocked: true, text: '#10 pr: opened #55' }));
+      const r = await run(
+        setup({
+          blocked: true,
+          event: [
+            '-Type',
+            'step.finished',
+            '-Issue',
+            '10',
+            '-Step',
+            'pr',
+            '-Result',
+            'opened #55',
+            '-Pr',
+            `${BASE}/pull/55`,
+          ],
+        }),
+      );
       expect(r.status).toBe(2);
       expect(r.stdout).toContain('M4 ▓▓░░░░░░ 1/4 · #10 pr');
       expect(r.stdout).toContain('M4 ▓▓▓▓░░░░ 2/4 · 1 blocked · 1 needs you');

@@ -120,11 +120,13 @@ function Write-Step([string]$text, [string]$Color = '', [string]$Tool = '', [int
   if ($Recent.Count -gt 10) { $Recent.RemoveAt(0) }
 }
 
-function Send-Notice([string]$text) {
+# Urgency from the tone of the event: danger and warning get a sound on macOS, the rest is silent.
+function Send-Notice([string]$text, [string]$Tone = '') {
   try {
     if ($IsMacOS) {
       $esc = $text.Replace('\', '\\').Replace('"', '\"')
-      & osascript -e "display notification `"$esc`" with title `"deliver loop`"" 2>$null | Out-Null
+      $sound = switch ($Tone) { 'danger' { ' sound name "Basso"' } 'warning' { ' sound name "Ping"' } default { '' } }
+      & osascript -e "display notification `"$esc`" with title `"deliver loop`"$sound" 2>$null | Out-Null
     } elseif ($IsWindows) {
       [void][Windows.UI.Notifications.ToastNotificationManager, Windows.UI.Notifications, ContentType = WindowsRuntime]
       $xml = [Windows.UI.Notifications.ToastNotificationManager]::GetTemplateContent('ToastText02')
@@ -141,7 +143,7 @@ $MilestoneScript = @('../../github-milestone', '../../../github/github-milestone
   Where-Object { Test-Path $_ } | Select-Object -First 1
 
 # Progress events (ADR 0001, #372): the loop opens the run (run.started), emits what it knows itself (issue.started,
-# step.finished from the progress lines, attention, milestone.progress and the waiting / needs-you items of
+# step.finished and attention followed from the harness's events, attention, milestone.progress and the waiting / needs-you items of
 # Get-DeliverStatus.ps1, issue.finished from the GitHub state, run.finished) and is the owner of the terminal sink of
 # Report-Progress.ps1: tokens and agent state come from there, never from the loop. The harness gets AGENT_EVENTS_RUN with an
 # empty AGENT_EVENTS_TERMINAL (nested: its own events skip the sink). status.json (deprecated) is the projection
@@ -169,7 +171,6 @@ $Prs = @{}
 $LineOutcome = @{}
 $Reported = @{}
 $ReleaseKey = ''
-$AttentionKind = @{ 'PR opened' = 'pr_opened'; 'review fix round' = 'review_fix'; 'CI red' = 'ci_red'; paused = 'paused'; blocked = 'blocked' }
 
 function Get-RefNumber([string]$text) { if ($text -match '/(?:issues|pull)/(\d+)') { [int]$Matches[1] } else { 0 } }
 
@@ -219,6 +220,15 @@ function Send-Event([hashtable]$Fields) {
     $env:AGENT_EVENTS_TERMINAL = 'owner'
     Update-Projection
   } elseif ($Milestone) { Update-Projection }
+}
+
+# One followed event through the terminal sink only (tokens and agent state), as Send-Event sets the environment.
+function Send-SinkEvent([string]$Json, [string]$Pr) {
+  if (-not $RunId) { return }
+  $herdr = $env:HERDR_ENV; $term = $env:AGENT_EVENTS_TERMINAL
+  $env:HERDR_ENV = $LoopHerdrEnv; $env:AGENT_EVENTS_TERMINAL = 'owner'
+  try { & $ReportScript -Type step.finished -SinkEvent $Json -Pr $Pr | Out-Null } catch { Write-Verbose "sink event not shown: $_" }
+  finally { $env:HERDR_ENV = $herdr; $env:AGENT_EVENTS_TERMINAL = $term }
 }
 
 function Start-Run {
@@ -417,27 +427,6 @@ function Get-Short([string]$s, [int]$n = 0) {
   return $first
 }
 
-function Get-Attention([string]$step, [string]$result) {
-  switch -Regex ($step) {
-    '^pr$' { return 'PR opened' }
-    '^review$' { if ($result -match 'fix') { return 'review fix round' } }
-    '^ci$' { if ($result -match 'red|fail') { return 'CI red' } }
-    '^merge(d)?$' { return 'merged' }
-  }
-  if ($result -match '\bpaused\b' -or $step -eq 'paused') { return 'paused' }
-  if ($result -match '\bblocked\b' -or $step -eq 'blocked') { return 'blocked' }
-  return $null
-}
-
-# Color of a progress line in the pane: PR opened, merged, done green; the other attention steps yellow.
-function Get-StepColor([string]$step, [string]$result) {
-  if ($step -eq 'done') { return 'green' }
-  $why = Get-Attention $step $result
-  if ($why -in 'PR opened', 'merged') { return 'green' }
-  if ($why) { return 'yellow' }
-  return ''
-}
-
 # Steps shared by both harnesses: a tool call, assistant text (with progress lines of deliver), a tool error.
 function Write-ToolStep([string]$prefix, [string]$name, $in) {
   $what = ''
@@ -447,28 +436,62 @@ function Write-ToolStep([string]$prefix, [string]$name, $in) {
   Write-Step "$prefix$name $what" -Tool $name -ToolAt $prefix.Length
 }
 
-# A progress line `#<nr> <step>: <result>` of deliver (top level only) becomes step.finished, plus attention for the
-# attention steps (merged has no kind). Removed with the console PBI, once the skill emits its steps itself.
+# Assistant text is logged uncolored and never parsed: steps, colors and notifications come from the events (Show-NewEvents).
 function Write-TextStep([string]$prefix, [string]$text) {
-  $color = ''
-  if (-not $prefix) {
-    foreach ($l in ($text -split "`r?`n")) { if ($l -match '^#\d+ ([\w-]+): (.*)$') { $color = Get-StepColor $Matches[1] $Matches[2]; if ($color) { break } } }
+  Write-Step "$prefix» $(Get-Short $text)"
+}
+
+$ToneColor = @{ success = 'green'; info = 'cyan'; warning = 'yellow'; danger = 'red' }
+$AttentionText = @{ pr_opened = 'PR opened'; review_fix = 'review fix round'; ci_red = 'CI red'; paused = 'paused'; blocked = 'blocked' }
+$EventOffset = 0
+
+# The new events of the run's event file (written by the harness through Report-Progress.ps1 while it runs): one line
+# `#<nr> <step>: <result>` each, colored by tone (the tone rules live in Report-Progress.ps1). Notifications come from
+# attention and issue.finished delivered; the urgency from tone. Each event also goes through the terminal sink
+# (Report-Progress.ps1 -SinkEvent), since the harness runs nested and reports nothing itself.
+function Show-NewEvents {
+  if (-not $EventFile -or -not (Test-Path -LiteralPath $EventFile)) { return }
+  $text = ''
+  for ($try = 0; $try -lt 10; $try++) {
+    try {
+      $fs = [IO.FileStream]::new($EventFile, [IO.FileMode]::Open, [IO.FileAccess]::Read, [IO.FileShare]::ReadWrite)
+      try {
+        [void]$fs.Seek($script:EventOffset, [IO.SeekOrigin]::Begin)
+        $bytes = [byte[]]::new([Math]::Max(0, $fs.Length - $script:EventOffset))
+        [void]$fs.Read($bytes, 0, $bytes.Length)
+        $text = [Text.Encoding]::UTF8.GetString($bytes)
+      } finally { $fs.Dispose() }
+      break
+    } catch [IO.IOException] { Start-Sleep -Milliseconds 20 }
   }
-  Write-Step "$prefix» $(Get-Short $text)" $color
-  if ($prefix) { return }
-  foreach ($l in ($text -split "`r?`n")) {
-    if ($l -notmatch '^#(\d+) ([\w-]+): (.*)$') { continue }
-    $nr = [int]$Matches[1]; $step = $Matches[2]; $res = $Matches[3]
-    if ($step -eq 'pr' -and $res -match '#(\d+)') { $Prs["$nr"] = Get-PrUrl $Matches[1] }
-    $pr = [string]$Prs["$nr"]
-    Send-Event @{ Type = 'step.finished'; Issue = $nr; Step = $step; Result = $res; Pr = $pr }
-    $why = Get-Attention $step $res
-    $reason = if ($res) { $res } else { [string]$why }
-    if ($why -and $AttentionKind.ContainsKey($why)) { Send-Event @{ Type = 'attention'; Kind = $AttentionKind[$why]; Issue = $nr; Reason = $reason; Pr = $pr } }
-    if ($why -in 'paused', 'blocked') { $LineOutcome["$nr"] = @{ Outcome = $why; Reason = $reason } }
-    Write-ProgressLine
-    if ($why) { Send-Notice "#$nr $why" }
+  $end = $text.LastIndexOf("`n")
+  if ($end -lt 0) { return }
+  $script:EventOffset += [Text.Encoding]::UTF8.GetByteCount($text.Substring(0, $end + 1))
+  $shown = $false
+  foreach ($raw in ($text.Substring(0, $end) -split "`n")) {
+    if (-not $raw.Trim()) { continue }
+    try { $ev = $raw | ConvertFrom-Json } catch { continue }
+    $nr = [int]$ev.issue.number
+    $step = $null; $res = ''; $notice = $null
+    switch ($ev.type) {
+      'step.finished' { $step = [string]$ev.step.name; $res = [string]$ev.step.text }
+      'attention' {
+        if ($ev.kind -eq 'needs_you') { continue }
+        $step = [string]$ev.kind; $res = [string]$ev.reason
+        if ($AttentionText.ContainsKey($step)) { $notice = $AttentionText[$step] }
+        if ($ev.kind -in 'paused', 'blocked' -and $nr) { $LineOutcome["$nr"] = @{ Outcome = [string]$ev.kind; Reason = $(if ($res) { $res } else { [string]$ev.kind }) } }
+      }
+      'issue.finished' { $step = [string]$ev.outcome; $res = [string]$ev.reason; if ($ev.outcome -eq 'delivered') { $notice = 'merged' } }
+      default { continue }
+    }
+    if ($nr -and $ev.prUrl) { $Prs["$nr"] = [string]$ev.prUrl }
+    $head = if ($nr) { "#$nr $step" } else { $step }
+    Write-Step $(if ($res) { "${head}: $res" } else { $head }) $ToneColor[[string]$ev.tone]
+    Send-SinkEvent $raw ([string]$ev.prUrl)
+    if ($notice) { Send-Notice "$(if ($nr) { "#$nr " })$notice" -Tone ([string]$ev.tone) }
+    $shown = $true
   }
+  if ($shown) { if ($Milestone) { Update-Projection }; Write-ProgressLine }
 }
 
 # One stream-json record of Claude Code: summary line, progress lines of deliver (top level only), tool errors.
@@ -545,6 +568,7 @@ function Invoke-Iteration([int]$n, [int]$total, $state) {
   if ($base) { $started.Url = "$base/issues/$nr" }
   if ($Block -and $Block.ready.next -and [int]$Block.ready.next.number -eq $nr) { $started.Title = [string]$Block.ready.next.title; $started.Url = [string]$Block.ready.next.url }
   Send-Event $started
+  $script:EventOffset = if ($EventFile -and (Test-Path -LiteralPath $EventFile)) { (Get-Item -LiteralPath $EventFile).Length } else { 0 }
   # the harness reports nothing to the terminal: HERDR_ENV empty, and nested for the sink (AGENT_EVENTS_RUN without the owner marker)
   $savedHerdr = $env:HERDR_ENV; $savedTerminal = $env:AGENT_EVENTS_TERMINAL
   $env:HERDR_ENV = ''; $env:AGENT_EVENTS_TERMINAL = ''
@@ -559,7 +583,9 @@ function Invoke-Iteration([int]$n, [int]$total, $state) {
       if ($_ -is [System.Management.Automation.ErrorRecord]) { Write-Step "stderr $(Get-Short $line)" 'red'; return }
       [IO.File]::AppendAllText($jsonl, $line + "`n")
       if ($Harness -eq 'copilot') { Read-CopilotRecord $line } else { Read-Record $line }
+      Show-NewEvents
     }
+    Show-NewEvents
     $exit = $LASTEXITCODE
     if ($exit -ne 0) { Write-Step "$Harness exited with $exit" 'red' }
   } finally { $env:HERDR_ENV = $savedHerdr; $env:AGENT_EVENTS_TERMINAL = $savedTerminal }
