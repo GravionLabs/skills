@@ -14,6 +14,20 @@ The deliver scripts call the terminal only through `scripts/TerminalBackend.ps1`
 
 The loop reports the tokens `deliver`, `deliver_step`, `deliver_pr` and `deliver_progress` (`<closed>/<total>` of the milestone, e.g. `7/19`) through `Set-LoopTokens`, and the lifecycle through `Set-LoopAgentState`; `Clear-LoopTokens` removes all four on exit. poimen gets the same tokens and state through `poimen-server` (`terminal.report_tokens`); a missing server or method warns once on stderr (`Invoke-Poimen`) and the loop goes on. The status file `.agents/deliver-loop/status.json` is written whatever the backend (`loop.md` "Observability").
 
+## Terminal sink of Report-Progress
+
+After appending, `scripts/Report-Progress.ps1` shows the event through the same functions, so herdr and poimen get tokens and state in interactive sessions too:
+
+| Event                               | Backend call                                                                                                                                                           |
+| :---------------------------------- | :--------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `step.finished`                     | `Set-LoopTokens`: `deliver=#<nr>`, `deliver_step=[<n>/<total> ]<step>[: <result>]` (at most 80 characters), `deliver_pr=#<pr>` once a PR exists, `deliver_tone=<tone>` |
+| `milestone.progress`                | `Set-LoopTokens`: `deliver_progress=<closed>/<total>`                                                                                                                  |
+| `issue.started`                     | `Set-LoopAgentState working`                                                                                                                                           |
+| `attention` kind `paused`/`blocked` | `Set-LoopAgentState blocked`                                                                                                                                           |
+| `run.finished`                      | `Clear-LoopTokens` (all five tokens), `Set-LoopAgentState idle` (`blocked` for result `blocked` or `no progress`), then `Clear-LoopAgentState`                         |
+
+`deliver_tone` is `neutral`, `info`, `success`, `warning` or `danger` (the tone of the event). Only the outermost emitter reports: the process that writes `run.started` prints `AGENT_EVENTS_TERMINAL=owner` next to `AGENT_EVENTS_RUN` and reports; an emitter that has a run but no `owner` value (a nested one) skips the sink, so the owner overrides or unsets the variable for the processes it starts. The owner (whoever wrote `run.started`) must export `AGENT_EVENTS_RUN` and `AGENT_EVENTS_TERMINAL=owner`; a session that exports only the run id counts as nested. A session without a run owner (`AGENT_EVENTS_RUN` unset, interactive `/deliver`) reports itself. The agent state follows `Test-LoopAgentConflict` (no report in a pane with another agent). Backend `none` or a failing call: no-op, the event is written anyway.
+
 Only `Test-LoopAgentConflict` (`herdr pane get`, herdr only) reads state. The sections below describe herdr.
 
 Only when `printenv HERDR_ENV` prints `1` (the session runs in a herdr pane). Without herdr nothing here runs.
