@@ -1,0 +1,86 @@
+[
+  {
+    "seq": 1,
+    "tokens": {
+      "deliver": null,
+      "deliver_step": null,
+      "deliver_pr": null,
+      "deliver_progress": null,
+      "deliver_tone": null
+    },
+    "agent": null,
+    "pane": "w1:p2"
+  },
+  {
+    "seq": 2,
+    "tokens": {
+      "deliver": null,
+      "deliver_step": null,
+      "deliver_pr": null,
+      "deliver_progress": "4/9",
+      "deliver_tone": null
+    },
+    "agent": null,
+    "pane": "w1:p2"
+  },
+  {
+    "seq": 3,
+    "tokens": {
+      "deliver": null,
+      "deliver_step": null,
+      "deliver_pr": null,
+      "deliver_progress": "4/9",
+      "deliver_tone": null
+    },
+    "agent": "working",
+    "pane": "w1:p2"
+  },
+  {
+    "seq": 4,
+    "tokens": {
+      "deliver": "#371",
+      "deliver_step": "7/7 ci: red: lint failed in skills/delivery/deliver/scripts/Report-Progress.ps1:",
+      "deliver_pr": "#381",
+      "deliver_progress": "4/9",
+      "deliver_tone": "danger"
+    },
+    "agent": "working",
+    "pane": "w1:p2"
+  },
+  {
+    "seq": 5,
+    "tokens": {
+      "deliver": "#371",
+      "deliver_step": "7/7 ci: red: lint failed in skills/delivery/deliver/scripts/Report-Progress.ps1:",
+      "deliver_pr": "#381",
+      "deliver_progress": "4/9",
+      "deliver_tone": "danger"
+    },
+    "agent": "working",
+    "pane": "w1:p2"
+  },
+  {
+    "seq": 6,
+    "tokens": {
+      "deliver": "#371",
+      "deliver_step": "7/7 ci: red: lint failed in skills/delivery/deliver/scripts/Report-Progress.ps1:",
+      "deliver_pr": "#381",
+      "deliver_progress": "4/9",
+      "deliver_tone": "danger"
+    },
+    "agent": "working",
+    "pane": "w1:p2"
+  },
+  {
+    "seq": 7,
+    "tokens": {
+      "deliver": null,
+      "deliver_step": null,
+      "deliver_pr": null,
+      "deliver_progress": null,
+      "deliver_tone": null
+    },
+    "agent": "released",
+    "pane": "w1:p2"
+  }
+]
