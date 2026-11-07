@@ -420,6 +420,13 @@ describe('deliver SKILL.md', () => {
       expect(start).toContain('keep the printed run id');
     });
 
+    it('Start 4 hands the run id to every later call with -Run <id>', () => {
+      const line = start.split('\n').find((l) => l.includes('keep the printed run id')) ?? '';
+      expect(line).toContain('Add `-Run <id>` to every later call');
+      for (const t of ['step.finished', 'attention', 'issue.finished', 'run.finished'])
+        expect(line).toContain(t);
+    });
+
     it('every progress-line rule names Report-Progress with its type', () => {
       expect(steps).toContain(
         'Report-Progress.ps1 -Type step.finished -Issue <nr> -Step <step> -Result "<result>" [-Pr <url>]',
