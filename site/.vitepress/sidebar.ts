@@ -51,6 +51,7 @@ export const sidebar: SidebarGroup[] = [
       { text: 'Skill composition', link: '/concepts/composition' },
       { text: 'Issue model', link: '/concepts/issue-model' },
       { text: 'Skill frontmatter', link: '/concepts/skill-frontmatter' },
+      { text: 'ADR 0001: Agent progress events', link: '/adr/0001-agent-progress-events' },
     ],
   },
   {
