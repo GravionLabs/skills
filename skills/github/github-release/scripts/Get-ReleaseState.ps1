@@ -23,11 +23,16 @@
   With base: the explicit base_branch input, returned unchanged.
 .PARAMETER Issue
   base only: issue number whose body (and parents) may carry a `Release branch:` line.
+.PARAMETER Milestone
+  finish only: milestone title. Adds releaseTest (the open issue labeled `release-test` of it: number, url; or null),
+  gate (`release.test.gate` of .agents/config.json, default false) and warning (`RC test open: <url>`). With gate true
+  and an open release-test issue `action` becomes a stop.
 #>
 param(
   [Parameter(Mandatory)][ValidateSet('cut', 'finish', 'base')][string]$Mode,
   [string]$Branch,
-  [int]$Issue
+  [int]$Issue,
+  [string]$Milestone
 )
 $ErrorActionPreference = 'Stop'
 
@@ -174,8 +179,24 @@ if ($Mode -eq 'finish' -and $onOrigin) {
   if ($LASTEXITCODE -eq 0) { $releasePr = @($raw | ConvertFrom-Json) | Select-Object -First 1 }
 }
 
+$releaseTest = $null; $gate = $false; $warning = $null
+if ($Mode -eq 'finish' -and $Milestone) {
+  $raw = & gh issue list --label release-test --state open --milestone $Milestone --json number,url 2>$null
+  if ($LASTEXITCODE -ne 0) { Fail 'gh issue list failed' }
+  $releaseTest = @($raw | ConvertFrom-Json) | Select-Object -First 1
+  if (Test-Path .agents/config.json) {
+    $cfg = Get-Content .agents/config.json -Raw | ConvertFrom-Json
+    $gate = [bool]($cfg.release.test.gate -eq $true)
+  }
+  if ($releaseTest) {
+    $warning = "RC test open: $($releaseTest.url)"
+    if ($gate -and $action -eq 'release-pr') { $action = "stop: release.test.gate is true, close the RC test $($releaseTest.url) first" }
+  }
+}
+
 [ordered]@{
   default = $default; branch = $Branch; state = $state; openPrs = @($openPrs); localAhead = $localAhead
   staleLines = @($staleLines); deleteAllowed = $deleteAllowed; action = $action
   hasMajorCommit = $major; defaultIsAncestor = $defaultIsAncestor; mergeConflicts = $mergeConflicts; releaseWorkflow = $workflow; releasePr = $releasePr
+  releaseTest = $releaseTest; gate = $gate; warning = $warning
 } | ConvertTo-Json -Depth 4

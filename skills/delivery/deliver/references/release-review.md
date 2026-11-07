@@ -21,6 +21,18 @@ After the round this session writes `<git-common-dir>/.agents/state/release-revi
 - `round` ≤ 2: file one bug per finding. Interactive: show the findings first and ask: file them, or an instruction. Unattended: file them without asking.
 - `round` > 2: a pause instead of more bugs. Interactive: ask the user with the findings; the user defers the decision: record the pause as below. Unattended: record the pause. No bug, no release PR.
 
+## RC test
+
+The RC test is manual and runs beside the open release PR; it never blocks step 9. Only the `release-test` issue of the milestone (`github-issue` `references/milestones.md`) may still be open, or nothing. After a clean review:
+
+1. `release.prerelease` in `.agents/config.json` (`docs/usage/project-config.md`) is a command such as `gh workflow run release.yml --ref release/next -f prerelease=true`. Run it, watch the run (`gh run watch`), read the pre-release URL and version. Without `release.prerelease` no RC is cut.
+2. Comment on the `release-test` issue: the pre-release URL and version (without a prerelease: `release/next` at its SHA, `git rev-parse origin/release/next`), first line the marker `<!-- release-test-rc -->`. No `release-test` issue: no comment, only the progress line.
+3. Close every other open `release-test` issue of an older milestone: `gh issue close <nr> --comment "Superseded by <issue URL> (RC <version>)."`.
+4. Events: through `Report-Progress.ps1` (#369) `release.updated` with `rcUrl`, `rcVersion`, `testIssue` and an `attention` with kind `release_test`, `needsYou: true`, tone `warning`; before it exists the progress line `release: RC <version> → <issue URL>`.
+5. `release.test.gate` (default `false`): with `true` stop here, print `needs you: RC test <issue URL>`, no release PR until the issue is closed (the next run continues). With `false` run `github-release finish` (`-Milestone` makes it add `RC test open: <issue URL>` to the PR body and warn) and print `needs you: RC test <issue URL>, release PR <URL>`.
+
+Bugs from the RC test: a `[Bug]` filed in the milestone while the release PR is not merged is delivered by the loop as usual; step 9 then runs again, cuts a new RC and posts it on the same issue with a new marker comment. The release PR picks up the fix through `release/next`. After the merge, bugs go to the next milestone.
+
 ## Pause marker
 
 The marker is state in GitHub: the label `needs-decision` on a closed PBI or Bug of the milestone (the milestone's last closed one, highest `closed_at` of the list above). Record it with a comment on that issue, then `gh issue edit <nr> --add-label needs-decision`. Comment:

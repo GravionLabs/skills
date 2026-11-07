@@ -35,7 +35,8 @@ Before `deliver` opens the release PR of a `--milestone`, a subagent (role `rele
 
 - Blocking findings: one `[Bug] fix: …` issue per finding in the milestone (`Related: #<PBI>`, marker `Found in release review round <n>`), no release PR, `release: <n> blocking → #a, #b`. Interactive mode shows the findings and asks before filing; unattended files them. The next `/deliver --milestone <name>` delivers the bugs and reviews again.
 - At most 2 rounds per milestone: a third round with blocking findings pauses (interactive: asks; unattended: comment and `needs-decision` on the milestone's last PBI).
-- No blocking finding: up to 5 notes go into the release PR body as `## Release review notes`.
+- No blocking finding: `deliver` cuts the release candidate (`release.prerelease` in `.agents/config.json`, e.g. `gh workflow run release.yml --ref release/next -f prerelease=true`), posts it on the `release-test` issue with the marker `<!-- release-test-rc -->`, closes older `release-test` issues (`Superseded by …`), opens the release PR without waiting for the RC test and prints `needs you: RC test <issue URL>, release PR <URL>`. `release.test.gate: true` stops after the RC until the issue is closed. A Bug from the RC test is delivered before the merge, step 9 cuts a new RC on the same issue; after the merge bugs go to the next milestone.
+- Release PR body: up to 5 notes go into the release PR body as `## Release review notes`.
 
 Details: `references/release-review.md` of the `deliver` skill. A manual `github-release finish` has no release review.
 
