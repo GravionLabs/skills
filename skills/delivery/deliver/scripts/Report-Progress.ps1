@@ -8,7 +8,7 @@
   whole in one write call. `tone` is decided here from type, step, result and kind (Get-Tone, table in the schema).
   The host (POIMEN_TERMINAL_ID, HERDR_PANE_ID) is read from the environment, never passed by the agent.
   Terminal sink: after the append the event is shown in the terminal (tokens and agent state through TerminalBackend.ps1,
-  mapping table in references/terminal-backends.md). Only the outermost emitter reports: the process that writes run.started
+  mapping checked by the token fixtures test/skills/delivery/fixtures/progress-events/*.tokens.json). Only the outermost emitter reports: the process that writes run.started
   prints `AGENT_EVENTS_TERMINAL=owner` next to the run id (this script only prints the line). The owner, whoever wrote
   run.started, must export AGENT_EVENTS_RUN and AGENT_EVENTS_TERMINAL=owner and must override or unset AGENT_EVENTS_TERMINAL
   for every child process it starts. An emitter reports when it has no AGENT_EVENTS_RUN (no run owner, interactive /deliver),
@@ -107,7 +107,7 @@ function Get-Tone([string]$type, [string]$step, [string]$result, [string]$kind, 
 . (Join-Path $PSScriptRoot 'TerminalBackend.ps1')
 . (Join-Path $PSScriptRoot 'ProgressRetention.ps1')
 
-# Terminal sink: tokens and agent state of one event. Table in references/terminal-backends.md.
+# Terminal sink: tokens and agent state of one event. Mapping: the token fixtures (references/terminal-backends.md).
 function Send-TerminalSink($ev, [string]$prUrl) {
   $backend = Get-TerminalBackend
   if ($backend -eq 'none') { return }
