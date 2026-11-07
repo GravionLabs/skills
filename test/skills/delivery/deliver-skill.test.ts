@@ -436,6 +436,11 @@ describe('deliver SKILL.md', () => {
       expect(report).toContain('Report-Progress.ps1 -Type run.finished');
     });
 
+    it('run.finished is sent only when Start 4 created the run (#397)', () => {
+      expect(report).toContain('only when Start 4 created the run');
+      expect(report).toContain('never closes the loop');
+    });
+
     it('the herdr reference no longer has Start, Per step or End steps', () => {
       for (const h of ['## Start', '## Per step', '## End']) expect(herdr).not.toContain(h);
       expect(herdr).not.toContain('`printenv HERDR_PANE_ID` once');
