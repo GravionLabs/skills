@@ -21,7 +21,7 @@ describe('Get-ReleaseState.ps1 -Milestone (RC test)', () => {
     fs.mkdirSync(ghDir);
     fake = createFakeGh(
       ghDir,
-      `(call) => ({ rest: JSON.parse((call.args[0] === 'issue' ? process.env.FAKE_TEST_ISSUES : call.args.includes('--head') ? '[]' : '[]') || '[]') })`,
+      `(call) => ({ rest: JSON.parse((call.args[0] === 'issue' ? (call.args.includes('--milestone') ? process.env.FAKE_TEST_ISSUES : process.env.FAKE_ALL_ISSUES) : '[]') || '[]') })`,
     );
   });
   afterAll(() => worker.close());
@@ -39,7 +39,7 @@ describe('Get-ReleaseState.ps1 -Milestone (RC test)', () => {
     fs.rmSync(cfgDir(), { recursive: true, force: true });
   });
 
-  const finish = async (issues: string, gate?: boolean, milestone = 'M4') => {
+  const finish = async (issues: string, gate?: boolean, milestone = 'M4', all = '[]') => {
     if (gate !== undefined) {
       fs.mkdirSync(cfgDir(), { recursive: true });
       fs.writeFileSync(
@@ -49,7 +49,10 @@ describe('Get-ReleaseState.ps1 -Milestone (RC test)', () => {
     }
     const r = await worker.run(
       ['-Mode', 'finish', '-Branch', 'release/3.1', '-Milestone', milestone],
-      { cwd: fx.clone, env: { ...fake.env(fx.env), FAKE_TEST_ISSUES: issues } },
+      {
+        cwd: fx.clone,
+        env: { ...fake.env(fx.env), FAKE_TEST_ISSUES: issues, FAKE_ALL_ISSUES: all },
+      },
     );
     expect(r.stderr).toBe('');
     expect(r.status).toBe(0);
@@ -88,5 +91,13 @@ describe('Get-ReleaseState.ps1 -Milestone (RC test)', () => {
     expect(call.args).toEqual(
       expect.arrayContaining(['--label', 'release-test', '--state', 'open', '--milestone', 'M4']),
     );
+  });
+
+  it('lists open release-test issues of other milestones to close as superseded', async () => {
+    const all =
+      '[{"number":7,"url":"https://x/issues/7","milestone":{"title":"M4"}},{"number":3,"url":"https://x/issues/3","milestone":{"title":"M3"}}]';
+    const r = await finish(open, undefined, 'M4', all);
+    expect(r.olderReleaseTests).toEqual([{ number: 3, url: 'https://x/issues/3' }]);
+    expect((await finish('[]')).olderReleaseTests).toEqual([]);
   });
 });

@@ -16,7 +16,7 @@ Prerequisites: `gh` authenticated, repo root, clean `git status`. Mode: `cut [--
 pwsh scripts/Get-ReleaseState.ps1 -Mode cut            # or: -Mode finish [-Branch release/next]
 ```
 
-The script is read-only and prints JSON: `default`, `branch`, `state`, `openPrs`, `localAhead`, `staleLines`, `deleteAllowed`, `action`, `hasMajorCommit`, `releaseWorkflow`, `releasePr`, `defaultIsAncestor`, `mergeConflicts`, `releaseTest`, `gate`, `warning`. Exit 1 with a message on stderr (invalid branch name, no release branch) means stop and report. Do what `action` says; `stop: ...` means report the text and change nothing.
+The script is read-only and prints JSON: `default`, `branch`, `state`, `openPrs`, `localAhead`, `staleLines`, `deleteAllowed`, `action`, `hasMajorCommit`, `releaseWorkflow`, `releasePr`, `defaultIsAncestor`, `mergeConflicts`, `releaseTest`, `olderReleaseTests`, `gate`, `warning`. Exit 1 with a message on stderr (invalid branch name, no release branch) means stop and report. Do what `action` says; `stop: ...` means report the text and change nothing.
 
 | `state`                     | cut                                                             | finish                                                                                                 |
 | :-------------------------- | :-------------------------------------------------------------- | :----------------------------------------------------------------------------------------------------- |

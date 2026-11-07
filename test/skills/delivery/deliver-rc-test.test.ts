@@ -18,6 +18,8 @@ describe('deliver step 9: RC test', () => {
 
   it('documents the RC comment marker, replace of older issues, new RC after a bug and the gate default', () => {
     expect(review).toContain('<!-- release-test-rc -->');
+    expect(review).toContain('olderReleaseTests');
+    expect(review).toContain('no second release review');
     expect(review).toContain('Superseded by <issue URL> (RC <version>).');
     expect(review).toContain('cuts a new RC and posts it on the same issue');
     expect(review).toContain('`release.test.gate` (default `false`)');

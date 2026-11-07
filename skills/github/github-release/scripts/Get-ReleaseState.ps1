@@ -25,7 +25,7 @@
   base only: issue number whose body (and parents) may carry a `Release branch:` line.
 .PARAMETER Milestone
   finish only: milestone title. Adds releaseTest (the open issue labeled `release-test` of it: number, url; or null),
-  gate (`release.test.gate` of .agents/config.json, default false) and warning (`RC test open: <url>`). With gate true
+  olderReleaseTests (open release-test issues of other milestones, to close as superseded), gate (`release.test.gate` of .agents/config.json, default false) and warning (`RC test open: <url>`). With gate true
   and an open release-test issue `action` becomes a stop.
 #>
 param(
@@ -179,11 +179,15 @@ if ($Mode -eq 'finish' -and $onOrigin) {
   if ($LASTEXITCODE -eq 0) { $releasePr = @($raw | ConvertFrom-Json) | Select-Object -First 1 }
 }
 
-$releaseTest = $null; $gate = $false; $warning = $null
+$olderReleaseTests = @(); $releaseTest = $null; $gate = $false; $warning = $null
 if ($Mode -eq 'finish' -and $Milestone) {
   $raw = & gh issue list --label release-test --state open --milestone $Milestone --json number,url 2>$null
   if ($LASTEXITCODE -ne 0) { Fail 'gh issue list failed' }
   $releaseTest = @($raw | ConvertFrom-Json) | Select-Object -First 1
+  $raw = & gh issue list --label release-test --state open --json number,url,milestone 2>$null
+  if ($LASTEXITCODE -ne 0) { Fail 'gh issue list failed' }
+  $olderReleaseTests = @(@($raw | ConvertFrom-Json) | Where-Object { $_.milestone.title -ne $Milestone } |
+      ForEach-Object { [ordered]@{ number = $_.number; url = $_.url } })
   if (Test-Path .agents/config.json) {
     $cfg = Get-Content .agents/config.json -Raw | ConvertFrom-Json
     $gate = [bool]($cfg.release.test.gate -eq $true)
@@ -198,5 +202,5 @@ if ($Mode -eq 'finish' -and $Milestone) {
   default = $default; branch = $Branch; state = $state; openPrs = @($openPrs); localAhead = $localAhead
   staleLines = @($staleLines); deleteAllowed = $deleteAllowed; action = $action
   hasMajorCommit = $major; defaultIsAncestor = $defaultIsAncestor; mergeConflicts = $mergeConflicts; releaseWorkflow = $workflow; releasePr = $releasePr
-  releaseTest = $releaseTest; gate = $gate; warning = $warning
+  releaseTest = $releaseTest; olderReleaseTests = @($olderReleaseTests); gate = $gate; warning = $warning
 } | ConvertTo-Json -Depth 4
