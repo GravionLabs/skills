@@ -187,9 +187,11 @@ try {
   }
   Add-If $ev prUrl $Pr
   if ($Type -eq 'attention') {
-    Add-If $ev kind $Kind; Add-If $ev reason $Reason
+    Add-If $ev kind $Kind
     if ($Kind -in 'needs_you', 'release_test') { $ev.needsYou = $true }
   }
+  # the reason of an attention and of an issue.finished (blocked, paused: the projection's reason)
+  if ($Type -in 'attention', 'issue.finished') { Add-If $ev reason $Reason }
   Add-If $ev outcome $Outcome
   if ($Closed -ge 0) { $ev.closed = $Closed }
   if ($Total -ge 0) { $ev.total = $Total }
