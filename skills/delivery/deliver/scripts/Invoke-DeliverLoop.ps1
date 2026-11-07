@@ -139,7 +139,7 @@ $PaneStep = ''
 $PaneProgress = ''
 function Set-Pane([string]$Nr = '', [string]$Step = '', [switch]$Clear) {
   # pane tokens (#16): deliver=#<nr>, deliver_step=<pos>/<total> <step>[: <result>], deliver_pr=#<pr>, deliver_progress=<closed>/<total> (#329); values <= 80 chars
-  if ($Clear) { Clear-LoopTokens -Pane $Pane -Name 'deliver', 'deliver_step', 'deliver_pr', 'deliver_progress' -Backend $Backend; return }
+  if ($Clear) { Clear-LoopTokens -Pane $Pane -Name 'deliver', 'deliver_step', 'deliver_pr', 'deliver_progress', 'deliver_tone' -Backend $Backend; return }
   if ($Nr -ne $script:PanePbi) { $script:PanePbi = $Nr; $script:PanePr = '' }
   if ($Step -match '^\d+/\d+ pr: .*?#(\d+)') { $script:PanePr = $Matches[1] }
   $script:PaneStep = $Step

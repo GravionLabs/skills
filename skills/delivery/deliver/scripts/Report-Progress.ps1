@@ -7,6 +7,11 @@
   `seq` counts up per run without gaps (the file is locked while the line is counted and appended). The line is written
   whole in one write call. `tone` is decided here from type, step, result and kind (Get-Tone, table in the schema).
   The host (POIMEN_TERMINAL_ID, HERDR_PANE_ID) is read from the environment, never passed by the agent.
+  Terminal sink: after the append the event is shown in the terminal (tokens and agent state through TerminalBackend.ps1,
+  mapping table in references/terminal-backends.md). Only the outermost emitter reports: the process that writes run.started
+  prints `AGENT_EVENTS_TERMINAL=owner` next to the run id and keeps it in its own environment; an emitter with a run but without
+  `owner` (a nested one) skips the sink, so the owner strips or overrides the variable for the processes it starts. Without a run
+  (a run.started creates it) the process is the owner. Backend none or a failing call: no-op, the event is written anyway.
   Never fails the caller: an I/O error prints one line to stderr and the exit code is 0.
 .PARAMETER Type
   run.started, milestone.progress, issue.started, step.finished, attention, issue.finished, release.updated or run.finished.
@@ -84,6 +89,43 @@ function Get-Tone([string]$type, [string]$step, [string]$result, [string]$kind, 
     }
   }
   return 'neutral'
+}
+
+. (Join-Path $PSScriptRoot 'TerminalBackend.ps1')
+
+# Terminal sink: tokens and agent state of one event. Table in references/terminal-backends.md.
+function Send-TerminalSink($ev, [string]$prUrl) {
+  $backend = Get-TerminalBackend
+  if ($backend -eq 'none') { return }
+  $pane = Get-LoopPane $backend
+  $state = { param($s) if (-not $script:SinkConflict) { Set-LoopAgentState -Pane $pane -State $s -Backend $backend } }
+  $script:SinkConflict = Test-LoopAgentConflict -Pane $pane -Backend $backend
+  switch ($ev.type) {
+    'step.finished' {
+      $t = [ordered]@{}
+      if ($ev.issue) { $t['deliver'] = "#$($ev.issue.number)" }
+      if ($ev.step) {
+        $text = "$($ev.step.name)"
+        if ($ev.step.n -and $ev.step.total) { $text = "$($ev.step.n)/$($ev.step.total) $text" }
+        if ($ev.step.text) { $text += ": $($ev.step.text)" }
+        if ($text.Length -gt 80) { $text = $text.Substring(0, 80) }
+        $t['deliver_step'] = $text
+      }
+      if ($prUrl -match '(\d+)/?$') { $t['deliver_pr'] = "#$($Matches[1])" }
+      $t['deliver_tone'] = $ev.tone
+      Set-LoopTokens -Pane $pane -Token $t -Backend $backend
+    }
+    'milestone.progress' {
+      if ($null -ne $ev.closed -and $null -ne $ev.total) { Set-LoopTokens -Pane $pane -Token ([ordered]@{ deliver_progress = "$($ev.closed)/$($ev.total)" }) -Backend $backend }
+    }
+    'issue.started' { & $state 'working' }
+    'attention' { if ($ev.kind -in 'paused', 'blocked') { & $state 'blocked' } }
+    'run.finished' {
+      Clear-LoopTokens -Pane $pane -Name 'deliver', 'deliver_step', 'deliver_pr', 'deliver_progress', 'deliver_tone' -Backend $backend
+      & $state $(if ($ev.result -in 'blocked', 'no progress') { 'blocked' } else { 'idle' })
+      if (-not $script:SinkConflict) { Clear-LoopAgentState -Pane $pane -Backend $backend }
+    }
+  }
 }
 
 $stepNumbers = @{ select = 1; resume = 2; implement = 3; review = 4; fix = 5; pr = 6; ci = 7; merge = 7; merged = 7 }
@@ -172,7 +214,10 @@ try {
     $fs.Write($line, 0, $line.Length)
     $fs.Flush()
   } finally { $fs.Dispose() }
-  if ($created) { Write-Output "AGENT_EVENTS_RUN=$run" }
+  if ($created) { Write-Output "AGENT_EVENTS_RUN=$run"; Write-Output 'AGENT_EVENTS_TERMINAL=owner' }
+  if ($created -or $env:AGENT_EVENTS_TERMINAL -eq 'owner') {
+    try { Send-TerminalSink ([pscustomobject]($ev | ConvertTo-Json -Depth 6 | ConvertFrom-Json)) $Pr } catch { Write-Verbose "terminal sink: $_" }
+  }
 } catch {
   [Console]::Error.WriteLine("Report-Progress: $($_.Exception.Message)")
 }
