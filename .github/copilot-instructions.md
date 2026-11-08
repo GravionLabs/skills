@@ -7,7 +7,7 @@ GravionLabs/skills is a collection of agent **skills** installed with `npx skill
 - Skills: `skills/<group>/<name>/SKILL.md` (+ `scripts/`, `references/`, `templates/`, `assets/`); the folder is the group
 - Groups: `.claude-plugin/marketplace.json`, one plugin per group folder (`node scripts/check-marketplace.mjs --fix` lists the skills there and in the installer's `groups.json`)
 - Tests: `test/` (Vitest). `pnpm test`
-- `docs/skill-list.md` is generated (`pnpm run generate`) and gitignored. Do not commit it.
+- `site/skill-list.md` is generated (`pnpm run generate`) and gitignored. Do not commit it.
 
 ## Skill frontmatter
 

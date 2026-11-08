@@ -28,9 +28,9 @@ User-invoked: `/project-setup [dry-run]`. It detects the stack, lets the user pi
 
 ## What is written
 
-- `.agents/config.json`, key `format`: only entries of non-default choices. Other keys stay, an entry of another language stays, `"format": false` is respected (skipped). A new file gets `$schema`. Schema: `schema/config.schema.json` of `implementation`, docs `docs/usage/project-config.md`.
+- `.agents/config.json`, key `format`: only entries of non-default choices. Other keys stay, an entry of another language stays, `"format": false` is respected (skipped). A new file gets `$schema`. Schema: `schema/config.schema.json` of `implementation`, docs `site/usage/project-config.md`.
 - `.agents/config.json`, key `lint`: the same for linters (`{ "command": ..., "extensions": [...] }`); `"lint": false` is respected. Runner and defaults: the lint reference of `implementation`.
-- `.agents/config.json`, key `governance` (only with `-Governance`): `adrDir`, `adrPaths` (`docker-compose.yml` and compose files, `infra/**`, `.github/workflows/**` where they exist), `specDir`, `specMap` (`apps/<name>/**` to `<specDir>/<name>.md` per folder of `apps/`), `specMode: warn`, `skipLabels: ["skip-adr"]`. Docs: `docs/usage/project-config.md`.
+- `.agents/config.json`, key `governance` (only with `-Governance`): `adrDir`, `adrPaths` (`docker-compose.yml` and compose files, `infra/**`, `.github/workflows/**` where they exist), `specDir`, `specMap` (`apps/<name>/**` to `<specDir>/<name>.md` per folder of `apps/`), `specMode: warn`, `skipLabels: ["skip-adr"]`. Docs: `site/usage/project-config.md`.
 - `.editorconfig`: the dotnet template (`templates/dotnet.editorconfig`, also used by `dotnet-create-solution`) or `templates/base.editorconfig`, plus `templates/sections/<lang>.editorconfig` for ts/ng, py, rust and go. An existing file is never overwritten: `editorconfig.diff` shows the difference, the user merges by hand.
 
 - `.vscode/settings.json`, `extensions.json`, `tasks.json`, `launch.json` resp. `.zed/settings.json`, `tasks.json`, `debug.json` resp. `.run/*.run.xml` (step 9): created when missing; an existing file is never changed.

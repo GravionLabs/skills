@@ -25,7 +25,7 @@ After the round this session writes `<git-common-dir>/.agents/state/release-revi
 
 The RC test is manual and runs beside the open release PR; it never blocks step 9. Only the `release-test` issue of the milestone (`github-issue` `references/milestones.md`) may still be open, or nothing. After a clean review:
 
-1. `release.prerelease` in `.agents/config.json` (`docs/usage/project-config.md`) is a command such as `gh workflow run release.yml --ref release/next -f prerelease=true`. Run it, watch the run (`gh run watch`), read the pre-release URL and version. Without `release.prerelease` no RC is cut.
+1. `release.prerelease` in `.agents/config.json` (`site/usage/project-config.md`) is a command such as `gh workflow run release.yml --ref release/next -f prerelease=true`. Run it, watch the run (`gh run watch`), read the pre-release URL and version. Without `release.prerelease` no RC is cut.
 2. Comment on the `release-test` issue: the pre-release URL and version (without a prerelease: `release/next` at its SHA, `git rev-parse origin/release/next`), first line the marker `<!-- release-test-rc -->`. No `release-test` issue: no comment, only the progress line.
 3. Close every other open `release-test` issue (`olderReleaseTests` of `Get-ReleaseState.ps1 -Mode finish -Milestone <name>`): `gh issue close <nr> --comment "Superseded by <issue URL> (RC <version>)."`.
 4. Events: through `Report-Progress.ps1` (#369) `release.updated` with `rcUrl`, `rcVersion`, `testIssue` and an `attention` with kind `release_test`, `needsYou: true`, tone `warning`; before it exists the progress line `release: RC <version> → <issue URL>`.

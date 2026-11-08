@@ -2,7 +2,7 @@ packages:
   - '.'
   - site
 
-# The pages of the documentation site are the files of `docs/`, outside any package, and VitePress
+# The pages of the documentation site are the markdown files of `site/`; VitePress
 # compiles them to code that imports `vue`: it must be found from the repository root. The dev server
 # pre-bundles its dependencies from there too (`optimizeDeps.include` of VitePress and the Mermaid
 # plugin); without them CommonJS packages such as `dayjs` reach the browser unbundled and the page stays blank.

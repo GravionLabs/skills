@@ -10,8 +10,8 @@ const repo = files(
   'README.md',
   'AGENTS.md',
   'CONTRIBUTING.md',
-  'docs/usage/install.md',
-  'docs/concepts/agent-frontmatter.md',
+  'site/usage/install.md',
+  'site/concepts/agent-frontmatter.md',
   'packages/shared/',
   'packages/shared/apm.yml',
   'packages/shared/.apm/skills/implementation/SKILL.md',
@@ -19,24 +19,34 @@ const repo = files(
   '.github/skills/check-prerequisites/',
   'scripts/check-manifests.mjs',
   'src/generators/',
-  'docs/usage/',
+  'site/usage/',
+  'site/README.md',
+  'site/tests/fixture.md',
+  'docs/adr/0001-agent-progress-events.md',
+  'docs/spikes/deliver.md',
+  'docs/adr/',
   '/',
 );
 const GH = 'https://github.com/GravionLabs/skills';
 
 describe('isSitePage', () => {
   it('is every markdown file under docs', () => {
-    expect(isSitePage('docs/usage/install.md')).toBe(true);
-    expect(isSitePage('docs/skill-list.md')).toBe(true);
+    expect(isSitePage('site/usage/install.md')).toBe(true);
+    expect(isSitePage('site/skill-list.md')).toBe(true);
   });
-  it('is nothing else', () => {
+  it('is nothing else: not the README, tests or packages of site/, not docs/', () => {
+    expect(isSitePage('site/README.md')).toBe(false);
+    expect(isSitePage('site/tests/fixture.md')).toBe(false);
+    expect(isSitePage('site/node_modules/vitepress/README.md')).toBe(false);
+    expect(isSitePage('docs/adr/0001-agent-progress-events.md')).toBe(false);
+    expect(isSitePage('docs/spikes/deliver.md')).toBe(false);
     expect(isSitePage('README.md')).toBe(false);
     expect(isSitePage('packages/shared/apm.yml')).toBe(false);
     expect(isSitePage('docs/images/x.png')).toBe(false);
   });
 });
 
-describe('repoLink from a page in docs/', () => {
+describe('repoLink from a page in site/', () => {
   const link = (href: string, page = 'concepts/agent-frontmatter.md') => repoLink(href, page, repo);
 
   it('leaves links between site pages, external links, anchors and mail alone', () => {
@@ -93,6 +103,20 @@ describe('repoLink from a page in docs/', () => {
     expect(link('../../../')).toBe('../../../');
   });
 
+  it('sends the internal ADRs and spikes of docs/ to GitHub, never as site pages', () => {
+    expect(link('../../docs/adr/0001-agent-progress-events.md')).toBe(
+      `${GH}/blob/main/docs/adr/0001-agent-progress-events.md`,
+    );
+    expect(link('../docs/spikes/deliver.md#a', 'overview.md')).toBe(
+      `${GH}/blob/main/docs/spikes/deliver.md#a`,
+    );
+    expect(link('../../docs/adr/')).toBe(`${GH}/tree/main/docs/adr`);
+  });
+
+  it('sends the README of site/ to GitHub, since it is no page', () => {
+    expect(link('../README.md')).toBe(`${GH}/blob/main/site/README.md`);
+  });
+
   it('leaves a link to something that is not there, so the dead-link check can say so', () => {
     expect(link('nowhere.md')).toBe('nowhere.md');
     expect(link('../../../outside.md')).toBe('../../../outside.md');
@@ -103,8 +127,8 @@ describe('repoLink from the README embedded as the home page', () => {
   const link = (href: string) => repoLink(href, 'index.md', repo);
 
   it('resolves docs/... links as site pages', () => {
-    expect(link('docs/usage/install.md')).toBe('usage/install.md');
-    expect(link('./docs/usage/install.md#a')).toBe('usage/install.md#a');
+    expect(link('site/usage/install.md')).toBe('usage/install.md');
+    expect(link('./site/usage/install.md#a')).toBe('usage/install.md#a');
   });
   it('sends other repository paths to GitHub', () => {
     expect(link('AGENTS.md')).toBe(`${GH}/blob/main/AGENTS.md`);
@@ -112,22 +136,28 @@ describe('repoLink from the README embedded as the home page', () => {
     expect(link('packages/shared')).toBe(`${GH}/tree/main/packages/shared`);
     expect(link('scripts/check-manifests.mjs')).toBe(`${GH}/blob/main/scripts/check-manifests.mjs`);
   });
-  it('leaves missing docs pages alone', () => {
-    expect(link('docs/missing.md')).toBe('docs/missing.md');
+  it('leaves missing site pages alone', () => {
+    expect(link('site/missing.md')).toBe('site/missing.md');
   });
   it('leaves a generated page alone while it is absent', () => {
-    expect(link('docs/agent-list.md')).toBe('docs/agent-list.md');
+    expect(link('site/agent-list.md')).toBe('site/agent-list.md');
   });
-  it('sends a docs directory to GitHub as a tree, since the site has no page for it', () => {
-    expect(link('docs/usage/')).toBe(`${GH}/tree/main/docs/usage`);
-    expect(link('docs/usage')).toBe(`${GH}/tree/main/docs/usage`);
+  it('sends the ADRs and spikes of docs/ to GitHub', () => {
+    expect(link('docs/adr/0001-agent-progress-events.md')).toBe(
+      `${GH}/blob/main/docs/adr/0001-agent-progress-events.md`,
+    );
+    expect(link('docs/spikes/deliver.md')).toBe(`${GH}/blob/main/docs/spikes/deliver.md`);
+  });
+  it('sends a site directory to GitHub as a tree, since the site has no page for it', () => {
+    expect(link('site/usage/')).toBe(`${GH}/tree/main/site/usage`);
+    expect(link('site/usage')).toBe(`${GH}/tree/main/site/usage`);
   });
   it('keeps query strings and anchors', () => {
-    expect(link('docs/usage/install.md?x=1')).toBe('usage/install.md?x=1');
+    expect(link('site/usage/install.md?x=1')).toBe('usage/install.md?x=1');
     expect(link('AGENTS.md?plain=1#a')).toBe(`${GH}/blob/main/AGENTS.md?plain=1#a`);
   });
   it('treats README.md like index.md', () => {
-    expect(repoLink('docs/usage/install.md', 'README.md', repo)).toBe('usage/install.md');
+    expect(repoLink('site/usage/install.md', 'README.md', repo)).toBe('usage/install.md');
     expect(repoLink('AGENTS.md', 'README.md', repo)).toBe(`${GH}/blob/main/AGENTS.md`);
   });
   it('does not go above the repository root', () => {
@@ -189,7 +219,7 @@ describe('the markdown-it plugin', () => {
 
   it('rewrites links nested in emphasis and headings', async () => {
     const html = await render(
-      '# See [a](AGENTS.md)\n\n**bold [b](packages/shared)** _[c](docs/usage/install.md)_',
+      '# See [a](AGENTS.md)\n\n**bold [b](packages/shared)** _[c](site/usage/install.md)_',
       {
         relativePath: 'index.md',
       },
@@ -200,7 +230,7 @@ describe('the markdown-it plugin', () => {
   });
 
   it('treats index.md as the README at the repository root', async () => {
-    const html = await render('[a](docs/usage/install.md) [b](CONTRIBUTING.md)', {
+    const html = await render('[a](site/usage/install.md) [b](CONTRIBUTING.md)', {
       relativePath: 'index.md',
     });
     expect(html).toContain('href="./usage/install"');

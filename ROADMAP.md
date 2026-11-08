@@ -110,7 +110,7 @@ GitVersion bumps the minor version on a release merge into `main` (#73; since #1
 | #131  | [Bug] fix: release review runs governance on the wrong diff without waivers          |
 <!-- roadmap:end -->
 
-Review file, Aspire, ADRs and specs. `release/next` was cut from `v1.1.0`; release PR #96. Notes: #53 is read by GravionLabs/herdr-plugins#4 (`review-popup`); #65 defines the `governance` key names read by GravionLabs/ci#94 and ci#95; #65–#68, #86 and #87 are Feature #64; #97–#99 were found while delivering #64; #100 is described in [delivery](docs/delivery.md#release-review); #102 belongs to GravionLabs/ci#107 and ci#108 (ci v1.4.0). Also in the milestone: #112 (these docs) and #115 (drop the hourly project-needs sync). How the ADR and spec rules work together: [ADRs and specs](docs/usage/governance.md).
+Review file, Aspire, ADRs and specs. `release/next` was cut from `v1.1.0`; release PR #96. Notes: #53 is read by GravionLabs/herdr-plugins#4 (`review-popup`); #65 defines the `governance` key names read by GravionLabs/ci#94 and ci#95; #65–#68, #86 and #87 are Feature #64; #97–#99 were found while delivering #64; #100 is described in [delivery](site/delivery.md#release-review); #102 belongs to GravionLabs/ci#107 and ci#108 (ci v1.4.0). Also in the milestone: #112 (these docs) and #115 (drop the hourly project-needs sync). How the ADR and spec rules work together: [ADRs and specs](site/usage/governance.md).
 
 <!-- roadmap:begin done 1.3.0 -->
 ## Done in 1.3.0

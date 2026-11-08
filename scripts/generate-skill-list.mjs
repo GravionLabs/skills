@@ -1,11 +1,11 @@
 #!/usr/bin/env node
-// Writes docs/skill-list.md: one table per group of .claude-plugin/marketplace.json with each skill's
+// Writes site/skill-list.md: one table per group of .claude-plugin/marketplace.json with each skill's
 // description and install command. The file is gitignored; the site build runs this first.
 import { readFileSync, writeFileSync } from 'node:fs';
 import { join, resolve } from 'node:path';
 
 const root = resolve(import.meta.dirname, '..');
-const out = join(root, process.argv[2] ?? 'docs/skill-list.md');
+const out = join(root, process.argv[2] ?? 'site/skill-list.md');
 const manifest = JSON.parse(readFileSync(join(root, '.claude-plugin/marketplace.json'), 'utf-8'));
 
 /** The `description` of a SKILL.md frontmatter: single line, quoted or plain, or a folded block (`>`). */

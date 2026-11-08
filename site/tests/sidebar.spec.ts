@@ -3,22 +3,27 @@ import { resolve } from 'node:path';
 import { describe, expect, it } from 'vitest';
 import { generatedPages, sidebar } from '../.vitepress/sidebar';
 
-const docs = resolve(import.meta.dirname, '../../docs');
+const site = resolve(import.meta.dirname, '..');
 
-/** Every markdown page below docs/ as a site link (`/concepts/skills`). */
-function pagesOnDisk(dir = docs, prefix = ''): string[] {
+/** Not pages: the `srcExclude` of the config, plus the VitePress folder. */
+const notPages = new Set(['/README.md', '/tests', '/node_modules', '/.vitepress']);
+
+/** Every markdown page below site/ as a site link (`/concepts/skills`). */
+function pagesOnDisk(dir = site, prefix = ''): string[] {
   return readdirSync(dir, { withFileTypes: true }).flatMap((e) =>
-    e.isDirectory()
-      ? pagesOnDisk(resolve(dir, e.name), `${prefix}/${e.name}`)
-      : e.name.endsWith('.md')
-        ? [`${prefix}/${e.name.replace(/\.md$/, '')}`]
-        : [],
+    notPages.has(`${prefix}/${e.name}`)
+      ? []
+      : e.isDirectory()
+        ? pagesOnDisk(resolve(dir, e.name), `${prefix}/${e.name}`)
+        : e.name.endsWith('.md')
+          ? [`${prefix}/${e.name.replace(/\.md$/, '')}`]
+          : [],
   );
 }
 
 const listed = sidebar.flatMap((g) => g.items.map((i) => i.link));
 
-/** `docs/index.md`: the home page (the README), reached by the site title, not the sidebar. */
+/** `site/index.md`: the home page (the README), reached by the site title, not the sidebar. */
 const homePage = '/index';
 
 describe('the sidebar of the docs site', () => {
@@ -43,6 +48,11 @@ describe('the sidebar of the docs site', () => {
     expect(pagesOnDisk().filter((p) => p !== homePage && !listed.includes(p))).toEqual([]);
   });
 
+  it('lists no ADR or spike: they stay internal in docs/', () => {
+    expect(listed.filter((l) => /^\/(adr|spikes)\//.test(l))).toEqual([]);
+    expect(pagesOnDisk().filter((p) => /^\/(adr|spikes)\//.test(p))).toEqual([]);
+  });
+
   it('does not list the home page', () => {
     expect(pagesOnDisk()).toContain(homePage);
     expect(listed).not.toContain(homePage);
@@ -52,7 +62,7 @@ describe('the sidebar of the docs site', () => {
   it('lists only pages that exist, except the CI-generated ones', () => {
     const missing = listed
       .filter((l) => !generatedPages.includes(l))
-      .filter((l) => !existsSync(resolve(docs, `${l.slice(1)}.md`)));
+      .filter((l) => !existsSync(resolve(site, `${l.slice(1)}.md`)));
     expect(missing).toEqual([]);
   });
 

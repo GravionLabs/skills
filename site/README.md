@@ -1,16 +1,17 @@
 # site
 
-The GravionLabs skills documentation site, built with [VitePress](https://vitepress.dev). It has no content of
-its own: `srcDir` is `../docs`, so every page is a file of `docs/`, rendered in place. Keep `.md`
-files out of `site/` (this README is the only one).
+The GravionLabs skills documentation site, built with [VitePress](https://vitepress.dev). `site/` is the
+Pages source: every markdown file in it is a page (`srcDir` is `.`), except this README, `tests/` and
+`node_modules/` (`srcExclude`). `docs/` is internal (ADRs, spikes) and not published; a page that links
+there gets a GitHub URL.
 
 ## Home page
 
-The home page (`/`) is `docs/index.md`, a VitePress `layout: home` page: a hero with three actions
+The home page (`/`) is `site/index.md`, a VitePress `layout: home` page: a hero with three actions
 (overview, skills, GitHub) and a row of feature cards, all in its frontmatter. It has no body and
 `editLink: false`. The README at the repository root is the GitHub landing page and is not part of
 the site; the repo-links plugin still treats `README.md` like `index.md` when a page links to files
-outside `docs/`.
+outside `site/`.
 
 ## Commands
 
@@ -28,5 +29,5 @@ pnpm --filter site test      # sidebar, repo-links and config tests
 $env:SITE_BASE = '/skills/'; pnpm --filter site build
 ```
 
-The sidebar is the list in `.vitepress/sidebar.ts`; a test fails when a `docs/**/*.md` page is in
+The sidebar is the list in `.vitepress/sidebar.ts`; a test fails when a `site/**/*.md` page is in
 no group.
