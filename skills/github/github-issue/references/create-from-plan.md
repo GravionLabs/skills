@@ -36,6 +36,8 @@ Link every created issue to `parent_issue` (`sub-issues.md`, "Link a child to a
 parent"); in a split, to the Feature of the body's first line (no line: no link). A plan from a
 description creates no issues.
 
+Milestone: a created PBI or Bug gets the milestone of the plan with `github-milestone assign M<nnn> #<nr> …` (`milestones.md`, "Setting a milestone"), never `gh issue edit --milestone`; a Feature only when all its PBIs are in it.
+
 ## 4. Blocked-by links
 
 For every item and every entry of its `blocked_by`: a plan id (string) resolves to

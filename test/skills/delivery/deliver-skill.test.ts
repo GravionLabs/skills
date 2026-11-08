@@ -779,55 +779,84 @@ describe('deliver help', () => {
   });
 });
 
-describe('M<n> milestones (#235)', () => {
+describe('M<nnn> milestones (#235)', () => {
   const body = text.slice(text.indexOf('\n---', 3) + 4);
   const release = body.slice(body.indexOf('**Release.**'), body.indexOf('## Pause rules'));
   const ref = fs.readFileSync(path.join(skillDir, 'references/release-review.md'), 'utf8');
   const loop = fs.readFileSync(path.join(skillDir, 'references/loop.md'), 'utf8');
   const help = fs.readFileSync(path.join(skillDir, 'references/help.md'), 'utf8');
   const guide = fs.readFileSync(path.resolve(__dirname, '../../../docs/guides/deliver.md'), 'utf8');
+  const schemaText = fs.readFileSync(
+    path.join(skillDir, 'schema/deliver-release-review.schema.json'),
+    'utf8',
+  );
 
   it('resolves --milestone M4 through the github-milestone lookup, open and after close', () => {
     expect(body).toContain(
-      'the `github-milestone` lookup resolves `M4` to the title `M4` or, after `close`, `M4 (0.2.0)`',
+      'the `github-milestone` lookup resolves `M004` to the title `M004` or, after `close`, `M004 (0.2.0)`',
     );
-    expect(body).toContain('`<key>` is its `M<n>` or sub-number `M<n>.<m>` (legacy: the title)');
+    expect(body).toContain(
+      '`<key>` is its unpadded `M<n>` or sub-number `M<n>.<m>` (`M003` → `M3`, `M011.1` → `M11.1`; `M3` and `M003` share one state file; legacy: the title)',
+    );
     expect(body).toContain(
       'The `milestone.title` of that read is the title for `gh issue create --milestone`',
     );
     expect(loop).toContain(
-      'resolves `M4` to the title `M4` or, after `/github-milestone close`, `M4 (0.2.0)`',
+      'resolves `M004` to the title `M004` or, after `/github-milestone close`, `M004 (0.2.0)`',
     );
   });
 
-  it('keys the release-review state file by M<n>', () => {
+  it('keys the release-review state file by M<nnn>', () => {
     expect(release).toContain('release-review-<key>.json');
     expect(release).not.toContain('release-review-<milestone>');
     expect(ref).toContain(
-      'so `M4`, `M4 Topic` and `M4 (0.2.0)` share one file, `M1.1 Topic (0.2.0)` is `M1.1` and never `M1`; legacy: the title',
+      '`M3`, `M003`, `M3 Topic` and `M003 Topic (0.2.0)` share one file `release-review-M3.json`, `M1.1 Topic (0.2.0)` is `M1.1` and never `M1`; legacy: the title',
     );
     expect(ref).toContain('`milestone` = `<key>`');
     expect(ref).toContain('`<name>` the resolved `milestone.title`');
     expect(loop).toContain('`release-review-<key>.json`');
   });
 
+  // #468: one key form in the docs, the schema and the state file names
+  it('names the unpadded key form and one state file for M3 and M003 (#468)', () => {
+    expect(loop).toContain(
+      'is keyed by the unpadded `M<n>` (`M003` → `M3`, one file for both forms)',
+    );
+    expect(schemaText).toContain('M3 and M003 share one state file');
+  });
+
+  it('writes no zero-padded state file name in the skills and docs (#468)', () => {
+    for (const f of [
+      `${skillDir}/SKILL.md`,
+      `${skillDir}/references/release-review.md`,
+      `${skillDir}/references/loop.md`,
+      `${skillDir}/schema/deliver-release-review.schema.json`,
+      path.resolve(__dirname, '../../../docs/delivery.md'),
+      path.resolve(__dirname, '../../../docs/guides/deliver.md'),
+      path.resolve(__dirname, '../../../docs/guides/release.md'),
+      path.resolve(__dirname, '../../../skills/github/github-milestone/SKILL.md'),
+    ]) {
+      expect(fs.readFileSync(f, 'utf8'), f).not.toMatch(/release-review-M\d{3}/);
+    }
+  });
+
   it('ends step 9 with the hint to close the milestone after merge and tag', () => {
     expect(release).toContain(
-      'End step 9 with the hint `after the release PR is merged and tagged: /github-milestone close M<n>`',
+      'End step 9 with the hint `after the release PR is merged and tagged: /github-milestone close M<nnn>`',
     );
   });
 
-  it('help and the deliver guide name the M<n> form', () => {
+  it('help and the deliver guide name the M<nnn> form', () => {
     expect(help).toContain(
-      '`M4` finds the title `M4` and, after `github-milestone close`, `M4 (0.2.0)`',
+      '`M004` finds the title `M004` and, after `github-milestone close`, `M004 (0.2.0)`',
     );
-    expect(help).toContain('/deliver --milestone M4');
-    expect(help).toContain('-Milestone M4');
-    expect(help).toContain('run `/github-milestone close M<n>`');
-    expect(guide).toContain('/deliver --milestone M4');
-    expect(guide).toContain('`M4 (0.2.0)`');
-    expect(guide).toContain('deliver-loop -Milestone M4');
-    expect(guide).toContain('`/github-milestone close M4`');
+    expect(help).toContain('/deliver --milestone M004');
+    expect(help).toContain('-Milestone M004');
+    expect(help).toContain('run `/github-milestone close M<nnn>`');
+    expect(guide).toContain('/deliver --milestone M004');
+    expect(guide).toContain('`M004 (0.2.0)`');
+    expect(guide).toContain('deliver-loop -Milestone M004');
+    expect(guide).toContain('`/github-milestone close M004`');
   });
 
   // #224: reviewers must not touch the user's checkouts

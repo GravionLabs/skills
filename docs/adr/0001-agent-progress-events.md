@@ -1,6 +1,6 @@
 # ADR 0001: Agent progress events replace status.json
 
-- Status: Accepted; the terminal sink of the emitter superseded in part by [ADR 0002](0002-displays-read-the-progress-events.md)
+- Status: Accepted; the terminal sink of the emitter superseded in part by [ADR 0002](0002-displays-read-the-progress-events.md); the location of the schema and the fixtures superseded in part by [ADR 0003](0003-the-progress-event-format-lives-in-agent-events.md)
 - Date: 2026-11-07
 - Issues: #368, #329, #331, #332
 - Builds on: the terminal backend adapter of #331 (`scripts/TerminalBackend.ps1`)
@@ -38,7 +38,7 @@ Skills and the loop write **progress events** to an append-only file per run. Th
 
 ### Schema
 
-JSON Lines, one event per line, published as `schema/progress-event.schema.json` (raw URL on `main`, like the status schema today).
+JSON Lines, one event per line, published as `schema/progress-event.schema.json` (now in GravionLabs/agent-events, [ADR 0003](0003-the-progress-event-format-lives-in-agent-events.md); originally the raw URL on `main`, like the status schema today).
 
 - Every event carries `v` (1), `seq` (per run, gapless), `ts`, `run`, `type` and `tone`.
 - The event types use the AG-UI vocabulary: `run.started`, `milestone.progress`, `issue.started`, `step.finished`, `attention`, `issue.finished`, `release.updated`, `run.finished`.

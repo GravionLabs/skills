@@ -95,6 +95,22 @@ describe('Get-ReleaseState.ps1 -Milestone (RC test)', () => {
     });
   });
 
+  it('finds the release-test issue of a padded milestone by number (#435)', async () => {
+    const all =
+      '[{"number":9,"url":"https://x/issues/9","milestone":{"title":"M004 Topic"}},{"number":8,"url":"https://x/issues/8","milestone":{"title":"M040"}}]';
+    expect(await finish('[]', true, 'M4', all)).toMatchObject({ releaseTest: { number: 9 } });
+    expect(
+      await finish(
+        '[]',
+        true,
+        'M004',
+        '[{"number":7,"url":"https://x/issues/7","milestone":{"title":"M4"}}]',
+      ),
+    ).toMatchObject({
+      releaseTest: { number: 7 },
+    });
+  });
+
   it('asks gh for the open release-test issues of the milestone', async () => {
     await finish('[]');
     const call = fake.calls().find((c) => c.args[0] === 'issue')!;

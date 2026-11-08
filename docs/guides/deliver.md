@@ -58,7 +58,7 @@ A blocked PBI (a red check unrelated to the change, for example) is listed with 
 
 ## Status of a milestone
 
-With `--milestone`, `deliver` prints a status block of at most 10 lines after each PBI and in the report: progress, delivered in this run, ready, waiting, what needs you (decisions, `interactive`, manual tests, the release PR to merge), release state and the next milestone, every issue as a full URL with its title. `/deliver status --milestone M4` prints it without delivering; `pwsh scripts/Get-DeliverStatus.ps1 -Milestone M4 [-Text]` gives the same as JSON or text.
+With `--milestone`, `deliver` prints a status block of at most 10 lines after each PBI and in the report: progress, delivered in this run, ready, waiting, what needs you (decisions, `interactive`, manual tests, the release PR to merge), release state and the next milestone, every issue as a full URL with its title. `/deliver status --milestone M004` prints it without delivering; `pwsh scripts/Get-DeliverStatus.ps1 -Milestone M004 [-Text]` gives the same as JSON or text.
 
 ## Deliver a Feature or several issues
 
@@ -72,12 +72,12 @@ A Feature or Epic expands to its open PBIs and Bugs. They are ordered by their b
 ## Deliver a milestone
 
 ```text
-/deliver --milestone M4
+/deliver --milestone M004
 ```
 
-Name the milestone `M<n>`: `M4` finds the open `M4` and, after `/github-milestone close M4` renamed it, `M4 (0.2.0)`, so the same command and the same release-review state work before and after the rename. A legacy title such as `1.3.0` works as before; to move a repository to `M<n>` see [Migrate legacy milestones](release.md#migrate-legacy-milestones), the old `release-review-<title>.json` files stay as history.
+Name the milestone `M<nnn>`: `M004` finds the open `M004` and, after `/github-milestone close M004` renamed it, `M004 (0.2.0)`, so the same command and the same release-review state work before and after the rename. A legacy title such as `1.3.0` works as before; to move a repository to `M<nnn>` see [Migrate legacy milestones](release.md#migrate-legacy-milestones), the old `release-review-<title>.json` files stay as history.
 
-Delivers every open PBI and Bug of the milestone. A PBI or Bug that you reach only through a Feature or Epic of the milestone, and that has no or another milestone, is reported (`#42 select: outside M4, skipped`) and not delivered: set its milestone, or move it into `M4`. `/deliver <feature>` without `--milestone` still delivers all the PBIs of the Feature. The rule is explained in the [issue model](../concepts/issue-model.md#milestones). When none is left, `deliver` runs a release review of the whole release diff. Without blocking findings it cuts the release candidate, posts it on the `release-test` issue and opens the release PR into `main` without waiting for the RC test (`release.test.gate: true` in `.agents/config.json` waits for it) and stops: you review and merge that one. With blocking findings it files one Bug per finding in the milestone; run the command again to deliver them. With the release PR `deliver` ends with the hint to run `/github-milestone close M4` once that PR is merged and tagged.
+Delivers every open PBI and Bug of the milestone. A PBI or Bug that you reach only through a Feature or Epic of the milestone, and that has no or another milestone, is reported (`#42 select: outside M004, skipped`) and not delivered: set its milestone, or move it into `M004`. `/deliver <feature>` without `--milestone` still delivers all the PBIs of the Feature. The rule is explained in the [issue model](../concepts/issue-model.md#milestones). When none is left, `deliver` runs a release review of the whole release diff. Without blocking findings it cuts the release candidate, posts it on the `release-test` issue and opens the release PR into `main` without waiting for the RC test (`release.test.gate: true` in `.agents/config.json` waits for it) and stops: you review and merge that one. With blocking findings it files one Bug per finding in the milestone; run the command again to deliver them. With the release PR `deliver` ends with the hint to run `/github-milestone close M004` once that PR is merged and tagged.
 
 ## Interactive or unattended
 
@@ -103,21 +103,21 @@ State lives in GitHub only (issue, branch, PR, checks). After a crash, a closed 
 ## Limit a run with --max
 
 ```text
-/deliver --milestone M4 --max 3
+/deliver --milestone M004 --max 3
 ```
 
 `--max <n>` stops after `n` delivered, blocked or paused PBIs and prints the report. Run it again for the next batch.
 
 ## A milestone as a control session
 
-An interactive `/deliver --milestone M4` (or a Feature or Epic with more than three PBIs, `deliver.loopThreshold` in `.agents/config.json`) does not deliver the PBIs in your session. It starts the loop below in the background (in herdr in its own workspace), prints the progress and the status block between PBIs, and stays small:
+An interactive `/deliver --milestone M004` (or a Feature or Epic with more than three PBIs, `deliver.loopThreshold` in `.agents/config.json`) does not deliver the PBIs in your session. It starts the loop below in the background (in herdr in its own workspace), prints the progress and the status block between PBIs, and stays small:
 
 - a `needs-decision` PBI is shown to you; after your answer the label is removed and the loop continues
 - `interactive` PBIs are delivered by this session, because they cannot run unattended
 - the release review and release PR run once in this session after the loop ends `done`
-- past `deliver.controlContextTokens` (default 200000) it prints the status block and the resume command and stops; run `/deliver --milestone M4` again
+- past `deliver.controlContextTokens` (default 200000) it prints the status block and the resume command and stops; run `/deliver --milestone M004` again
 
-`/deliver --milestone M4 --inline` keeps the old behavior: this session delivers every PBI itself. Details: `references/control.md` of the `deliver` skill.
+`/deliver --milestone M004 --inline` keeps the old behavior: this session delivers every PBI itself. Details: `references/control.md` of the `deliver` skill.
 
 ## Feedback during a run
 
@@ -132,13 +132,13 @@ Before the first PBI `deliver` checks the repository and prints one line per che
 One session over a whole release grows large. `Invoke-DeliverLoop.ps1` starts a fresh `claude -p "/deliver … --unattended --max 1"` per PBI and reads the progress from GitHub. `skills-manage` offers the `deliver-loop` shim (`Install-LoopShim.ps1`), so you start it from any shell:
 
 ```powershell
-deliver-loop -Milestone M4 -Max 5
+deliver-loop -Milestone M004 -Max 5
 ```
 
 Without the shim, call the script by its full path:
 
 ```powershell
-pwsh .claude/skills/deliver/scripts/Invoke-DeliverLoop.ps1 -Milestone M4 -Max 5
+pwsh .claude/skills/deliver/scripts/Invoke-DeliverLoop.ps1 -Milestone M004 -Max 5
 ```
 
 It stops when everything is done or `-Max` is reached (exit 0), when no progress is made (1) or a PBI is blocked (2). The stream log is in `.agents/deliver-loop/`.

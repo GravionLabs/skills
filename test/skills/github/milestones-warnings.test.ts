@@ -42,7 +42,8 @@ const sub = (
   number: number,
   milestone: { number: number; title: string } | null,
   state = 'open',
-) => ({ number, title: `sub ${number}`, state, milestone });
+  repository_url?: string,
+) => ({ number, title: `sub ${number}`, state, milestone, repository_url });
 
 describe('Get-Milestones.ps1 warnings (#327)', () => {
   let worker: PwshWorker;
@@ -98,8 +99,38 @@ describe('Get-Milestones.ps1 warnings (#327)', () => {
     ]);
   });
 
+  // #438: a milestone belongs to one repository
+  it.each([
+    ['milestone number', { number: 4, title: 'M9' }],
+    ['milestone title', { number: 7, title: 'M4' }],
+  ])('a sub-issue from another repository is outside whatever its %s', async (_n, ms) => {
+    const other = 'https://api.github.com/repos/o/other';
+    const out = await show([issue(2, 'feature')], {
+      2: [
+        sub(3, { number: 4, title: 'M4' }),
+        sub(8, ms, 'open', other),
+        sub(9, null, 'open', other),
+      ],
+    });
+    expect(out.warnings[0].type).toBe('feature-incomplete');
+    expect(out.warnings[0].outside).toEqual([
+      { number: 8, title: 'sub 8', milestone: ms.title, repository: 'o/other' },
+      { number: 9, title: 'sub 9', milestone: 'none', repository: 'o/other' },
+    ]);
+  });
+
+  it('same-repository sub-issues carry no repository and raise no new warning', async () => {
+    const same = 'https://api.github.com/repos/o/r';
+    const out = await show([issue(2, 'feature')], {
+      2: [sub(3, { number: 4, title: 'M4' }, 'open', same)],
+    });
+    expect(out.warnings).toEqual([]);
+  });
+
   it('the output matches the schema', async () => {
-    const out = await show([issue(7, 'epic'), issue(2, 'feature')], { 2: [sub(6, null)] });
+    const out = await show([issue(7, 'epic'), issue(2, 'feature')], {
+      2: [sub(6, null, 'open', 'https://api.github.com/repos/o/other')],
+    });
     const schema = JSON.parse(
       fs.readFileSync(path.join(skill, 'schema/milestones.schema.json'), 'utf8'),
     );

@@ -14,7 +14,7 @@ const handler = `(call) => {
   const a = call.args;
   const p = a[1];
   if (a[0] === 'issue' && a[1] === 'edit') return { rest: {} };
-  if (a.includes('POST')) return { rest: { number: 99, title: a.find((x) => x.startsWith('title=')).slice(6), state: 'open', html_url: 'https://x/m/99' } };
+  if (a.includes('POST')) { const c = { number: 99, title: a.find((x) => x.startsWith('title=')).slice(6), state: 'open', html_url: 'https://x/m/99' }; require('fs').writeFileSync(__dirname + '/posted.json', JSON.stringify(c)); return { rest: c }; }
   if (a.includes('-X')) throw new Error('unexpected write: ' + a.join(' '));
   const sub = /issues\\/(\\d+)\\/sub_issues/.exec(p);
   if (sub) return { rest: env('FAKE_SUBS', '{}')[sub[1]] || [] };
@@ -22,9 +22,9 @@ const handler = `(call) => {
   if (m) {
     const cur = env('FAKE_CURRENT', '{}')[m[1]];
     if (cur === undefined) throw new Error('404 Not Found');
-    return { rest: { number: Number(m[1]), milestone: cur ? { title: cur } : null, labels: (env('FAKE_LABELS', '{}')[m[1]] || []).map((name) => ({ name })) } };
+    return { rest: { number: Number(m[1]), repository_url: env('FAKE_REPOS', '{}')[m[1]], milestone: cur ? { title: cur } : null, labels: (env('FAKE_LABELS', '{}')[m[1]] || []).map((name) => ({ name })) } };
   }
-  if (p.includes('/milestones?')) return { rest: [env('FAKE_MILESTONES', '[]')] };
+  if (p.includes('/milestones?')) { const f = __dirname + '/posted.json'; const extra = require('fs').existsSync(f) ? [JSON.parse(require('fs').readFileSync(f, 'utf8'))] : []; return { rest: [env('FAKE_MILESTONES', '[]').concat(extra)] }; }
   if (p.includes('/tags?')) return { rest: [[]] };
   throw new Error('unexpected path ' + p);
 }`;
@@ -51,6 +51,7 @@ describe('Set-IssueMilestones.ps1', () => {
   afterAll(() => worker.close());
 
   const run = (assignment: unknown, env: Record<string, unknown>) => {
+    fs.rmSync(path.join(tmp, 'posted.json'), { force: true });
     const before = fake.calls().length;
     return worker
       .run(
@@ -120,6 +121,29 @@ describe('Set-IssueMilestones.ps1', () => {
     expect(writes(r.calls)).toHaveLength(1);
   });
 
+  it('matches M3 to a padded title M003 and M11 to M011.1 only exactly (padded titles)', async () => {
+    const r = await run(
+      [
+        { issue: 1, milestone: 'M3' },
+        { issue: 2, milestone: 'M003' },
+        { issue: 3, milestone: 'M11.1' },
+        { issue: 4, milestone: 'M011' },
+      ],
+      {
+        FAKE_MILESTONES: [ms(1, 'M003 Market data'), ms(2, 'M011.1 Sub'), ms(3, 'M011')],
+        FAKE_CURRENT: { 1: null, 2: 'M003 Market data', 3: null, 4: null },
+      },
+    );
+    expect(r.status).toBe(0);
+    expect(JSON.parse(r.stdout).results).toEqual([
+      { issue: 1, milestone: 'M003 Market data', status: 'set' },
+      { issue: 2, milestone: 'M003 Market data', status: 'unchanged' },
+      { issue: 3, milestone: 'M011.1 Sub', status: 'set' },
+      { issue: 4, milestone: 'M011', status: 'set' },
+    ]);
+    expect(JSON.parse(r.stdout).created).toEqual([]);
+  });
+
   it('creates a missing M<n> before setting it', async () => {
     const r = await run([{ issue: 5, milestone: 'M4' }], {
       FAKE_MILESTONES: [ms(1, 'M3')],
@@ -127,11 +151,11 @@ describe('Set-IssueMilestones.ps1', () => {
     });
     expect(r.status).toBe(0);
     const out = JSON.parse(r.stdout);
-    expect(out.created).toEqual(['M4']);
-    expect(out.results).toEqual([{ issue: 5, milestone: 'M4', status: 'set' }]);
+    expect(out.created).toEqual(['M004']);
+    expect(out.results).toEqual([{ issue: 5, milestone: 'M004', status: 'set' }]);
     const w = writes(r.calls);
     expect(w[0]).toContain('POST');
-    expect(w[1].slice(0, 5)).toEqual(['issue', 'edit', '5', '--milestone', 'M4']);
+    expect(w[1].slice(0, 5)).toEqual(['issue', 'edit', '5', '--milestone', 'M004']);
   });
 
   it('refuses a closed milestone and writes nothing', async () => {
@@ -172,11 +196,18 @@ describe('Set-IssueMilestones.ps1', () => {
       FAKE_MILESTONES: [ms(1, 'M1'), ms(2, 'M2')],
       FAKE_CURRENT: { 1: null, 2: null, 3: null, 4: null },
     };
-    it('refuses an Epic without writes', async () => {
-      const r = await run([{ issue: 1, milestone: 'M1' }], {
-        ...base,
-        FAKE_LABELS: { 1: ['epic'] },
-      });
+    // for a missing M<n> the rule runs before the milestone is created: no POST, no edit, also for the earlier target
+    it.each([
+      ['an existing milestone', [{ issue: 1, milestone: 'M1' }]],
+      [
+        'a missing milestone (nothing created)',
+        [
+          { issue: 3, milestone: 'M1' },
+          { issue: 1, milestone: 'M9' },
+        ],
+      ],
+    ])('refuses an Epic for %s without writes', async (_n, assignment) => {
+      const r = await run(assignment, { ...base, FAKE_LABELS: { 1: ['epic'] } });
       expect(r.status).toBe(1);
       expect(r.stderr).toContain('Epic never has a milestone');
       expect(writes(r.calls)).toEqual([]);
@@ -197,6 +228,79 @@ describe('Set-IssueMilestones.ps1', () => {
       });
       expect(r.status).toBe(1);
       expect(r.stderr).toContain(`outside: ${outside}`);
+      expect(writes(r.calls)).toEqual([]);
+    });
+
+    // #438: a sub-issue from another repository is outside; its number never matches the assignment
+    it.each([
+      ['a milestone title collision', { title: 'M1' }],
+      ['no milestone', null],
+    ])('refuses a Feature with a sub-issue from another repository (%s)', async (_n, milestone) => {
+      const r = await run(
+        [
+          { issue: 1, milestone: 'M1' },
+          { issue: 3, milestone: 'M1' },
+        ],
+        {
+          ...base,
+          FAKE_CURRENT: { 1: null, 3: null },
+          FAKE_LABELS: { 1: ['feature'], 3: ['pbi'] },
+          FAKE_REPOS: { 1: 'https://api.github.com/repos/o/r' },
+          FAKE_SUBS: {
+            1: [
+              {
+                number: 3,
+                state: 'open',
+                milestone,
+                repository_url: 'https://api.github.com/repos/o/other',
+              },
+            ],
+          },
+        },
+      );
+      expect(r.status).toBe(1);
+      expect(r.stderr).toContain('outside: o/other#3');
+      expect(writes(r.calls)).toEqual([]);
+    });
+
+    // #464: the rule holds over the whole assignment, in either order of the targets
+    it.each([
+      [
+        'Feature target first',
+        [
+          { issue: 1, milestone: 'M1' },
+          { issue: 3, milestone: 'M2' },
+        ],
+      ],
+      [
+        'PBI target first',
+        [
+          { issue: 3, milestone: 'M2' },
+          { issue: 1, milestone: 'M1' },
+        ],
+      ],
+    ])(
+      'refuses a Feature whose PBI the same assignment sends elsewhere (%s) without writes',
+      async (_n, assignment) => {
+        const r = await run(assignment, {
+          ...base,
+          FAKE_CURRENT: { 1: null, 3: 'M1' },
+          FAKE_LABELS: { 1: ['feature'], 3: ['pbi'] },
+          FAKE_SUBS: { 1: [{ number: 3, state: 'open', milestone: { title: 'M1' } }] },
+        });
+        expect(r.status).toBe(1);
+        expect(r.stderr).toContain('outside: #3');
+        expect(writes(r.calls)).toEqual([]);
+      },
+    );
+
+    it.each(['M1000', 'M1.10'])('refuses %s up front, before anything is created', async (name) => {
+      const r = await run([{ issue: 3, milestone: name }], {
+        ...base,
+        FAKE_LABELS: { 3: ['pbi'] },
+      });
+      expect(r.status).toBe(1);
+      expect(r.stderr).toContain('not writable');
       expect(writes(r.calls)).toEqual([]);
     });
 

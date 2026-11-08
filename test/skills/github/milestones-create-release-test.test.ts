@@ -87,7 +87,9 @@ describe('Get-Milestones.ps1 create/insert release-test issue', () => {
     });
     expect(issuePosts).toHaveLength(1);
     const a = issuePosts[0].args;
-    expect(a).toContain('title=[PBI] test: release candidate test of M3 on macOS, Linux, Windows');
+    expect(a).toContain(
+      'title=[PBI] test: release candidate test of M003 on macOS, Linux, Windows',
+    );
     expect(a).toEqual(
       expect.arrayContaining([
         'labels[]=pbi',
@@ -97,7 +99,7 @@ describe('Get-Milestones.ps1 create/insert release-test issue', () => {
       ]),
     );
     const body = a.find((x) => x.startsWith('body='))!;
-    expect(body).toContain('Test M3 on macOS, Linux, Windows.');
+    expect(body).toContain('Test M003 on macOS, Linux, Windows.');
     expect(body).toContain('Tier: interactive');
   });
 

@@ -11,7 +11,7 @@ describe('roadmap help', () => {
   });
 
   it('covers approval, milestones and ROADMAP.md markers', () => {
-    for (const s of ['approval', 'M<n>', 'github-milestone', 'roadmap:begin', 'grill-me']) {
+    for (const s of ['approval', 'M<nnn>', 'github-milestone', 'roadmap:begin', 'grill-me']) {
       expect(help).toContain(s);
     }
   });

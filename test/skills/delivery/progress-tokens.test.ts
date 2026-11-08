@@ -3,13 +3,15 @@ import * as fs from 'fs';
 import * as os from 'os';
 import * as path from 'path';
 import Ajv from 'ajv/dist/2020';
+import { AGENT_EVENTS_FIXTURES } from '../../helpers/agent-events';
 import { PwshWorker } from '../../helpers/pwsh-worker';
 
 const ROOT = path.resolve(__dirname, '../../..');
 const SCRIPT = path.join(ROOT, 'skills/delivery/deliver/scripts/Report-Progress.ps1');
 const SCHEMA = path.join(ROOT, 'skills/delivery/deliver/schema/progress-tokens.schema.json');
 const BACKENDS = path.join(ROOT, 'skills/delivery/deliver/references/terminal-backends.md');
-const FIXTURES = path.join(__dirname, 'fixtures/progress-events');
+const FIXTURES = path.join(__dirname, 'fixtures/progress-events'); // *.tokens.json
+const EVENTS = AGENT_EVENTS_FIXTURES; // *.jsonl and *.state.json of the pinned agent-events tag
 const hasPwsh = spawnSync('pwsh', ['-NoProfile', '-Command', '1']).status === 0;
 
 const TOKENS = ['deliver', 'deliver_step', 'deliver_pr', 'deliver_progress', 'deliver_tone'];
@@ -24,13 +26,13 @@ type Entry = {
 
 const readJson = (p: string) => JSON.parse(fs.readFileSync(p, 'utf8'));
 const cases = fs
-  .readdirSync(FIXTURES)
+  .readdirSync(EVENTS)
   .filter((f) => f.endsWith('.jsonl'))
   .map((f) => f.replace(/\.jsonl$/, ''))
   .sort();
 const lines = (c: string) =>
   fs
-    .readFileSync(path.join(FIXTURES, `${c}.jsonl`), 'utf8')
+    .readFileSync(path.join(EVENTS, `${c}.jsonl`), 'utf8')
     .split('\n')
     .filter((l) => l !== '');
 const expected = (c: string): Entry[] => readJson(path.join(FIXTURES, `${c}.tokens.json`));
@@ -73,7 +75,7 @@ describe('fixtures/progress-events/<case>.tokens.json (#414)', () => {
     '%s: an abandoned entry is the last one, exactly when the run state is abandoned',
     (c) => {
       const entries = expected(c);
-      const result = readJson(path.join(FIXTURES, `${c}.state.json`)).result;
+      const result = readJson(path.join(EVENTS, `${c}.state.json`)).result;
       expect(entries.findIndex((e) => e.abandoned)).toBe(
         result === 'abandoned' ? entries.length - 1 : -1,
       );
