@@ -262,9 +262,9 @@ describe('Get-Milestones.ps1 -Mode close', () => {
       expect(out).toMatchObject({
         closed: true,
         version: '1.2.0',
-        milestone: { number: 8, title: 'M2 (1.2.0)', state: 'closed' },
+        milestone: { number: 8, title: 'M002 (1.2.0)', state: 'closed' },
       });
-      expect(writes).toEqual([patchM(8, 'M2 (1.2.0)')]);
+      expect(writes).toEqual([patchM(8, 'M002 (1.2.0)')]);
     });
 
     it('with -Version: that tag is used even when a newer one exists', async () => {
@@ -273,7 +273,7 @@ describe('Get-Milestones.ps1 -Mode close', () => {
         FAKE_TAGS: ['v1.2.0', 'v1.3.0'],
       });
       expect(out).toMatchObject({ closed: true, version: '1.2.0' });
-      expect(writes).toEqual([patchM(8, 'M2 (1.2.0)')]);
+      expect(writes).toEqual([patchM(8, 'M002 (1.2.0)')]);
     });
 
     it('open issues moved to M<m>, then renamed and closed', async () => {
@@ -284,7 +284,7 @@ describe('Get-Milestones.ps1 -Mode close', () => {
       expect(out).toMatchObject({ closed: true, moved: [{ number: 21 }] });
       expect(writes).toEqual([
         ['issue', 'edit', '21', '--milestone', 'M3'],
-        patchM(8, 'M2 (1.2.0)'),
+        patchM(8, 'M002 (1.2.0)'),
       ]);
     });
 

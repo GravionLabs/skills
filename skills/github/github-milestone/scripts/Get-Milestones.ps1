@@ -2,7 +2,7 @@
 .SYNOPSIS
   Milestones of a repository as JSON (schema/milestones.schema.json) for the github-milestone skill.
 .DESCRIPTION
-  Milestone titles: `M<n>` or `M<n>.<m>[.<k>...]` (sub-number, sorts numerically per part between M<n> and M<n+1>: 1, 1.1, 1.2, 2, 10; lookup by `M1.1` is exact, `M1` never finds `M1.1`) or `M<n> <Topic>` while open (topic without parentheses), `M<n> [<Topic>] (x.y.z)` after close, and the legacy
+  Titles are written with a 3-digit main number (`M001`, `M011.1`, `M001 (0.2.0)`; at most M999, one sub level 1..9, create/rename/insert refuse more) and found by value (`M11`, `M011`, `M0011`). Milestone titles: `M<n>` or `M<n>.<m>[.<k>...]` (sub-number, sorts numerically per part between M<n> and M<n+1>: 1, 1.1, 1.2, 2, 10; lookup by `M1.1` is exact, `M1` never finds `M1.1`) or `M<n> <Topic>` while open (topic without parentheses), `M<n> [<Topic>] (x.y.z)` after close, and the legacy
   bare `x.y.z` (still valid, no flag day). Other titles are listed but never current.
   current, list and show are read-only and use only `gh api` GET calls (REST). create and close are the writes.
   current: the open milestone with the lowest M number; legacy rule unchanged: an open x.y.z title above the latest
@@ -87,9 +87,19 @@ function Get-Bare([string]$n) { $n -replace '^v(?=[0-9])', '' }
 $numberedRx = '^M([0-9]{1,8}(?:\.[0-9]{1,8}){0,7})(?: ([^()]+?))?(?: \(([0-9]+\.[0-9]+\.[0-9]+)\))?$'
 # sort key of a number id (1, 1.1, 10): every part padded to 8 digits, 8 parts, so the string order is the numeric order per part
 function Get-NumKey([string]$id) { $p = @(if ($id) { $id -split '\.' }); (0..7 | ForEach-Object { if ($_ -lt $p.Count) { $p[$_].PadLeft(8, '0') } else { '00000000' } }) -join '' }
+# Titles are written with a 3-digit main number (M001, M011.1), found by value (M11, M011, M0011 are one). n is the normalized id (11, 11.1).
+function Format-Id([string]$id) { $p = @($id -split '\.' | ForEach-Object { [int]$_ }); (@('{0:D3}' -f $p[0]) + @($p | Select-Object -Skip 1)) -join '.' }
+function Format-Title($p) { "M$(Format-Id $p.n)$(if ($p.topic) { " $($p.topic)" })$(if ($p.version) { " ($($p.version))" })" }
+# $null when a new title may use this id, else the reason (main number up to 999, one sub level 1..9)
+function Test-Writable([string]$id) {
+  $p = @($id -split '\.' | ForEach-Object { [int]$_ })
+  if ($p[0] -gt 999) { return "main number $($p[0]) is above 999 (titles are written as M001..M999)" }
+  if ($p.Count -gt 2) { return "more than one sub level in M$id (only M<n>.<m> is written)" }
+  if ($p.Count -eq 2 -and $p[1] -gt 9) { return "sub-number $($p[1]) in M$id is above 9" }
+}
 # title -> @{ kind = 'numbered'|'legacy'|$null; n (id string: 1 or 1.1); key (sort key); whole (int before the first dot); topic; version } (version: of the parentheses, or the legacy title)
 function Get-Title([string]$t) {
-  if ($t -cmatch $numberedRx) { @{ kind = 'numbered'; n = $Matches[1]; key = (Get-NumKey $Matches[1]); whole = [int](($Matches[1] -split '\.')[0]); topic = $Matches[2]; version = $Matches[3] } }
+  if ($t -cmatch $numberedRx) { @{ kind = 'numbered'; n = (($Matches[1] -split '\.' | ForEach-Object { [int]$_ }) -join '.'); key = (Get-NumKey $Matches[1]); whole = [int](($Matches[1] -split '\.')[0]); topic = $Matches[2]; version = $Matches[3] } }
   elseif ($t -match $semverRx) { @{ kind = 'legacy'; n = ''; key = (Get-NumKey ''); whole = 0; topic = $null; version = $t } }
   else { @{ kind = $null; n = ''; key = (Get-NumKey ''); whole = 0; topic = $null; version = $null } }
 }
@@ -123,11 +133,14 @@ if ($Mode -eq 'create') {
     $title = Get-Bare $Name
     $pt = Get-Title $title
     if (-not $pt.kind -or ($pt.kind -eq 'numbered' -and $pt.version)) { Fail "invalid milestone name '$Name': expected M<n> [<Topic>] or x.y.z" }
+    if ($pt.kind -eq 'numbered') { $bad = Test-Writable $pt.n; if ($bad) { Fail "invalid milestone name '$Name': $bad" }; $title = Format-Title $pt }
   }
   else {
     $max = 0
     foreach ($x in $milestones) { $p = Get-Title $x.title; if ($p.kind -eq 'numbered' -and $p.whole -gt $max) { $max = $p.whole } }
-    $title = "M$($max + 1)"
+    $bad = Test-Writable "$($max + 1)"
+    if ($bad) { Fail "cannot create the next milestone: $bad" }
+    $title = "M$('{0:D3}' -f ($max + 1))"
   }
   $existing = Find-Milestone $milestones $title
   $created = -not $existing
@@ -150,7 +163,10 @@ if ($Mode -eq 'rename') {
   if ($m.state -ne 'open') { Fail "milestone '$($m.title)' is closed: only open milestones are renamed" }
   $from = Get-Title $m.title
   $dest = Get-Title $To
-  if ($from.kind -eq 'numbered' -and $from.n -ne $dest.n) { Fail "the number of $($m.title) stays M$($from.n): -To '$To' would change it" }
+  $bad = Test-Writable $dest.n
+  if ($bad) { Fail "invalid -To '$To': $bad" }
+  $To = Format-Title $dest
+  if ($from.kind -eq 'numbered' -and $from.n -ne $dest.n) { Fail "the number of $($m.title) stays M$(Format-Id $from.n): -To '$To' would change it" }
   $clash = $milestones | Where-Object { $_.title -ieq $To -or ($_.number -ne $m.number -and (Get-Title $_.title).kind -eq 'numbered' -and (Get-Title $_.title).n -eq $dest.n) } | Select-Object -First 1
   if ($clash) { Fail "milestone '$($clash.title)' already exists: -To '$To' is taken" }
   $null = & gh api -X PATCH "repos/$Repo/milestones/$($m.number)" -f "title=$To" 2>$null
@@ -164,13 +180,17 @@ if ($Mode -eq 'insert') {
   if (-not $Name) { Fail 'insert needs -Name M<n>' }
   if ($Name -cnotmatch '^M([0-9]{1,8})$') { Fail "invalid milestone name '$Name': insert takes a whole number M<n>" }
   $at = [int]$Matches[1]
+  $bad = Test-Writable "$at"
+  if ($bad) { Fail "invalid milestone name '$Name': $bad" }
   $shift = @($milestones | Where-Object { $p = Get-Title $_.title; $_.state -eq 'open' -and $p.kind -eq 'numbered' -and $p.whole -ge $at } | Sort-Object { (Get-Title $_.title).key } -Descending)
   $plan = @($shift | ForEach-Object {
       $p = Get-Title $_.title
       $parts = $p.n -split '\.'
       $parts[0] = [string]($p.whole + 1)
-      $to = "M$($parts -join '.')$(if ($p.topic) { " $($p.topic)" })$(if ($p.version) { " ($($p.version))" })"
-      [pscustomobject]@{ number = $_.number; from = $_.title; to = $to; old = "M$($p.n)" }
+      $bad = Test-Writable ($parts -join '.')
+      if ($bad) { Fail "insert M$at would rename $($_.title): $bad" }
+      $np = @{ n = ($parts -join '.'); topic = $p.topic; version = $p.version }
+      [pscustomobject]@{ number = $_.number; from = $_.title; to = (Format-Title $np); old = "M$(Format-Id $p.n)"; rx = "M0*$([regex]::Escape($p.n))" }
     })
   $moving = @($plan | ForEach-Object { $_.number })
   $taken = @($milestones | Where-Object { $moving -notcontains $_.number } | ForEach-Object { (Get-Title $_.title).n } | Where-Object { $_ })
@@ -180,17 +200,17 @@ if ($Mode -eq 'insert') {
   $common = & git rev-parse --git-common-dir 2>$null
   if ($LASTEXITCODE -ne 0) { $common = $null }
   foreach ($pl in $plan) {
-    $rx = "(?<![A-Za-z0-9.])$([regex]::Escape($pl.old))(?![0-9]|\.[0-9])"
+    $rx = "(?<![A-Za-z0-9.])$($pl.rx)(?![0-9]|\.[0-9])"
     foreach ($i in (Get-Paged "repos/$Repo/issues?milestone=$($pl.number)&state=all&per_page=100" | Where-Object { $null -eq $_.pull_request })) {
       if ("$($i.body)" -cmatch $rx) { $refs.Add([ordered]@{ where = "issue #$($i.number)"; name = $pl.old; hint = 'issue body names the old milestone' }) }
     }
     if ((Test-Path ROADMAP.md) -and ((Get-Content -Raw ROADMAP.md) -cmatch $rx)) { $refs.Add([ordered]@{ where = 'ROADMAP.md'; name = $pl.old; hint = 'text names the old milestone' }) }
     if ($common) {
-      $sf = Join-Path $common ".agents/state/release-review-$($pl.old).json"
-      if (Test-Path $sf) { $refs.Add([ordered]@{ where = $sf; name = $pl.old; hint = 'release-review state of the old name' }) }
+      $sf = @($pl.old, ($pl.old -replace '^M0+(?=[0-9])', 'M')) | ForEach-Object { Join-Path $common ".agents/state/release-review-$_.json" } | Where-Object { Test-Path $_ } | Select-Object -First 1
+      if ($sf) { $refs.Add([ordered]@{ where = $sf; name = $pl.old; hint = 'release-review state of the old name' }) }
     }
   }
-  $res = [ordered]@{ inserted = $false; dryRun = [bool]$DryRun; title = "M$at"; renames = @($plan | ForEach-Object { [ordered]@{ number = $_.number; from = $_.from; to = $_.to } }); references = @($refs) }
+  $res = [ordered]@{ inserted = $false; dryRun = [bool]$DryRun; title = "M$('{0:D3}' -f $at)"; renames = @($plan | ForEach-Object { [ordered]@{ number = $_.number; from = $_.from; to = $_.to } }); references = @($refs) }
   if (-not $DryRun) {
     $done = [System.Collections.Generic.List[string]]::new()
     foreach ($pl in $plan) {
@@ -198,8 +218,8 @@ if ($Mode -eq 'insert') {
       if ($LASTEXITCODE -ne 0) { Fail "renaming milestone $($pl.from) to $($pl.to) failed (renamed so far: $($done -join ', '))" }
       $done.Add("$($pl.from) -> $($pl.to)")
     }
-    $raw = & gh api -X POST "repos/$Repo/milestones" -f "title=M$at" 2>$null
-    if ($LASTEXITCODE -ne 0) { Fail "creating milestone M$at failed (renamed so far: $($done -join ', '))" }
+    $raw = & gh api -X POST "repos/$Repo/milestones" -f "title=M$('{0:D3}' -f $at)" 2>$null
+    if ($LASTEXITCODE -ne 0) { Fail "creating milestone M$('{0:D3}' -f $at) failed (renamed so far: $($done -join ', '))" }
     $c = $raw | ConvertFrom-Json
     $res.inserted = $true
     $res.milestone = [ordered]@{ number = $c.number; title = $c.title; state = $c.state; url = $c.html_url }
@@ -247,7 +267,7 @@ if ($Mode -eq 'close') {
       $ver = $cand[-1].Substring(1)
     }
     $mt = Get-Title $m.title
-    $newTitle = "M$($mt.n)$(if ($mt.topic) { " $($mt.topic)" }) ($ver)"
+    $newTitle = "M$(Format-Id $mt.n)$(if ($mt.topic) { " $($mt.topic)" }) ($ver)"
   }
   else {
     $title = $m.title

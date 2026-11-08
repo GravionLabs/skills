@@ -466,7 +466,7 @@ describe('Get-Milestones.ps1', () => {
       let before = fake.calls().length;
       await json(['-Mode', 'create', '-Name', 'M4'], { FAKE_MILESTONES: [] });
       expect(posts(before)).toEqual([
-        ['api', '-X', 'POST', 'repos/{owner}/{repo}/milestones', '-f', 'title=M4'],
+        ['api', '-X', 'POST', 'repos/{owner}/{repo}/milestones', '-f', 'title=M004'],
       ]);
       before = fake.calls().length;
       const out = await json(['-Mode', 'create'], {
@@ -474,11 +474,11 @@ describe('Get-Milestones.ps1', () => {
       });
       expect(out.created).toBe(true);
       expect(posts(before)).toEqual([
-        ['api', '-X', 'POST', 'repos/{owner}/{repo}/milestones', '-f', 'title=M8'],
+        ['api', '-X', 'POST', 'repos/{owner}/{repo}/milestones', '-f', 'title=M008'],
       ]);
       before = fake.calls().length;
       await json(['-Mode', 'create'], { FAKE_MILESTONES: [] });
-      expect(posts(before)[0]).toContain('title=M1');
+      expect(posts(before)[0]).toContain('title=M001');
     });
 
     it('create M<n> that exists (also with the version in the title): left as is', async () => {

@@ -83,14 +83,37 @@ describe('Get-Milestones.ps1 sub-numbers', () => {
 
   it('create M1.1 takes a free title and reports an existing one', async () => {
     const r = await run(['-Mode', 'create', '-Name', 'M1.1'], [ms(1, 'M1'), ms(2, 'M2')]);
-    expect(JSON.parse(r.stdout)).toMatchObject({ created: true, milestone: { title: 'M1.1' } });
+    expect(JSON.parse(r.stdout)).toMatchObject({ created: true, milestone: { title: 'M001.1' } });
     const again = await run(['-Mode', 'create', '-Name', 'M1.1'], [ms(1, 'M1.1')]);
     expect(JSON.parse(again.stdout).created).toBe(false);
   });
 
   it('create without a name takes the next free whole number', async () => {
     const r = await run(['-Mode', 'create'], [ms(1, 'M1'), ms(2, 'M1.7'), ms(3, 'M2.3')]);
-    expect(JSON.parse(r.stdout).milestone.title).toBe('M3');
+    expect(JSON.parse(r.stdout).milestone.title).toBe('M003');
+  });
+
+  it('create pads the number, refuses what is not writable, and finds a padded title by value', async () => {
+    const r = await run(['-Mode', 'create', '-Name', 'M15'], [ms(1, 'M1')]);
+    expect(JSON.parse(r.stdout).milestone.title).toBe('M015');
+    const next = await run(['-Mode', 'create'], [ms(1, 'M14')]);
+    expect(JSON.parse(next.stdout).milestone.title).toBe('M015');
+    for (const bad of ['M1000', 'M1.10', 'M1.1.1']) {
+      const f = await run(['-Mode', 'create', '-Name', bad], []);
+      expect(f.status).toBe(1);
+    }
+    const all = [ms(1, 'M011.1'), ms(2, 'M011'), ms(3, 'M1.2.3 Deep')];
+    for (const name of ['M11', 'M011', 'M0011']) {
+      const s = await run(['-Mode', 'show', '-Name', name], all);
+      expect(JSON.parse(s.stdout).number).toBe(2);
+    }
+    expect((await run(['-Mode', 'show', '-Name', 'M11'], [ms(1, 'M011.1')])).status).toBe(1);
+    const list = await run(['-Mode', 'list'], all);
+    expect(JSON.parse(list.stdout).milestones.map((x: any) => x.title)).toEqual([
+      'M1.2.3 Deep',
+      'M011',
+      'M011.1',
+    ]);
   });
 
   it('rename keeps the number: M1.1 may take a topic and a version, not another number', async () => {
