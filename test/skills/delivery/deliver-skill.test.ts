@@ -824,10 +824,10 @@ describe('M<n> milestones (#235)', () => {
     expect(help).toContain('/deliver --milestone M4');
     expect(help).toContain('-Milestone M4');
     expect(help).toContain('run `/github-milestone close M<n>`');
-    expect(guide).toContain('/deliver --milestone M4');
-    expect(guide).toContain('`M4 (0.2.0)`');
-    expect(guide).toContain('deliver-loop -Milestone M4');
-    expect(guide).toContain('`/github-milestone close M4`');
+    expect(guide).toContain('/deliver --milestone M004');
+    expect(guide).toContain('`M004 (0.2.0)`');
+    expect(guide).toContain('deliver-loop -Milestone M004');
+    expect(guide).toContain('`/github-milestone close M004`');
   });
 
   // #224: reviewers must not touch the user's checkouts

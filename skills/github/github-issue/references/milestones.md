@@ -1,6 +1,6 @@
 # Milestones and the issue levels
 
-A milestone is a release and holds the work items that are delivered. The rule is written here once; `planner`, `roadmap`, `deliver` and `github-milestone` follow and check it.
+A milestone is a release and holds the work items that are delivered. The rule is written here once; `planner`, `roadmap`, `deliver` and `github-milestone` follow and check it. Its title is `M<nnn>` (three digits, `M001` to `M999`; the lookup accepts `M11` for `M011`), see `github-milestone`.
 
 | Level   | Milestone                                                          |
 | :------ | :----------------------------------------------------------------- |
@@ -9,7 +9,7 @@ A milestone is a release and holds the work items that are delivered. The rule i
 | Feature | Only when all its PBIs are in that same milestone, otherwise none. |
 | Epic    | Never.                                                             |
 
-Why: `deliver --milestone` takes the open PBIs and Bugs of the milestone plus the work items below the Features in it. A Feature in the milestone with PBIs outside of it pulls those in, and they then do not count in the milestone progress. `deliver` therefore skips such an item (`#<nr> select: outside M<n>, skipped`); `/deliver <feature>` without `--milestone` delivers all its PBIs as before.
+Why: `deliver --milestone` takes the open PBIs and Bugs of the milestone plus the work items below the Features in it. A Feature in the milestone with PBIs outside of it pulls those in, and they then do not count in the milestone progress. `deliver` therefore skips such an item (`#<nr> select: outside M<nnn>, skipped`); `/deliver <feature>` without `--milestone` delivers all its PBIs as before.
 
 ## Release test
 
