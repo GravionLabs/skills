@@ -76,6 +76,7 @@ At the end, at most 12 lines, per given number (and milestone). The open items c
 
 ## Rules
 
+- Stop now: when a `step.finished` call printed `STOP requested`, start no further step and no further PBI: `gh issue edit <nr> --remove-assignee @me`, step line `#<nr> stop: stopped after <step>, continue with /deliver <nr>`, `issue.finished -Outcome skipped -Reason "stop requested"`, then the report. A running subagent is not interrupted; only the step boundaries of this session check.
 - `--max <n>`: after the n-th PBI that is delivered, blocked or paused, select no further PBI and go to the report.
 - Never merge on a red or pending required check; never `--admin`. Never merge the release PR into `main`; a person reviews and merges it.
 - This session neither implements nor reviews; subagents do. It never switches its own checkout; parallel runs need one worktree per session and claim their PBIs (`references/claim.md`).

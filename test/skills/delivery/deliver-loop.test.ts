@@ -131,7 +131,9 @@ fs.writeFileSync(f, JSON.stringify(s));`,
       full.stream.map((r) => JSON.stringify(r)).join('\n') + '\n',
     );
     const bin = path.join(cwd, 'bin');
-    const events = full.events.map((e) => reportEventCmd(e) + '\n').join('');
+    const events = full.events
+      .map((e) => reportEventCmd(e) + (full.stopDuring ? ` >> ${cwd}/stop-out.txt` : '') + '\n')
+      .join('');
     const stopDuring = full.stopDuring
       ? `echo now > "$(cat ${cwd}/.agents/deliver-loop/latest.txt)/stop"\n`
       : '';
@@ -433,6 +435,25 @@ fs.writeFileSync(f, JSON.stringify(s));`,
       });
       const dir = read('.agents/deliver-loop/latest.txt').trim();
       expect(fs.existsSync(path.join(dir, 'stop'))).toBe(false);
+    });
+
+    it('a stop file with now: the harness sees STOP requested, an unchanged PBI set ends stopped, not no progress (#476)', async () => {
+      const gh = setup({
+        issues: { 81: pbi(), 82: pbi() },
+        effect: 'none',
+        stopDuring: true,
+        events: [step(81, 'implement', 'done')],
+        stream: [{ type: 'assistant', message: { content: [{ type: 'text', text: 'working' }] } }],
+      });
+      const r = await run(gh, ['-Target', '81,82', '-Max', '5'], {
+        AGENT_EVENTS_DIR: path.join(cwd, 'events'),
+      });
+      expect(r.status).toBe(0);
+      expect(read('stop-out.txt')).toContain('STOP requested');
+      expect(harnessCalls()).toHaveLength(1);
+      expect(r.stdout).toContain('loop result: stopped');
+      expect(r.stdout).not.toContain('no progress');
+      expect(records().pop()).toMatchObject({ result: 'stopped', code: 0 });
     });
 
     it('a stop file created during iteration 1 finishes that PBI, reports stopping, then stops with -Max reduced', async () => {
