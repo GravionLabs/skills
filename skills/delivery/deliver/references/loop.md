@@ -50,7 +50,7 @@ An open `release-test` issue is not part of that set (also when passed explicitl
 
 ## Stop a run
 
-The file `.agents/deliver-loop/<run>/stop` (any content) asks the loop to stop. It is checked before every iteration, also the first. Seen during an iteration, the loop sends one `attention` event `stopping` (`stops after #<nr>`, step line `stop requested: stops after #<nr>`, tone neutral), lets that iteration end and starts no further one. The result is `stopped`: exit 0, `run.finished` with `stopped`, a `result` record, the notification `loop result: stopped`, the stop file deleted, and a last line `resume: deliver-loop <the same arguments>` (`-Max` reduced by the iterations run). Creating the file is up to the caller.
+The file `.agents/deliver-loop/<run>/stop` (any content) asks the loop to stop. It is checked before every iteration, also the first. Seen during an iteration, the loop sends one `attention` event `stopping` (`stops after #<nr>`, step line `stop requested: stops after #<nr>`, tone neutral), lets that iteration end and starts no further one. The result is `stopped`: exit 0, `run.finished` with `stopped`, a `result` record, the notification `loop result: stopped`, the stop file deleted, and a last line `resume: deliver-loop <the same arguments>` (`-Max` reduced by the iterations run). `deliver-loop stop [--now] [--cancel]` (from any directory of the repository) runs `scripts/Request-LoopStop.ps1 [-Now] [-Cancel] [-Run <id>]`: it takes the run of `.agents/deliver-loop/latest.txt` when its `progress.jsonl` has no `result` record, writes the stop file (empty, `now` with `--now`) or deletes it with `--cancel`, and prints one line; no running loop: exit 1 and nothing written.
 
 ## Observability
 
