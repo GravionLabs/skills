@@ -1,6 +1,6 @@
 # Milestones and the issue levels
 
-A milestone is a release and holds the work items that are delivered. The rule is written here once; `planner`, `roadmap`, `deliver` and `github-milestone` follow and check it.
+A milestone is a release and holds the work items that are delivered. The rule is written here once; `planner`, `roadmap`, `deliver` and `github-milestone` follow and check it. Its title is `M<nnn>` (three digits, `M001` to `M999`; the lookup accepts `M11` for `M011`), see `github-milestone`.
 
 | Level   | Milestone                                                          |
 | :------ | :----------------------------------------------------------------- |
@@ -9,11 +9,11 @@ A milestone is a release and holds the work items that are delivered. The rule i
 | Feature | Only when all its PBIs are in that same milestone, otherwise none. |
 | Epic    | Never.                                                             |
 
-Why: `deliver --milestone` takes the open PBIs and Bugs of the milestone plus the work items below the Features in it. A Feature in the milestone with PBIs outside of it pulls those in, and they then do not count in the milestone progress. `deliver` therefore skips such an item (`#<nr> select: outside M<n>, skipped`); `/deliver <feature>` without `--milestone` delivers all its PBIs as before.
+Why: `deliver --milestone` takes the open PBIs and Bugs of the milestone plus the work items below the Features in it. A Feature in the milestone with PBIs outside of it pulls those in, and they then do not count in the milestone progress. `deliver` therefore skips such an item (`#<nr> select: outside M<nnn>, skipped`); `/deliver <feature>` without `--milestone` delivers all its PBIs as before.
 
 ## Setting a milestone
 
-Only `github-milestone assign M<n>|none #<nr> …` sets or clears the milestone of issues (`scripts/Get-Milestones.ps1 -Mode assign`; `-DryRun` writes nothing). Never set one by hand: the milestone flags of the `gh` issue-edit call (`--milestone`, `--remove-milestone`) are not used in any skill, because they skip the checks below and the report. `assign` takes an open milestone only (a missing `M<n>` is not created: `create` first), refuses an Epic (except `none`) and a Feature whose open sub-issues would not all be in the milestone afterwards, and reports each change as `set` or `unchanged`. A PBI or Bug created by `github-issue` `references/create-from-plan.md` gets its milestone this way.
+Only `github-milestone assign M<nnn>|none #<nr> …` sets or clears the milestone of issues (`scripts/Get-Milestones.ps1 -Mode assign`; `-DryRun` writes nothing). Never set one by hand: the milestone flags of the `gh` issue-edit call (`--milestone`, `--remove-milestone`) are not used in any skill, because they skip the checks below and the report. `assign` takes an open milestone only (a missing `M<nnn>` is not created: `create` first), refuses an Epic (except `none`) and a Feature whose open sub-issues would not all be in the milestone afterwards, and reports each change as `set` or `unchanged`. A PBI or Bug created by `github-issue` `references/create-from-plan.md` gets its milestone this way.
 
 ## Release test
 

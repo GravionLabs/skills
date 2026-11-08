@@ -32,13 +32,13 @@ describe('milestone rule (#327)', () => {
   });
 
   it('deliver step 1 reports items outside the milestone', () => {
-    expect(read('skills/delivery/deliver/SKILL.md')).toContain('select: outside M<n>, skipped');
+    expect(read('skills/delivery/deliver/SKILL.md')).toContain('select: outside M<nnn>, skipped');
   });
 
   it('setting a milestone: only github-milestone assign, no skill file edits it with gh issue edit', () => {
     const ref = read('skills/github/github-issue/references/milestones.md');
     const section = ref.split(/^## /m).find((x) => x.startsWith('Setting a milestone\n')) ?? '';
-    expect(section).toContain('github-milestone assign M<n>|none #<nr>');
+    expect(section).toContain('github-milestone assign M<nnn>|none #<nr>');
     expect(section).toMatch(/--milestone/);
     expect(section).toMatch(/--remove-milestone/);
     expect(ref.split(/^## /m).find((x) => x.startsWith('Checks\n')) ?? '').toContain('assign');

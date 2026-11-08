@@ -16,10 +16,10 @@ const docs: [string, string][] = [
 
 describe('github-release milestone hint after the release tag', () => {
   it.each(docs)('%s points to close M<n> and create of the next M', (_name, text) => {
-    expect(text).toMatch(/\/github-milestone close M(<n>|\d+)`?\s/);
+    expect(text).toMatch(/\/github-milestone close M(<nnn>|\d{3})`?\s/);
     expect(text).toMatch(/\/github-milestone create/);
     expect(text).toMatch(
-      /create.{0,60}first.{0,80}then .{0,20}close M(<n>|\d+) --move-to M(<n\+1>|\d+)/,
+      /create.{0,60}first.{0,80}then .{0,20}close M(<nnn>|\d{3}) --move-to M(<n\+1>|<nnn\+1>|\d{3})/,
     );
   });
 
@@ -90,9 +90,9 @@ describe('migrating legacy milestones (#243)', () => {
   const section = guide.slice(guide.indexOf('## Migrate legacy milestones'));
 
   it('release guide has the tamias table and the commands', () => {
-    expect(section).toContain('M2 (0.1.1)');
-    expect(section).toContain('/github-milestone rename 0.2.0 "M2 (0.1.1)"');
-    expect(section).toContain('close M2 --version 0.1.1 --move-to M3');
+    expect(section).toContain('M002 (0.1.1)');
+    expect(section).toContain('/github-milestone rename 0.2.0 "M002 (0.1.1)"');
+    expect(section).toContain('close M002 --version 0.1.1 --move-to M003');
     expect(section).toContain('release-review-<title>.json');
     expect(section).toContain('docs/roadmap.md');
   });

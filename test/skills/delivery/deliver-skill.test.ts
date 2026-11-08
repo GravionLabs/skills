@@ -779,7 +779,7 @@ describe('deliver help', () => {
   });
 });
 
-describe('M<n> milestones (#235)', () => {
+describe('M<nnn> milestones (#235)', () => {
   const body = text.slice(text.indexOf('\n---', 3) + 4);
   const release = body.slice(body.indexOf('**Release.**'), body.indexOf('## Pause rules'));
   const ref = fs.readFileSync(path.join(skillDir, 'references/release-review.md'), 'utf8');
@@ -789,22 +789,24 @@ describe('M<n> milestones (#235)', () => {
 
   it('resolves --milestone M4 through the github-milestone lookup, open and after close', () => {
     expect(body).toContain(
-      'the `github-milestone` lookup resolves `M4` to the title `M4` or, after `close`, `M4 (0.2.0)`',
+      'the `github-milestone` lookup resolves `M004` to the title `M004` or, after `close`, `M004 (0.2.0)`',
     );
-    expect(body).toContain('`<key>` is its `M<n>` or sub-number `M<n>.<m>` (legacy: the title)');
+    expect(body).toContain(
+      '`<key>` is its `M<nnn>` or sub-number `M<nnn>.<m>` (legacy: the title)',
+    );
     expect(body).toContain(
       'The `milestone.title` of that read is the title for `gh issue create --milestone`',
     );
     expect(loop).toContain(
-      'resolves `M4` to the title `M4` or, after `/github-milestone close`, `M4 (0.2.0)`',
+      'resolves `M004` to the title `M004` or, after `/github-milestone close`, `M004 (0.2.0)`',
     );
   });
 
-  it('keys the release-review state file by M<n>', () => {
+  it('keys the release-review state file by M<nnn>', () => {
     expect(release).toContain('release-review-<key>.json');
     expect(release).not.toContain('release-review-<milestone>');
     expect(ref).toContain(
-      'so `M4`, `M4 Topic` and `M4 (0.2.0)` share one file, `M1.1 Topic (0.2.0)` is `M1.1` and never `M1`; legacy: the title',
+      'so `M004`, `M004 Topic` and `M004 (0.2.0)` share one file, `M001.1 Topic (0.2.0)` is `M001.1` and never `M001`; legacy: the title',
     );
     expect(ref).toContain('`milestone` = `<key>`');
     expect(ref).toContain('`<name>` the resolved `milestone.title`');
@@ -813,21 +815,21 @@ describe('M<n> milestones (#235)', () => {
 
   it('ends step 9 with the hint to close the milestone after merge and tag', () => {
     expect(release).toContain(
-      'End step 9 with the hint `after the release PR is merged and tagged: /github-milestone close M<n>`',
+      'End step 9 with the hint `after the release PR is merged and tagged: /github-milestone close M<nnn>`',
     );
   });
 
-  it('help and the deliver guide name the M<n> form', () => {
+  it('help and the deliver guide name the M<nnn> form', () => {
     expect(help).toContain(
-      '`M4` finds the title `M4` and, after `github-milestone close`, `M4 (0.2.0)`',
+      '`M004` finds the title `M004` and, after `github-milestone close`, `M004 (0.2.0)`',
     );
-    expect(help).toContain('/deliver --milestone M4');
-    expect(help).toContain('-Milestone M4');
-    expect(help).toContain('run `/github-milestone close M<n>`');
-    expect(guide).toContain('/deliver --milestone M4');
-    expect(guide).toContain('`M4 (0.2.0)`');
-    expect(guide).toContain('deliver-loop -Milestone M4');
-    expect(guide).toContain('`/github-milestone close M4`');
+    expect(help).toContain('/deliver --milestone M004');
+    expect(help).toContain('-Milestone M004');
+    expect(help).toContain('run `/github-milestone close M<nnn>`');
+    expect(guide).toContain('/deliver --milestone M004');
+    expect(guide).toContain('`M004 (0.2.0)`');
+    expect(guide).toContain('deliver-loop -Milestone M004');
+    expect(guide).toContain('`/github-milestone close M004`');
   });
 
   // #224: reviewers must not touch the user's checkouts
