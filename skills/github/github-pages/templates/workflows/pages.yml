@@ -1,0 +1,24 @@
+# Builds site/ with VitePress and deploys it to GitHub Pages (reusable workflow of GravionLabs/ci).
+# Only site/ is published; docs/ (ADRs, internal specs) never is.
+name: Pages
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+permissions: {}
+
+jobs:
+  pages:
+    permissions:
+      contents: read
+      pages: write
+      id-token: write
+    uses: GravionLabs/ci/.github/workflows/vitepress-pages.yml@v1
+    with:
+      site-path: site
+      package-manager: __PACKAGE_MANAGER__
+      pre-build: ''
+      deploy: ${{ github.event_name != 'pull_request' }}
