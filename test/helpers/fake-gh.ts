@@ -47,8 +47,14 @@ try {
   );
   return {
     bin,
+    // The terminal selectors are blanked so a developer's terminal (poimen, herdr) never leaks into a case. Get-TerminalBackend
+    // checks poimen before herdr, so a local POIMEN_TERMINAL_ID+POIMEN_SOCKET would win over a case's own HERDR_ENV=1.
     env: (base: NodeJS.ProcessEnv = process.env): NodeJS.ProcessEnv => ({
       ...base,
+      HERDR_ENV: '',
+      POIMEN_TERMINAL_ID: '',
+      POIMEN_SOCKET: '',
+      DELIVER_TERMINAL_BACKEND: '',
       PATH: `${bin}${path.delimiter}${base.PATH ?? ''}`,
     }),
     calls: (): GhCall[] =>
