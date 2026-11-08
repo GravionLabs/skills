@@ -120,6 +120,17 @@ describe.skipIf(!hasPwsh || process.platform === 'win32')(
       expect(validateState(r.state), JSON.stringify(validateState.errors)).toBe(true);
     });
 
+    it('folds run.finished with result stopped as a finished run (#474)', async () => {
+      const lines = fixtureLines('done').map((l) => {
+        const e = JSON.parse(l);
+        if (e.type === 'run.finished') e.result = 'stopped';
+        return JSON.stringify(e);
+      });
+      const r = await fold(writeEvents('stopped', lines.join('\n') + '\n'));
+      expect(r.status, r.stderr).toBe(0);
+      expect(r.state).toEqual(readJson(path.join(FIXTURES, 'done.state.json')));
+    });
+
     it('yields the same state for the same events and Now', async () => {
       const f = path.join(FIXTURES, 'rc-test-open.jsonl');
       expect((await fold(f)).stdout).toBe((await fold(f)).stdout);

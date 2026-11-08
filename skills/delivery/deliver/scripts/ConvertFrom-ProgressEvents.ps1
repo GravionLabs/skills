@@ -70,6 +70,7 @@ end {
   if (-not $events.Count) { Write-Note 'no progress events'; exit 1 }
 
   $known = 'run.started', 'milestone.progress', 'issue.started', 'step.finished', 'attention', 'issue.finished', 'release.updated', 'run.finished'
+  # run.finished with another result (e.g. `stopped`, a stop request of the loop) is a finished run: folded as done
   $results = 'done', 'max reached', 'blocked', 'no progress'
   $stepNumbers = @{ select = 1; resume = 2; implement = 3; review = 4; fix = 5; pr = 6; ci = 7; merge = 7; merged = 7; cleanup = 7 }
   $tsPattern = '^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}(\.[0-9]+)?(Z|[+-][0-9]{2}:[0-9]{2})$'
