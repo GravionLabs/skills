@@ -58,3 +58,24 @@ describe.skipIf(!hasPwsh)('Test-BlockerUnresolved', () => {
     expect(out).toEqual([false, false, false, true]);
   });
 });
+
+// #435: the current milestone is found by number, padded or not (M003 < M003.1 < M010)
+describe.skipIf(!hasPwsh)('Get-CurrentMilestone with padded titles', () => {
+  const current = (titles: string[]) => {
+    const script = `Import-Module '${MODULE}' -Force
+$t = '${JSON.stringify(titles)}' | ConvertFrom-Json
+Get-CurrentMilestone -Titles $t -LatestTag $null`;
+    const r = spawnSync('pwsh', ['-NoProfile', '-Command', script], { encoding: 'utf8' });
+    expect(r.status, r.stderr).toBe(0);
+    return r.stdout.trim();
+  };
+
+  it.each([
+    [['M010', 'M003.1 Sub', 'M003 Topic', 'M011'], 'M003 Topic'],
+    [['M010', 'M3.1', 'M003.1', 'M011'], 'M3.1'],
+    [['M010', 'M9', 'M011'], 'M9'],
+    [['M011.1', 'M011', 'M010 (1.0.0)'], 'M010 (1.0.0)'],
+  ])('%j gives %s', (titles, expected) => {
+    expect(current(titles)).toBe(expected);
+  });
+});

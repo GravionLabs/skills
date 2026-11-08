@@ -72,6 +72,20 @@ beforeAll(() => {
 afterAll(() => fs.rmSync(tmp, { recursive: true, force: true }));
 
 describe('Get-DeliverStatus.ps1', () => {
+  it.each([['M011.1 Sub', 'M011.1']])(
+    'keeps the key of the title %s as %s (padded titles, #435; M4 stays M4 above)',
+    (title, key) => {
+      const fake = fixture(`key-${key}`, [{ number: 1, title: 'feat: one', state: 'open' }]);
+      const file = path.join(path.dirname(fake), 'issues.json');
+      const j = JSON.parse(fs.readFileSync(file, 'utf8'));
+      j.milestone.title = title;
+      fs.writeFileSync(file, JSON.stringify(j));
+      const r = run(fake);
+      expect(r.status).toBe(0);
+      expect(JSON.parse(r.stdout).key).toBe(key);
+    },
+  );
+
   it('builds the block of a running milestone as JSON', () => {
     const fake = fixture('running', [
       { number: 1, title: 'feat: one', state: 'closed' },

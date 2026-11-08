@@ -120,6 +120,29 @@ describe('Set-IssueMilestones.ps1', () => {
     expect(writes(r.calls)).toHaveLength(1);
   });
 
+  it('matches M3 to a padded title M003 and M11 to M011.1 only exactly (padded titles)', async () => {
+    const r = await run(
+      [
+        { issue: 1, milestone: 'M3' },
+        { issue: 2, milestone: 'M003' },
+        { issue: 3, milestone: 'M11.1' },
+        { issue: 4, milestone: 'M011' },
+      ],
+      {
+        FAKE_MILESTONES: [ms(1, 'M003 Market data'), ms(2, 'M011.1 Sub'), ms(3, 'M011')],
+        FAKE_CURRENT: { 1: null, 2: 'M003 Market data', 3: null, 4: null },
+      },
+    );
+    expect(r.status).toBe(0);
+    expect(JSON.parse(r.stdout).results).toEqual([
+      { issue: 1, milestone: 'M003 Market data', status: 'set' },
+      { issue: 2, milestone: 'M003 Market data', status: 'unchanged' },
+      { issue: 3, milestone: 'M011.1 Sub', status: 'set' },
+      { issue: 4, milestone: 'M011', status: 'set' },
+    ]);
+    expect(JSON.parse(r.stdout).created).toEqual([]);
+  });
+
   it('creates a missing M<n> before setting it', async () => {
     const r = await run([{ issue: 5, milestone: 'M4' }], {
       FAKE_MILESTONES: [ms(1, 'M3')],

@@ -31,14 +31,17 @@ if ($items.Count -eq 1 -and $items[0] -is [System.Collections.IList]) { $items =
 $semverRx = '^[0-9]+\.[0-9]+\.[0-9]+$'
 $numberedRx = '^M([0-9]{1,8}(?:\.[0-9]{1,8}){0,7})(?: ([^()]+?))?(?: \(([0-9]+\.[0-9]+\.[0-9]+)\))?$'
 function Get-Bare([string]$n) { $n -replace '^v(?=[0-9])', '' }
-function Get-N([string]$t) { if ($t -cmatch $numberedRx) { $Matches[1] } else { $null } }
+# number id by value: every part as [int] (M3 = M003, M011.1 = M11.1)
+function Get-N([string]$t) { if ($t -cmatch $numberedRx) { (@($Matches[1] -split '\.' | ForEach-Object { [string][int]$_ })) -join '.' } else { $null } }
+# canonical name: main number padded to 3 digits (M3 Topic -> M003 Topic), so equal numbers are equal names
+function Get-Canon([string]$t) { if ($t -cmatch '^M([0-9]+)(?=[. ]|$)') { 'M' + ([int]$Matches[1]).ToString('000') + $t.Substring($Matches[0].Length) } else { $t } }
 function Get-Ver([string]$t) { if ($t -cmatch $numberedRx) { $Matches[3] } else { $null } }
 # same lookup as github-milestone: exact title, M<n> by number, version in the parentheses
 function Find-Milestone($all, [string]$name) {
   $bare = Get-Bare $name
   $hit = $all | Where-Object { $_.title -eq $name -or $_.title -eq $bare } | Select-Object -First 1
   if (-not $hit -and $bare -cmatch $numberedRx -and -not $Matches[3]) {
-    $n = $Matches[1]
+    $n = Get-N $bare
     $hit = $all | Where-Object { (Get-N $_.title) -eq $n } | Select-Object -First 1
   }
   if (-not $hit -and $bare -match $semverRx) { $hit = $all | Where-Object { (Get-Ver $_.title) -eq $bare } | Select-Object -First 1 }
@@ -56,7 +59,7 @@ foreach ($it in $items) {
   if (-not $valid) { Fail "invalid milestone name '$name': expected M<n> [<Topic>] or x.y.z" }
   if ($seen.ContainsKey($nr)) { Fail "issue #$nr appears twice in the assignment" }
   $seen[$nr] = $true
-  $pairs.Add([pscustomobject]@{ issue = $nr; name = $bare })
+  $pairs.Add([pscustomobject]@{ issue = $nr; name = (Get-Canon $bare) })
 }
 if (-not $pairs.Count) { Fail 'the assignment is empty' }
 
