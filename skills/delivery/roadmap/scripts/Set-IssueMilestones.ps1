@@ -4,9 +4,10 @@
 .DESCRIPTION
   -Assignment: a JSON array [{ "issue": 12, "milestone": "M3" }] or the path of a file holding it. A milestone name is resolved as in the
   github-milestone skill: exact title, M<n> (finds `M3 Market data`), or legacy x.y.z. Everything is checked before the first write:
-  invalid input, an unknown issue or a closed milestone exits 1 and changes nothing. A missing M<n> is created with
-  Get-Milestones.ps1 -Mode create of the sibling github-milestone skill. An issue already in the target milestone is skipped
-  (status unchanged); the others get `gh issue edit --milestone` (status set). A re-run therefore changes nothing.
+  invalid input, an unknown issue, a closed milestone or a break of the milestone rule (Epic, incomplete Feature) exits 1 and changes nothing. A missing M<n> is created (after the rule checks of all targets, which run as a dry run against it) with
+  Get-Milestones.ps1 -Mode create of the sibling github-milestone skill. The assignment and the milestone rule are
+  done per target milestone by `Get-Milestones.ps1 -Mode assign` (dry run first); an issue already in the target milestone is skipped
+  (status unchanged), the others are set (status set). A re-run therefore changes nothing.
 .PARAMETER Assignment
   JSON array or file path.
 .PARAMETER Repo
@@ -71,34 +72,22 @@ foreach ($name in ($pairs.name | Select-Object -Unique)) {
   if ($m -and $m.state -ne 'open') { Fail "milestone '$($m.title)' is closed: nothing was changed" }
   $targets[$name] = if ($m) { $m.title } else { $null }
 }
-$current = @{}
-$labelsOf = @{}
-$repoOf = @{}
 foreach ($p in $pairs) {
-  $raw = & gh api "repos/$Repo/issues/$($p.issue)" 2>$null
+  $null = & gh api "repos/$Repo/issues/$($p.issue)" 2>$null
   if ($LASTEXITCODE -ne 0) { Fail "issue #$($p.issue) not found: nothing was changed" }
-  $obj = $raw | Out-String | ConvertFrom-Json
-  $current[$p.issue] = if ($obj.milestone) { $obj.milestone.title } else { $null }
-  $repoOf[$p.issue] = $obj.repository_url
-  $labelsOf[$p.issue] = @($obj.labels | ForEach-Object { if ($_ -is [string]) { $_ } else { $_.name } })
 }
-# milestone rule (github-issue references/milestones.md): an Epic never has a milestone; a Feature only when all its open PBIs end up in the same one
-$byIssue = @{}
-foreach ($p in $pairs) { $byIssue[$p.issue] = $p }
-foreach ($p in $pairs) {
-  if ($labelsOf[$p.issue] -contains 'epic') { Fail "issue #$($p.issue) is an Epic: an Epic never has a milestone, nothing was changed" }
-  if ($labelsOf[$p.issue] -notcontains 'feature') { continue }
-  $subRaw = & gh api "repos/$Repo/issues/$($p.issue)/sub_issues?per_page=100" 2>$null
-  if ($LASTEXITCODE -ne 0) { Fail "sub-issues of #$($p.issue) not readable: nothing was changed" }
-  # a sub-issue from another repository is always outside (its number and milestone title belong to that repository)
-  $outside = @(@($subRaw | Out-String | ConvertFrom-Json) | Where-Object { $_ -and $_.state -eq 'open' } | ForEach-Object {
-      $foreign = $_.repository_url -and $repoOf[$p.issue] -and $_.repository_url -ne $repoOf[$p.issue]
-      if ($foreign) { ($_.repository_url -replace '^.*/repos/', '') + "#$($_.number)" }
-      elseif ($byIssue.ContainsKey([int]$_.number)) { if ($byIssue[[int]$_.number].name -ne $p.name) { "#$($_.number)" } }
-      elseif (-not ($targets[$p.name] -and $_.milestone -and $_.milestone.title -eq $targets[$p.name])) { "#$($_.number)" }
-    })
-  if ($outside.Count) { Fail "Feature #$($p.issue) gets a milestone only when all its PBIs are in it; outside: $($outside -join ', '): nothing was changed" }
+
+# the milestone rule (Epic, Feature) is checked by github-milestone: Get-Milestones.ps1 -Mode assign, per target milestone
+function Invoke-Assign([string]$title, [bool]$dry) {
+  $nrs = ($pairs | Where-Object { ($targets[$_.name] ?? $_.name) -eq $title } | ForEach-Object { $_.issue }) -join ','
+  $extra = @{ DryRun = $dry }
+  $out = & $MilestoneScript -Mode assign -Name $title -Issues $nrs -Repo $Repo @extra
+  if ($LASTEXITCODE -ne 0) { Fail "assigning to milestone $title failed: see above" }
+  @(($out | Out-String | ConvertFrom-Json).assigned)
 }
+# dry run for the existing targets first: a refused assignment changes nothing, not even in an earlier target
+# a missing target is checked too (assign -DryRun plans against it), before anything is created
+foreach ($name in @($targets.Keys)) { $null = Invoke-Assign $(if ($targets[$name]) { $targets[$name] } else { $name }) $true }
 
 $created = [System.Collections.Generic.List[string]]::new()
 foreach ($name in @($targets.Keys)) {
@@ -109,15 +98,9 @@ foreach ($name in @($targets.Keys)) {
   $created.Add($targets[$name])
 }
 
-$repoArgs = if ($Repo -eq '{owner}/{repo}') { @() } else { @('--repo', $Repo) }
-$results = foreach ($p in $pairs) {
-  $title = $targets[$p.name]
-  $status = 'unchanged'
-  if ($current[$p.issue] -ne $title) {
-    $null = & gh issue edit $p.issue --milestone $title @repoArgs 2>$null
-    if ($LASTEXITCODE -ne 0) { Fail "setting milestone $title on #$($p.issue) failed" }
-    $status = 'set'
-  }
-  [ordered]@{ issue = $p.issue; milestone = $title; status = $status }
+$status = @{}
+foreach ($t in ($targets.Values | Select-Object -Unique)) {
+  foreach ($a in (Invoke-Assign $t $false)) { $status[[int]$a.number] = $a.status }
 }
+$results = foreach ($p in $pairs) { [ordered]@{ issue = $p.issue; milestone = $targets[$p.name]; status = $status[$p.issue] } }
 [ordered]@{ created = @($created); results = @($results) } | ConvertTo-Json -Depth 5
