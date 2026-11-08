@@ -14,7 +14,7 @@ const handler = `(call) => {
   const a = call.args;
   const p = a[1];
   if (a[0] === 'issue' && a[1] === 'edit') return { rest: {} };
-  if (a.includes('POST')) return { rest: { number: 99, title: a.find((x) => x.startsWith('title=')).slice(6), state: 'open', html_url: 'https://x/m/99' } };
+  if (a.includes('POST')) { const c = { number: 99, title: a.find((x) => x.startsWith('title=')).slice(6), state: 'open', html_url: 'https://x/m/99' }; require('fs').writeFileSync(__dirname + '/posted.json', JSON.stringify(c)); return { rest: c }; }
   if (a.includes('-X')) throw new Error('unexpected write: ' + a.join(' '));
   const sub = /issues\\/(\\d+)\\/sub_issues/.exec(p);
   if (sub) return { rest: env('FAKE_SUBS', '{}')[sub[1]] || [] };
@@ -24,7 +24,7 @@ const handler = `(call) => {
     if (cur === undefined) throw new Error('404 Not Found');
     return { rest: { number: Number(m[1]), repository_url: env('FAKE_REPOS', '{}')[m[1]], milestone: cur ? { title: cur } : null, labels: (env('FAKE_LABELS', '{}')[m[1]] || []).map((name) => ({ name })) } };
   }
-  if (p.includes('/milestones?')) return { rest: [env('FAKE_MILESTONES', '[]')] };
+  if (p.includes('/milestones?')) { const f = __dirname + '/posted.json'; const extra = require('fs').existsSync(f) ? [JSON.parse(require('fs').readFileSync(f, 'utf8'))] : []; return { rest: [env('FAKE_MILESTONES', '[]').concat(extra)] }; }
   if (p.includes('/tags?')) return { rest: [[]] };
   throw new Error('unexpected path ' + p);
 }`;
@@ -51,6 +51,7 @@ describe('Set-IssueMilestones.ps1', () => {
   afterAll(() => worker.close());
 
   const run = (assignment: unknown, env: Record<string, unknown>) => {
+    fs.rmSync(path.join(tmp, 'posted.json'), { force: true });
     const before = fake.calls().length;
     return worker
       .run(
