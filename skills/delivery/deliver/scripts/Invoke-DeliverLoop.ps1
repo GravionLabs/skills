@@ -168,6 +168,8 @@ $Block = $null
 $Delivered = @()
 $Prs = @{}
 $LineOutcome = @{}
+# PBIs whose PR has auto-merge on (outcome merging): handed to GitHub, out of the stop-rule set, they count as progress
+$Merging = @()
 $Reported = @{}
 $ReleaseKey = ''
 
@@ -257,7 +259,7 @@ function Stop-Run([string]$RunResult) {
 function Read-StatusBlock {
   if (-not $Milestone -or -not $MilestoneScript) { return }
   try {
-    $raw = & $StatusScript -Milestone $Milestone -Delivered ([int[]]@($Delivered)) -MilestonesScript $MilestoneScript 2>$null
+    $raw = & $StatusScript -Milestone $Milestone -Delivered ([int[]]@($Delivered)) -Merging ([int[]]@($Merging)) -MilestonesScript $MilestoneScript 2>$null
     # no $LASTEXITCODE test: the script ends after a native call (the release PR lookup) that may fail on its own
     if ($raw) { $script:Block = ($raw | Out-String) | ConvertFrom-Json }
   } catch { Write-Verbose "status block not read: $_" }
@@ -307,6 +309,7 @@ function Send-BlockEvents {
 # open blocker blocked; else the paused/blocked progress line, else skipped (still open and ready: no progress).
 function Get-IssueOutcome([int]$nr, $after) {
   $line = $LineOutcome["$nr"]
+  if ($line -and $line.Outcome -eq 'merging') { return $line }
   $labels = @($after.Labels[$nr])
   $held = @($labels | Where-Object { $_ -in 'needs-decision', 'interactive' })
   if ($held) { return @{ Outcome = 'paused'; Reason = $(if ($line) { $line.Reason } else { $held[0] }) } }
@@ -382,7 +385,7 @@ function Get-State {
     }
   }
   # release-test (the RC test of the milestone, always last and manual): not part of the stop-rule set, so it neither keeps the loop from done nor makes it blocked
-  $found = [System.Collections.Generic.List[object]]::new(@($found | Where-Object { $_.Labels -notcontains 'release-test' }))
+  $found = [System.Collections.Generic.List[object]]::new(@($found | Where-Object { $_.Labels -notcontains 'release-test' -and $script:Merging -notcontains [int]$_.Number }))
   # release-review pause (references/release-review.md): nothing open, but a closed PBI or Bug of the milestone carries needs-decision
   $paused = $false
   if ($Milestone -and $found.Count -eq 0) {
@@ -507,7 +510,10 @@ function Show-NewEvents {
         if ($AttentionText.ContainsKey($step)) { $notice = $AttentionText[$step] }
         if ($ev.kind -in 'paused', 'blocked' -and $nr) { $LineOutcome["$nr"] = @{ Outcome = [string]$ev.kind; Reason = $(if ($res) { $res } else { [string]$ev.kind }) } }
       }
-      'issue.finished' { $step = [string]$ev.outcome; $res = [string]$ev.reason; if ($ev.outcome -eq 'delivered') { $notice = 'merged' } }
+      'issue.finished' {
+        $step = [string]$ev.outcome; $res = [string]$ev.reason; if ($ev.outcome -eq 'delivered') { $notice = 'merged' }
+        if ($ev.outcome -eq 'merging' -and $nr) { $LineOutcome["$nr"] = @{ Outcome = 'merging'; Reason = $(if ($res) { $res } else { 'auto-merge on, waits for checks' }) } }
+      }
       default { continue }
     }
     if ($nr -and $ev.prUrl) { $Prs["$nr"] = [string]$ev.prUrl }
@@ -642,9 +648,10 @@ try {
     if (Test-StopRequested) { $result = 'stopped'; break }
     $i++
     Invoke-Iteration $i $total $state
+    if ($LineOutcome["$([int]$state.Ready[0])"].Outcome -eq 'merging') { $Merging = @($Merging) + [int]$state.Ready[0] }
     $after = Get-State
     # delivered = left the open set; a PBI that is only held (needs-decision) stays open and is paused (#346)
-    $gone = @($state.Eligible | Where-Object { $after.Eligible -notcontains $_ -and $after.OpenNrs -notcontains $_ })
+    $gone = @($state.Eligible | Where-Object { $after.Eligible -notcontains $_ -and $after.OpenNrs -notcontains $_ -and $Merging -notcontains $_ })
     $Delivered = @($Delivered) + $gone
     Send-IterationOutcome ([int]$state.Ready[0]) $gone $after
     Read-StatusBlock

@@ -2,7 +2,7 @@
 .SYNOPSIS
   Preflight of `deliver`: repository skills, harness allowlist, stale worktrees; prints one JSON object (or lines with -Text).
 .DESCRIPTION
-  Three checks, each with status ok / fixed / action needed:
+  Four checks, each with status ok / fixed / action needed:
   - skills: the stack skills of `detect-techstack` (`<lang>-implementation`, `<lang>-test`) must be installed in the
     project (.claude/skills or .agents/skills) and not older than the same skill in the global install (SKILL.md write
     time). Missing or old: `fix` names the `skills-manage` call; nothing is installed here.
@@ -13,6 +13,9 @@
   - worktrees: worktrees (not the main or current one) on a PBI branch whose PR is merged or whose branch was deleted
     on origin (pushed once, absent now, no unpushed commits, ls-remote succeeded; one ls-remote for all) are removed with Remove-PbiWorktrees.ps1 (merged PR) or `git worktree remove` (clean, branch gone);
     the others are listed in `left`.
+  - merge: how step 7/8 of deliver merges (`mode`): `auto` (repository allows auto-merge and `release/next` has required checks),
+    `watch` (auto-merge off: `auto-merge off, watching checks`) or `watch-no-required` (no required checks on `release/next`, auto-merge would
+    merge at once: `no required checks on release/next`). Always status ok, a note for the run. Reads two REST endpoints.
   Output: {actionNeeded, checks[{name, status, detail, fix, missing[], removed[], left[]}]}. Exit 1 only when the
   directory is not a git repository.
 .PARAMETER ProjectRoot
@@ -33,7 +36,7 @@ param(
   [ValidateSet('claude', 'opencode', 'copilot')][string]$Harness = 'claude',
   [switch]$Unattended,
   [switch]$AddAllowlist,
-  [ValidateSet('skills', 'allowlist', 'worktrees')][string[]]$Check = @('skills', 'allowlist', 'worktrees'),
+  [ValidateSet('skills', 'allowlist', 'worktrees', 'merge')][string[]]$Check = @('skills', 'allowlist', 'worktrees', 'merge'),
   [switch]$Text
 )
 $ErrorActionPreference = 'Stop'
@@ -197,9 +200,19 @@ function Test-Worktrees {
   Add-Check 'worktrees' $status "$($removed.Count) removed, $($left.Count) left" @{ removed = $removed; left = $left }
 }
 
+# ---- merge ----
+function Test-MergeMode {
+  $allowed = try { [bool]((& gh api 'repos/{owner}/{repo}' 2>$null) -join "`n" | ConvertFrom-Json).allow_auto_merge } catch { $false }
+  $types = try { @((& gh api 'repos/{owner}/{repo}/rules/branches/release/next' 2>$null) -join "`n" | ConvertFrom-Json | ForEach-Object { $_.type }) } catch { @() }
+  if ($types -notcontains 'required_status_checks') { Add-Check 'merge' 'ok' 'no required checks on release/next' @{ mode = 'watch-no-required' }; return }
+  if (-not $allowed) { Add-Check 'merge' 'ok' 'auto-merge off, watching checks' @{ mode = 'watch' }; return }
+  Add-Check 'merge' 'ok' 'auto-merge on, no watch' @{ mode = 'auto' }
+}
+
 if ($Check -contains 'skills') { Test-Skills }
 if ($Check -contains 'allowlist') { Test-Allowlist }
 if ($Check -contains 'worktrees') { Test-Worktrees }
+if ($Check -contains 'merge') { Test-MergeMode }
 if ($Text) {
   foreach ($c in $checks) { "preflight $($c.name): $($c.status) - $($c.detail)$(if ($c.fix) { " ($($c.fix))" })" }
 } else {

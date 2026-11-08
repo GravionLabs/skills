@@ -25,7 +25,7 @@
 .PARAMETER Kind
   attention kind: pr_opened, review_fix, ci_red, paused, blocked, needs_you or release_test.
 .PARAMETER Outcome
-  issue.finished: delivered, blocked, paused or skipped.
+  issue.finished: delivered, merging (auto-merge on, the PR merges when the checks are green), blocked, paused or skipped.
 .PARAMETER ReviewRound
   release.updated: the round of the release review (1, 2, ...).
 .PARAMETER RunResult
@@ -83,7 +83,7 @@ function Get-Tone([string]$type, [string]$step, [string]$result, [string]$kind, 
       return 'neutral'
     }
     'issue.finished' {
-      switch ($outcome) { 'delivered' { return 'success' } 'blocked' { return 'danger' } 'paused' { return 'warning' } }
+      switch ($outcome) { 'delivered' { return 'success' } 'merging' { return 'neutral' } 'blocked' { return 'danger' } 'paused' { return 'warning' } }
       return 'neutral'
     }
     'run.finished' {

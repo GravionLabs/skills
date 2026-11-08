@@ -18,6 +18,8 @@
   https://github.com/<owner>/<repo>; default from the milestone read.
 .PARAMETER ReleasePr
   URL of the open release PR; default looked up (REST). Pass an empty string to skip the lookup.
+.PARAMETER Merging
+  Issue numbers whose PR has auto-merge on (outcome merging): open, listed as waiting (`merging, waits for checks`), not delivered.
 .PARAMETER Text
   Print the block as text instead of JSON.
 .PARAMETER MilestonesScript
@@ -26,6 +28,7 @@
 param(
   [Parameter(Mandatory)][string]$Milestone,
   [int[]]$Delivered = @(),
+  [int[]]$Merging = @(),
   [string]$Repo = '{owner}/{repo}',
   [string]$BaseUrl,
   [string]$ReleasePr,
@@ -92,6 +95,7 @@ foreach ($i in $work) {
   elseif (Test-Label $i 'interactive') { $needs.Add("interactive, run /deliver $($i.number) in a session: $(Format-Ref $ref)") }
   elseif (Test-Label $i 'manual-test') { $needs.Add("manual test: $(Format-Ref $ref)") }
   elseif (Test-Label $i 'needs-refinement') { $ref.reason = 'needs refinement'; $waiting.Add($ref) }
+  elseif ($Merging -contains [int]$i.number) { $ref.reason = 'merging, waits for checks'; $waiting.Add($ref) }
   elseif (@($i.assignees).Count) { $ref.reason = "claimed by $(@($i.assignees) -join ', ')"; $waiting.Add($ref) }
   elseif ($blockers.Count) { $ref.reason = 'blocked by ' + ($blockers -join ', '); $waiting.Add($ref) }
   else { $ready.Add($ref) }
