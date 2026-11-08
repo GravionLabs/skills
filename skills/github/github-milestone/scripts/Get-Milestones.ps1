@@ -35,8 +35,11 @@
   (the call's own issues count with the new milestone; a sub-issue from another repository is always outside). Clearing a PBI or Bug is allowed, reported in warnings[]
   (no-milestone; feature-incomplete when its Feature keeps the milestone). An issue already in the target is `unchanged`. -DryRun writes nothing.
   Result: assigned[] (number, previous, milestone, status set|unchanged), warnings[].
+  renumber: migrates the titles of every numbered milestone, open and closed, to the padded form (`M1 (0.2.0)` -> `M001 (0.2.0)`, `M11.1` -> `M011.1`, `M12 Terminal` -> `M012 Terminal`; topic and version kept; legacy x.y.z and other titles untouched).
+  A target title that exists already (also two milestones with the same number) exits 1 before the first write; a number above 999 or a sub-number above 9 is reported in skipped[] and left as it is. A second run plans nothing.
+  -DryRun prints the plan (renames[]: number, state, old, new; skipped[]; summary) and writes nothing. -AllRepos: one result per repository in repos[].
 .PARAMETER Mode
-  current, list, show, create, issues, close, rename, insert or assign.
+  current, list, show, create, issues, close, rename, insert, assign or renumber.
 .PARAMETER Issues
   assign: issue numbers, comma or space separated, `#` allowed (`1,2,#3`).
 .PARAMETER NoReleaseTest
@@ -58,15 +61,21 @@
   owner/name; default: the repository of the current directory ({owner}/{repo} of gh).
 .PARAMETER ReleaseState
   Path of Get-ReleaseState.ps1; default: the sibling github-release skill. Missing: releasePr is null.
+.PARAMETER AllRepos
+  renumber: run it over every repository of the owner that is not archived and has milestones (`gh repo list <owner> --no-archived`). All repositories are planned first; one clash or failure aborts before the first write.
+.PARAMETER Owner
+  renumber -AllRepos: the owner; default the owner of -Repo (of the current directory without -Repo).
 #>
 param(
-  [Parameter(Mandatory)][ValidateSet('current', 'list', 'show', 'create', 'issues', 'close', 'rename', 'insert', 'assign')][string]$Mode,
+  [Parameter(Mandatory)][ValidateSet('current', 'list', 'show', 'create', 'issues', 'close', 'rename', 'insert', 'assign', 'renumber')][string]$Mode,
   [string]$Issues,
   [switch]$NoReleaseTest,
   [string]$Name,
   [string]$To,
   [string]$MoveTo,
   [switch]$DryRun,
+  [switch]$AllRepos,
+  [string]$Owner,
   [string]$Version,
   [ValidateSet('open', 'closed', 'all')][string]$State = 'all',
   [string]$Repo = '{owner}/{repo}',
@@ -132,6 +141,70 @@ function New-ReleaseTest($ms) {
   $raw = & (Join-Path $PSScriptRoot 'New-ReleaseTestIssue.ps1') -Milestone $ms.title -MilestoneNumber $ms.number -Repo $Repo
   if ($LASTEXITCODE -ne 0) { Fail "creating the release-test issue of $($ms.title) failed" }
   if ($raw) { $raw | Out-String | ConvertFrom-Json }
+}
+
+# renumber: plan of one repository ($ms = its milestones); error = reason (nothing may be written), renames[] old -> new
+function Get-RenumberPlan([string]$repo, $ms) {
+  $renames = [System.Collections.Generic.List[object]]::new()
+  $skipped = [System.Collections.Generic.List[object]]::new()
+  $numbered = 0; $unchanged = 0; $other = 0
+  foreach ($m in ($ms | Sort-Object number)) {
+    $p = Get-Title $m.title
+    if ($p.kind -ne 'numbered') { $other++; continue }
+    $numbered++
+    $bad = Test-Writable $p.n
+    if ($bad) { $skipped.Add([ordered]@{ number = $m.number; state = $m.state; title = $m.title; reason = $bad }); continue }
+    $new = Format-Title $p
+    if ($new -ceq $m.title) { $unchanged++; continue }
+    $renames.Add([ordered]@{ number = $m.number; state = $m.state; old = $m.title; new = $new })
+  }
+  $err = $null
+  foreach ($r in $renames) {
+    $taken = @($ms | Where-Object { $_.number -ne $r.number -and $_.title -ieq $r.new } | Select-Object -First 1)
+    $twin = @($renames | Where-Object { $_.number -ne $r.number -and $_.new -ieq $r.new } | Select-Object -First 1)
+    if ($taken.Count) { $err = "milestone '$($taken[0].title)' already exists: renumber would rename '$($r.old)' to '$($r.new)'"; break }
+    if ($twin.Count) { $err = "'$($twin[0].old)' and '$($r.old)' would both become '$($r.new)'"; break }
+  }
+  [ordered]@{
+    repo = $repo; renumbered = $false; dryRun = [bool]$DryRun; error = $err
+    renames = @($renames); skipped = @($skipped)
+    summary = [ordered]@{ milestones = @($ms).Count; numbered = $numbered; renames = $renames.Count; unchanged = $unchanged; skipped = $skipped.Count; other = $other }
+  }
+}
+
+if ($Mode -eq 'renumber') {
+  $repos = @($Repo)
+  if ($AllRepos) {
+    $own = $Owner
+    if (-not $own -and $Repo -ne '{owner}/{repo}') { $own = ($Repo -split '/')[0] }
+    if (-not $own) { $own = (& gh repo view --json owner --jq '.owner.login' 2>$null | Out-String).Trim(); if ($LASTEXITCODE -ne 0 -or -not $own) { Fail 'cannot resolve the owner: pass -Owner' } }
+    $raw = & gh repo list $own --json nameWithOwner --no-archived --limit 1000 2>$null
+    if ($LASTEXITCODE -ne 0) { Fail "gh repo list $own failed" }
+    $repos = @($raw | Out-String | ConvertFrom-Json | ForEach-Object { $_.nameWithOwner })
+  }
+  $plans = [System.Collections.Generic.List[object]]::new()
+  foreach ($r in $repos) {
+    $ms = @(Get-Paged "repos/$r/milestones?state=all&per_page=100")
+    if ($AllRepos -and -not $ms.Count) { continue }
+    $plans.Add((Get-RenumberPlan $r $ms))
+  }
+  $failed = @($plans | Where-Object { $_.error })
+  if (-not $DryRun -and -not $failed.Count) {
+    $done = [System.Collections.Generic.List[string]]::new()
+    foreach ($pl in $plans) {
+      foreach ($rn in $pl.renames) {
+        $null = & gh api -X PATCH "repos/$($pl.repo)/milestones/$($rn.number)" -f "title=$($rn.new)" 2>$null
+        if ($LASTEXITCODE -ne 0) { Fail "renaming milestone $($rn.old) to $($rn.new) in $($pl.repo) failed (renamed so far: $($done -join ', '))" }
+        $done.Add("$($pl.repo): $($rn.old) -> $($rn.new)")
+      }
+      $pl.renumbered = $true
+    }
+  }
+  foreach ($f in $failed) { Write-Error "$($f.repo): $($f.error); nothing was changed" -ErrorAction Continue }
+  if ($AllRepos) { [ordered]@{ allRepos = $true; dryRun = [bool]$DryRun; repos = @($plans) } | ConvertTo-Json -Depth 7 }
+  else { $plans[0] | ConvertTo-Json -Depth 6 }
+  if ($failed.Count) { exit 1 }
+  exit 0
 }
 
 $milestones = @(Get-Paged "repos/$Repo/milestones?state=all&per_page=100")
