@@ -37,9 +37,9 @@ Plans an issue one level down with blockers and sizes, grills the open decisions
 
 ## Config
 
-- `governance` in `.agents/config.json`: switches on the ADR and spec rules (decision PBI `docs: ADR <topic>` that blocks the implementing item, spec criterion); without it planning is unchanged. See `docs/usage/project-config.md`
+- `governance` in `.agents/config.json`: switches on the ADR and spec rules (decision PBI `docs: ADR <topic>` that blocks the implementing item, spec criterion); without it planning is unchanged. See `site/usage/project-config.md`
 
 ## See also
 
 - `grill-me`, `github-issue`, `deliver`
-- `docs/usage/governance.md`
+- `site/usage/governance.md`

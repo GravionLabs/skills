@@ -30,7 +30,6 @@ describe('pages.yml workflow guard (#272)', () => {
     expect(wf.on.push.branches).toEqual(['main']);
     expect(wf.on.pull_request.paths).toEqual([
       'site/**',
-      'docs/**',
       'README.md',
       'skills/**',
       '.claude-plugin/**',

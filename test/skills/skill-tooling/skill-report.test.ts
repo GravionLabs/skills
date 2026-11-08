@@ -56,7 +56,7 @@ describe.skipIf(!hasPwsh || process.platform === 'win32')('Get-SkillReport.ps1 (
         'See `beta` `references/there.md` for the tier.',
         'Read `beta/references/gone.md`, `../beta/references/gone2.md` and `beta/references/ok.md`.',
         'Uses `vendor/scripts/run.sh` of a vendor.',
-        'See `docs/there.md`, `docs/gone.md`, `AGENTS.md` and `scripts/tool.mjs`.',
+        'See `docs/there.md`, `docs/gone.md`, `site/page.md`, `site/gone.md`, `AGENTS.md` and `scripts/tool.mjs`.',
       ].join('\n\n'),
     );
     skill('beta', 'Beta.');
@@ -67,6 +67,7 @@ describe.skipIf(!hasPwsh || process.platform === 'win32')('Get-SkillReport.ps1 (
       'Needs `references/own-missing.md` and `references/r.md`.\n',
     );
     write('docs/there.md');
+    write('site/page.md');
     write('scripts/tool.mjs');
     const r = await run();
     expect(r.status).toBe(0);
@@ -77,6 +78,7 @@ describe.skipIf(!hasPwsh || process.platform === 'win32')('Get-SkillReport.ps1 (
       'alpha: beta/references/missing.md',
       'alpha: docs/gone.md',
       'alpha: references/own-missing.md',
+      'alpha: site/gone.md',
     ]);
   });
 

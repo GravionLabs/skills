@@ -22,7 +22,7 @@
       "!pnpm-lock.yaml",
       "!.worktrees",
       "!.work",
-      "!docs/skill-list.md",
+      "!site/skill-list.md",
       "!CHANGELOG.md",
       "!site/.vitepress/cache",
       "!site/.vitepress/dist"

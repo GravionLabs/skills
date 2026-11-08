@@ -51,15 +51,6 @@ export const sidebar: SidebarGroup[] = [
       { text: 'Skill composition', link: '/concepts/composition' },
       { text: 'Issue model', link: '/concepts/issue-model' },
       { text: 'Skill frontmatter', link: '/concepts/skill-frontmatter' },
-      { text: 'ADR 0001: Agent progress events', link: '/adr/0001-agent-progress-events' },
-      {
-        text: 'ADR 0002: Displays read the progress events',
-        link: '/adr/0002-displays-read-the-progress-events',
-      },
-      {
-        text: 'ADR 0003: The progress event format lives in agent-events',
-        link: '/adr/0003-the-progress-event-format-lives-in-agent-events',
-      },
     ],
   },
   {
@@ -75,7 +66,6 @@ export const sidebar: SidebarGroup[] = [
       { text: 'Skill companion directories', link: '/usage/skill-companion-dirs' },
       { text: 'Skill trigger evals', link: '/usage/trigger-evals' },
       { text: 'External frameworks', link: '/frameworks' },
-      { text: 'Spikes: deliver capabilities', link: '/spikes/deliver' },
     ],
   },
 ];

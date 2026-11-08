@@ -4,7 +4,7 @@ name: Pages
 # documents build it, so a dead link is found before the merge; only main deploys, and only while the
 # repository variable DEPLOY_PAGES is "true" (Settings -> Pages -> Source must be "GitHub Actions").
 #
-# The generated skill list (docs/skill-list.md, gitignored) is built inside the build job and never committed.
+# The generated skill list (site/skill-list.md, gitignored) is built inside the build job and never committed.
 # Pull requests also build when skills/, the marketplace or the generator change, because the list derives from them.
 # Only main deploys, also for manual runs (workflow_dispatch from another branch builds but never uploads).
 # GravionLabs/ci/node/setup is pinned to the commit of a GravionLabs/ci release tag and bumped by hand.
@@ -14,7 +14,6 @@ on:
   pull_request:
     paths:
       - 'site/**'
-      - 'docs/**'
       - 'README.md'
       - 'skills/**'
       - '.claude-plugin/**'

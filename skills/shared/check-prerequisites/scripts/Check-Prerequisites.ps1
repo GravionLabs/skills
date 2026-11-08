@@ -25,7 +25,7 @@
     # Auto-installs missing tools
 
 .LINK
-    https://github.com/GravionLabs/skills/blob/main/docs/prerequisites.md
+    https://github.com/GravionLabs/skills/blob/main/site/prerequisites.md
 #>
 param(
     [switch]$Full,
@@ -214,7 +214,7 @@ if ($results.missing.Count -eq 0) {
     }
 
     Write-Host "Run with -AutoInstall flag to attempt automatic installation." -ForegroundColor Yellow
-    Write-Host "See docs/prerequisites.md for detailed instructions." -ForegroundColor Yellow
+    Write-Host "See site/prerequisites.md for detailed instructions." -ForegroundColor Yellow
 
     if ($AutoInstall) {
         Write-Host "`n  Attempting auto-install..." -ForegroundColor Yellow

@@ -4,9 +4,9 @@ import { describe, expect, it } from 'vitest';
 
 const root = path.resolve(__dirname, '../../..');
 const read = (p: string): string => readFileSync(path.join(root, p), 'utf8');
-const doc = read('docs/usage/project-config.md');
+const doc = read('site/usage/project-config.md');
 
-describe('docs/usage/project-config.md', () => {
+describe('site/usage/project-config.md', () => {
   it('contains the JetBrains example', () => {
     expect(doc).toContain('dotnet tool install -g JetBrains.ReSharper.GlobalTools');
     expect(doc).toContain('jb cleanupcode');
@@ -20,7 +20,7 @@ describe('docs/usage/project-config.md', () => {
     expect(doc).toMatch(/^!\.agents\/config\.json$/m);
   });
   it('is linked from README and the site sidebar', () => {
-    expect(read('README.md')).toContain('docs/usage/project-config.md');
+    expect(read('README.md')).toContain('site/usage/project-config.md');
     expect(read('site/.vitepress/sidebar.ts')).toContain('/usage/project-config');
   });
   it('is mentioned by the implementation skill and stays within 100 lines', () => {
@@ -35,11 +35,11 @@ describe('docs/usage/project-config.md', () => {
       /^- \[ \] Full suite: one full run before the pull request, and again after the last fix round$/m,
     );
   });
-  it('skills link the override doc by full URL, not a relative docs/ path', () => {
+  it('skills link the override doc by full URL, not a relative site/ path', () => {
     const f = read('skills/shared/implementation/references/format.md');
     expect(f).toContain(
-      'https://github.com/GravionLabs/skills/blob/main/docs/usage/project-config.md',
+      'https://github.com/GravionLabs/skills/blob/main/site/usage/project-config.md',
     );
-    expect(f).not.toMatch(/(^|[^/])docs\/usage\//m);
+    expect(f).not.toMatch(/(^|[^/])(docs|site)\/usage\//m);
   });
 });

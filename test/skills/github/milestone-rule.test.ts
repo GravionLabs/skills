@@ -69,6 +69,6 @@ describe('milestone rule (#327)', () => {
     expect(read('skills/github/github-issue/references/create-from-plan.md')).toContain(
       'github-milestone assign',
     );
-    expect(read('docs/guides/release.md')).toContain('/github-milestone assign');
+    expect(read('site/guides/release.md')).toContain('/github-milestone assign');
   });
 });

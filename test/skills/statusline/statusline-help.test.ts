@@ -23,7 +23,7 @@ describe('context-statusline help', () => {
 
   it('is mentioned in the docs page', () => {
     const doc = fs.readFileSync(
-      path.resolve(__dirname, '../../../docs/usage/statusline.md'),
+      path.resolve(__dirname, '../../../site/usage/statusline.md'),
       'utf8',
     );
     expect(doc).toContain('/context-statusline help');

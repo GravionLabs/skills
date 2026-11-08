@@ -6,12 +6,12 @@ const read = (p: string) => fs.readFileSync(p, 'utf8');
 
 const skill = read(path.join(skillDir, 'SKILL.md'));
 const help = read(path.join(skillDir, 'references/help.md'));
-const guide = read(path.resolve(__dirname, '../../../docs/guides/release.md'));
+const guide = read(path.resolve(__dirname, '../../../site/guides/release.md'));
 
 const docs: [string, string][] = [
   ['SKILL.md', skill],
   ['references/help.md', help],
-  ['docs/guides/release.md', guide],
+  ['site/guides/release.md', guide],
 ];
 
 describe('github-release milestone hint after the release tag', () => {
@@ -46,7 +46,7 @@ describe('github-release milestone hint after the release tag', () => {
 describe('release routine creates the next milestone before close --move-to', () => {
   const ms = read(path.resolve(__dirname, '../../../skills/github/github-milestone/SKILL.md'));
   const texts: [string, string][] = [
-    ['docs/guides/release.md', guide],
+    ['site/guides/release.md', guide],
     ['github-release SKILL.md', skill],
     ['github-milestone SKILL.md', ms],
   ];
@@ -76,7 +76,7 @@ describe('release routine creates the next milestone before close --move-to', ()
   });
 
   it.each([
-    ['docs/guides/release.md', guide],
+    ['site/guides/release.md', guide],
     ['github-release SKILL.md', skill],
   ])('%s legacy hint creates before close', (_name, text) => {
     expect(text).toMatch(
@@ -86,7 +86,7 @@ describe('release routine creates the next milestone before close --move-to', ()
 });
 
 describe('migrating legacy milestones (#243)', () => {
-  const deliverGuide = read(path.resolve(__dirname, '../../../docs/guides/deliver.md'));
+  const deliverGuide = read(path.resolve(__dirname, '../../../site/guides/deliver.md'));
   const section = guide.slice(guide.indexOf('## Migrate legacy milestones'));
 
   it('release guide has the tamias table and the commands', () => {

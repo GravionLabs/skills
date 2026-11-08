@@ -11,7 +11,7 @@ const SCRIPT = path.resolve(
 const hasPwsh = spawnSync('pwsh', ['-NoProfile', '-Command', '1']).status === 0;
 
 const hint =
-  'docs/adr or docs/specs found but no governance key in .agents/config.json; add it to opt in (docs/usage/project-config.md)';
+  'docs/adr or docs/specs found but no governance key in .agents/config.json; add it to opt in (site/usage/project-config.md)';
 const noDocs = {
   configured: false,
   adrDir: 'docs/adr',

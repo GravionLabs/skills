@@ -14,7 +14,7 @@ permissions:
   contents: read
 
 # Required checks of the ruleset on release/next: "Build & Test" and "Test".
-# Nothing is generated into the repository: docs/skill-list.md is built in the working tree for the site only.
+# Nothing is generated into the repository: site/skill-list.md is built in the working tree for the site only.
 jobs:
   build-test:
     name: Build & Test
@@ -59,7 +59,7 @@ jobs:
       - name: Analyze PowerShell scripts
         run: pnpm run lint:ps
 
-      # docs/skill-list.md is gitignored; generate it in the working tree only so the site build resolves its links.
+      # site/skill-list.md is gitignored; generate it in the working tree only so the site build resolves its links.
       - name: Generate docs for site build
         run: pnpm run generate
 

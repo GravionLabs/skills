@@ -8,8 +8,8 @@ const read = (p: string) => readFileSync(path.join(root, p), 'utf8');
 const docs = [
   'skills/delivery/deliver/references/loop.md',
   'skills/delivery/deliver/references/help.md',
-  'docs/guides/deliver.md',
-  'docs/delivery.md',
+  'site/guides/deliver.md',
+  'site/delivery.md',
   'skills/delivery/skills-manage/references/after-install.md',
 ];
 

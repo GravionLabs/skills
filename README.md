@@ -1,6 +1,6 @@
 # GravionLabs skills
 
-Agent **skills** for issue-driven delivery and per-stack implementation, in the [agentskills.io](https://agentskills.io) format. One `SKILL.md` loads unchanged on Claude Code, OpenCode and GitHub Copilot; skills are installed with [`npx skills`](https://github.com/vercel-labs/skills). Workflows are skills: `/deliver` chains them from issue to merged PR ([delivery](docs/delivery.md)).
+Agent **skills** for issue-driven delivery and per-stack implementation, in the [agentskills.io](https://agentskills.io) format. One `SKILL.md` loads unchanged on Claude Code, OpenCode and GitHub Copilot; skills are installed with [`npx skills`](https://github.com/vercel-labs/skills). Workflows are skills: `/deliver` chains them from issue to merged PR ([delivery](site/delivery.md)).
 
 Documentation site: **[gravionlabs.github.io/skills](https://gravionlabs.github.io/skills/)**
 
@@ -36,7 +36,7 @@ A group is a folder `skills/<group>/` and a plugin in [`.claude-plugin/marketpla
 
 Presets of `skills-manage`: `core` (`shared`, `github`, `delivery`, `statusline`) and `all` (every group except `skill-tooling`).
 
-📄 **[Skills](docs/concepts/skills.md)** · 📄 **[Skill list](docs/skill-list.md)** (generated) · 📄 **[Work an issue by hand](docs/guides/work-an-issue-by-hand.md)** · 📄 **[Delivery](docs/delivery.md)** · 📄 **[Project config](docs/usage/project-config.md)** · 📄 **[External frameworks](docs/frameworks.md)** · 📄 **[AGENTS.md](AGENTS.md)** for layout and conventions
+📄 **[Skills](site/concepts/skills.md)** · 📄 **[Skill list](site/skill-list.md)** (generated) · 📄 **[Work an issue by hand](site/guides/work-an-issue-by-hand.md)** · 📄 **[Delivery](site/delivery.md)** · 📄 **[Project config](site/usage/project-config.md)** · 📄 **[External frameworks](site/frameworks.md)** · 📄 **[AGENTS.md](AGENTS.md)** for layout and conventions
 
 ## Contributing
 
@@ -48,4 +48,4 @@ pnpm run check                                        # everything CI runs
 node scripts/check-marketplace.mjs --fix                 # after adding skills/<group>/<name>/
 ```
 
-New or changed skills follow the [skill frontmatter convention](docs/concepts/skill-frontmatter.md).
+New or changed skills follow the [skill frontmatter convention](site/concepts/skill-frontmatter.md).

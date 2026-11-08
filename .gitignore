@@ -43,7 +43,7 @@ skills-lock.json
 test-results/
 
 # Generated docs — pnpm run generate builds them for the site; never committed
-docs/skill-list.md
+site/skill-list.md
 evals/results/
 
 # VitePress site
