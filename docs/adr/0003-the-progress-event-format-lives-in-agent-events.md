@@ -3,13 +3,13 @@
 - Status: Proposed
 - Date: 2026-11-08
 - Issues: #451, #450
-- Supersedes in part: [ADR 0001](0001-agent-progress-events.md) (the location of the schema and the fixtures; the emitter, the tone rules and the retention stay as decided there)
+- Supersedes in part: [ADR 0001](0001-agent-progress-events.md) (the location of the schema and the fixtures; the emitter, the tone rules and the retention stay as decided there), [ADR 0002](0002-displays-read-the-progress-events.md) (the in-repo schema and fixtures as the contract for readers, lines 53-54; the reader-not-pusher decision and the terminal sink stay as decided there)
 
 ## Context
 
 ADR 0001 put the event schema in this repository, as `schema/progress-event.schema.json` of the `deliver` skill, and named its raw URL on `main` as the public address. The paired fixtures (events to state) were to live under `test/`. The consumers of the format are not in this repository: the poimen Deliver panel (Rust and TypeScript) and herdr rules read the events and need the same schema, the same reducer cases and the same rules for evolving the format.
 
-GravionLabs/agent-events v1.0.0 now holds the contract: the event schema, the run state schema, the fixtures and the specification (`SPEC.md`). A contract that several repositories read should have one home that none of them owns, with versions a reader can pin. The raw URL on `main` of a skill moves with every commit and says nothing about the version a reader was built against.
+GravionLabs/agent-events holds the contract: the event schema, the run state schema, the fixtures and the specification (`SPEC.md`). The version this repository pins is v1.0.0, planned: the tag does not exist yet and is cut with the agent-events release. A contract that several repositories read should have one home that none of them owns, with versions a reader can pin. The raw URL on `main` of a skill moves with every commit and says nothing about the version a reader was built against.
 
 The scope is the format only. The emitter (`Report-Progress.ps1`), the reference reducer (`ConvertFrom-ProgressEvents.ps1`), the tone rules, the transport and the retention stay in this repository as ADR 0001 decided. The event format v1 does not change. The token fixtures (`*.tokens.json`) belong to the herdr plugin work and stay out of this decision.
 
@@ -40,6 +40,16 @@ The progress event format is defined in GravionLabs/agent-events. This repositor
 - **The schema stays in skills.** No new repository and no pin. But poimen and herdr consume the schema of a skill repository, with a raw URL on `main` as the only version, and the fixtures and spec have no natural home there.
 - **The schema lives in poimen.** The main consumer would own it. But skills would then depend on an application repository for the format they emit, and other readers such as herdr rules would depend on poimen as well.
 - **Shared code instead of a spec.** One library that emits and reduces events. The skills are PowerShell, poimen is Rust and TypeScript, so each language needs its own library, and the library, not a document, becomes the contract. A schema, fixtures and a spec let each side keep its own implementation and check it against the same cases.
+
+## Deliver mapping onto the core (#451)
+
+- `issue` → `task` + `subject` (`kind: github.issue`)
+- `prUrl` → `links` (`rel: pull-request`)
+- `milestone.progress` → `progress`
+- `issue.finished` outcomes → `outcome` + `deliver.outcome`
+- release state → `deliver.release.updated`, plus the core `attention` and `links` for the release-candidate test
+
+The contents of the deliver profile (prefix `deliver.`, `profiles: ["deliver@1"]`, tone rules, state extension) are not yet written here; they stay open under #451.
 
 ## Implementation (#452)
 
