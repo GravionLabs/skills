@@ -176,6 +176,10 @@ function Get-RenumberPlan([string]$repo, $ms) {
 }
 
 if ($Mode -eq 'renumber') {
+  if (-not $AllRepos -and $Repo -eq '{owner}/{repo}') {
+    $Repo = (& gh repo view --json nameWithOwner --jq '.nameWithOwner' 2>$null | Out-String).Trim()
+    if ($LASTEXITCODE -ne 0 -or -not $Repo) { Fail 'cannot resolve the repository: pass -Repo owner/name' }
+  }
   $repos = @($Repo)
   if ($AllRepos) {
     $own = $Owner
