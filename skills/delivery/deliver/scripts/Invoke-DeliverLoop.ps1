@@ -445,6 +445,8 @@ function Write-TextStep([string]$prefix, [string]$text) {
 $ToneColor = @{ success = 'green'; info = 'cyan'; warning = 'yellow'; danger = 'red' }
 # Stop request: the file .agents/deliver-loop/<run>/stop (any content) ends the loop before the next iteration.
 function Test-StopRequested { [bool]$script:RunDir -and (Test-Path -LiteralPath (Join-Path $script:RunDir 'stop')) }
+# `now` in the stop file: the session stopped after its current step, the PBI stays open (not "no progress")
+function Test-StopNow { (Test-StopRequested) -and ((Get-Content -LiteralPath (Join-Path $script:RunDir 'stop') -Raw) -match '^\s*now\s*$') }
 $StopSeen = $false
 $CurrentPbi = 0
 # once per iteration: one attention event `stopping`; Show-NewEvents prints it as `stop requested: stops after #<nr>`
@@ -595,8 +597,9 @@ function Invoke-Iteration([int]$n, [int]$total, $state) {
   Send-Event $started
   $script:EventOffset = if ($EventFile -and (Test-Path -LiteralPath $EventFile)) { (Get-Item -LiteralPath $EventFile).Length } else { 0 }
   # the harness reports nothing to the terminal: HERDR_ENV empty, and nested for the sink (AGENT_EVENTS_RUN without the owner marker)
-  $savedHerdr = $env:HERDR_ENV; $savedTerminal = $env:AGENT_EVENTS_TERMINAL
+  $savedHerdr = $env:HERDR_ENV; $savedTerminal = $env:AGENT_EVENTS_TERMINAL; $savedLoopDir = $env:DELIVER_LOOP_DIR
   $env:HERDR_ENV = ''; $env:AGENT_EVENTS_TERMINAL = ''
+  $env:DELIVER_LOOP_DIR = Split-Path $RunDir -Parent  # Report-Progress finds the stop file (stop --now) here
   try {
     $cli = if ($Harness -eq 'copilot') {
       @('-p', $prompt, '--model', $iterModel, '--allow-all-tools', '--allow-all-paths', '--allow-all-urls', '--no-ask-user', '--output-format', 'json')
@@ -613,7 +616,7 @@ function Invoke-Iteration([int]$n, [int]$total, $state) {
     Show-NewEvents
     $exit = $LASTEXITCODE
     if ($exit -ne 0) { Write-Step "$Harness exited with $exit" 'red' }
-  } finally { $env:HERDR_ENV = $savedHerdr; $env:AGENT_EVENTS_TERMINAL = $savedTerminal }
+  } finally { $env:HERDR_ENV = $savedHerdr; $env:AGENT_EVENTS_TERMINAL = $savedTerminal; $env:DELIVER_LOOP_DIR = $savedLoopDir }
 }
 
 $result = $null
@@ -648,6 +651,7 @@ try {
     Send-BlockEvents
     Write-ProgressLine
     Write-ProgressRecord 'iteration-end' @{ n = $i; pbi = [int]$state.Ready[0]; delivered = ($gone -join ','); open = $after.Open }
+    if (($after.Eligible -join ',') -eq ($state.Eligible -join ',') -and (Test-StopNow)) { $result = 'stopped'; break }
     if (($after.Eligible -join ',') -eq ($state.Eligible -join ',')) {
       $result = 'no progress'
       Write-Step 'no progress: the open PBIs did not change. Last log lines:' 'yellow'

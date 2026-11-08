@@ -29,6 +29,15 @@ describe('deliver SKILL.md', () => {
     expect(steps).toContain('only from these events');
   });
 
+  it('has the stop now rule (#476)', () => {
+    const rules = body.slice(body.indexOf('## Rules'));
+    expect(rules).toContain('`STOP requested`');
+    expect(rules).toContain('gh issue edit <nr> --remove-assignee @me');
+    expect(rules).toContain('#<nr> stop: stopped after <step>, continue with /deliver <nr>');
+    expect(rules).toContain('-Outcome skipped -Reason "stop requested"');
+    expect(rules).toContain('A running subagent is not interrupted');
+  });
+
   it('names PRs and issues as full URLs, the release PR included', () => {
     expect(body).toContain('full URL');
     expect(body).toContain('not as a bare `#<n>`');
