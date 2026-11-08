@@ -2,7 +2,7 @@
 .SYNOPSIS
   Append one progress event of a run to <git-common-dir>/.agents/events/<run>.jsonl (or $AGENT_EVENTS_DIR/<run>.jsonl).
 .DESCRIPTION
-  Schema: schema/progress-event.schema.json. The run id is AGENT_EVENTS_RUN. Without it, -Type run.started creates one
+  Schema: GravionLabs/agent-events schema/progress-event.schema.json. The run id is AGENT_EVENTS_RUN. Without it, -Type run.started creates one
   (yyyyMMdd-HHmmss-<4 hex>) and prints `AGENT_EVENTS_RUN=<id>`; every other type without a run does nothing (exit 0).
   `seq` counts up per run without gaps (the file is locked while the line is counted and appended). The line is written
   whole in one write call. `tone` is decided here from type, step, result and kind (Get-Tone, table in the schema).

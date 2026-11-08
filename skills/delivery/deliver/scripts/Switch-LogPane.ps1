@@ -4,7 +4,7 @@
 .DESCRIPTION
   Bound to a herdr key (references/terminal-backends.md): `type = "shell"` sets HERDR_ACTIVE_TAB_ID, HERDR_ACTIVE_PANE_ID and
   HERDR_ACTIVE_PANE_CWD; a plugin action sets HERDR_TAB_ID and HERDR_PANE_ID. herdr has no hide, so the toggle closes the
-  pane and reopens it on the same log: .agents/deliver-loop.ansi.log under the pane's cwd, else .agents/deliver-loop.log.
+  pane and reopens it on the same log: .agents/deliver-loop.log under the pane's cwd.
   Runs only in herdr: HERDR_ENV=1 or a HERDR_ACTIVE_* id (a shell keybinding may not set HERDR_ENV). Outside herdr (poimen: notice only), without
   a log or on a herdr failure it opens no pane and exits 0.
 #>
@@ -20,7 +20,7 @@ $backend = if ($env:HERDR_ACTIVE_TAB_ID -or $env:HERDR_ACTIVE_PANE_ID) { 'herdr'
 if ($backend -eq 'none') { exit 0 }
 
 $cwd = if ($env:HERDR_ACTIVE_PANE_CWD) { $env:HERDR_ACTIVE_PANE_CWD } else { (Get-Location).Path }
-$candidates = @('.agents/deliver-loop.ansi.log', '.agents/deliver-loop.log') | ForEach-Object { Join-Path $cwd $_ }
+$candidates = @('.agents/deliver-loop.log') | ForEach-Object { Join-Path $cwd $_ }
 try {
   $status = Switch-LogPane -Pane $pane -Tab $tab -LogCandidates $candidates -Backend $backend
 } catch {

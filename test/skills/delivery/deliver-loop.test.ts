@@ -234,7 +234,6 @@ fs.writeFileSync(f, JSON.stringify(s));`,
       expect(lines).toMatch(/\d\d:\d\d:\d\d bash ls -la/);
       expect(lines).toMatch(/\d\d:\d\d:\d\d \[subagent\] view src\/a\.ts/);
       expect(lines).toMatch(/\d\d:\d\d:\d\d ✗ boom/);
-      expect(read('.agents/deliver-loop.ansi.log')).toContain('\u001b[36mbash\u001b[0m');
       expect(read('herdr-calls.txt')).toContain(
         'deliver_step=7/7 ci: red --token deliver_pr=#55 --token deliver_tone=danger',
       );
@@ -244,9 +243,7 @@ fs.writeFileSync(f, JSON.stringify(s));`,
         expect(read('notices.txt')).toContain('#7 CI red');
       }
       expect(r.stdout).toContain('loop result: done');
-      expect(read('.agents/deliver-loop.ansi.log')).toContain(
-        `${String.fromCharCode(27)}[32mloop result: done`,
-      );
+      expect(fs.existsSync(path.join(cwd, '.agents/deliver-loop.ansi.log'))).toBe(false);
     });
   });
 
@@ -539,7 +536,7 @@ fs.writeFileSync(f, JSON.stringify(s));`,
       expect(lines).toMatch(/\d\d:\d\d:\d\d \[Review PBI #401 diff\] Bash git diff/);
       expect(lines).toMatch(/\d\d:\d\d:\d\d Read src\/a\.ts/);
       expect(lines).toMatch(/\d\d:\d\d:\d\d ✗ boom/);
-      // stdout is a terminal (DELIVER_LOOP_ASSUME_TTY): the colored line of the .ansi.log
+      // stdout is a terminal (DELIVER_LOOP_ASSUME_TTY): the colored line
       const ESC = String.fromCharCode(27);
       expect(r.stdout).toContain(`[Review PBI #401 diff] ${ESC}[36mBash${ESC}[0m git diff`);
       const runDirs = fs
@@ -570,10 +567,11 @@ fs.writeFileSync(f, JSON.stringify(s));`,
         'pane report-metadata p7 --source deliver --clear-token deliver --clear-token deliver_step --clear-token deliver_pr --clear-token deliver_progress --clear-token deliver_tone',
       ]);
       expect(calls.join('\n')).not.toContain('display-agent');
-      // no -LogPane: opens no pane (a TTY and a herdr pane are present); the plain log has no escape codes, the ANSI log is colored
+      // no -LogPane: opens no pane (a TTY and a herdr pane are present); the plain log has no escape codes, stdout is colored and no .ansi.log exists
       expect(read('herdr-calls.txt')).not.toContain('pane list');
       expect(lines).not.toContain(ESC);
-      const ansi = read('.agents/deliver-loop.ansi.log');
+      const ansi = r.stdout;
+      expect(fs.existsSync(path.join(cwd, '.agents/deliver-loop.ansi.log'))).toBe(false);
       expect(ansi).toMatch(new RegExp(`${ESC}\\[2m\\d\\d:\\d\\d:\\d\\d${ESC}\\[0m `));
       expect(ansi).toContain(`${ESC}[36mRead${ESC}[0m src/a.ts`);
       expect(ansi).toContain(`${ESC}[31m✗ boom${ESC}[0m`);

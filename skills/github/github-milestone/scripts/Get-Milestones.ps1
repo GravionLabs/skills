@@ -30,12 +30,22 @@
   insert: `insert -Name M<n>` renames every open M<k> with k >= n (and its sub-numbered ones, topic and version kept) to k+1, from the highest down so no title collides,
   then creates M<n>. Closed milestones are never touched; a closed or unmoved milestone that would collide exits 1 before the first write. -DryRun only lists
   the renames. Result: renames[], references[] (what is not rewritten: issue bodies of the shifted milestones, ROADMAP.md, release-review-<M<n>>.json state files).
+  assign: `assign -Name <M<n>|none> -Issues 1,2,3` sets the milestone of the issues (found as in show; open only; a missing one is never created: exit 1, with -DryRun the plan is made against it (state `missing`) so the rules can be checked first) or clears it (`none`).
+  Everything is checked before the first write (exit 1, nothing changed): an Epic never gets a milestone; a Feature only when all its open sub-issues are in it afterwards
+  (the call's own issues count with the new milestone; a sub-issue from another repository is always outside). Clearing a PBI or Bug is allowed, reported in warnings[]
+  (no-milestone; feature-incomplete when its Feature keeps the milestone). An issue already in the target is `unchanged`. -DryRun writes nothing.
+  Result: assigned[] (number, previous, milestone, status set|unchanged), warnings[].
+  renumber: migrates the titles of every numbered milestone, open and closed, to the padded form (`M1 (0.2.0)` -> `M001 (0.2.0)`, `M11.1` -> `M011.1`, `M12 Terminal` -> `M012 Terminal`; topic and version kept; legacy x.y.z and other titles untouched).
+  A target title that exists already (also two milestones with the same number) exits 1 before the first write; a number above 999 or a sub-number above 9 is reported in skipped[] and left as it is. A second run plans nothing.
+  -DryRun prints the plan (renames[]: number, state, old, new; skipped[]; summary) and writes nothing. -AllRepos: one result per repository in repos[].
 .PARAMETER Mode
-  current, list, show, create, issues, close, rename or insert.
+  current, list, show, create, issues, close, rename, insert, assign or renumber.
+.PARAMETER Issues
+  assign: issue numbers, comma or space separated, `#` allowed (`1,2,#3`).
 .PARAMETER NoReleaseTest
   create, insert: skip the release-test issue (New-ReleaseTestIssue.ps1 makes it only when .agents/config.json has release.test, never twice per milestone; result key releaseTest).
 .PARAMETER DryRun
-  insert: list the renames and the references that need a manual check, write nothing.
+  insert: list the renames and the references that need a manual check, write nothing. assign: report the result, write nothing.
 .PARAMETER Name
   show, create, close, issues: M<n>, the full title, the version x.y.z (a leading v is dropped) or the title of a legacy milestone.
   create: M<n> or x.y.z; empty: the next free M number.
@@ -51,14 +61,21 @@
   owner/name; default: the repository of the current directory ({owner}/{repo} of gh).
 .PARAMETER ReleaseState
   Path of Get-ReleaseState.ps1; default: the sibling github-release skill. Missing: releasePr is null.
+.PARAMETER AllRepos
+  renumber: run it over every repository of the owner that is not archived and has milestones (`gh repo list <owner> --no-archived`). All repositories are planned first; one clash or failure aborts before the first write.
+.PARAMETER Owner
+  renumber -AllRepos: the owner; default the owner of -Repo (of the current directory without -Repo).
 #>
 param(
-  [Parameter(Mandatory)][ValidateSet('current', 'list', 'show', 'create', 'issues', 'close', 'rename', 'insert')][string]$Mode,
+  [Parameter(Mandatory)][ValidateSet('current', 'list', 'show', 'create', 'issues', 'close', 'rename', 'insert', 'assign', 'renumber')][string]$Mode,
+  [string]$Issues,
   [switch]$NoReleaseTest,
   [string]$Name,
   [string]$To,
   [string]$MoveTo,
   [switch]$DryRun,
+  [switch]$AllRepos,
+  [string]$Owner,
   [string]$Version,
   [ValidateSet('open', 'closed', 'all')][string]$State = 'all',
   [string]$Repo = '{owner}/{repo}',
@@ -124,6 +141,70 @@ function New-ReleaseTest($ms) {
   $raw = & (Join-Path $PSScriptRoot 'New-ReleaseTestIssue.ps1') -Milestone $ms.title -MilestoneNumber $ms.number -Repo $Repo
   if ($LASTEXITCODE -ne 0) { Fail "creating the release-test issue of $($ms.title) failed" }
   if ($raw) { $raw | Out-String | ConvertFrom-Json }
+}
+
+# renumber: plan of one repository ($ms = its milestones); error = reason (nothing may be written), renames[] old -> new
+function Get-RenumberPlan([string]$repo, $ms) {
+  $renames = [System.Collections.Generic.List[object]]::new()
+  $skipped = [System.Collections.Generic.List[object]]::new()
+  $numbered = 0; $unchanged = 0; $other = 0
+  foreach ($m in ($ms | Sort-Object number)) {
+    $p = Get-Title $m.title
+    if ($p.kind -ne 'numbered') { $other++; continue }
+    $numbered++
+    $bad = Test-Writable $p.n
+    if ($bad) { $skipped.Add([ordered]@{ number = $m.number; state = $m.state; title = $m.title; reason = $bad }); continue }
+    $new = Format-Title $p
+    if ($new -ceq $m.title) { $unchanged++; continue }
+    $renames.Add([ordered]@{ number = $m.number; state = $m.state; old = $m.title; new = $new })
+  }
+  $err = $null
+  foreach ($r in $renames) {
+    $taken = @($ms | Where-Object { $_.number -ne $r.number -and $_.title -ieq $r.new } | Select-Object -First 1)
+    $twin = @($renames | Where-Object { $_.number -ne $r.number -and $_.new -ieq $r.new } | Select-Object -First 1)
+    if ($taken.Count) { $err = "milestone '$($taken[0].title)' already exists: renumber would rename '$($r.old)' to '$($r.new)'"; break }
+    if ($twin.Count) { $err = "'$($twin[0].old)' and '$($r.old)' would both become '$($r.new)'"; break }
+  }
+  [ordered]@{
+    repo = $repo; renumbered = $false; dryRun = [bool]$DryRun; error = $err
+    renames = @($renames); skipped = @($skipped)
+    summary = [ordered]@{ milestones = @($ms).Count; numbered = $numbered; renames = $renames.Count; unchanged = $unchanged; skipped = $skipped.Count; other = $other }
+  }
+}
+
+if ($Mode -eq 'renumber') {
+  $repos = @($Repo)
+  if ($AllRepos) {
+    $own = $Owner
+    if (-not $own -and $Repo -ne '{owner}/{repo}') { $own = ($Repo -split '/')[0] }
+    if (-not $own) { $own = (& gh repo view --json owner --jq '.owner.login' 2>$null | Out-String).Trim(); if ($LASTEXITCODE -ne 0 -or -not $own) { Fail 'cannot resolve the owner: pass -Owner' } }
+    $raw = & gh repo list $own --json nameWithOwner --no-archived --limit 1000 2>$null
+    if ($LASTEXITCODE -ne 0) { Fail "gh repo list $own failed" }
+    $repos = @($raw | Out-String | ConvertFrom-Json | ForEach-Object { $_.nameWithOwner })
+  }
+  $plans = [System.Collections.Generic.List[object]]::new()
+  foreach ($r in $repos) {
+    $ms = @(Get-Paged "repos/$r/milestones?state=all&per_page=100")
+    if ($AllRepos -and -not $ms.Count) { continue }
+    $plans.Add((Get-RenumberPlan $r $ms))
+  }
+  $failed = @($plans | Where-Object { $_.error })
+  if (-not $DryRun -and -not $failed.Count) {
+    $done = [System.Collections.Generic.List[string]]::new()
+    foreach ($pl in $plans) {
+      foreach ($rn in $pl.renames) {
+        $null = & gh api -X PATCH "repos/$($pl.repo)/milestones/$($rn.number)" -f "title=$($rn.new)" 2>$null
+        if ($LASTEXITCODE -ne 0) { Fail "renaming milestone $($rn.old) to $($rn.new) in $($pl.repo) failed (renamed so far: $($done -join ', '))" }
+        $done.Add("$($pl.repo): $($rn.old) -> $($rn.new)")
+      }
+      $pl.renumbered = $true
+    }
+  }
+  foreach ($f in $failed) { Write-Error "$($f.repo): $($f.error); nothing was changed" -ErrorAction Continue }
+  if ($AllRepos) { [ordered]@{ allRepos = $true; dryRun = [bool]$DryRun; repos = @($plans) } | ConvertTo-Json -Depth 7 }
+  else { $plans[0] | ConvertTo-Json -Depth 6 }
+  if ($failed.Count) { exit 1 }
+  exit 0
 }
 
 $milestones = @(Get-Paged "repos/$Repo/milestones?state=all&per_page=100")
@@ -299,6 +380,79 @@ if ($Mode -eq 'close') {
   exit 0
 }
 
+if ($Mode -eq 'assign') {
+  if (-not $Name) { Fail 'assign needs -Name <M<n>|none>' }
+  $nums = @("$Issues" -split '[,\s]+' | Where-Object { $_ } | ForEach-Object { if ($_ -match '^#?([0-9]+)$' -and [int]$Matches[1] -ge 1) { [int]$Matches[1] } else { Fail "invalid issue number '$_' in -Issues" } } | Select-Object -Unique)
+  if (-not $nums.Count) { Fail 'assign needs -Issues <n,...>' }
+  $target = $null
+  if ($Name -cne 'none') {
+    $bare = Get-Bare $Name
+    if (-not (Get-Title $bare).kind) { Fail "invalid milestone name '$Name': expected M<n>, x.y.z or none" }
+    $target = Find-Milestone $milestones $bare
+    if (-not $target -and $DryRun) { $target = [pscustomobject]@{ number = $null; title = $bare; state = 'missing'; html_url = $null } }
+    if (-not $target) { Fail "milestone '$Name' not found; create it first with /github-milestone create $bare" }
+    if ($target.state -ne 'missing' -and $target.state -ne 'open') { Fail "milestone '$($target.title)' is closed: nothing was changed" }
+  }
+  $info = @{}
+  foreach ($n in $nums) {
+    $raw = & gh api "repos/$Repo/issues/$n" 2>$null
+    if ($LASTEXITCODE -ne 0) { Fail "issue #$n not found: nothing was changed" }
+    $o = $raw | Out-String | ConvertFrom-Json
+    $info[$n] = [pscustomobject]@{
+      number = $n; title = $o.title; repository_url = $o.repository_url; parent = $o.parent_issue_url
+      current = $(if ($o.milestone) { [string]$o.milestone.title } else { [string]$null })
+      labels = @($o.labels | ForEach-Object { if ($_ -is [string]) { $_ } else { $_.name } })
+    }
+  }
+  $warnings = [System.Collections.Generic.List[object]]::new()
+  foreach ($n in $nums) {
+    $i = $info[$n]
+    if ($target) {
+      if ($i.labels -contains 'epic') { Fail "issue #$n is an Epic: an Epic never has a milestone, nothing was changed" }
+      if ($i.labels -notcontains 'feature') { continue }
+      $sraw = & gh api "repos/$Repo/issues/$n/sub_issues?per_page=100" 2>$null
+      if ($LASTEXITCODE -ne 0) { Fail "sub-issues of #$n not readable: nothing was changed" }
+      $outside = @(@($sraw | Out-String | ConvertFrom-Json) | Where-Object { $_ -and $_.state -eq 'open' } | ForEach-Object {
+          $foreign = $_.repository_url -and $i.repository_url -and $_.repository_url -ne $i.repository_url
+          if ($foreign) { ($_.repository_url -replace '^.*/repos/', '') + "#$($_.number)" }
+          elseif ($info.ContainsKey([int]$_.number)) { }
+          elseif (-not ($_.milestone -and $_.milestone.title -eq $target.title)) { "#$($_.number)" }
+        })
+      if ($outside.Count) { Fail "Feature #$n gets a milestone only when all its PBIs are in it; outside: $($outside -join ', '): nothing was changed" }
+    }
+    elseif ($i.labels -contains 'pbi' -or $i.labels -contains 'bug') {
+      $warnings.Add([ordered]@{ type = 'no-milestone'; number = $n; message = "warning: #$n has no milestone" })
+      $pm = if ($i.parent) { [regex]::Match($i.parent, '/repos/(.+)/issues/([0-9]+)$') } else { $null }
+      if ($pm -and $pm.Success -and $pm.Groups[1].Value -eq ($i.repository_url -replace '^.*/repos/', '') -and -not $info.ContainsKey([int]$pm.Groups[2].Value)) {
+        $praw = & gh api "repos/$Repo/issues/$($pm.Groups[2].Value)" 2>$null
+        if ($LASTEXITCODE -eq 0) {
+          $po = $praw | Out-String | ConvertFrom-Json
+          if ($po.milestone) {
+            $warnings.Add([ordered]@{ type = 'feature-incomplete'; number = [int]$po.number; title = $po.title; outside = @([ordered]@{ number = $n; title = $i.title; milestone = 'none' }) })
+          }
+        }
+      }
+    }
+  }
+  $repoArgs = if ($Repo -eq '{owner}/{repo}') { @() } else { @('--repo', $Repo) }
+  $assigned = foreach ($n in $nums) {
+    $i = $info[$n]
+    $newMs = $null
+    if ($target) { $newMs = $target.title }
+    $status = 'unchanged'
+    if ("$($i.current)" -cne "$newMs") {
+      $status = 'set'
+      if (-not $DryRun) {
+        $null = if ($newMs) { & gh issue edit $n --milestone $newMs @repoArgs 2>$null } else { & gh issue edit $n --remove-milestone @repoArgs 2>$null }
+        if ($LASTEXITCODE -ne 0) { Fail "setting the milestone of #$n failed" }
+      }
+    }
+    [ordered]@{ number = $n; previous = $(if ($i.current) { $i.current } else { $null }); milestone = $newMs; status = $status }
+  }
+  [ordered]@{ dryRun = [bool]$DryRun; milestone = $(if ($target) { [ordered]@{ number = $target.number; title = $target.title; state = $target.state; url = $target.html_url } } else { $null }); assigned = @($assigned); warnings = @($warnings) } | ConvertTo-Json -Depth 6
+  exit 0
+}
+
 if ($Mode -eq 'issues') {
   if (-not $Name) { Fail 'issues needs -Name <milestone title>' }
   $m = Find-Milestone $milestones $Name
@@ -374,8 +528,16 @@ function Get-Detail($m) {
     $kinds = @($i.labels | ForEach-Object { $_.name })
     if ($kinds -contains 'epic') { $warnings += , ([ordered]@{ type = 'epic-in-milestone'; number = $i.number; title = $i.title }) }
     elseif ($kinds -contains 'feature') {
-      $outside = @(Get-Paged "repos/$Repo/issues/$($i.number)/sub_issues?per_page=100" | Where-Object { $_.state -eq 'open' -and ($null -eq $_.milestone -or $_.milestone.number -ne $m.number) } |
-          ForEach-Object { [ordered]@{ number = $_.number; title = $_.title; milestone = $(if ($_.milestone) { $_.milestone.title } else { 'none' }) } })
+      # a sub-issue from another repository is always outside: a milestone belongs to one repository
+      $feature = $i
+      $outside = @(Get-Paged "repos/$Repo/issues/$($i.number)/sub_issues?per_page=100" | Where-Object {
+          $foreign = $_.repository_url -and $feature.repository_url -and $_.repository_url -ne $feature.repository_url
+          $_.state -eq 'open' -and ($foreign -or $null -eq $_.milestone -or $_.milestone.number -ne $m.number)
+        } | ForEach-Object {
+          $o = [ordered]@{ number = $_.number; title = $_.title; milestone = $(if ($_.milestone) { $_.milestone.title } else { 'none' }) }
+          if ($_.repository_url -and $feature.repository_url -and $_.repository_url -ne $feature.repository_url) { $o.repository = $_.repository_url -replace '^.*/repos/', '' }
+          $o
+        })
       if ($outside.Count) { $warnings += , ([ordered]@{ type = 'feature-incomplete'; number = $i.number; title = $i.title; outside = $outside }) }
     }
   }

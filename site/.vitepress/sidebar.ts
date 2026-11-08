@@ -56,6 +56,10 @@ export const sidebar: SidebarGroup[] = [
         text: 'ADR 0002: Displays read the progress events',
         link: '/adr/0002-displays-read-the-progress-events',
       },
+      {
+        text: 'ADR 0003: The progress event format lives in agent-events',
+        link: '/adr/0003-the-progress-event-format-lives-in-agent-events',
+      },
     ],
   },
   {

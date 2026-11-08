@@ -2,7 +2,7 @@
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "https://github.com/GravionLabs/skills/skills/github/github-milestone/schema/milestones.schema.json",
   "title": "Get-Milestones.ps1 output",
-  "description": "Milestone titles: M<n> [<Topic>] (open, topic without parentheses), M<n> [<Topic>] (x.y.z) (closed, released) or legacy x.y.z; others are listed, never current. One of eight shapes, by -Mode: current, list, show (a milestone detail), create, issues, close, rename or insert. M<n> may carry sub-numbers (M1.1) that sort between M<n> and M<n+1>.",
+  "description": "Milestone titles: M<n> [<Topic>] (open, topic without parentheses), M<n> [<Topic>] (x.y.z) (closed, released) or legacy x.y.z; others are listed, never current. One of eleven shapes, by -Mode: current, list, show (a milestone detail), create, issues, close, rename, insert, assign or renumber (also with -AllRepos). M<n> may carry sub-numbers (M1.1) that sort between M<n> and M<n+1>.",
   "oneOf": [
     {
       "title": "current",
@@ -104,6 +104,46 @@
       "additionalProperties": false
     },
     {
+      "title": "assign",
+      "type": "object",
+      "required": ["dryRun", "milestone", "assigned", "warnings"],
+      "properties": {
+        "dryRun": { "type": "boolean", "description": "true: nothing was written." },
+        "milestone": { "oneOf": [{ "$ref": "#/$defs/milestoneRef" }, { "type": "null" }], "description": "The target; null for assign none." },
+        "assigned": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "required": ["number", "previous", "milestone", "status"],
+            "properties": {
+              "number": { "type": "integer" },
+              "previous": { "type": ["string", "null"], "description": "Milestone title before, null when none." },
+              "milestone": { "type": ["string", "null"], "description": "Milestone title after, null when cleared." },
+              "status": { "enum": ["set", "unchanged"] }
+            },
+            "additionalProperties": false
+          }
+        },
+        "warnings": {
+          "type": "array",
+          "description": "no-milestone: a PBI or Bug was cleared; feature-incomplete: the Feature of a cleared PBI keeps its milestone (outside[] as in show).",
+          "items": {
+            "type": "object",
+            "required": ["type", "number"],
+            "properties": {
+              "type": { "enum": ["no-milestone", "feature-incomplete"] },
+              "number": { "type": "integer" },
+              "message": { "type": "string" },
+              "title": { "type": "string" },
+              "outside": { "type": "array", "items": { "type": "object" } }
+            },
+            "additionalProperties": false
+          }
+        }
+      },
+      "additionalProperties": false
+    },
+    {
       "title": "insert",
       "type": "object",
       "required": ["inserted", "dryRun", "title", "renames", "references"],
@@ -135,6 +175,21 @@
       "additionalProperties": false
     },
     {
+      "title": "renumber",
+      "$ref": "#/$defs/renumber"
+    },
+    {
+      "title": "renumber -AllRepos",
+      "type": "object",
+      "required": ["allRepos", "dryRun", "repos"],
+      "properties": {
+        "allRepos": { "const": true },
+        "dryRun": { "type": "boolean" },
+        "repos": { "type": "array", "description": "One result per repository with milestones.", "items": { "$ref": "#/$defs/renumber" } }
+      },
+      "additionalProperties": false
+    },
+    {
       "title": "create",
       "type": "object",
       "required": ["created", "milestone"],
@@ -156,6 +211,50 @@
     }
   ],
   "$defs": {
+    "renumber": {
+      "type": "object",
+      "description": "renumber of one repository: the plan (dry run) or what was renamed.",
+      "required": ["repo", "renumbered", "dryRun", "error", "renames", "skipped", "summary"],
+      "properties": {
+        "repo": { "type": "string" },
+        "renumbered": { "type": "boolean", "description": "true once the renames were written; false on a dry run or an error." },
+        "dryRun": { "type": "boolean" },
+        "error": { "type": ["string", "null"], "description": "A clash (title already exists, two milestones become the same title): nothing was written, exit 1." },
+        "renames": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "required": ["number", "state", "old", "new"],
+            "properties": { "number": { "type": "integer" }, "state": { "enum": ["open", "closed"] }, "old": { "type": "string" }, "new": { "type": "string" } },
+            "additionalProperties": false
+          }
+        },
+        "skipped": {
+          "type": "array",
+          "description": "Numbered milestones that cannot be written padded (number above 999, sub-number above 9, two sub levels); left as they are.",
+          "items": {
+            "type": "object",
+            "required": ["number", "state", "title", "reason"],
+            "properties": { "number": { "type": "integer" }, "state": { "enum": ["open", "closed"] }, "title": { "type": "string" }, "reason": { "type": "string" } },
+            "additionalProperties": false
+          }
+        },
+        "summary": {
+          "type": "object",
+          "required": ["milestones", "numbered", "renames", "unchanged", "skipped", "other"],
+          "properties": {
+            "milestones": { "type": "integer" },
+            "numbered": { "type": "integer" },
+            "renames": { "type": "integer" },
+            "unchanged": { "type": "integer", "description": "Numbered and already padded." },
+            "skipped": { "type": "integer" },
+            "other": { "type": "integer", "description": "Legacy x.y.z and other titles, untouched." }
+          },
+          "additionalProperties": false
+        }
+      },
+      "additionalProperties": false
+    },
     "releaseTest": {
       "type": "object",
       "required": ["created", "number", "url"],
@@ -239,7 +338,7 @@
                 "items": {
                   "type": "object",
                   "required": ["number", "title", "milestone"],
-                  "properties": { "number": { "type": "integer" }, "title": { "type": "string" }, "milestone": { "type": "string" } }
+                  "properties": { "number": { "type": "integer" }, "title": { "type": "string" }, "milestone": { "type": "string" }, "repository": { "type": "string", "description": "owner/repo of a sub-issue from another repository." } }
                 }
               }
             },

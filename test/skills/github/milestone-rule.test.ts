@@ -32,6 +32,43 @@ describe('milestone rule (#327)', () => {
   });
 
   it('deliver step 1 reports items outside the milestone', () => {
-    expect(read('skills/delivery/deliver/SKILL.md')).toContain('select: outside M<n>, skipped');
+    expect(read('skills/delivery/deliver/SKILL.md')).toContain('select: outside M<nnn>, skipped');
+  });
+
+  it('setting a milestone: only github-milestone assign, no skill file edits it with gh issue edit', () => {
+    const ref = read('skills/github/github-issue/references/milestones.md');
+    const section = ref.split(/^## /m).find((x) => x.startsWith('Setting a milestone\n')) ?? '';
+    expect(section).toContain('github-milestone assign M<nnn>|none #<nr>');
+    expect(section).toMatch(/--milestone/);
+    expect(section).toMatch(/--remove-milestone/);
+    expect(ref.split(/^## /m).find((x) => x.startsWith('Checks\n')) ?? '').toContain('assign');
+
+    const files: string[] = [];
+    const walk = (dir: string) => {
+      for (const e of fs.readdirSync(dir, { withFileTypes: true })) {
+        const p = path.join(dir, e.name);
+        if (e.isDirectory()) walk(p);
+        else if (e.name.endsWith('.md')) files.push(p);
+      }
+    };
+    walk(path.join(root, 'skills'));
+    expect(files.length).toBeGreaterThan(0);
+    // Scripts (Get-Milestones.ps1 implements assign, close and insert) are out of scope: skill files only.
+    // A line that forbids the call ("never", "instead of", "not used") is prose, not a call.
+    const call = /gh issue edit\b[^\n`]*--(remove-)?milestone\b/;
+    const prohibition = /never|instead of|not used|not by hand/i;
+    const offenders = files.filter((f) =>
+      fs
+        .readFileSync(f, 'utf8')
+        .split('\n')
+        .some((line) => call.test(line) && !prohibition.test(line)),
+    );
+    expect(offenders.map((f) => path.relative(root, f))).toEqual([]);
+    expect(read('skills/github/github-issue/SKILL.md')).toContain('github-milestone assign');
+    expect(read('skills/delivery/planner/SKILL.md')).toContain('github-milestone assign');
+    expect(read('skills/github/github-issue/references/create-from-plan.md')).toContain(
+      'github-milestone assign',
+    );
+    expect(read('docs/guides/release.md')).toContain('/github-milestone assign');
   });
 });

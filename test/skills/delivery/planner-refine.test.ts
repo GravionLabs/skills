@@ -37,7 +37,7 @@ describe('planner refine definition of ready (#891)', () => {
 
   it('Refine of a milestone adds missing Tier lines and reports the changed items (#325)', () => {
     expect(refine).toMatch(
-      /`refine M<n>`[\s\S]*every open PBI and Bug[\s\S]*reports the items it changed/,
+      /`refine M<nnn>`[\s\S]*every open PBI and Bug[\s\S]*reports the items it changed/,
     );
     expect(section('Milestone')).toMatch(/Tier: <tier> — <reason>[\s\S]*report/);
   });

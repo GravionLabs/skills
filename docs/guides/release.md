@@ -39,7 +39,7 @@ To put a milestone between two open ones, use a sub-number: `/github-milestone c
 /github-milestone current
 ```
 
-`current` is the lowest open `M<nnn>` (a legacy `x.y.z` milestone above the latest `v<x.y.z>` tag comes first). It lists its open issues grouped as ready, blocked, `needs-decision`, `needs-refinement` and claimed, plus the release PR. Assign the planned PBIs and Bugs to the milestone before you deliver.
+`current` is the lowest open `M<nnn>` (a legacy `x.y.z` milestone above the latest `v<x.y.z>` tag comes first). It lists its open issues grouped as ready, blocked, `needs-decision`, `needs-refinement` and claimed, plus the release PR. Assign the planned PBIs and Bugs to the milestone before you deliver: `/github-milestone assign M3 #12 #13` (`none` clears it). Set milestones only this way, never with `gh issue edit --milestone`.
 
 ## 3. Deliver the milestone
 
@@ -152,11 +152,11 @@ Once the release job has tagged `v1.3.0`, close the milestone and create the nex
 
 With open issues left, create the next milestone first and move them: `/github-milestone create M004`, then `/github-milestone close M003 --move-to M004`. `--move-to` needs the target to exist and be open, so `create` always comes before `close ... --move-to`; `create` is idempotent. Legacy repositories whose open milestone is named `x.y.z` get the old hint: `create` the next `x.y.z` milestone first, then `/github-milestone close 1.3.0 [--move-to <next>]`.
 
-`close` needs the release tag: without `--version <x.y.z>` it takes the newest tag not yet assigned to a milestone, and renames `M003` to `M003 (1.3.0)` (`M003 Market data` to `M003 Market data (1.3.0)`) while closing it. Open issues stay, and nothing is renamed or closed, unless you pass `--move-to M<mmm>`, an existing open milestone that receives them (create it first). Pull requests are not moved. A milestone that is already closed is left as is. `close` renames only to add the version, never edits the due date or deletes a milestone. To rename a legacy `x.y.z` milestone (or any open one) use `/github-milestone rename <name> <new title>`: `rename 0.2.0 "M002 (0.1.1)"` (the version comes from the new title, the number of an `M<nnn>` never changes, closed milestones are refused).
+`close` needs the release tag: without `--version <x.y.z>` it takes the newest tag not yet assigned to a milestone, and renames `M003` to `M003 (1.3.0)` (`M003 Market data` to `M003 Market data (1.3.0)`) while closing it. Open issues stay, and nothing is renamed or closed, unless you pass `--move-to M<nnn>`, an existing open milestone that receives them (create it first). Pull requests are not moved. A milestone that is already closed is left as is. `close` renames only to add the version, never edits the due date or deletes a milestone. To rename a legacy `x.y.z` milestone (or any open one) use `/github-milestone rename <name> <new title>`: `rename 0.2.0 "M002 (0.1.1)"` (the version comes from the new title, the number of an `M<nnn>` never changes, closed milestones are refused).
 
 ## Migrate legacy milestones
 
-A repository with `x.y.z` milestones moves to `M<nnn>` in one pass; no flag day is needed, legacy titles keep working meanwhile. Worked example: tamias, whose milestone `0.2.0` shipped as `v0.1.1`. The number follows the order of the releases, the version in the parentheses is the tag that shipped. A repository with short numbers (`M1`, `M11`) migrates its titles once with `/github-milestone renumber --dry-run`, then `/github-milestone renumber`; old titles in issue bodies and `ROADMAP.md` are listed, not rewritten.
+A repository with `x.y.z` milestones moves to `M<nnn>` in one pass; no flag day is needed, legacy titles keep working meanwhile. Worked example: tamias, whose milestone `0.2.0` shipped as `v0.1.1`. The number follows the order of the releases, the version in the parentheses is the tag that shipped. A repository with short numbers (`M1`, `M11`) migrates its titles once with `/github-milestone renumber --dry-run`, then `/github-milestone renumber` (`--repo o/r` for one repository, `--all-repos` for every non-archived repository of the owner); old titles in issue bodies and `ROADMAP.md` are listed, not rewritten.
 
 | Legacy title | New title      | State                      |
 | :----------- | :------------- | :------------------------- |
