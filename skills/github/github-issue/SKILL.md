@@ -31,7 +31,7 @@ Titles are always written with the bracket prefix. Legacy titles (`Epic: …`, `
 Parent/child links are **native GitHub sub-issues** — see `references/sub-issues.md` for how to
 read, create, move and verify them. Markdown checklists are not used.
 
-Milestones: a PBI and a Bug always have one; a Feature only when all its PBIs are in that milestone; an Epic never (`references/milestones.md`).
+Milestones: a PBI and a Bug always have one; a Feature only when all its PBIs are in that milestone; an Epic never (`references/milestones.md`). Set them only with `github-milestone assign M<n>|none #<nr>`, never `gh issue edit --milestone`.
 
 ## Routing
 
