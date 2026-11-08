@@ -41,6 +41,7 @@ describe.skipIf(!hasPwsh || process.platform === 'win32')('Get-MergingPrs.ps1 (#
     checks: Record<string, object[]>,
     detail: object = {},
     issues = '10,11',
+    rules: object[] = [],
   ) => {
     const d = path.join(dir, name);
     const gh = createFakeGh(
@@ -48,6 +49,7 @@ describe.skipIf(!hasPwsh || process.platform === 'win32')('Get-MergingPrs.ps1 (#
       `(call) => {
         const a = call.args[1];
         if (/pulls\\?base=release\\/next&state=open/.test(a)) return { rest: ${JSON.stringify(prs)} };
+        if (/rules\\/branches/.test(a)) return { rest: ${JSON.stringify(rules)} };
         if (/branches\\/release\\/next$/.test(a)) return { rest: { commit: { sha: 'base' } } };
         const m = /commits\\/(\\w+)\\/check-runs/.exec(a);
         if (m) return { rest: { check_runs: ${JSON.stringify(checks)}[m[1]] || [] } };
@@ -73,7 +75,7 @@ describe.skipIf(!hasPwsh || process.platform === 'win32')('Get-MergingPrs.ps1 (#
   it('a merged PR is not listed (PR gone, issue closed): empty result', async () => {
     const r = await run('merged', [], {});
     expect(r.out).toEqual([]);
-    expect(r.calls).toBe(1);
+    expect(r.calls).toBe(2); // PR list + branch rules
   });
 
   it('green or running checks: waiting', async () => {
@@ -116,5 +118,29 @@ describe.skipIf(!hasPwsh || process.platform === 'win32')('Get-MergingPrs.ps1 (#
   it('ignores PRs without auto-merge and issues outside the set', async () => {
     const r = await run('ignored', [pr(1, 'feat/10-a', 's1', false), pr(2, 'feat/99-z', 's2')], {});
     expect(r.out).toEqual([]);
+  });
+
+  it('only the required checks of release/next count, cancelled is not red', async () => {
+    const rules = [
+      {
+        type: 'required_status_checks',
+        parameters: { required_status_checks: [{ context: 'build' }] },
+      },
+    ];
+    const r = await run(
+      'required',
+      [pr(1, 'feat/10-a', 's1'), pr(2, 'feat/11-b', 's2')],
+      {
+        s1: [ok, { status: 'completed', conclusion: 'failure', name: 'optional-lint' }],
+        s2: [{ status: 'completed', conclusion: 'cancelled', name: 'build' }],
+      },
+      { mergeable: true, mergeable_state: 'clean' },
+      '10,11',
+      rules,
+    );
+    expect(r.out.map((x) => [x.issue, x.state])).toEqual([
+      [10, 'waiting'],
+      [11, 'waiting'],
+    ]);
   });
 });

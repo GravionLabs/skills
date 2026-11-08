@@ -2,7 +2,7 @@
 .SYNOPSIS
   Open PRs into release/next with auto-merge on whose issue is in the set (deliver step 1, loop wait).
 .DESCRIPTION
-  One REST list call (pulls?base=release/next&state=open, auto_merge != null), then per matching PR its check runs.
+  One REST list call (pulls?base=release/next&state=open, auto_merge != null), then per matching PR its check runs, only the required checks of release/next (branch rules, all runs when none can be read; cancelled is not red).
   The issue number comes from the head branch <type>/<nr>-<slug>. Prints a JSON array of
   { issue, pr, url, state, reason }, state:
     waiting      checks still running or all green: auto-merge will merge, nothing to do
@@ -17,7 +17,7 @@ param([Parameter(Mandatory)][string[]]$Issues)
 
 $ErrorActionPreference = 'Stop'
 $set = @($Issues | ForEach-Object { $_ -split ',' } | Where-Object { $_ } | ForEach-Object { [int]$_ })
-$badConclusions = 'failure', 'timed_out', 'cancelled', 'action_required', 'startup_failure'
+$badConclusions = 'failure', 'timed_out', 'action_required', 'startup_failure'
 
 function Get-Gh([string]$path) {
   $out = & gh api $path 2>$null
@@ -26,8 +26,16 @@ function Get-Gh([string]$path) {
   return ($out -join "`n") | ConvertFrom-Json
 }
 
+# Required checks of release/next (branch rules); unreadable or none: all check runs count. cancelled is not red.
+$required = @()
+try {
+  $required = @(@(Get-Gh 'repos/{owner}/{repo}/rules/branches/release/next') | Where-Object { $_ -and $_.type -eq 'required_status_checks' } |
+      ForEach-Object { $_.parameters.required_status_checks } | ForEach-Object { $_.context } | Where-Object { $_ })
+} catch { $required = @() }
+
 function Get-Failed([string]$sha) {
-  $runs = (Get-Gh "repos/{owner}/{repo}/commits/$sha/check-runs?per_page=100").check_runs
+  $runs = @((Get-Gh "repos/{owner}/{repo}/commits/$sha/check-runs?per_page=100").check_runs)
+  if ($required.Count) { $runs = @($runs | Where-Object { $required -contains $_.name }) }
   [pscustomobject]@{
     Failed  = @($runs | Where-Object { $_.status -eq 'completed' -and $_.conclusion -in $badConclusions } | ForEach-Object { $_.name })
   }
