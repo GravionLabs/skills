@@ -3,16 +3,12 @@ import * as fs from 'fs';
 import * as os from 'os';
 import * as path from 'path';
 import Ajv from 'ajv/dist/2020';
+import { AGENT_EVENTS_FIXTURES, EVENT_SCHEMA, STATE_SCHEMA } from '../../helpers/agent-events';
 import { PwshWorker } from '../../helpers/pwsh-worker';
 
 const ROOT = path.resolve(__dirname, '../../..');
 const SCRIPT = path.join(ROOT, 'skills/delivery/deliver/scripts/ConvertFrom-ProgressEvents.ps1');
-const STATE_SCHEMA = path.join(
-  ROOT,
-  'skills/delivery/deliver/schema/deliver-run-state.schema.json',
-);
-const EVENT_SCHEMA = path.join(ROOT, 'skills/delivery/deliver/schema/progress-event.schema.json');
-const FIXTURES = path.join(__dirname, 'fixtures/progress-events');
+const FIXTURES = AGENT_EVENTS_FIXTURES;
 // every fixture pair is folded with this "now" and without the pid test (the fixture pid is not a live process).
 // Written with a space, not a T: the worker reads its request with ConvertFrom-Json, which would turn an ISO string
 // into a DateTime and hand the script a local-time string.

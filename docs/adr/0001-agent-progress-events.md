@@ -38,7 +38,7 @@ Skills and the loop write **progress events** to an append-only file per run. Th
 
 ### Schema
 
-JSON Lines, one event per line, published as `schema/progress-event.schema.json` (raw URL on `main`, like the status schema today).
+JSON Lines, one event per line, published as `schema/progress-event.schema.json` (now in GravionLabs/agent-events, [ADR 0003](0003-the-progress-event-format-lives-in-agent-events.md); originally the raw URL on `main`, like the status schema today).
 
 - Every event carries `v` (1), `seq` (per run, gapless), `ts`, `run`, `type` and `tone`.
 - The event types use the AG-UI vocabulary: `run.started`, `milestone.progress`, `issue.started`, `step.finished`, `attention`, `issue.finished`, `release.updated`, `run.finished`.

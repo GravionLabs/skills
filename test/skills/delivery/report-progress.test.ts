@@ -3,16 +3,14 @@ import * as fs from 'fs';
 import * as os from 'os';
 import * as path from 'path';
 import Ajv from 'ajv/dist/2020';
+import { EVENT_SCHEMA } from '../../helpers/agent-events';
 import { PwshWorker } from '../../helpers/pwsh-worker';
 
 const SCRIPT = path.resolve(
   __dirname,
   '../../../skills/delivery/deliver/scripts/Report-Progress.ps1',
 );
-const SCHEMA = path.resolve(
-  __dirname,
-  '../../../skills/delivery/deliver/schema/progress-event.schema.json',
-);
+const SCHEMA = EVENT_SCHEMA;
 const hasPwsh = spawnSync('pwsh', ['-NoProfile', '-Command', '1']).status === 0;
 
 describe.skipIf(!hasPwsh || process.platform === 'win32')('Report-Progress.ps1', () => {
