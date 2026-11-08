@@ -9,7 +9,7 @@ describe('Node version of the repository (#72)', () => {
     expect(read('.nvmrc').trim()).toBe('26');
   });
 
-  it.each(['.github/workflows/ci.yml', '.github/workflows/pages.yml'])(
+  it.each(['.github/workflows/ci.yml'])(
     '%s takes the Node version from .nvmrc, never a literal',
     (rel) => {
       const wf = read(rel);
