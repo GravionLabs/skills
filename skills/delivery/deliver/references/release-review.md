@@ -14,7 +14,7 @@ Why no governance: its inputs belong to one issue (the labels such as `skip-adr`
 
 ## Result file
 
-After the round this session writes `<git-common-dir>/.agents/state/release-review-<key>.json` (`<key>` = the `M<nnn>` or sub-number `M<nnn>.<m>` of the resolved `milestone.title`, so `M004`, `M004 Topic` and `M004 (0.2.0)` share one file, `M001.1 Topic (0.2.0)` is `M001.1` and never `M001`; legacy: the title; `git rev-parse --git-common-dir`, the same file from every worktree, never committed), overwriting the previous round: `{ milestone, sha, round, review, bugs }`, `sha` = `git rev-parse origin/release/next`, `review` = the subagent's result, `milestone` = `<key>`, `bugs` = the numbers of the bugs filed in this round (empty when none); schema `schema/deliver-release-review.schema.json`. Print `release: review round <round>: <n> blocking`.
+After the round this session writes `<git-common-dir>/.agents/state/release-review-<key>.json` (`<key>` = the unpadded `M<n>` or `M<n>.<m>` of the resolved `milestone.title` (`M003` → `M3`, `M011.1` → `M11.1`): `M3`, `M003`, `M3 Topic` and `M003 Topic (0.2.0)` share one file `release-review-M3.json`, `M1.1 Topic (0.2.0)` is `M1.1` and never `M1`; legacy: the title; `git rev-parse --git-common-dir`, the same file from every worktree, never committed), overwriting the previous round: `{ milestone, sha, round, review, bugs }`, `sha` = `git rev-parse origin/release/next`, `review` = the subagent's result, `milestone` = `<key>`, `bugs` = the numbers of the bugs filed in this round (empty when none); schema `schema/deliver-release-review.schema.json`. Print `release: review round <round>: <n> blocking`.
 
 ## Blocking findings
 
