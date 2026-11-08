@@ -73,11 +73,13 @@ foreach ($name in ($pairs.name | Select-Object -Unique)) {
 }
 $current = @{}
 $labelsOf = @{}
+$repoOf = @{}
 foreach ($p in $pairs) {
   $raw = & gh api "repos/$Repo/issues/$($p.issue)" 2>$null
   if ($LASTEXITCODE -ne 0) { Fail "issue #$($p.issue) not found: nothing was changed" }
   $obj = $raw | Out-String | ConvertFrom-Json
   $current[$p.issue] = if ($obj.milestone) { $obj.milestone.title } else { $null }
+  $repoOf[$p.issue] = $obj.repository_url
   $labelsOf[$p.issue] = @($obj.labels | ForEach-Object { if ($_ -is [string]) { $_ } else { $_.name } })
 }
 # milestone rule (github-issue references/milestones.md): an Epic never has a milestone; a Feature only when all its open PBIs end up in the same one
@@ -88,10 +90,13 @@ foreach ($p in $pairs) {
   if ($labelsOf[$p.issue] -notcontains 'feature') { continue }
   $subRaw = & gh api "repos/$Repo/issues/$($p.issue)/sub_issues?per_page=100" 2>$null
   if ($LASTEXITCODE -ne 0) { Fail "sub-issues of #$($p.issue) not readable: nothing was changed" }
-  $outside = @(@($subRaw | Out-String | ConvertFrom-Json) | Where-Object { $_ -and $_.state -eq 'open' } | Where-Object {
-      if ($byIssue.ContainsKey([int]$_.number)) { $byIssue[[int]$_.number].name -ne $p.name }
-      else { -not ($targets[$p.name] -and $_.milestone -and $_.milestone.title -eq $targets[$p.name]) }
-    } | ForEach-Object { "#$($_.number)" })
+  # a sub-issue from another repository is always outside (its number and milestone title belong to that repository)
+  $outside = @(@($subRaw | Out-String | ConvertFrom-Json) | Where-Object { $_ -and $_.state -eq 'open' } | ForEach-Object {
+      $foreign = $_.repository_url -and $repoOf[$p.issue] -and $_.repository_url -ne $repoOf[$p.issue]
+      if ($foreign) { ($_.repository_url -replace '^.*/repos/', '') + "#$($_.number)" }
+      elseif ($byIssue.ContainsKey([int]$_.number)) { if ($byIssue[[int]$_.number].name -ne $p.name) { "#$($_.number)" } }
+      elseif (-not ($targets[$p.name] -and $_.milestone -and $_.milestone.title -eq $targets[$p.name])) { "#$($_.number)" }
+    })
   if ($outside.Count) { Fail "Feature #$($p.issue) gets a milestone only when all its PBIs are in it; outside: $($outside -join ', '): nothing was changed" }
 }
 

@@ -22,7 +22,7 @@ const handler = `(call) => {
   if (m) {
     const cur = env('FAKE_CURRENT', '{}')[m[1]];
     if (cur === undefined) throw new Error('404 Not Found');
-    return { rest: { number: Number(m[1]), milestone: cur ? { title: cur } : null, labels: (env('FAKE_LABELS', '{}')[m[1]] || []).map((name) => ({ name })) } };
+    return { rest: { number: Number(m[1]), repository_url: env('FAKE_REPOS', '{}')[m[1]], milestone: cur ? { title: cur } : null, labels: (env('FAKE_LABELS', '{}')[m[1]] || []).map((name) => ({ name })) } };
   }
   if (p.includes('/milestones?')) return { rest: [env('FAKE_MILESTONES', '[]')] };
   if (p.includes('/tags?')) return { rest: [[]] };
@@ -197,6 +197,38 @@ describe('Set-IssueMilestones.ps1', () => {
       });
       expect(r.status).toBe(1);
       expect(r.stderr).toContain(`outside: ${outside}`);
+      expect(writes(r.calls)).toEqual([]);
+    });
+
+    // #438: a sub-issue from another repository is outside; its number never matches the assignment
+    it.each([
+      ['a milestone title collision', { title: 'M1' }],
+      ['no milestone', null],
+    ])('refuses a Feature with a sub-issue from another repository (%s)', async (_n, milestone) => {
+      const r = await run(
+        [
+          { issue: 1, milestone: 'M1' },
+          { issue: 3, milestone: 'M1' },
+        ],
+        {
+          ...base,
+          FAKE_CURRENT: { 1: null, 3: null },
+          FAKE_LABELS: { 1: ['feature'], 3: ['pbi'] },
+          FAKE_REPOS: { 1: 'https://api.github.com/repos/o/r' },
+          FAKE_SUBS: {
+            1: [
+              {
+                number: 3,
+                state: 'open',
+                milestone,
+                repository_url: 'https://api.github.com/repos/o/other',
+              },
+            ],
+          },
+        },
+      );
+      expect(r.status).toBe(1);
+      expect(r.stderr).toContain('outside: o/other#3');
       expect(writes(r.calls)).toEqual([]);
     });
 

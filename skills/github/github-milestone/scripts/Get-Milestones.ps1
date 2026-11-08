@@ -374,8 +374,16 @@ function Get-Detail($m) {
     $kinds = @($i.labels | ForEach-Object { $_.name })
     if ($kinds -contains 'epic') { $warnings += , ([ordered]@{ type = 'epic-in-milestone'; number = $i.number; title = $i.title }) }
     elseif ($kinds -contains 'feature') {
-      $outside = @(Get-Paged "repos/$Repo/issues/$($i.number)/sub_issues?per_page=100" | Where-Object { $_.state -eq 'open' -and ($null -eq $_.milestone -or $_.milestone.number -ne $m.number) } |
-          ForEach-Object { [ordered]@{ number = $_.number; title = $_.title; milestone = $(if ($_.milestone) { $_.milestone.title } else { 'none' }) } })
+      # a sub-issue from another repository is always outside: a milestone belongs to one repository
+      $feature = $i
+      $outside = @(Get-Paged "repos/$Repo/issues/$($i.number)/sub_issues?per_page=100" | Where-Object {
+          $foreign = $_.repository_url -and $feature.repository_url -and $_.repository_url -ne $feature.repository_url
+          $_.state -eq 'open' -and ($foreign -or $null -eq $_.milestone -or $_.milestone.number -ne $m.number)
+        } | ForEach-Object {
+          $o = [ordered]@{ number = $_.number; title = $_.title; milestone = $(if ($_.milestone) { $_.milestone.title } else { 'none' }) }
+          if ($_.repository_url -and $feature.repository_url -and $_.repository_url -ne $feature.repository_url) { $o.repository = $_.repository_url -replace '^.*/repos/', '' }
+          $o
+        })
       if ($outside.Count) { $warnings += , ([ordered]@{ type = 'feature-incomplete'; number = $i.number; title = $i.title; outside = $outside }) }
     }
   }
