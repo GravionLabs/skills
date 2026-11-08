@@ -40,13 +40,13 @@ Checked from GitHub (not from the output) before and after each iteration, on th
 
 An open `release-test` issue is not part of that set (also when passed explicitly as a Target: `Invoke-DeliverLoop.ps1` drops it from the targets): as the last open item it neither keeps the loop from `done` nor makes it `blocked`. `Get-DeliverStatus.ps1` counts it in `total`, as waiting (`release test`, or `release test, waits for <n> open items`) and, once an RC is posted on it (comment marker `<!-- release-test-rc -->`), as needs you `RC test <issue URL>`.
 
-| Result      | When                                                                                | Exit |
-| :---------- | :---------------------------------------------------------------------------------- | :--- |
-| done        | no open PBI left (a `merging` PBI, auto-merge on, is handed to GitHub and no longer counts)                                                                    | 0    |
-| max reached | `-Max` iterations ran (delivered, blocked or paused PBIs in total)                  | 0    |
-| blocked     | open PBIs remain, all wait on an open blocker or a label                            | 2    |
-| no progress | the set did not change after an iteration; prints the last log lines, never retries | 1    |
-| stopped     | the stop file of the run exists before an iteration                                 | 0    |
+| Result      | When                                                                                        | Exit |
+| :---------- | :------------------------------------------------------------------------------------------ | :--- |
+| done        | no open PBI left (a `merging` PBI, auto-merge on, is handed to GitHub and no longer counts) | 0    |
+| max reached | `-Max` iterations ran (delivered, blocked or paused PBIs in total)                          | 0    |
+| blocked     | open PBIs remain, all wait on an open blocker or a label                                    | 2    |
+| no progress | the set did not change after an iteration; prints the last log lines, never retries         | 1    |
+| stopped     | the stop file of the run exists before an iteration                                         | 0    |
 
 ## Stop a run
 
