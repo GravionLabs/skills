@@ -4,7 +4,7 @@
 .DESCRIPTION
   -Assignment: a JSON array [{ "issue": 12, "milestone": "M3" }] or the path of a file holding it. A milestone name is resolved as in the
   github-milestone skill: exact title, M<n> (finds `M3 Market data`), or legacy x.y.z. Everything is checked before the first write:
-  invalid input, an unknown issue, a closed milestone or a break of the milestone rule (Epic, incomplete Feature) exits 1 and changes nothing. A missing M<n> is created with
+  invalid input, an unknown issue, a closed milestone or a break of the milestone rule (Epic, incomplete Feature) exits 1 and changes nothing. A missing M<n> is created (after the rule checks of all targets, which run as a dry run against it) with
   Get-Milestones.ps1 -Mode create of the sibling github-milestone skill. The assignment and the milestone rule are
   done per target milestone by `Get-Milestones.ps1 -Mode assign` (dry run first); an issue already in the target milestone is skipped
   (status unchanged), the others are set (status set). A re-run therefore changes nothing.
@@ -79,14 +79,15 @@ foreach ($p in $pairs) {
 
 # the milestone rule (Epic, Feature) is checked by github-milestone: Get-Milestones.ps1 -Mode assign, per target milestone
 function Invoke-Assign([string]$title, [bool]$dry) {
-  $nrs = ($pairs | Where-Object { $targets[$_.name] -eq $title } | ForEach-Object { $_.issue }) -join ','
+  $nrs = ($pairs | Where-Object { ($targets[$_.name] ?? $_.name) -eq $title } | ForEach-Object { $_.issue }) -join ','
   $extra = @{ DryRun = $dry }
   $out = & $MilestoneScript -Mode assign -Name $title -Issues $nrs -Repo $Repo @extra
   if ($LASTEXITCODE -ne 0) { Fail "assigning to milestone $title failed: see above" }
   @(($out | Out-String | ConvertFrom-Json).assigned)
 }
 # dry run for the existing targets first: a refused assignment changes nothing, not even in an earlier target
-foreach ($name in @($targets.Keys)) { if ($targets[$name]) { $null = Invoke-Assign $targets[$name] $true } }
+# a missing target is checked too (assign -DryRun plans against it), before anything is created
+foreach ($name in @($targets.Keys)) { $null = Invoke-Assign $(if ($targets[$name]) { $targets[$name] } else { $name }) $true }
 
 $created = [System.Collections.Generic.List[string]]::new()
 foreach ($name in @($targets.Keys)) {

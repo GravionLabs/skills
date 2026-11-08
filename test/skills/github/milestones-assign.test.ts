@@ -110,6 +110,17 @@ describe('Get-Milestones.ps1 -Mode assign', () => {
     expect(writes).toEqual([]);
   });
 
+  it('-DryRun plans against a missing milestone and still applies the Epic rule', async () => {
+    const ok = await assign('M9', '1', { 1: pbi() }, {}, ['-DryRun']);
+    expect(ok.r.status).toBe(0);
+    expect(ok.out.assigned[0].status).toBe('set');
+    expect(ok.writes).toEqual([]);
+    expect(ok.posts).toEqual([]);
+    const epic = await assign('M9', '2', { 2: { labels: ['epic'] } }, {}, ['-DryRun']);
+    expect(epic.r.status).toBe(1);
+    expect(epic.r.stderr).toContain('Epic never has a milestone');
+  });
+
   it.each([
     ['an unknown milestone (not created, hint create)', 'M9', /not found; create it first/],
     ['a closed milestone', 'M2', /closed/],

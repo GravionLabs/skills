@@ -30,7 +30,7 @@
   insert: `insert -Name M<n>` renames every open M<k> with k >= n (and its sub-numbered ones, topic and version kept) to k+1, from the highest down so no title collides,
   then creates M<n>. Closed milestones are never touched; a closed or unmoved milestone that would collide exits 1 before the first write. -DryRun only lists
   the renames. Result: renames[], references[] (what is not rewritten: issue bodies of the shifted milestones, ROADMAP.md, release-review-<M<n>>.json state files).
-  assign: `assign -Name <M<n>|none> -Issues 1,2,3` sets the milestone of the issues (found as in show; open only; a missing one is not created, exit 1) or clears it (`none`).
+  assign: `assign -Name <M<n>|none> -Issues 1,2,3` sets the milestone of the issues (found as in show; open only; a missing one is never created: exit 1, with -DryRun the plan is made against it (state `missing`) so the rules can be checked first) or clears it (`none`).
   Everything is checked before the first write (exit 1, nothing changed): an Epic never gets a milestone; a Feature only when all its open sub-issues are in it afterwards
   (the call's own issues count with the new milestone; a sub-issue from another repository is always outside). Clearing a PBI or Bug is allowed, reported in warnings[]
   (no-milestone; feature-incomplete when its Feature keeps the milestone). An issue already in the target is `unchanged`. -DryRun writes nothing.
@@ -316,8 +316,9 @@ if ($Mode -eq 'assign') {
     $bare = Get-Bare $Name
     if (-not (Get-Title $bare).kind) { Fail "invalid milestone name '$Name': expected M<n>, x.y.z or none" }
     $target = Find-Milestone $milestones $bare
+    if (-not $target -and $DryRun) { $target = [pscustomobject]@{ number = $null; title = $bare; state = 'missing'; html_url = $null } }
     if (-not $target) { Fail "milestone '$Name' not found; create it first with /github-milestone create $bare" }
-    if ($target.state -ne 'open') { Fail "milestone '$($target.title)' is closed: nothing was changed" }
+    if ($target.state -ne 'missing' -and $target.state -ne 'open') { Fail "milestone '$($target.title)' is closed: nothing was changed" }
   }
   $info = @{}
   foreach ($n in $nums) {

@@ -173,11 +173,18 @@ describe('Set-IssueMilestones.ps1', () => {
       FAKE_MILESTONES: [ms(1, 'M1'), ms(2, 'M2')],
       FAKE_CURRENT: { 1: null, 2: null, 3: null, 4: null },
     };
-    it('refuses an Epic without writes', async () => {
-      const r = await run([{ issue: 1, milestone: 'M1' }], {
-        ...base,
-        FAKE_LABELS: { 1: ['epic'] },
-      });
+    // for a missing M<n> the rule runs before the milestone is created: no POST, no edit, also for the earlier target
+    it.each([
+      ['an existing milestone', [{ issue: 1, milestone: 'M1' }]],
+      [
+        'a missing milestone (nothing created)',
+        [
+          { issue: 3, milestone: 'M1' },
+          { issue: 1, milestone: 'M9' },
+        ],
+      ],
+    ])('refuses an Epic for %s without writes', async (_n, assignment) => {
+      const r = await run(assignment, { ...base, FAKE_LABELS: { 1: ['epic'] } });
       expect(r.status).toBe(1);
       expect(r.stderr).toContain('Epic never has a milestone');
       expect(writes(r.calls)).toEqual([]);
