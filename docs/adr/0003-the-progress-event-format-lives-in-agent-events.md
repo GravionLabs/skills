@@ -40,3 +40,7 @@ The progress event format is defined in GravionLabs/agent-events. This repositor
 - **The schema stays in skills.** No new repository and no pin. But poimen and herdr consume the schema of a skill repository, with a raw URL on `main` as the only version, and the fixtures and spec have no natural home there.
 - **The schema lives in poimen.** The main consumer would own it. But skills would then depend on an application repository for the format they emit, and other readers such as herdr rules would depend on poimen as well.
 - **Shared code instead of a spec.** One library that emits and reduces events. The skills are PowerShell, poimen is Rust and TypeScript, so each language needs its own library, and the library, not a document, becomes the contract. A schema, fixtures and a spec let each side keep its own implementation and check it against the same cases.
+
+## Implementation (#452)
+
+`test/skills/delivery/agent-events/` is a copy of the pinned tag (`VERSION`, `schema/`, `fixtures/`); `test/skills/delivery/agent-events.test.ts` compares it with the tag through `gh api` (skipped offline, `AGENT_EVENTS_VERIFY=1` makes it mandatory). The emitter, reducer and `Get-RunState.ps1` tests read it through `test/helpers/agent-events.ts`. The `$id`s are the agent-events raw URLs; the schemas are removed from `skills/delivery/deliver/schema/`.

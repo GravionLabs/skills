@@ -7,7 +7,7 @@
   Exactly one mode:
   -List: the runs, newest first, JSON array of { run, startedAt, result, lastType, lastTs }; result is running, abandoned
   or the run.finished result (the fold of ConvertFrom-ProgressEvents.ps1). No events directory: [].
-  -Run <id>: the fold of the run, the reducer's JSON (schema/deliver-run-state.schema.json).
+  -Run <id>: the fold of the run, the reducer's JSON (GravionLabs/agent-events schema/deliver-run-state.schema.json).
   -Run <id> -After <seq>: the events with seq greater than <seq>, one JSON event per line (poll the tail).
   -NeedsAttention: the open needsYou items of all running runs, JSON array of { run, number, url, reason }.
   An unknown run ends with one line on stderr and exit 1. Usage errors exit 2.

@@ -3,15 +3,12 @@ import * as fs from 'fs';
 import * as os from 'os';
 import * as path from 'path';
 import Ajv from 'ajv/dist/2020';
+import { AGENT_EVENTS_FIXTURES, STATE_SCHEMA } from '../../helpers/agent-events';
 import { PwshWorker } from '../../helpers/pwsh-worker';
 
 const ROOT = path.resolve(__dirname, '../../..');
 const SCRIPT = path.join(ROOT, 'skills/delivery/deliver/scripts/Get-RunState.ps1');
-const STATE_SCHEMA = path.join(
-  ROOT,
-  'skills/delivery/deliver/schema/deliver-run-state.schema.json',
-);
-const FIXTURES = path.join(__dirname, 'fixtures/progress-events');
+const FIXTURES = AGENT_EVENTS_FIXTURES;
 // the reducer's "now" and no pid test, as in progress-reducer.test.ts (written with a space: see there)
 const NOW = '2026-11-07 12:00:00Z';
 const FIXED = ['-Now', NOW, '-NoPidCheck'];
