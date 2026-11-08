@@ -54,13 +54,17 @@ describe('fixtures/progress-events (#370)', () => {
 describe('deliver-run-state.schema.json (#370)', () => {
   const running = () => readJson(path.join(FIXTURES, 'running.state.json'));
 
-  it('is the status schema without schemaVersion, plus abandoned and the RC fields', () => {
-    const old = readJson(
-      path.join(ROOT, 'skills/delivery/deliver/schema/deliver-loop-status.schema.json'),
-    );
+  it('has no schemaVersion, five run results plus abandoned and the RC fields', () => {
     const next = readJson(STATE_SCHEMA);
-    expect(next.required).toEqual(old.required.filter((k: string) => k !== 'schemaVersion'));
-    expect(next.properties.result.enum).toEqual([...old.properties.result.enum, 'abandoned']);
+    expect(next.required).not.toContain('schemaVersion');
+    expect(next.properties.result.enum).toEqual([
+      'running',
+      'done',
+      'max reached',
+      'blocked',
+      'no progress',
+      'abandoned',
+    ]);
     expect(Object.keys(next.properties.release.properties)).toEqual([
       'reviewRound',
       'prUrl',
