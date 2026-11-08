@@ -9,7 +9,7 @@
   References are read from SKILL.md and every references/*.md. A `references/<file>` (or scripts/, templates/,
   assets/) path is resolved in the own skill first, then in a skill named in the same sentence
   (`` `<skill>` `references/<file>` ``); `<skill>/references/<file>`, `../<skill>/...` and repo-root paths
-  (docs/..., scripts/..., AGENTS.md, README.md, CONTRIBUTING.md) are resolved against all skills and -Root.
+  (docs/..., site/..., scripts/..., AGENTS.md, README.md, CONTRIBUTING.md) are resolved against all skills and -Root.
 
 .PARAMETER Root
   Repository root. Defaults to the current directory.
@@ -73,7 +73,7 @@ $dangling = @()
 $lineMap = @{}
 $skillDirs = @{}
 foreach ($f in $skillFiles) { $skillDirs[$f.Directory.Name] = $f.Directory.FullName }
-$rootDocs = '`((?:docs/[\w./-]+|AGENTS\.md|README\.md|CONTRIBUTING\.md))`'
+$rootDocs = '`((?:(?:docs|site)/[\w./-]+|AGENTS\.md|README\.md|CONTRIBUTING\.md))`'
 $localPath = '`(?:(?<pre>\.\./[\w-]+/|[\w-]+/)?(?<p>(?:references|assets|templates|scripts)/[\w./-]+))`|\]\((?<pre2>\.\./[\w-]+/)?(?<p2>(?:references|assets|templates|scripts)/[^)#\s]+)\)'
 
 function Add-Dangling($skill, $kind, $ref) { $script:dangling += [pscustomobject]@{ skill = $skill; kind = $kind; ref = $ref } }

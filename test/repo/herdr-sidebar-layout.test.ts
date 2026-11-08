@@ -3,7 +3,7 @@ import path from 'node:path';
 import { describe, expect, it } from 'vitest';
 
 const root = path.resolve(__dirname, '../..');
-const guide = readFileSync(path.join(root, 'docs/guides/herdr.md'), 'utf8');
+const guide = readFileSync(path.join(root, 'site/guides/herdr.md'), 'utf8');
 const reference = readFileSync(
   path.join(root, 'skills/delivery/deliver/references/terminal-backends.md'),
   'utf8',

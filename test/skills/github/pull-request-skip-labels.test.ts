@@ -158,7 +158,7 @@ describe('github-pull-request skip label docs', () => {
     expect(skill.split('\n').length).toBeLessThanOrEqual(100);
   });
   it('governance doc describes the copy and keeps the manual fallback', () => {
-    const doc = fs.readFileSync(path.join(root, 'docs/usage/governance.md'), 'utf-8');
+    const doc = fs.readFileSync(path.join(root, 'site/usage/governance.md'), 'utf-8');
     expect(doc).toContain('Add-SkipLabels.ps1');
     expect(doc).toContain('PR opened outside `github-pull-request`');
     expect(doc).toContain('gh pr create --label');

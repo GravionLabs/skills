@@ -26,7 +26,7 @@ Skills must load unchanged on GitHub Copilot, Claude Code and OpenCode, so only 
 | `user-invocable`           | Optional. `false` hides the skill from the `/` menu while the model may still load it.                                                                                                                                                                                                                |
 | `context` / `agent`        | Optional. `context: fork` runs the skill in a subagent (Claude Code); `agent` names the agent definition. Only for self-contained skills that return a small result and never ask the user or spawn subagents; the body states the return contract.                                                   |
 
-**Forbidden top-level keys (🔴):** `allowed-tools` (matches no platform's tool vocabulary), `model` (platform-specific, goes stale), `compatibility` (a uniform claim carries no information), `chronicle-hints` (move to `metadata:`), anything else (breaks strict loaders). Custom annotations go under `metadata:`. See `docs/concepts/skill-frontmatter.md` for the reasoning.
+**Forbidden top-level keys (🔴):** `allowed-tools` (matches no platform's tool vocabulary), `model` (platform-specific, goes stale), `compatibility` (a uniform claim carries no information), `chronicle-hints` (move to `metadata:`), anything else (breaks strict loaders). Custom annotations go under `metadata:`. See `site/concepts/skill-frontmatter.md` for the reasoning.
 
 ```yaml
 ---

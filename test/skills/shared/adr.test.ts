@@ -158,7 +158,7 @@ describe('governance schema and docs', () => {
   });
 
   it('project-config.md documents every governance key', () => {
-    const doc = read('docs/usage/project-config.md');
+    const doc = read('site/usage/project-config.md');
     for (const k of Object.keys(gov.properties)) expect(doc).toContain(`\`${k}\``);
     expect(doc).toContain('apps/bff/**');
     expect(doc).toContain('docs/specs/frontend.md');
