@@ -53,7 +53,7 @@ esac
       path.join(cwd, 'herdr-list.json'),
       JSON.stringify({ id: 'cli:pane:list', result: { panes: opts.panes ?? [active] } }),
     );
-    for (const log of opts.logs ?? ['deliver-loop.ansi.log', 'deliver-loop.log'])
+    for (const log of opts.logs ?? ['deliver-loop.log'])
       fs.writeFileSync(path.join(cwd, '.agents', log), 'line\n');
     if (opts.listFails) fs.writeFileSync(path.join(cwd, 'list-fail'), '');
   };
@@ -92,13 +92,13 @@ esac
   it.each([
     ['shell keybinding (HERDR_ACTIVE_*)', shellEnv],
     ['plugin action (HERDR_*)', pluginEnv],
-  ])('%s: opens the pane below the active pane on the ANSI log', async (_name, env) => {
+  ])('%s: opens the pane below the active pane on the plain log', async (_name, env) => {
     // a deliver-log pane of another tab does not count
     prepare({ panes: [active, otherTab] });
     const r = await run(env());
     expect(r.status).toBe(0);
     expect(r.stderr).toBe('');
-    expect(calls()).toEqual(opened('deliver-loop.ansi.log'));
+    expect(calls()).toEqual(opened('deliver-loop.log'));
   });
 
   it.each([
@@ -109,12 +109,6 @@ esac
     const r = await run(env());
     expect(r.status).toBe(0);
     expect(calls()).toEqual(['pane list', 'pane close w1:p6']);
-  });
-
-  it('falls back to the plain log when there is no ANSI log (NO_COLOR run)', async () => {
-    prepare({ logs: ['deliver-loop.log'] });
-    await run(shellEnv());
-    expect(calls()).toEqual(opened('deliver-loop.log'));
   });
 
   it('no log file: opens no pane, exits 0', async () => {

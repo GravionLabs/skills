@@ -1,7 +1,7 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "title": "deliver progress tokens",
-  "description": "Token fixture <case>.tokens.json next to <case>.jsonl (test/skills/delivery/fixtures/progress-events/): what a display shows after each event of the file. One entry per complete line, in file order; an incomplete last line has no entry. Unknown event types and fields change nothing, so their entry repeats the one before. A run that turns abandoned (no run.finished, ADR 0001 rule) ends with one more entry without seq, `abandoned: true`, all tokens cleared and the agent released. The source of the tokens is `deliver` (TTL one hour), of the agent state `deliver-loop` with agent `deliver`. The same event file always yields the same entries.",
+  "description": "Token fixture <case>.tokens.json next to <case>.jsonl (the event files come from GravionLabs/agent-events at the pinned tag, test/skills/delivery/agent-events/fixtures/; this file: test/skills/delivery/fixtures/progress-events/): what a display shows after each event of the file. One entry per complete line, in file order; an incomplete last line has no entry. Unknown event types and fields change nothing, so their entry repeats the one before. A run that turns abandoned (no run.finished, ADR 0001 rule) ends with one more entry without seq, `abandoned: true`, all tokens cleared and the agent released. The source of the tokens is `deliver` (TTL one hour), of the agent state `deliver-loop` with agent `deliver`. The same event file always yields the same entries.",
   "type": "array",
   "items": {
     "type": "object",

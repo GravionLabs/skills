@@ -74,13 +74,13 @@ esac
   const herdrEnv = { HERDR_ENV: '1', HERDR_PANE_ID: 'w1:p5', DELIVER_LOOP_ASSUME_TTY: '1' };
 
   describe('stdout colors', () => {
-    it('is colored like the ANSI log on a terminal; the plain log stays free of escapes', async () => {
+    it('is colored on a terminal and writes no .ansi.log; the plain log stays free of escapes', async () => {
       const r = await go(prepare(), [], { DELIVER_LOOP_ASSUME_TTY: '1' });
       expect(r.status).toBe(0);
       expect(r.stdout).toMatch(new RegExp(`${ESC}\\[2m\\d\\d:\\d\\d:\\d\\d${ESC}\\[0m `));
       expect(r.stdout).toContain(`${ESC}[32mloop result: done`);
       expect(read('.agents/deliver-loop.log')).not.toContain(ESC);
-      expect(read('.agents/deliver-loop.ansi.log')).toContain(`${ESC}[32mloop result: done`);
+      expect(fs.existsSync(path.join(cwd, '.agents/deliver-loop.ansi.log'))).toBe(false);
     });
 
     it.each([
@@ -92,6 +92,7 @@ esac
       expect(r.status).toBe(0);
       expect(r.stdout).toMatch(/\d\d:\d\d:\d\d loop result: done/);
       expect(r.stdout).not.toContain(ESC);
+      expect(fs.existsSync(path.join(cwd, '.agents/deliver-loop.ansi.log'))).toBe(false);
     });
   });
 
@@ -111,7 +112,7 @@ esac
       expect(paneCalls()).toEqual([]);
     });
 
-    it('-LogPane opens one pane below that tails the ANSI log, labels it deliver-log and leaves it open', async () => {
+    it('-LogPane opens one pane below that tails the plain log, labels it deliver-log and leaves it open', async () => {
       // a deliver-log pane of another tab does not count
       const gh = prepare([
         { pane_id: 'w1:p5', tab_id: 'w1:t5', label: 'skills' },
@@ -123,7 +124,7 @@ esac
       expect(paneCalls()).toEqual([
         'pane list',
         'pane split --current --direction down --ratio 0.7 --no-focus',
-        `pane run w1:p9 pwsh -NoProfile -Command "Get-Content -Tail 40 -Wait '${path.join(cwd, '.agents/deliver-loop.ansi.log')}'"`,
+        `pane run w1:p9 pwsh -NoProfile -Command "Get-Content -Tail 40 -Wait '${path.join(cwd, '.agents/deliver-loop.log')}'"`,
         'pane rename w1:p9 deliver-log',
       ]);
     });
@@ -210,7 +211,7 @@ fs.writeFileSync(${JSON.stringify(state)}, JSON.stringify({ state: 'closed' }));
         env: { ...gh.env(), HERDR_ENV: '', NO_COLOR: '', ...tty },
       });
       expect(r.status).toBe(0);
-      const ansi = read('.agents/deliver-loop.ansi.log');
+      const ansi = r.stdout;
       expect(ansi).toContain(`${ESC}[32m#401 pr: opened #55${ESC}[0m`);
       expect(ansi).toContain(`${ESC}[36m#401 select: ready${ESC}[0m`);
       expect(ansi).toContain(`${ESC}[33m#401 review: fix 1/2${ESC}[0m`);
@@ -230,7 +231,7 @@ fs.writeFileSync(${JSON.stringify(state)}, JSON.stringify({ state: 'closed' }));
       expect(r.status).toBe(0);
       expect(r.stdout).toMatch(/\d\d:\d\d:\d\d #401 ci: red/);
       expect(r.stdout).not.toContain(ESC);
-      expect(read('.agents/deliver-loop.ansi.log')).toBe('');
+      expect(fs.existsSync(path.join(cwd, '.agents/deliver-loop.ansi.log'))).toBe(false);
     });
 
     it.skipIf(process.platform !== 'darwin')(
@@ -274,8 +275,8 @@ fs.writeFileSync(${JSON.stringify(state)}, JSON.stringify({ state: 'closed' }));
       const log = read('.agents/deliver-loop.log');
       expect(log).toContain('» #401 pr: opened #55');
       expect(log).not.toMatch(/\d\d:\d\d:\d\d #401 (pr|ci|paused)/);
-      expect(read('.agents/deliver-loop.ansi.log')).not.toContain(`${ESC}[31m`);
-      expect(read('.agents/deliver-loop.ansi.log')).not.toContain(`${ESC}[33m`);
+      expect(r.stdout).not.toContain(`${ESC}[31m#401 ci`);
+      expect(r.stdout).not.toContain(`${ESC}[33m`);
       expect(read('notices.txt')).not.toMatch(/PR opened|CI red|paused/);
     });
   });

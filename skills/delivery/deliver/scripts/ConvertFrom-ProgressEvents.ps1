@@ -2,8 +2,8 @@
 .SYNOPSIS
   Fold the progress events of one run (<run>.jsonl) into the run state and print it as JSON.
 .DESCRIPTION
-  Reference reducer of ADR 0001 ("Projection"). Input: schema/progress-event.schema.json, one event per line, from -Path or
-  the pipeline. Output: schema/deliver-run-state.schema.json. The fold is a pure function of the event list and -Now; the
+  Reference reducer of ADR 0001 ("Projection"). Input: GravionLabs/agent-events schema/progress-event.schema.json, one event per line, from -Path or
+  the pipeline. Output: GravionLabs/agent-events schema/deliver-run-state.schema.json. The fold is a pure function of the event list and -Now; the
   only other input is the pid check of a run without run.finished (-NoPidCheck turns it off).
   Rules: current from the last issue.started and step.finished, reset by issue.finished; delivered, blocked and paused from
   issue.finished (the latest outcome of an issue wins); needsYou from attention with needsYou: true and the open RC test

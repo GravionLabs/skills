@@ -15,6 +15,7 @@
       "**/*.yml",
       "**/*.yaml",
       "!**/dist",
+      "!test/skills/delivery/agent-events",
       "!**/node_modules",
       "!**/coverage",
       "!**/test-results",

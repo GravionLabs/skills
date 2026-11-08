@@ -55,7 +55,12 @@ function Test-Skills {
     Where-Object { Test-Path -LiteralPath $_ } | Select-Object -First 1
   if (-not $det) { Add-Check 'skills' 'action needed' 'detect-techstack is not installed' @{ fix = '/skills-manage shared' }; return }
   $stack = (& pwsh -NoProfile -File $det -ProjectRoot $root) -join "`n" | ConvertFrom-Json
-  $need = @(@($stack.implementation) + @($stack.test) | Where-Object { $_ } | Select-Object -Unique)
+  # detect-techstack names `<lang>-implementation`/`<lang>-test`; js has no skills of its own and shares the `ts` group
+  # (same mapping as `$langMap` of skills-manage Install-Skills.ps1; a test keeps them in step)
+  $langGroup = @{ js = 'ts' }
+  $map = { param($n) $p, $r = $n -split '-', 2; if ($r -and $langGroup.ContainsKey($p)) { "$($langGroup[$p])-$r" } else { $n } }
+  $need = @(@($stack.implementation) + @($stack.test) | Where-Object { $_ } | ForEach-Object { & $map $_ } | Select-Object -Unique)
+  $groups = @(@($stack.languages) | Where-Object { $_ } | ForEach-Object { if ($langGroup.ContainsKey("$_")) { $langGroup["$_"] } else { "$_" } } | Select-Object -Unique)
   if (-not $need) { Add-Check 'skills' 'ok' 'no stack skills needed'; return }
   $missing = @(); $old = @()
   foreach ($s in $need) {
@@ -65,7 +70,7 @@ function Test-Skills {
     if ($glob -and (Get-Item -LiteralPath $glob).LastWriteTimeUtc -gt (Get-Item -LiteralPath $proj).LastWriteTimeUtc) { $old += $s }
   }
   if (-not $missing -and -not $old) { Add-Check 'skills' 'ok' "$($need.Count) stack skills current"; return }
-  $fix = if ($Unattended) { 'continue with the global skills' } else { "/skills-manage $(@($stack.languages) -join ' ')" }
+  $fix = if ($Unattended) { 'continue with the global skills' } else { "/skills-manage $($groups -join ' ')" }
   Add-Check 'skills' 'action needed' ('missing: {0}; older than global: {1}' -f ($missing -join ','), ($old -join ',')) @{ fix = $fix; missing = $missing; old = $old }
 }
 

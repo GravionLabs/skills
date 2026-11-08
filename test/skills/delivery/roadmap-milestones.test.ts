@@ -14,7 +14,7 @@ const handler = `(call) => {
   const a = call.args;
   const p = a[1];
   if (a[0] === 'issue' && a[1] === 'edit') return { rest: {} };
-  if (a.includes('POST')) return { rest: { number: 99, title: a.find((x) => x.startsWith('title=')).slice(6), state: 'open', html_url: 'https://x/m/99' } };
+  if (a.includes('POST')) { const c = { number: 99, title: a.find((x) => x.startsWith('title=')).slice(6), state: 'open', html_url: 'https://x/m/99' }; require('fs').writeFileSync(__dirname + '/posted.json', JSON.stringify(c)); return { rest: c }; }
   if (a.includes('-X')) throw new Error('unexpected write: ' + a.join(' '));
   const sub = /issues\\/(\\d+)\\/sub_issues/.exec(p);
   if (sub) return { rest: env('FAKE_SUBS', '{}')[sub[1]] || [] };
@@ -22,9 +22,9 @@ const handler = `(call) => {
   if (m) {
     const cur = env('FAKE_CURRENT', '{}')[m[1]];
     if (cur === undefined) throw new Error('404 Not Found');
-    return { rest: { number: Number(m[1]), milestone: cur ? { title: cur } : null, labels: (env('FAKE_LABELS', '{}')[m[1]] || []).map((name) => ({ name })) } };
+    return { rest: { number: Number(m[1]), repository_url: env('FAKE_REPOS', '{}')[m[1]], milestone: cur ? { title: cur } : null, labels: (env('FAKE_LABELS', '{}')[m[1]] || []).map((name) => ({ name })) } };
   }
-  if (p.includes('/milestones?')) return { rest: [env('FAKE_MILESTONES', '[]')] };
+  if (p.includes('/milestones?')) { const f = __dirname + '/posted.json'; const extra = require('fs').existsSync(f) ? [JSON.parse(require('fs').readFileSync(f, 'utf8'))] : []; return { rest: [env('FAKE_MILESTONES', '[]').concat(extra)] }; }
   if (p.includes('/tags?')) return { rest: [[]] };
   throw new Error('unexpected path ' + p);
 }`;
@@ -51,6 +51,7 @@ describe('Set-IssueMilestones.ps1', () => {
   afterAll(() => worker.close());
 
   const run = (assignment: unknown, env: Record<string, unknown>) => {
+    fs.rmSync(path.join(tmp, 'posted.json'), { force: true });
     const before = fake.calls().length;
     return worker
       .run(
@@ -195,11 +196,18 @@ describe('Set-IssueMilestones.ps1', () => {
       FAKE_MILESTONES: [ms(1, 'M1'), ms(2, 'M2')],
       FAKE_CURRENT: { 1: null, 2: null, 3: null, 4: null },
     };
-    it('refuses an Epic without writes', async () => {
-      const r = await run([{ issue: 1, milestone: 'M1' }], {
-        ...base,
-        FAKE_LABELS: { 1: ['epic'] },
-      });
+    // for a missing M<n> the rule runs before the milestone is created: no POST, no edit, also for the earlier target
+    it.each([
+      ['an existing milestone', [{ issue: 1, milestone: 'M1' }]],
+      [
+        'a missing milestone (nothing created)',
+        [
+          { issue: 3, milestone: 'M1' },
+          { issue: 1, milestone: 'M9' },
+        ],
+      ],
+    ])('refuses an Epic for %s without writes', async (_n, assignment) => {
+      const r = await run(assignment, { ...base, FAKE_LABELS: { 1: ['epic'] } });
       expect(r.status).toBe(1);
       expect(r.stderr).toContain('Epic never has a milestone');
       expect(writes(r.calls)).toEqual([]);
@@ -220,6 +228,38 @@ describe('Set-IssueMilestones.ps1', () => {
       });
       expect(r.status).toBe(1);
       expect(r.stderr).toContain(`outside: ${outside}`);
+      expect(writes(r.calls)).toEqual([]);
+    });
+
+    // #438: a sub-issue from another repository is outside; its number never matches the assignment
+    it.each([
+      ['a milestone title collision', { title: 'M1' }],
+      ['no milestone', null],
+    ])('refuses a Feature with a sub-issue from another repository (%s)', async (_n, milestone) => {
+      const r = await run(
+        [
+          { issue: 1, milestone: 'M1' },
+          { issue: 3, milestone: 'M1' },
+        ],
+        {
+          ...base,
+          FAKE_CURRENT: { 1: null, 3: null },
+          FAKE_LABELS: { 1: ['feature'], 3: ['pbi'] },
+          FAKE_REPOS: { 1: 'https://api.github.com/repos/o/r' },
+          FAKE_SUBS: {
+            1: [
+              {
+                number: 3,
+                state: 'open',
+                milestone,
+                repository_url: 'https://api.github.com/repos/o/other',
+              },
+            ],
+          },
+        },
+      );
+      expect(r.status).toBe(1);
+      expect(r.stderr).toContain('outside: o/other#3');
       expect(writes(r.calls)).toEqual([]);
     });
 

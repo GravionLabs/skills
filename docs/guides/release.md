@@ -39,7 +39,7 @@ To put a milestone between two open ones, use a sub-number: `/github-milestone c
 /github-milestone current
 ```
 
-`current` is the lowest open `M<n>` (a legacy `x.y.z` milestone above the latest `v<x.y.z>` tag comes first). It lists its open issues grouped as ready, blocked, `needs-decision`, `needs-refinement` and claimed, plus the release PR. Assign the planned PBIs and Bugs to the milestone before you deliver.
+`current` is the lowest open `M<n>` (a legacy `x.y.z` milestone above the latest `v<x.y.z>` tag comes first). It lists its open issues grouped as ready, blocked, `needs-decision`, `needs-refinement` and claimed, plus the release PR. Assign the planned PBIs and Bugs to the milestone before you deliver: `/github-milestone assign M3 #12 #13` (`none` clears it). Set milestones only this way, never with `gh issue edit --milestone`.
 
 ## 3. Deliver the milestone
 
