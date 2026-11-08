@@ -73,13 +73,16 @@ afterAll(() => fs.rmSync(tmp, { recursive: true, force: true }));
 
 describe('Get-DeliverStatus.ps1', () => {
   it.each([
-    ['M011.1 Sub', 'M011.1'],
-    ['M003 Topic (1.2.0)', 'M003'],
+    ['M011.1 Sub', 'M11.1'],
+    ['M11.1 Sub', 'M11.1'],
+    ['M003 Topic (1.2.0)', 'M3'],
     ['M3 Topic', 'M3'],
+    ['M001 (0.2.0)', 'M1'],
+    ['1.2.0', '1.2.0'],
   ])(
-    'the key of the title %s is its M<n> prefix %s, as written (padded titles, #435; M4 stays M4 above)',
+    'the key of the title %s is %s: numbers unpadded, padded and unpadded titles share a key (#435)',
     (title, key) => {
-      const fake = fixture(`key-${key}-${title.length}`, [
+      const fake = fixture(`key-${title.length}-${title.replace(/\W/g, '_')}`, [
         { number: 1, title: 'feat: one', state: 'open' },
       ]);
       const file = path.join(path.dirname(fake), 'issues.json');
