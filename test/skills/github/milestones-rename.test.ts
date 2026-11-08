@@ -58,21 +58,40 @@ describe('Get-Milestones.ps1 -Mode rename', () => {
   };
 
   it.each([
-    ['0.1.0', 'M1 (0.1.0)', 1],
-    ['0.2.0', 'M2 (0.1.1)', 2],
-    ['v0.2.0', 'M2 (0.1.1)', 2],
-    ['M3', 'M3 Market data', 3],
-    ['M4', 'M4 Core', 4],
-  ])('%s -> %s: one PATCH of the title only', async (name, to, number) => {
+    ['0.1.0', 'M1 (0.1.0)', 1, 'M001 (0.1.0)'],
+    ['0.2.0', 'M2 (0.1.1)', 2, 'M002 (0.1.1)'],
+    ['v0.2.0', 'M2 (0.1.1)', 2, 'M002 (0.1.1)'],
+    ['M3', 'M3 Market data', 3, 'M003 Market data'],
+    ['M4', 'M4 Core', 4, 'M004 Core'],
+  ])('%s -> %s: one PATCH of the padded title only', async (name, to, number, title) => {
     const { r, writes } = await rename(name, to);
     expect(r.status).toBe(0);
     expect(JSON.parse(r.stdout)).toMatchObject({
       renamed: true,
-      milestone: { number, title: to, state: 'open' },
+      milestone: { number, title, state: 'open' },
     });
     expect(writes).toEqual([
-      ['api', '-X', 'PATCH', `repos/{owner}/{repo}/milestones/${number}`, '-f', `title=${to}`],
+      ['api', '-X', 'PATCH', `repos/{owner}/{repo}/milestones/${number}`, '-f', `title=${title}`],
     ]);
+  });
+
+  it('a padding-only change of the number (M3 -> M003) is the same number', async () => {
+    const { r, writes } = await rename('M3', 'M003 Market data');
+    expect(r.status).toBe(0);
+    expect(writes).toEqual([
+      ['api', '-X', 'PATCH', 'repos/{owner}/{repo}/milestones/3', '-f', 'title=M003 Market data'],
+    ]);
+  });
+
+  it.each([
+    ['main number above 999', 'M3', 'M1000 X', /above 999/],
+    ['sub-number above 9', '0.1.0', 'M1.10', /above 9/],
+    ['two sub levels', '0.1.0', 'M1.1.1', /sub level/],
+  ])('%s: refused, nothing written', async (_c, name, to, msg) => {
+    const { r, writes } = await rename(name, to);
+    expect(r.status).toBe(1);
+    expect(r.stderr).toMatch(msg);
+    expect(writes).toEqual([]);
   });
 
   it.each([
@@ -82,7 +101,7 @@ describe('Get-Milestones.ps1 -Mode rename', () => {
     ['M<n> number already used by another milestone', '0.1.0', 'M3', /already exists/],
     ['invalid target', '0.1.0', 'next', /invalid -To/],
     ['legacy target', '0.1.0', '0.9.0', /invalid -To/],
-    ['changed number of an M<n>', 'M4', 'M8 (0.4.0)', /stays M4/],
+    ['changed number of an M<n>', 'M4', 'M8 (0.4.0)', /stays M004/],
   ])('%s: exit 1, nothing written', async (_c, name, to, msg) => {
     const { r, writes } = await rename(name, to);
     expect(r.status).toBe(1);

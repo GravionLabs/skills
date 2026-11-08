@@ -72,18 +72,18 @@ describe('Get-Milestones.ps1 -Mode insert', () => {
     const { r, writes } = await insert('M2');
     expect(r.status).toBe(0);
     expect(writes).toEqual([
-      'PATCH repos/{owner}/{repo}/milestones/5 title=M5 Later (0.4.0)',
-      'PATCH repos/{owner}/{repo}/milestones/3 title=M4',
-      'PATCH repos/{owner}/{repo}/milestones/4 title=M3.1',
-      'PATCH repos/{owner}/{repo}/milestones/2 title=M3 Market',
-      'POST repos/{owner}/{repo}/milestones title=M2',
+      'PATCH repos/{owner}/{repo}/milestones/5 title=M005 Later (0.4.0)',
+      'PATCH repos/{owner}/{repo}/milestones/3 title=M004',
+      'PATCH repos/{owner}/{repo}/milestones/4 title=M003.1',
+      'PATCH repos/{owner}/{repo}/milestones/2 title=M003 Market',
+      'POST repos/{owner}/{repo}/milestones title=M002',
     ]);
     const out = JSON.parse(r.stdout);
     expect(out).toMatchObject({
       inserted: true,
       dryRun: false,
-      title: 'M2',
-      milestone: { title: 'M2' },
+      title: 'M002',
+      milestone: { title: 'M002' },
     });
     expect(out.renames.map((x: any) => x.number)).toEqual([5, 3, 4, 2]);
   });
@@ -100,15 +100,15 @@ describe('Get-Milestones.ps1 -Mode insert', () => {
     const out = JSON.parse(r.stdout);
     expect(out).toMatchObject({ inserted: false, dryRun: true });
     expect(out.renames.map((x: any) => `${x.from} -> ${x.to}`)).toEqual([
-      'M4 Later (0.4.0) -> M5 Later (0.4.0)',
-      'M3 -> M4',
+      'M4 Later (0.4.0) -> M005 Later (0.4.0)',
+      'M3 -> M004',
     ]);
   });
 
   it('with nothing to shift it only creates M<n>', async () => {
     const { r, writes } = await insert('M9');
     expect(JSON.parse(r.stdout).renames).toEqual([]);
-    expect(writes).toEqual(['POST repos/{owner}/{repo}/milestones title=M9']);
+    expect(writes).toEqual(['POST repos/{owner}/{repo}/milestones title=M009']);
   });
 
   it('exits 1 before any write when the number is closed (nothing can come before M1 (0.1.0))', async () => {
@@ -122,6 +122,38 @@ describe('Get-Milestones.ps1 -Mode insert', () => {
     const { r, writes } = await insert('M2', [], [ms(1, 'M2'), ms(2, 'M3 (0.3.0)', 'closed')]);
     expect(r.status).toBe(1);
     expect(writes).toEqual([]);
+  });
+
+  it.each([
+    ['M2', 'M002'],
+    ['M002', 'M002'],
+  ])('accepts %s (padded or not) and writes %s', async (name, title) => {
+    const { r, writes } = await insert(name, [], [ms(1, 'M2'), ms(2, 'M003')]);
+    expect(r.status).toBe(0);
+    expect(writes).toEqual([
+      'PATCH repos/{owner}/{repo}/milestones/2 title=M004',
+      'PATCH repos/{owner}/{repo}/milestones/1 title=M003',
+      `POST repos/{owner}/{repo}/milestones title=${title}`,
+    ]);
+  });
+
+  it('refuses a main number above 999 and a shift that would reach it, before any write', async () => {
+    const big = await insert('M1000');
+    expect(big.r.status).toBe(1);
+    expect(big.r.stderr).toMatch(/above 999/);
+    const edge = await insert('M999', [], [ms(1, 'M999')]);
+    expect(edge.r.status).toBe(1);
+    expect(edge.r.stderr).toMatch(/above 999/);
+    expect([...big.writes, ...edge.writes]).toEqual([]);
+  });
+
+  it('shifts a sub-numbered title with padding', async () => {
+    const { r, writes } = await insert('M12', [], [ms(1, 'M12.1'), ms(2, 'M012')]);
+    expect(r.status).toBe(0);
+    expect(writes.slice(0, 2)).toEqual([
+      'PATCH repos/{owner}/{repo}/milestones/1 title=M013.1',
+      'PATCH repos/{owner}/{repo}/milestones/2 title=M013',
+    ]);
   });
 
   it.each(['M2.1', '1.0.0', 'M0x'])('rejects the name %s', async (name) => {
@@ -141,7 +173,7 @@ describe('Get-Milestones.ps1 -Mode insert', () => {
         ],
       });
       const refs = JSON.parse(r.stdout).references.map((x: any) => `${x.where}:${x.name}`);
-      expect(refs).toEqual(['issue #7:M3', 'ROADMAP.md:M3']);
+      expect(refs).toEqual(['issue #7:M003', 'ROADMAP.md:M003']);
     } finally {
       fs.rmSync(roadmap);
     }

@@ -111,8 +111,8 @@ describe('Get-Milestones.ps1 with a milestone topic', () => {
   });
 
   it.each([
-    ['M3', 'M3 Market data (0.2.0)'],
-    ['M3 Market data', 'M3 Market data (0.2.0)'],
+    ['M3', 'M003 Market data (0.2.0)'],
+    ['M3 Market data', 'M003 Market data (0.2.0)'],
   ])('close %s adds the version at the end', async (name, title) => {
     const { out, writes } = await run(['-Mode', 'close', '-Name', name, '-Version', '0.2.0'], all, [
       'v0.2.0',
@@ -146,7 +146,7 @@ describe('Get-Milestones.ps1 with a milestone topic', () => {
 
   it('create accepts a topic, finds an existing one by number, rejects a version and bad names', async () => {
     const made = await run(['-Mode', 'create', '-Name', 'M11 Billing'], all);
-    expect(made.out).toMatchObject({ created: true, milestone: { title: 'M11 Billing' } });
+    expect(made.out).toMatchObject({ created: true, milestone: { title: 'M011 Billing' } });
     const again = await run(['-Mode', 'create', '-Name', 'M3 Other'], all);
     expect(again.out).toMatchObject({ created: false, milestone: { number: 2 } });
     for (const name of ['M3 (0.2.0)', 'M3 Topic (0.2.0)', 'M3 (x)']) {
@@ -154,6 +154,6 @@ describe('Get-Milestones.ps1 with a milestone topic', () => {
       expect(bad.r.status).toBe(1);
     }
     const next = await run(['-Mode', 'create'], all);
-    expect(next.out.milestone.title).toBe('M11');
+    expect(next.out.milestone.title).toBe('M011');
   });
 });

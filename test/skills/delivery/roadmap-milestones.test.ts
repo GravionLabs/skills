@@ -127,11 +127,11 @@ describe('Set-IssueMilestones.ps1', () => {
     });
     expect(r.status).toBe(0);
     const out = JSON.parse(r.stdout);
-    expect(out.created).toEqual(['M4']);
-    expect(out.results).toEqual([{ issue: 5, milestone: 'M4', status: 'set' }]);
+    expect(out.created).toEqual(['M004']);
+    expect(out.results).toEqual([{ issue: 5, milestone: 'M004', status: 'set' }]);
     const w = writes(r.calls);
     expect(w[0]).toContain('POST');
-    expect(w[1].slice(0, 5)).toEqual(['issue', 'edit', '5', '--milestone', 'M4']);
+    expect(w[1].slice(0, 5)).toEqual(['issue', 'edit', '5', '--milestone', 'M004']);
   });
 
   it('refuses a closed milestone and writes nothing', async () => {
