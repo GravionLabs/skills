@@ -99,7 +99,7 @@ function Get-CurrentMilestone([string[]]$Titles, [string]$LatestTag) {
   $legacy = @(@($Titles) | Where-Object { $_ -match $semver -and [version]$_ -gt $floor } | Sort-Object { [version]$_ }) | Select-Object -First 1
   if ($legacy) { return $legacy }
   $rx = '^M([0-9]{1,8}(?:\.[0-9]{1,8}){0,7})(?: ([^()]+?))?(?: \(([0-9]+\.[0-9]+\.[0-9]+)\))?$'
-  $key = { param($t) $p = @($t -replace $rx, '$1' -split '\.'); (0..7 | ForEach-Object { if ($_ -lt $p.Count) { ([string][int]$p[$_]).PadLeft(8, '0') } else { '00000000' } }) -join '' }
+  $key = { param($t) $p = @($t -replace $rx, '$1' -split '\.'); (0..7 | ForEach-Object { if ($_ -lt $p.Count) { $p[$_].PadLeft(8, '0') } else { '00000000' } }) -join '' }
   @(@($Titles) | Where-Object { $_ -cmatch $rx } | Sort-Object { & $key $_ }) | Select-Object -First 1
 }
 

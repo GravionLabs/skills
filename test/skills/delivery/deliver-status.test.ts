@@ -72,10 +72,16 @@ beforeAll(() => {
 afterAll(() => fs.rmSync(tmp, { recursive: true, force: true }));
 
 describe('Get-DeliverStatus.ps1', () => {
-  it.each([['M011.1 Sub', 'M011.1']])(
-    'keeps the key of the title %s as %s (padded titles, #435; M4 stays M4 above)',
+  it.each([
+    ['M011.1 Sub', 'M011.1'],
+    ['M003 Topic (1.2.0)', 'M003'],
+    ['M3 Topic', 'M3'],
+  ])(
+    'the key of the title %s is its M<n> prefix %s, as written (padded titles, #435; M4 stays M4 above)',
     (title, key) => {
-      const fake = fixture(`key-${key}`, [{ number: 1, title: 'feat: one', state: 'open' }]);
+      const fake = fixture(`key-${key}-${title.length}`, [
+        { number: 1, title: 'feat: one', state: 'open' },
+      ]);
       const file = path.join(path.dirname(fake), 'issues.json');
       const j = JSON.parse(fs.readFileSync(file, 'utf8'));
       j.milestone.title = title;
