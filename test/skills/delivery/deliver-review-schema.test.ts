@@ -95,6 +95,15 @@ describe('deliver-release-review.schema.json (#100)', () => {
     expect(validateRelease({ ...result(), milestone: 'M4 (0.2.0)' })).toBe(false);
   });
 
+  // #468: one key form, the unpadded one (M003 is M3, M011.1 is M11.1)
+  it.each(['M11.1', 'M10', 'M1.10'])('accepts the unpadded key %s (#468)', (milestone) => {
+    expect(validateRelease({ ...result(), milestone })).toBe(true);
+  });
+
+  it.each(['M004', 'M011.1', 'M1.01'])('rejects the padded key %s (#468)', (milestone) => {
+    expect(validateRelease({ ...result(), milestone })).toBe(false);
+  });
+
   it('rejects round 0, a bug number 0 and an extra field', () => {
     expect(validateRelease({ ...result(), round: 0 })).toBe(false);
     expect(validateRelease({ ...result(), bugs: [0] })).toBe(false);
