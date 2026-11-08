@@ -46,6 +46,11 @@ An open `release-test` issue is not part of that set (also when passed explicitl
 | max reached | `-Max` iterations ran (delivered, blocked or paused PBIs in total)                  | 0    |
 | blocked     | open PBIs remain, all wait on an open blocker or a label                            | 2    |
 | no progress | the set did not change after an iteration; prints the last log lines, never retries | 1    |
+| stopped     | the stop file of the run exists before an iteration                                 | 0    |
+
+## Stop a run
+
+The file `.agents/deliver-loop/<run>/stop` (any content) asks the loop to stop. It is checked before every iteration, also the first. Seen during an iteration, the loop sends one `attention` event `stopping` (`stops after #<nr>`, step line `stop requested: stops after #<nr>`, tone neutral), lets that iteration end and starts no further one. The result is `stopped`: exit 0, `run.finished` with `stopped`, a `result` record, the notification `loop result: stopped`, the stop file deleted, and a last line `resume: deliver-loop <the same arguments>` (`-Max` reduced by the iterations run). Creating the file is up to the caller.
 
 ## Observability
 

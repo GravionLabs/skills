@@ -17,7 +17,7 @@
   Stdout is colored when it is a terminal and neither -NoColor nor NO_COLOR is set; otherwise it is plain.
   Machine-readable progress for a control session (`deliver` `references/control.md`): .agents/deliver-loop/<run>/progress.jsonl,
   one JSON object per line (`start`, `iteration-start`, `iteration-end`, `result`), and .agents/deliver-loop/latest.txt with the path of the newest run directory.
-  Run it from the repository root. Exit code: 0 done or max reached, 1 no progress, 2 blocked, 64 bad arguments.
+  Run it from the repository root. Exit code: 0 done, max reached or stopped (stop file), 1 no progress, 2 blocked, 64 bad arguments.
 .PARAMETER Target
   Issue numbers (PBI, Feature or Epic), as for `/deliver`: `-Target 12,14` or `-Target 12 14` (a comma list also works
   under `pwsh -File`, which does not split it itself).
@@ -443,7 +443,29 @@ function Write-TextStep([string]$prefix, [string]$text) {
 }
 
 $ToneColor = @{ success = 'green'; info = 'cyan'; warning = 'yellow'; danger = 'red' }
-$AttentionText = @{ pr_opened = 'PR opened'; review_fix = 'review fix round'; ci_red = 'CI red'; paused = 'paused'; blocked = 'blocked' }
+# Stop request: the file .agents/deliver-loop/<run>/stop (any content) ends the loop before the next iteration.
+function Test-StopRequested { [bool]$script:RunDir -and (Test-Path -LiteralPath (Join-Path $script:RunDir 'stop')) }
+$StopSeen = $false
+$CurrentPbi = 0
+# once per iteration: one attention event `stopping`; Show-NewEvents prints it as `stop requested: stops after #<nr>`
+function Watch-Stop {
+  if ($script:StopSeen -or -not $script:CurrentPbi -or -not (Test-StopRequested)) { return }
+  $script:StopSeen = $true
+  Send-Event @{ Type = 'attention'; Kind = 'stopping'; Issue = $script:CurrentPbi; Reason = "stops after #$($script:CurrentPbi)" }
+}
+
+# The command that continues a stopped run: the same arguments, -Max reduced by the iterations run.
+function Get-ResumeCommand([int]$ran) {
+  $parts = @('deliver-loop')
+  if ($Nrs.Count) { $parts += @('-Target', ($Nrs -join ',')) }
+  if ($Milestone) { $parts += @('-Milestone', "'$Milestone'") }
+  if ($Max -gt 0) { $parts += @('-Max', [string][Math]::Max(1, $Max - $ran)) }
+  if ($Model -and -not ($Harness -eq 'copilot' -and $Model -eq 'auto')) { $parts += @('-Model', $Model) }
+  if ($Harness -ne 'claude') { $parts += @('-Harness', $Harness) }
+  $parts -join ' '
+}
+
+$AttentionText = @{ stopping = 'stop requested'; pr_opened = 'PR opened'; review_fix = 'review fix round'; ci_red = 'CI red'; paused = 'paused'; blocked = 'blocked' }
 $EventOffset = 0
 
 # The new events of the run's event file (written by the harness through Report-Progress.ps1 while it runs): one line
@@ -451,6 +473,7 @@ $EventOffset = 0
 # attention and issue.finished delivered; the urgency from tone. Each event also goes through the terminal sink
 # (Report-Progress.ps1 -SinkEvent), since the harness runs nested and reports nothing itself.
 function Show-NewEvents {
+  Watch-Stop
   if (-not $EventFile -or -not (Test-Path -LiteralPath $EventFile)) { return }
   $text = ''
   for ($try = 0; $try -lt 10; $try++) {
@@ -486,7 +509,7 @@ function Show-NewEvents {
       default { continue }
     }
     if ($nr -and $ev.prUrl) { $Prs["$nr"] = [string]$ev.prUrl }
-    $head = if ($nr) { "#$nr $step" } else { $step }
+    $head = if ($nr -and $step -ne 'stopping') { "#$nr $step" } elseif ($step -eq 'stopping') { 'stop requested' } else { $step }
     Write-Step $(if ($res) { "${head}: $res" } else { $head }) $ToneColor[[string]$ev.tone]
     Send-SinkEvent $raw ([string]$ev.prUrl)
     if ($notice) { Send-Notice "$(if ($nr) { "#$nr " })$notice" -Tone ([string]$ev.tone) }
@@ -563,6 +586,7 @@ function Invoke-Iteration([int]$n, [int]$total, $state) {
   Write-Step "iteration $n/$total start: $prompt"
   Write-ProgressRecord 'iteration-start' @{ n = $n; total = $total; pbi = [int]$state.Ready[0]; open = $state.Open; model = $iterModel }
   $nr = [int]$state.Ready[0]
+  $script:CurrentPbi = $nr; $script:StopSeen = $false
   $LineOutcome.Remove("$nr")
   $started = @{ Type = 'issue.started'; Issue = $nr }
   $base = Get-BaseUrl
@@ -612,6 +636,7 @@ try {
   $result = Get-StopReason $state
   $total = if ($Max -gt 0) { [Math]::Min($Max, $state.Eligible.Count) } else { $state.Eligible.Count }
   while (-not $result) {
+    if (Test-StopRequested) { $result = 'stopped'; break }
     $i++
     Invoke-Iteration $i $total $state
     $after = Get-State
@@ -639,6 +664,10 @@ try {
   Stop-Run $result
   Write-ProgressRecord 'result' @{ result = $result; code = $code; iterations = $i; open = $state.Open }
   Send-Notice "loop result: $result"
+  if ($result -eq 'stopped') {
+    Remove-Item -LiteralPath (Join-Path $RunDir 'stop') -Force -ErrorAction SilentlyContinue
+    Write-Step "resume: $(Get-ResumeCommand $i)" 'yellow'
+  }
 } finally {
   # error or Ctrl+C: the run ends here, as no progress (the sink clears the tokens and releases the agent state)
   Stop-Run 'no progress'

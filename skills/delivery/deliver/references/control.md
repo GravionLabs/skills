@@ -16,12 +16,12 @@ Interactive (no `--unattended`), no `--inline`, and the selected set (step 1) ha
 
 Read `.agents/deliver-loop/latest.txt` (path of the newest run) and its `progress.jsonl`, one JSON object per line:
 
-| `event`           | Fields                                                                                   |
-| :---------------- | :--------------------------------------------------------------------------------------- |
-| `start`           | `targets`, `milestone`, `max`, `harness`, `model`, `open`                                |
-| `iteration-start` | `n`, `total`, `pbi`, `open`, `model`                                                     |
-| `iteration-end`   | `n`, `pbi`, `delivered` (comma list), `open`                                             |
-| `result`          | `result` (`done`, `max reached`, `blocked`, `no progress`), `code`, `iterations`, `open` |
+| `event`           | Fields                                                                                              |
+| :---------------- | :-------------------------------------------------------------------------------------------------- |
+| `start`           | `targets`, `milestone`, `max`, `harness`, `model`, `open`                                           |
+| `iteration-start` | `n`, `total`, `pbi`, `open`, `model`                                                                |
+| `iteration-end`   | `n`, `pbi`, `delivered` (comma list), `open`                                                        |
+| `result`          | `result` (`done`, `max reached`, `blocked`, `no progress`, `stopped`), `code`, `iterations`, `open` |
 
 After each `iteration-end` print `#<nr> loop: <delivered or held>` and the status block (`SKILL.md`, `## Status block`, `-Delivered` the numbers delivered so far). Poll with a sleep of at least 60 s; the loop's own lines are in `.agents/deliver-loop.log`.
 
@@ -35,7 +35,7 @@ The loop skips `interactive` PBIs. When the loop ends (`done` with only `interac
 
 ## Release
 
-When the loop result is `done` and no `interactive` PBI is left, run step 9 once in this session (release review, release PR). The control session does not wait for the RC test: step 9 cuts the RC, opens the release PR and ends the run with `needs you: RC test` (`release.test.gate: true` keeps the old gate). `max reached`: report the delivered count and, as open PBIs remain, offer to start the loop again; never release. `blocked` or `no progress`: report it, never release.
+When the loop result is `done` and no `interactive` PBI is left, run step 9 once in this session (release review, release PR). The control session does not wait for the RC test: step 9 cuts the RC, opens the release PR and ends the run with `needs you: RC test` (`release.test.gate: true` keeps the old gate). `max reached`: report the delivered count and, as open PBIs remain, offer to start the loop again; never release. `stopped` (stop file of the run): the run is finished; print the resume command of the loop's last line and do not start the loop again by itself, never release. `blocked` or `no progress`: report it, never release.
 
 ## Context guard
 
