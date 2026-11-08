@@ -13,9 +13,10 @@ export default defineConfig({
     globalSetup: ['test/helpers/pwsh-cache-global.ts'],
     setupFiles: ['test/helpers/pwsh-cache.ts'],
     // github-actions turns failures into annotations, readable without the log download.
+    // CI shards set VITEST_JUNIT_OUTPUT per shard so the junit files do not collide.
     reporters: [
       'default',
-      ['junit', { outputFile: 'test-results/junit.xml' }],
+      ['junit', { outputFile: process.env['VITEST_JUNIT_OUTPUT'] ?? 'test-results/junit.xml' }],
       ...(process.env['GITHUB_ACTIONS'] ? ['github-actions'] : []),
     ],
     coverage: {
