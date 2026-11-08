@@ -263,6 +263,47 @@ describe('Set-IssueMilestones.ps1', () => {
       expect(writes(r.calls)).toEqual([]);
     });
 
+    // #464: the rule holds over the whole assignment, in either order of the targets
+    it.each([
+      [
+        'Feature target first',
+        [
+          { issue: 1, milestone: 'M1' },
+          { issue: 3, milestone: 'M2' },
+        ],
+      ],
+      [
+        'PBI target first',
+        [
+          { issue: 3, milestone: 'M2' },
+          { issue: 1, milestone: 'M1' },
+        ],
+      ],
+    ])(
+      'refuses a Feature whose PBI the same assignment sends elsewhere (%s) without writes',
+      async (_n, assignment) => {
+        const r = await run(assignment, {
+          ...base,
+          FAKE_CURRENT: { 1: null, 3: 'M1' },
+          FAKE_LABELS: { 1: ['feature'], 3: ['pbi'] },
+          FAKE_SUBS: { 1: [{ number: 3, state: 'open', milestone: { title: 'M1' } }] },
+        });
+        expect(r.status).toBe(1);
+        expect(r.stderr).toContain('outside: #3');
+        expect(writes(r.calls)).toEqual([]);
+      },
+    );
+
+    it.each(['M1000', 'M1.10'])('refuses %s up front, before anything is created', async (name) => {
+      const r = await run([{ issue: 3, milestone: name }], {
+        ...base,
+        FAKE_LABELS: { 3: ['pbi'] },
+      });
+      expect(r.status).toBe(1);
+      expect(r.stderr).toContain('not writable');
+      expect(writes(r.calls)).toEqual([]);
+    });
+
     it('sets a Feature when its PBIs land in the same milestone (assigned now or already there), closed ones do not count', async () => {
       const r = await run(
         [

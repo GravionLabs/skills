@@ -5,8 +5,8 @@
   -Assignment: a JSON array [{ "issue": 12, "milestone": "M3" }] or the path of a file holding it. A milestone name is resolved as in the
   github-milestone skill: exact title, M<n> (finds `M3 Market data`), or legacy x.y.z. Everything is checked before the first write:
   invalid input, an unknown issue, a closed milestone or a break of the milestone rule (Epic, incomplete Feature) exits 1 and changes nothing. A missing M<n> is created (after the rule checks of all targets, which run as a dry run against it) with
-  Get-Milestones.ps1 -Mode create of the sibling github-milestone skill. The assignment and the milestone rule are
-  done per target milestone by `Get-Milestones.ps1 -Mode assign` (dry run first); an issue already in the target milestone is skipped
+  Get-Milestones.ps1 -Mode create of the sibling github-milestone skill. The assignment is
+  written per target milestone by `Get-Milestones.ps1 -Mode assign` (dry run first), which gets the whole assignment as -Planned so the milestone rule holds over all targets; M1000 and M1.10 are refused up front; an issue already in the target milestone is skipped
   (status unchanged), the others are set (status set). A re-run therefore changes nothing.
 .PARAMETER Assignment
   JSON array or file path.
@@ -58,6 +58,10 @@ foreach ($it in $items) {
   $bare = Get-Bare $name
   $valid = ($bare -cmatch $numberedRx -and -not $Matches[3]) -or $bare -match $semverRx
   if (-not $valid) { Fail "invalid milestone name '$name': expected M<n> [<Topic>] or x.y.z" }
+  if ($bare -cmatch $numberedRx) {
+    $ids = @($Matches[1] -split '\.' | ForEach-Object { [int]$_ })
+    if ($ids[0] -gt 999 -or $ids.Count -gt 2 -or ($ids.Count -eq 2 -and $ids[1] -gt 9)) { Fail "milestone name '$name' is not writable: main number up to 999, one sub level 1..9: nothing was changed" }
+  }
   if ($seen.ContainsKey($nr)) { Fail "issue #$nr appears twice in the assignment" }
   $seen[$nr] = $true
   $pairs.Add([pscustomobject]@{ issue = $nr; name = (Get-Canon $bare) })
@@ -83,7 +87,10 @@ foreach ($p in $pairs) {
 # the milestone rule (Epic, Feature) is checked by github-milestone: Get-Milestones.ps1 -Mode assign, per target milestone
 function Invoke-Assign([string]$title, [bool]$dry) {
   $nrs = ($pairs | Where-Object { ($targets[$_.name] ?? $_.name) -eq $title } | ForEach-Object { $_.issue }) -join ','
-  $extra = @{ DryRun = $dry }
+  # the whole assignment (issue -> target title), so a Feature's sub-issue sent to another target counts as outside
+  $planned = [ordered]@{}
+  foreach ($q in $pairs) { $planned["$($q.issue)"] = [string]($targets[$q.name] ?? $q.name) }
+  $extra = @{ DryRun = $dry; Planned = ($planned | ConvertTo-Json -Compress) }
   $out = & $MilestoneScript -Mode assign -Name $title -Issues $nrs -Repo $Repo @extra
   if ($LASTEXITCODE -ne 0) { Fail "assigning to milestone $title failed: see above" }
   @(($out | Out-String | ConvertFrom-Json).assigned)
