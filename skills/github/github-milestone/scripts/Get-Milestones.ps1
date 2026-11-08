@@ -63,12 +63,15 @@
   Path of Get-ReleaseState.ps1; default: the sibling github-release skill. Missing: releasePr is null.
 .PARAMETER AllRepos
   renumber: run it over every repository of the owner that is not archived and has milestones (`gh repo list <owner> --no-archived`). All repositories are planned first; one clash or failure aborts before the first write.
+.PARAMETER Planned
+  assign: JSON object {"<issue>": "<milestone title>"} of the whole assignment of the caller (all targets). A Feature's open sub-issue listed there counts as inside only when its planned milestone is the target; without it only the issues of this call count.
 .PARAMETER Owner
   renumber -AllRepos: the owner; default the owner of -Repo (of the current directory without -Repo).
 #>
 param(
   [Parameter(Mandatory)][ValidateSet('current', 'list', 'show', 'create', 'issues', 'close', 'rename', 'insert', 'assign', 'renumber')][string]$Mode,
   [string]$Issues,
+  [string]$Planned,
   [switch]$NoReleaseTest,
   [string]$Name,
   [string]$To,
@@ -405,6 +408,8 @@ if ($Mode -eq 'assign') {
     }
   }
   $warnings = [System.Collections.Generic.List[object]]::new()
+  $plannedMap = @{}
+  if ($Planned) { $po = $Planned | ConvertFrom-Json; foreach ($pp in $po.PSObject.Properties) { $plannedMap[[string]$pp.Name] = [string]$pp.Value } }
   foreach ($n in $nums) {
     $i = $info[$n]
     if ($target) {
@@ -415,6 +420,7 @@ if ($Mode -eq 'assign') {
       $outside = @(@($sraw | Out-String | ConvertFrom-Json) | Where-Object { $_ -and $_.state -eq 'open' } | ForEach-Object {
           $foreign = $_.repository_url -and $i.repository_url -and $_.repository_url -ne $i.repository_url
           if ($foreign) { ($_.repository_url -replace '^.*/repos/', '') + "#$($_.number)" }
+          elseif ($plannedMap.ContainsKey([string]$_.number)) { if ($plannedMap[[string]$_.number] -cne $target.title) { "#$($_.number)" } }
           elseif ($info.ContainsKey([int]$_.number)) { }
           elseif (-not ($_.milestone -and $_.milestone.title -eq $target.title)) { "#$($_.number)" }
         })
