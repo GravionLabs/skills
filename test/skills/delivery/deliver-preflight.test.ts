@@ -168,6 +168,38 @@ describe.skipIf(!hasPwsh || process.platform === 'win32')('Test-DeliverPreflight
     expect(ok.detail).toBe('2 stack skills current');
   });
 
+  it('maps a JavaScript project to the ts skills and names the ts group in the hint (#447)', async () => {
+    const detect = path.join(root, 'stub/detect-techstack/scripts/Detect-TechStack.ps1');
+    const original = fs.readFileSync(detect, 'utf8');
+    write(
+      detect,
+      `'{"languages":["js"],"implementation":["js-implementation"],"test":["js-test"]}'\n`,
+    );
+    try {
+      const ok = (await runStub(...only('skills'))).check('skills');
+      expect(ok.status).toBe('ok');
+      expect(ok.detail).toBe('2 stack skills current');
+      fs.rmSync(path.join(repo, '.claude/skills/ts-test'), { recursive: true });
+      const miss = (await runStub(...only('skills'))).check('skills');
+      expect(miss.missing).toEqual(['ts-test']);
+      expect(miss.fix).toBe('/skills-manage ts');
+    } finally {
+      write(detect, original);
+    }
+  });
+
+  it('agrees with the language mapping of Install-Skills.ps1 (#447)', () => {
+    const own = fs.readFileSync(SCRIPT, 'utf8').match(/\$langGroup = @\{([^}]*)\}/)![1];
+    const installer = fs.readFileSync(
+      path.resolve(__dirname, '../../../skills/delivery/skills-manage/scripts/Install-Skills.ps1'),
+      'utf8',
+    );
+    const lang = installer.match(/\$langMap = @\{([^}]*)\}/)![1];
+    const pairs = (t: string) => [...t.matchAll(/(\w+)\s*=\s*'(\w+)'/g)].map((m) => [m[1], m[2]]);
+    expect(pairs(own).length).toBeGreaterThan(0);
+    for (const [k, v] of pairs(own)) expect(pairs(lang)).toContainEqual([k, v]);
+  });
+
   it('removes worktrees of merged or deleted branches and lists the others', async () => {
     const wt = (n: string) => path.join(root, n);
     git(repo, 'worktree', 'add', '-q', '-b', 'feat/12-x', wt('merged'));
