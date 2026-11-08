@@ -40,13 +40,13 @@ Checked from GitHub (not from the output) before and after each iteration, on th
 
 An open `release-test` issue is not part of that set (also when passed explicitly as a Target: `Invoke-DeliverLoop.ps1` drops it from the targets): as the last open item it neither keeps the loop from `done` nor makes it `blocked`. `Get-DeliverStatus.ps1` counts it in `total`, as waiting (`release test`, or `release test, waits for <n> open items`) and, once an RC is posted on it (comment marker `<!-- release-test-rc -->`), as needs you `RC test <issue URL>`.
 
-| Result      | When                                                                                | Exit |
-| :---------- | :---------------------------------------------------------------------------------- | :--- |
-| done        | no open PBI left                                                                    | 0    |
-| max reached | `-Max` iterations ran (delivered, blocked or paused PBIs in total)                  | 0    |
-| blocked     | open PBIs remain, all wait on an open blocker or a label                            | 2    |
-| no progress | the set did not change after an iteration; prints the last log lines, never retries | 1    |
-| stopped     | the stop file of the run exists before an iteration                                 | 0    |
+| Result      | When                                                                                        | Exit |
+| :---------- | :------------------------------------------------------------------------------------------ | :--- |
+| done        | no open PBI left (a `merging` PBI, auto-merge on, is handed to GitHub and no longer counts) | 0    |
+| max reached | `-Max` iterations ran (delivered, blocked or paused PBIs in total)                          | 0    |
+| blocked     | open PBIs remain, all wait on an open blocker or a label                                    | 2    |
+| no progress | the set did not change after an iteration; prints the last log lines, never retries         | 1    |
+| stopped     | the stop file of the run exists before an iteration                                         | 0    |
 
 ## Stop a run
 
@@ -56,6 +56,7 @@ The file `.agents/deliver-loop/<run>/stop` (any content) asks the loop to stop. 
 
 - `.agents/deliver-loop/<run>/progress.jsonl` (`<run>` is the run id of the events below): one record per `start`, `iteration-start`, `iteration-end` and `result` for a control session; `.agents/deliver-loop/latest.txt` holds the path of the newest run.
 - `.agents/deliver-loop/<run>/<nr>.jsonl`: every stream record as it arrives (git-ignored). `<nr>` is the first ready PBI at the start of the iteration.
+- Outcome `merging` (`issue.finished`, auto-merge on, the issue stays open until GitHub merges): counts as progress, the loop does not select the PBI again, the status block shows it as waiting (`Get-DeliverStatus.ps1 -Merging`), the progress reducer as neither delivered nor blocked.
 - `.agents/deliver-loop.log` (plain) and stdout (colored when stdout is a terminal and neither `-NoColor` nor `NO_COLOR` is set, else plain): the tool lines `HH:MM:SS <tool> <description or file>` and tool errors with `✗` come from the stream; short assistant text is logged uncolored (`»`) and never parsed. The step lines `HH:MM:SS #<nr> <step>: <result>` come from the events: while the harness runs, the loop follows the run's event file and prints every new `step.finished`, `attention` (`<kind>: <reason>`) and `issue.finished` (`<outcome>: <reason>`) event, so a step exists only when the harness reported it through `Report-Progress.ps1`. Subagent steps carry the agent description as prefix (`[Review PBI #401 diff] Bash …`). Long text is cut to the terminal width (minus 40 for time, prefix and tool, at least 120), to 120 characters when stdout is redirected.
 - Colors of stdout on a terminal (time dim, tool name cyan, `✗` and tool errors red). A step line is colored by the `tone` of its event: `success` green, `info` cyan, `warning` yellow, `danger` red, `neutral` uncolored. The tone rules live only in `Report-Progress.ps1` (`schema/progress-event.schema.json` of GravionLabs/agent-events (pinned tag in `test/skills/delivery/agent-events/VERSION`)); the loop has no rules of its own. `.agents/deliver-loop.log` stays plain text. `-NoColor` or a non-empty `NO_COLOR` colors no stdout.
 - Log pane (opt-in with `-LogPane`; herdr, `HERDR_ENV=1`, stdout a terminal): before the first iteration the loop splits a pane labeled `deliver-log` below the session (`herdr pane split --current --direction down --ratio 0.7 --no-focus`) that runs `pwsh -NoProfile -Command "Get-Content -Tail 40 -Wait <log>"` on the plain `.agents/deliver-loop.log`. A `deliver-log` pane already in the tab is reused, any herdr failure is ignored, the loop never closes the pane, so the last lines stay readable after the run. Without `-LogPane` no pane opens (the console already shows the colored lines); `-NoPane` is a deprecated no-op. The function is `Open-LogPane` in `scripts/TerminalBackend.ps1`. To see the log from another pane, a herdr key toggles it (`scripts/Switch-LogPane.ps1`, `references/terminal-backends.md` "Log pane toggle").

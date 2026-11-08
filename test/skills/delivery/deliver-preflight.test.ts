@@ -245,7 +245,7 @@ describe.skipIf(!hasPwsh || process.platform === 'win32')('Test-DeliverPreflight
 
   it('prints one line per check with -Text and exits 1 outside a repository', async () => {
     const t = await runStub('-Text');
-    expect(t.stdout.trim().split('\n')).toHaveLength(3);
+    expect(t.stdout.trim().split('\n')).toHaveLength(4);
     expect(t.stdout).toMatch(/^preflight skills: /m);
     // own process: a ProjectRoot that is no git repository
     const plain = fs.mkdtempSync(path.join(os.tmpdir(), 'preflight-plain-'));

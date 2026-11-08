@@ -171,6 +171,7 @@ end {
             $delivered["$nr"] = [ordered]@{ pbi = $nr; url = (Get-IssueUrl $nr); prUrl = $(if ($prs.ContainsKey($nr)) { $prs[$nr] } else { Get-IssueUrl $nr }) }
             $blocked.Remove("$nr"); $paused.Remove("$nr"); $needs.Remove("$nr")
           }
+          'merging' { $blocked.Remove("$nr"); $paused.Remove("$nr"); $needs.Remove("$nr") }  # auto-merge on: waits for GitHub, neither delivered nor blocked
           'skipped' { $blocked.Remove("$nr"); $paused.Remove("$nr"); $needs.Remove("$nr") }
           'blocked' { $paused.Remove("$nr"); $blocked["$nr"] = ConvertTo-StateItem $nr $(if ($e.reason) { $e.reason } else { 'blocked' }) }
           'paused' { $blocked.Remove("$nr"); $paused["$nr"] = ConvertTo-StateItem $nr $(if ($e.reason) { $e.reason } else { 'paused' }) }
