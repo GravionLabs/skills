@@ -9,7 +9,7 @@ Prerequisites: `gh` authenticated, run from the repository root. Usage: `/github
 
 ## Instructions
 
-1. Run the script for the mode; it prints JSON (`schema/milestones.schema.json`). `current`, `list` and `<name>` are read-only and use only `gh api` GET calls; only `create`, `close`, `rename`, `insert` and `assign` write.
+1. Run the script for the mode; it prints JSON (`schema/milestones.schema.json`). `current`, `list` and `<name>` are read-only and use only `gh api` GET calls; only `create`, `close`, `rename`, `insert`, `assign` and `renumber` write (`renumber` PATCHes titles).
 
    ```powershell
    pwsh scripts/Get-Milestones.ps1 -Mode current            # or: -Mode list | -Mode show -Name <M<nnn>|x.y.z> | -Mode create [-Name "M<nnn>[.<m>] [<Topic>]"] | -Mode insert -Name M<nnn> [-DryRun] | -Mode renumber [-Repo o/r | -AllRepos [-Owner o]] [-DryRun] | -Mode assign -Name <M<nnn>|none> -Issues a,b [-DryRun] | -Mode rename -Name <name> -To "M<nnn> [<Topic>] [(x.y.z)]" | -Mode close -Name M<nnn> [-Version <x.y.z>] [-MoveTo M<nnn>]
@@ -44,6 +44,7 @@ Prerequisites: `gh` authenticated, run from the repository root. Usage: `/github
 - Each open issue appears in one group only, in the precedence `needs-decision`, `needs-refinement`, blocked (open blockers), claimed (any assignee), ready. Pull requests are never listed.
 - Valid titles: `M<nnn>[.<m>…] [<Topic>] [(x.y.z)]` (topic without parentheses, ignored for the order; sorted numerically per part: 1, 1.1, 1.2, 2, 10) and legacy `x.y.z`; any other title is listed, but never `current`. `<name>` finds a milestone by exact title, by `M<nnn>` (exact: `M001` never finds `M001.1`; also when the title has a topic and/or the parentheses; `M003` and `M003 Market data` find the same milestone; the lookup also accepts the unpadded number, so `M11` finds `M011` and `M3` finds `M003`) or by the version in the parentheses. `create -Name M15` and `rename` to `M15` write `M015`. Open milestones at or below the latest tag are stale: they show in `list`, not as `current`.
 - `rename` changes only the title of one open milestone (never the number of an `M<nnn>`, the due date or its issues). `create` never renames, edits or closes a milestone, and drops a leading `v` from the name. `close` renames only `M<nnn> [<Topic>]` to `M<nnn> [<Topic>] (x.y.z)`, in the one request that closes it (open issues without `--move-to` leave the title as it is); it never edits the due date or deletes a milestone, needs the tag `v<x.y.z>`, and moves only open issues (never pull requests) and only with `--move-to` to an existing open milestone, never created implicitly. Nothing else moves issues.
+- Known gap: `close --move-to` does not check the milestone rule (an Epic or an incomplete Feature can be moved). Follow-up in the next milestone; check `assign` (which does check) for such moves until then.
 - The release PR comes from `github-release` (`scripts/Get-ReleaseState.ps1`); without that skill installed `releasePr` is null.
 
 Report: the table(s) of the mode, or the `create` or `close` line.
