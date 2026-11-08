@@ -239,7 +239,7 @@
                 "items": {
                   "type": "object",
                   "required": ["number", "title", "milestone"],
-                  "properties": { "number": { "type": "integer" }, "title": { "type": "string" }, "milestone": { "type": "string" } }
+                  "properties": { "number": { "type": "integer" }, "title": { "type": "string" }, "milestone": { "type": "string" }, "repository": { "type": "string", "description": "owner/repo of a sub-issue from another repository." } }
                 }
               }
             },
