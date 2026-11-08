@@ -624,9 +624,8 @@ function Write-ProgressRecord([string]$Name, [hashtable]$Data = @{}) {
 function Invoke-Iteration([int]$n, [int]$total, $state) {
   New-Item -ItemType Directory -Force -Path $RunDir | Out-Null
   $jsonl = Join-Path $RunDir "$($state.Ready[0]).jsonl"
-  $targets = @($Nrs | ForEach-Object { "$_" })
-  if ($Milestone) { $targets += @('--milestone', $Milestone) }
-  $prompt = "/deliver $($targets -join ' ') --unattended --max 1"
+  # the session gets the PBI of this iteration, so its select, tier, log file and events agree (#488)
+  $prompt = "/deliver $([int]$state.Ready[0]) --unattended --max 1"
   $iterModel = $Model
   if ($Harness -eq 'claude' -and -not $Model) {
     $t = Get-PbiTier ([int]$state.Ready[0])

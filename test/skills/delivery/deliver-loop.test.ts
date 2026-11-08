@@ -360,7 +360,7 @@ fs.writeFileSync(f, JSON.stringify(s));`,
           .filter((f) => /queue/i.test(f)),
       ).toEqual([]);
       expect(harnessCalls()).toEqual([
-        '-p /deliver --milestone M4 --unattended --max 1 --model haiku --permission-mode auto --output-format stream-json --verbose',
+        '-p /deliver 10 --unattended --max 1 --model haiku --permission-mode auto --output-format stream-json --verbose',
       ]);
       expect(JSON.parse(read('state.json')).issues[10].state).toBe('CLOSED');
       expect(r.stdout).toContain('loop result: done');
@@ -394,10 +394,47 @@ fs.writeFileSync(f, JSON.stringify(s));`,
       const r = await run(gh, ['-Target', '100', '-Model', 'opus']);
       expect(r.status).toBe(1);
       expect(harnessCalls()).toEqual([
-        '-p /deliver 100 --unattended --max 1 --model opus --permission-mode auto --output-format stream-json --verbose',
+        '-p /deliver 101 --unattended --max 1 --model opus --permission-mode auto --output-format stream-json --verbose',
       ]);
       expect(r.stdout).toContain('no progress');
       expect(r.stdout).toMatch(/ {2}\d\d:\d\d:\d\d » working on it/);
+    });
+  });
+
+  describe('iteration PBI (#488)', () => {
+    it('hands the session the PBI the iteration is logged under: file, records and tier model agree', async () => {
+      const gh = setup({
+        issues: {
+          81: pbi({ body: 'Tier: fast' }),
+          82: pbi({ body: 'Tier: strong' }),
+        },
+        milestones: { M4: [81, 82] },
+        effect: 'close-first',
+      });
+      const r = await run(gh, ['-Milestone', 'M4']);
+      expect(r.status).toBe(0);
+      // not "/deliver --milestone M4": the session cannot pick another PBI than the logged one
+      expect(harnessCalls()).toEqual([
+        '-p /deliver 81 --unattended --max 1 --model haiku --permission-mode auto --output-format stream-json --verbose',
+        '-p /deliver 82 --unattended --max 1 --model opus --permission-mode auto --output-format stream-json --verbose',
+      ]);
+      const dir = read('.agents/deliver-loop/latest.txt').trim();
+      const recs = read(path.relative(cwd, path.join(dir, 'progress.jsonl')))
+        .trim()
+        .split('\n')
+        .map((l) => JSON.parse(l));
+      expect(
+        recs
+          .filter((x) => x.event === 'iteration-start' || x.event === 'iteration-end')
+          .map((x) => `${x.event}:${x.pbi}`),
+      ).toEqual([
+        'iteration-start:81',
+        'iteration-end:81',
+        'iteration-start:82',
+        'iteration-end:82',
+      ]);
+      expect(fs.existsSync(path.join(dir, '81.jsonl'))).toBe(true);
+      expect(fs.existsSync(path.join(dir, '82.jsonl'))).toBe(true);
     });
   });
 
