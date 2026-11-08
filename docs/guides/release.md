@@ -156,7 +156,7 @@ With open issues left, create the next milestone first and move them: `/github-m
 
 ## Migrate legacy milestones
 
-A repository with `x.y.z` milestones moves to `M<nnn>` in one pass; no flag day is needed, legacy titles keep working meanwhile. Worked example: tamias, whose milestone `0.2.0` shipped as `v0.1.1`. The number follows the order of the releases, the version in the parentheses is the tag that shipped. A repository with short numbers (`M1`, `M11`) migrates its titles once with `/github-milestone renumber --dry-run`, then `/github-milestone renumber` (`--repo o/r` for one repository, `--all-repos` for every non-archived repository of the owner); old titles in issue bodies and `ROADMAP.md` are listed, not rewritten.
+A repository with `x.y.z` milestones moves to `M<nnn>` in one pass; no flag day is needed, legacy titles keep working meanwhile. Worked example: tamias, whose milestone `0.2.0` shipped as `v0.1.1`. The number follows the order of the releases, the version in the parentheses is the tag that shipped. A repository with short numbers (`M1`, `M11`) migrates its titles once with `/github-milestone renumber --dry-run`, then `pwsh scripts/Get-Milestones.ps1 -Mode renumber -DryRun`, and `-Mode renumber` after approval (`-Repo o/r` for one repository, or `-AllRepos -Owner <owner>` for every non-archived repository of the owner); old titles in issue bodies and `ROADMAP.md` are listed, not rewritten.
 
 | Legacy title | New title      | State                      |
 | :----------- | :------------- | :------------------------- |

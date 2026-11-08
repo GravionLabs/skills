@@ -791,7 +791,9 @@ describe('M<nnn> milestones (#235)', () => {
     expect(body).toContain(
       'the `github-milestone` lookup resolves `M004` to the title `M004` or, after `close`, `M004 (0.2.0)`',
     );
-    expect(body).toContain('`<key>` is its `M<nnn>` or sub-number `M<nnn>.<m>` (legacy: the title)');
+    expect(body).toContain(
+      '`<key>` is its `M<nnn>` or sub-number `M<nnn>.<m>` (legacy: the title)',
+    );
     expect(body).toContain(
       'The `milestone.title` of that read is the title for `gh issue create --milestone`',
     );
