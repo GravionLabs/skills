@@ -60,6 +60,8 @@ esac
   const baseEnv = () => {
     const env: NodeJS.ProcessEnv = { ...process.env, PATH: `${bin}:${process.env.PATH}` };
     for (const k of Object.keys(env)) if (k.startsWith('HERDR_')) delete env[k];
+    // a developer's poimen terminal would win over HERDR_ENV in Get-TerminalBackend (poimen is checked first)
+    for (const k of ['POIMEN_TERMINAL_ID', 'POIMEN_SOCKET', 'DELIVER_TERMINAL_BACKEND']) delete env[k];
     return { ...env, HERDR_STUB_DIR: cwd };
   };
   // shell keybinding: HERDR_ACTIVE_* only, runs from the pane's cwd, no HERDR_ENV
