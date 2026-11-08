@@ -150,6 +150,7 @@ $MilestoneScript = @('../../github-milestone', '../../../github/github-milestone
 $ReportScript = Join-Path $PSScriptRoot 'Report-Progress.ps1'
 $ReducerScript = Join-Path $PSScriptRoot 'ConvertFrom-ProgressEvents.ps1'
 $StatusScript = Join-Path $PSScriptRoot 'Get-DeliverStatus.ps1'
+$MergingScript = Join-Path $PSScriptRoot 'Get-MergingPrs.ps1'
 # one events directory for the loop, Report-Progress and the harness: AGENT_EVENTS_DIR, else <git-common-dir>/.agents/events,
 # outside a git repository .agents/events
 if (-not $env:AGENT_EVENTS_DIR) {
@@ -383,9 +384,13 @@ function Get-State {
     $paused = [bool]@(@($closed.issues) | Where-Object { $_ -and $_.labels -contains 'needs-decision' -and ($_.labels -contains 'pbi' -or $_.labels -contains 'bug') })
   }
   $eligible = @($found | Where-Object { -not ($_.Labels | Where-Object { $Held -contains $_ }) })
+  $waitMerge = @{}
   $ready = @($eligible | Where-Object {
       $blockers = @(Get-Json @('api', "repos/{owner}/{repo}/issues/$($_.Number)/dependencies/blocked_by?per_page=100"))
-      -not ($blockers | Where-Object { $_ -and $_.state -eq 'open' })
+      $open = @($blockers | Where-Object { $_ -and $_.state -eq 'open' })
+      # every open blocker waits for its merge (outcome merging): the PBI waits too, it is not blocked
+      if ($open.Count -and -not @($open | Where-Object { $script:Merging -notcontains [int]$_.number })) { $waitMerge["$($_.Number)"] = [int]$open[0].number }
+      -not $open
     })
   $labelsOf = @{}
   foreach ($f in $found) { $labelsOf[[int]$f.Number] = @($f.Labels) }
@@ -395,9 +400,26 @@ function Get-State {
     Labels   = $labelsOf
     Skipped  = @($skipped)
     Paused   = $paused
+    WaitMerge = $waitMerge
     Eligible = @($eligible | ForEach-Object { $_.Number } | Sort-Object)
     Ready    = @($ready | ForEach-Object { $_.Number } | Sort-Object)
   }
+}
+
+# Only PBIs that wait for the merge of a `merging` blocker are left: wait (REST, at most every 60 s, MergePollSeconds) instead of
+# ending blocked or `no progress`. A merging PR that went red, conflicts or lost auto-merge leaves $Merging, so the next
+# iteration selects its PBI again (deliver step 1 starts the fix round or blocks it).
+function Wait-ForMerge($state) {
+  $poll = if ($env:DELIVER_MERGE_POLL_SECONDS) { [double]$env:DELIVER_MERGE_POLL_SECONDS } else { 60 }
+  while ($state.Open -gt 0 -and $state.Ready.Count -eq 0 -and $state.WaitMerge.Count -gt 0 -and $Merging.Count) {
+    foreach ($w in $state.WaitMerge.GetEnumerator()) { Write-Step "#$($w.Key) select: waits for merge of #$($w.Value)" 'yellow' }
+    if (Test-StopRequested) { break }
+    Start-Sleep -Seconds $poll
+    $list = @(Get-Json @('-File', $MergingScript, '-Issues', (@($Merging) -join ',')) -Pwsh)
+    $script:Merging = @($list | Where-Object { $_ -and $_.state -eq 'waiting' } | ForEach-Object { [int]$_.issue })
+    $state = Get-State
+  }
+  return $state
 }
 
 function Get-StopReason($state) {
@@ -632,6 +654,7 @@ try {
   Write-ProgressLine
   Write-ProgressRecord 'start' @{ targets = @($Nrs); milestone = $Milestone; max = $Max; harness = $Harness; model = $Model; open = $state.Open }
   foreach ($sk in $state.Skipped) { Write-Step "#$($sk.Number) select: outside $Milestone (milestone: $($sk.Milestone)), skipped; set the milestone to deliver it" 'yellow' }
+  $state = Wait-ForMerge $state
   $result = Get-StopReason $state
   $total = if ($Max -gt 0) { [Math]::Min($Max, $state.Eligible.Count) } else { $state.Eligible.Count }
   while (-not $result) {
@@ -655,7 +678,7 @@ try {
       foreach ($l in $Recent.ToArray()) { Write-Host "  $l" }
       break
     }
-    $state = $after
+    $state = Wait-ForMerge $after
     $result = Get-StopReason $state
     if (-not $result -and $Max -gt 0 -and $i -ge $Max) { $result = 'max reached' }
   }
