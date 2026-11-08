@@ -187,16 +187,18 @@ if ($Mode -eq 'finish' -and $Milestone) {
   $raw = & gh issue list --label release-test --state open --json number,url,milestone 2>$null
   if ($LASTEXITCODE -ne 0) { Fail 'gh issue list failed' }
   $allIssues = @($raw | ConvertFrom-Json)
-  # #409: gh needs the exact title; M<n> is also the key of a milestone titled `M<n> <Topic>`
+  # numeric value of M<n>[.<m>] (padded or not: M3 = M003, M011.1 = 11.1)
+  $msNum = {
+    param($t)
+    if ($t -match '^M(\d+)(?:\.(\d+))?') { [double]("$([int]$Matches[1]).$(if ($Matches[2]) { $Matches[2] } else { '0' })") } else { $null }
+  }
+  # #409: gh needs the exact title; M<n> is also the key of a milestone titled `M<n> <Topic>`; matched by number, not by padding
   if (-not $releaseTest -and $Milestone -match '^M\d+(\.\d+)?$') {
-    $releaseTest = $allIssues | Where-Object { $_.milestone.title -match "^$([regex]::Escape($Milestone))(\s|$)" } | Select-Object -First 1
+    $wantNum = & $msNum $Milestone
+    $releaseTest = $allIssues | Where-Object { $_.milestone.title -match '^M\d+(\.\d+)?(\s|$)' -and (& $msNum $_.milestone.title) -eq $wantNum } | Select-Object -First 1
   }
   # #399: only issues of a lower milestone (M-number, else due date) are replaced; no milestone = skipped
   $curDue = if ($releaseTest -and $releaseTest.milestone.dueOn) { [datetime]$releaseTest.milestone.dueOn } else { $null }
-  $msNum = {
-    param($t)
-    if ($t -match '^M(\d+)(?:\.(\d+))?') { [double]("$($Matches[1]).$(if ($Matches[2]) { $Matches[2] } else { '0' })") } else { $null }
-  }
   $isOlder = {
     param($m)
     if (-not $m -or -not $m.title -or $m.title -eq $Milestone) { return $false }

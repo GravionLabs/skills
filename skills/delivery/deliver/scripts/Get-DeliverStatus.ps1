@@ -42,7 +42,8 @@ if ($LASTEXITCODE -ne 0) { Fail "reading milestone '$Milestone' failed" }
 $data = ($raw | Out-String) | ConvertFrom-Json
 $all = @($data.issues)
 $title = [string]$data.milestone.title
-$key = if ($title -match '^(M[0-9]+(?:\.[0-9]+)*)') { $Matches[1] } else { $title }
+# key: every number part as [int], so M003 = M3 and M011.1 = M11.1 (one state file for padded and unpadded titles)
+$key = if ($title -match '^M([0-9]+(?:\.[0-9]+)*)') { 'M' + ((@($Matches[1] -split '\.' | ForEach-Object { [string][int]$_ })) -join '.') } else { $title }
 
 if (-not $BaseUrl) { $BaseUrl = [string]$data.baseUrl }
 if (-not $BaseUrl) { Fail 'repository URL not readable' }
