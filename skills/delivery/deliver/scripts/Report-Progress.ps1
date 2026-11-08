@@ -17,13 +17,15 @@
   Retention: -Type run.started deletes finished and abandoned runs older than AGENT_EVENTS_KEEP_DAYS (default 7) and all
   beyond the newest AGENT_EVENTS_KEEP (default 100), in the events dir and in .agents/deliver-loop/<run>/ (ProgressRetention.ps1).
   Running runs (live pid) and the current run are kept.
+  Stop --now: after a step.finished, when .agents/deliver-loop/<run>/stop (DELIVER_LOOP_DIR, else the main worktree) contains `now`,
+  `STOP requested` is printed on stdout (SKILL.md rule: start no further step).
   Never fails the caller: an I/O error prints one line to stderr and the exit code is 0.
 .PARAMETER Type
   run.started, milestone.progress, issue.started, step.finished, attention, issue.finished, release.updated or run.finished.
 .PARAMETER Kind
   attention kind: pr_opened, review_fix, ci_red, paused, blocked, needs_you or release_test.
 .PARAMETER Outcome
-  issue.finished: delivered, blocked, paused or skipped.
+  issue.finished: delivered, merging (auto-merge on, the PR merges when the checks are green), blocked, paused or skipped.
 .PARAMETER ReviewRound
   release.updated: the round of the release review (1, 2, ...).
 .PARAMETER RunResult
@@ -81,7 +83,7 @@ function Get-Tone([string]$type, [string]$step, [string]$result, [string]$kind, 
       return 'neutral'
     }
     'issue.finished' {
-      switch ($outcome) { 'delivered' { return 'success' } 'blocked' { return 'danger' } 'paused' { return 'warning' } }
+      switch ($outcome) { 'delivered' { return 'success' } 'merging' { return 'neutral' } 'blocked' { return 'danger' } 'paused' { return 'warning' } }
       return 'neutral'
     }
     'run.finished' {
@@ -250,6 +252,22 @@ try {
   if ($created) { Write-Output "AGENT_EVENTS_RUN=$run"; Write-Output 'AGENT_EVENTS_TERMINAL=owner' }
   if (-not $env:AGENT_EVENTS_RUN -or $created -or $env:AGENT_EVENTS_TERMINAL -eq 'owner') {
     try { Send-TerminalSink ([pscustomobject]($ev | ConvertTo-Json -Depth 6 | ConvertFrom-Json)) $Pr } catch { Write-Verbose "terminal sink: $_" }
+  }
+  # stop --now (#476): the stop file of the loop run contains `now` -> the session starts no further step
+  if ($Type -eq 'step.finished' -and $env:AGENT_EVENTS_RUN) {
+    try {
+      $loopDirs = @()
+      if ($env:DELIVER_LOOP_DIR) { $loopDirs += $env:DELIVER_LOOP_DIR }
+      else {
+        $main = @(& git -C (Get-Location).Path worktree list --porcelain 2>$null | Where-Object { $_ -like 'worktree *' })[0]
+        if ($main) { $loopDirs += Join-Path $main.Substring(9) '.agents/deliver-loop' }
+        $loopDirs += Join-Path (Get-Location).Path '.agents/deliver-loop'
+      }
+      foreach ($d in $loopDirs) {
+        $sf = Join-Path $d "$($env:AGENT_EVENTS_RUN)/stop"
+        if ((Test-Path -LiteralPath $sf -PathType Leaf) -and (Get-Content -LiteralPath $sf -Raw) -match '^\s*now\s*$') { Write-Output 'STOP requested'; break }
+      }
+    } catch { Write-Verbose "stop check: $_" }
   }
 } catch {
   [Console]::Error.WriteLine("Report-Progress: $($_.Exception.Message)")

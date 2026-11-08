@@ -12,6 +12,12 @@ function deliver-loop {
     $global:LASTEXITCODE = 1
     return
   }
+  if ($args.Count -gt 0 -and "$($args[0])" -eq 'stop') {
+    $stopArgs = @($args | Select-Object -Skip 1 | ForEach-Object { switch ("$_") { '--now' { '-Now' } '--cancel' { '-Cancel' } default { "$_" } } })
+    Push-Location -LiteralPath $root
+    try { & pwsh -NoProfile -File (Join-Path $dir 'scripts/Request-LoopStop.ps1') @stopArgs } finally { Pop-Location }
+    return
+  }
   $start = Join-Path $dir 'scripts/Start-LoopWorkspace.ps1'
   if ($env:HERDR_ENV -eq '1' -and (Get-Command herdr -ErrorAction SilentlyContinue) -and (Test-Path -LiteralPath $start)) {
     # an array argument (-Target 12,14) would reach the native pwsh as separate words: pass it as one comma-joined value
