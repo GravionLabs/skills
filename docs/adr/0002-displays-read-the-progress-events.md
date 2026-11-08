@@ -1,6 +1,6 @@
 # ADR 0002: Displays read the progress events
 
-- Status: Accepted
+- Status: Accepted; the in-repo schema and fixtures as the contract for readers (lines 53-54) superseded in part by [ADR 0003](0003-the-progress-event-format-lives-in-agent-events.md)
 - Date: 2026-11-07
 - Issues: #413, #395
 - Supersedes in part: [ADR 0001](0001-agent-progress-events.md) (the terminal sink of the emitter; the event format, `tone`, the location, the retention and the reference reducer stay)
@@ -50,8 +50,8 @@ A plugin in GravionLabs/herdr-plugins follows the event files of the open worksp
 
 ### The contract is the schema and the fixtures, not shared code
 
-- `progress-event.schema.json` and the paired fixtures (events → `*.state.json`, #370) stay the contract for full readers.
-- New **token fixtures** under `test/skills/delivery/fixtures/progress-events/`: events → expected tokens and agent state per step. They replace the sink table of `references/terminal-backends.md` as the checked source; the herdr plugin tests against them.
+- The event schema and the paired fixtures (events → `*.state.json`, #370) are defined in GravionLabs/agent-events and consumed at its pinned tag; full readers read that contract, not a copy here (ADR 0003).
+- **Token fixtures** under `test/skills/delivery/fixtures/progress-events/`: events → expected tokens and agent state per step. They replace the sink table of `references/terminal-backends.md` as the checked source; the herdr plugin tests against them. They stay out of ADR 0003 and move with the herdr plugin work.
 - Each reader implements its own fold in its own language: pwsh (reference), Rust (poimen), TypeScript (herdr). The schema only grows additively (ADR 0001), so the folds stay small.
 
 ### Agents

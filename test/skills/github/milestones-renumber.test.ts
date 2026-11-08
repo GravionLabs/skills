@@ -11,7 +11,8 @@ const script = path.join(root, 'skills/github/github-milestone/scripts/Get-Miles
 const handler = `(call) => {
   const a = call.args;
   const repos = JSON.parse(process.env.FAKE_REPOS);
-  if (a[0] === 'repo' && a[1] === 'list') return { rest: Object.keys(repos).filter((r) => r !== '{owner}/{repo}').map((nameWithOwner) => ({ nameWithOwner })) };
+  if (a[0] === 'repo' && a[1] === 'view') return { rest: process.env.FAKE_SELF };
+  if (a[0] === 'repo' && a[1] === 'list') return { rest: Object.keys(repos).map((nameWithOwner) => ({ nameWithOwner })) };
   if (a.includes('-X')) return { rest: {} };
   const m = a[1].match(/^repos\\/(.+)\\/milestones\\?/);
   if (m) return { rest: [repos[m[1]] || []] };
@@ -28,7 +29,8 @@ const ms = (number: number, title: string, state = 'open') => ({
   html_url: `https://x/m/${number}`,
 });
 
-const here = '{owner}/{repo}';
+// the repository of the current directory (gh repo view), as -Repo is omitted
+const here = 'o/r';
 const mixed = [
   ms(1, 'M1 (0.2.0)', 'closed'),
   ms(2, 'M11.1'),
@@ -55,7 +57,7 @@ describe('Get-Milestones.ps1 -Mode renumber', () => {
     const before = fake.calls().length;
     const r = await worker.run(['-Mode', 'renumber', ...extra], {
       cwd: tmp,
-      env: { ...fake.env(), FAKE_REPOS: JSON.stringify(repos) },
+      env: { ...fake.env(), FAKE_REPOS: JSON.stringify(repos), FAKE_SELF: here },
     });
     const calls = fake.calls().slice(before);
     const writes = calls.filter((c) => c.args.includes('-X')).map((c) => c.args);
@@ -125,6 +127,14 @@ describe('Get-Milestones.ps1 -Mode renumber', () => {
     const { r, writes } = await run({ [here]: list });
     expect(r.status).toBe(1);
     expect(r.stderr).toMatch(msg);
+    expect(writes).toEqual([]);
+  });
+
+  it('without -Repo the repo field is the owner/name of the current repository, never the placeholder', async () => {
+    const { r, writes } = await run({ [here]: mixed }, ['-DryRun']);
+    expect(r.status).toBe(0);
+    expect(JSON.parse(r.stdout).repo).toBe('o/r');
+    expect(r.stdout).not.toContain('{owner}');
     expect(writes).toEqual([]);
   });
 

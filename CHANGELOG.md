@@ -5,11 +5,47 @@ Versioning follows [Semantic Versioning](https://semver.org/).
 
 ---
 
+## [3.4.0] — 2026-11-08
+
+### Bug Fixes
+- Sub-issues from another repository count as outside the milestone (#438) (#445)
+- **delivery**: Find github-milestone in an installed layout (#446) (#454)
+- Deliver preflight asks for js-implementation and js-test that no group installs (#447) (#455)
+- **roadmap**: Milestone rule is checked per target, not over the whole assignment (#464) (#470)
+- **github-milestone**: Assign dry run on a missing milestone validates; renumber resolves the repository (#465) (#471)
+- **roadmap**: New-Roadmap matches block keys by numeric value after renumber (#466) (#472)
+- **deliver**: One milestone key form in docs, schema and state files (#468) (#477)
+- **docs**: Github-milestone modes renumber and assign documented (#469) (#478)
+- **docs**: ADR 0003 supersedes ADR 0002 in part (#467) (#483)
+
+
+### Documentation
+- Set milestones only through github-milestone assign (#440) (#449)
+- **adr**: The progress event format lives in agent-events (#451) (#456)
+- M<nnn> milestone format in skills and guides (#436) (#444)
+
+
+### Features
+- Zero-padded milestone numbers in github-milestone (#433) (#442)
+- Github-milestone assign mode enforces the milestone rule (#439) (#448)
+- Renumber mode migrates existing milestones (#434) (#458)
+- Padded milestone titles in roadmap, release and github-project scripts (#435) (#459)
+
+
+### Refactoring
+- **delivery**: Drop the deliver-loop.ansi.log (#441) (#453)
+- **deliver**: Schema and event fixtures come from agent-events (#452) (#457)
+
+
 ## [3.3.0] — 2026-11-07
 
 ### Bug Fixes
 - **docs**: AGENTS.md says github-project is not in this repository (#428) (#430)
 - Github-project live tests exceed the time budget and hit the worker timeout (#429) (#431)
+
+
+### Documentation
+- Update CHANGELOG.md for v3.3.0 [skip ci]
 
 
 ### Features

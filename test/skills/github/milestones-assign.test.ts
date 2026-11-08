@@ -1,3 +1,4 @@
+import Ajv2020 from 'ajv/dist/2020';
 import * as fs from 'fs';
 import * as os from 'os';
 import * as path from 'path';
@@ -119,6 +120,20 @@ describe('Get-Milestones.ps1 -Mode assign', () => {
     const epic = await assign('M9', '2', { 2: { labels: ['epic'] } }, {}, ['-DryRun']);
     expect(epic.r.status).toBe(1);
     expect(epic.r.stderr).toContain('Epic never has a milestone');
+  });
+
+  it('-DryRun against a missing milestone validates against the schema (number null, state missing)', async () => {
+    const { r, out } = await assign('M9', '1', { 1: pbi() }, {}, ['-DryRun']);
+    expect(r.status).toBe(0);
+    expect(out.milestone).toEqual({ number: null, title: 'M9', state: 'missing', url: null });
+    const schema = JSON.parse(
+      fs.readFileSync(
+        path.join(root, 'skills/github/github-milestone/schema/milestones.schema.json'),
+        'utf8',
+      ),
+    );
+    const ajv = new Ajv2020({ strict: false });
+    expect(ajv.validate(schema, out)).toBe(true);
   });
 
   it.each([

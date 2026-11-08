@@ -109,7 +109,7 @@
       "required": ["dryRun", "milestone", "assigned", "warnings"],
       "properties": {
         "dryRun": { "type": "boolean", "description": "true: nothing was written." },
-        "milestone": { "oneOf": [{ "$ref": "#/$defs/milestoneRef" }, { "type": "null" }], "description": "The target; null for assign none." },
+        "milestone": { "oneOf": [{ "$ref": "#/$defs/milestoneRef" }, { "$ref": "#/$defs/missingRef" }, { "type": "null" }], "description": "The target; null for assign none; missingRef only on -DryRun against a milestone that does not exist yet (it would be created)." },
         "assigned": {
           "type": "array",
           "items": {
@@ -274,6 +274,18 @@
         "state": { "enum": ["open", "closed"] },
         "url": { "type": ["string", "null"] }
       }
+    },
+    "missingRef": {
+      "type": "object",
+      "description": "-DryRun only: the milestone does not exist yet; title is the bare M<n> or x.y.z of -Name. Nothing was written.",
+      "required": ["number", "title", "state", "url"],
+      "properties": {
+        "number": { "type": "null" },
+        "title": { "type": "string" },
+        "state": { "const": "missing" },
+        "url": { "type": "null" }
+      },
+      "additionalProperties": false
     },
     "issueRef": {
       "type": "object",
