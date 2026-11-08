@@ -12,7 +12,7 @@ The deliver scripts call the terminal only through `scripts/TerminalBackend.ps1`
 | `Open-LogPane`         | `herdr pane list`, `pane split`, `pane run`, `pane rename`                       | notice only                                                                  | poimen, none |
 | `Switch-LogPane`       | `herdr pane list`, `pane close` or `Open-LogPane`                                | notice only                                                                  | poimen, none |
 
-The tokens `deliver`, `deliver_step`, `deliver_pr`, `deliver_progress` (`<closed>/<total>` of the milestone, e.g. `7/19`) and `deliver_tone` go through `Set-LoopTokens`, the lifecycle through `Set-LoopAgentState`; the loop sends events and its terminal sink (below) makes these calls, `Clear-LoopTokens` removes all five with `run.finished`. poimen gets the same tokens and state through `poimen-server` (`terminal.report_tokens`); a missing server or method warns once on stderr (`Invoke-Poimen`) and the loop goes on. The status file `.agents/deliver-loop/status.json` is written whatever the backend (`loop.md` "Observability").
+The tokens `deliver`, `deliver_step`, `deliver_pr`, `deliver_progress` (`<closed>/<total>` of the milestone, e.g. `7/19`) and `deliver_tone` go through `Set-LoopTokens`, the lifecycle through `Set-LoopAgentState`; the loop sends events and its terminal sink (below) makes these calls, `Clear-LoopTokens` removes all five with `run.finished`. poimen gets the same tokens and state through `poimen-server` (`terminal.report_tokens`); a missing server or method warns once on stderr (`Invoke-Poimen`) and the loop goes on.
 
 ## Terminal sink of Report-Progress (deprecated)
 

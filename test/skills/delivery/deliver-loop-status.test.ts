@@ -1,4 +1,3 @@
-import Ajv from 'ajv/dist/2020';
 import { spawnSync } from 'child_process';
 import * as fs from 'fs';
 import * as os from 'os';
@@ -7,23 +6,16 @@ import { reportEventCmd } from '../../helpers/report-progress';
 import { createFakeGh } from '../../helpers/fake-gh';
 import { PwshWorker } from '../../helpers/pwsh-worker';
 
-// #329: Invoke-DeliverLoop.ps1 prints a progress line, writes .agents/deliver-loop/status.json (schema) and reports
+// #329: Invoke-DeliverLoop.ps1 prints a progress line and reports
 // deliver_progress to the terminal backend (herdr, poimen); gh, claude, herdr, poimen-server are stubs on PATH.
 // Own file: deliver-loop.test.ts is at its time budget.
 const ROOT = path.resolve(__dirname, '../../..');
 const SCRIPT = path.join(ROOT, 'skills/delivery/deliver/scripts/Invoke-DeliverLoop.ps1');
-const schema = JSON.parse(
-  fs.readFileSync(
-    path.join(ROOT, 'skills/delivery/deliver/schema/deliver-loop-status.schema.json'),
-    'utf8',
-  ),
-);
-const validate = new Ajv({ allErrors: true }).compile(schema);
 const hasPwsh = spawnSync('pwsh', ['-NoProfile', '-Command', '1']).status === 0;
 const BASE = 'https://github.com/acme/app';
 
 describe.skipIf(!hasPwsh || process.platform === 'win32')(
-  'Invoke-DeliverLoop.ps1 progress and status.json',
+  'Invoke-DeliverLoop.ps1 progress and terminal tokens',
   () => {
     let dir: string;
     let cwd: string;
@@ -121,10 +113,10 @@ const s = JSON.parse(fs.readFileSync(f, 'utf8')); s.issues[10].state = 'closed';
       const p = path.join(cwd, f);
       return fs.existsSync(p) ? fs.readFileSync(p, 'utf8').trim().split('\n') : [];
     };
-    const status = () =>
-      JSON.parse(fs.readFileSync(path.join(cwd, '.agents/deliver-loop/status.json'), 'utf8'));
+    const noStatusFile = () =>
+      expect(fs.existsSync(path.join(cwd, '.agents/deliver-loop/status.json'))).toBe(false);
 
-    it('writes a schema-valid status.json atomically and prints the progress line outside herdr and poimen', async () => {
+    it('prints the progress line and writes no status.json outside herdr and poimen', async () => {
       const r = await run(
         setup({
           blocked: true,
@@ -145,28 +137,7 @@ const s = JSON.parse(fs.readFileSync(f, 'utf8')); s.issues[10].state = 'closed';
       expect(r.status).toBe(2);
       expect(r.stdout).toContain('M4 ▓▓░░░░░░ 1/4 · #10 pr');
       expect(r.stdout).toContain('M4 ▓▓▓▓░░░░ 2/4 · 1 blocked · 1 needs you');
-      const doc = status();
-      expect(validate(doc), JSON.stringify(validate.errors)).toBe(true);
-      expect(doc).toMatchObject({
-        harness: 'claude',
-        model: 'sonnet',
-        repository: 'acme/app',
-        milestone: { key: 'M4', title: 'M4 Status', url: `${BASE}/milestone/4` },
-        closed: 2,
-        total: 4,
-        current: null,
-        delivered: [{ pbi: 10, url: `${BASE}/issues/10`, prUrl: `${BASE}/pull/55` }],
-        blocked: [
-          { number: 11, url: `${BASE}/issues/11`, reason: expect.stringContaining('blocked by') },
-        ],
-        needsYou: [
-          { number: 12, url: `${BASE}/issues/12`, reason: expect.stringContaining('decision') },
-        ],
-        result: 'blocked',
-      });
-      expect(
-        fs.readdirSync(path.join(cwd, '.agents/deliver-loop')).filter((f) => f.endsWith('.tmp')),
-      ).toEqual([]);
+      noStatusFile();
       expect(r.stderr).toBe('');
     });
 
@@ -177,7 +148,7 @@ const s = JSON.parse(fs.readFileSync(f, 'utf8')); s.issues[10].state = 'closed';
       expect(calls.some((l) => l.includes('--token deliver_progress=1/2'))).toBe(true);
       expect(calls.at(-1)).toContain('--clear-token deliver_progress');
       expect(lines('poimen-calls.txt')).toEqual([]);
-      expect(status().result).toBe('done');
+      noStatusFile();
     });
 
     it('poimen: the same tokens and the lifecycle state go through poimen-server, a failing server does not stop the loop', async () => {
@@ -201,7 +172,7 @@ const s = JSON.parse(fs.readFileSync(f, 'utf8')); s.issues[10].state = 'closed';
       expect(calls).toContain('report clear --source deliver');
       expect(calls.some((l) => l.includes('--token') || l.includes('--ttl-ms'))).toBe(false);
       expect(lines('herdr-calls.txt')).toEqual([]);
-      expect(status().result).toBe('done');
+      noStatusFile();
     });
   },
 );
