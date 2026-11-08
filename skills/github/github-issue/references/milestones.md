@@ -28,4 +28,5 @@ An issue closes when its PR is merged into `release/next` (comment "ships with <
 - `github-milestone assign` refuses an Epic (except `none`) and a Feature whose open sub-issues would not all be in the milestone, before the first write; `warnings` names a PBI or Bug left without a milestone (`no-milestone`).
 - `github-milestone` `current` and `<name>` list a `warnings` group: an Epic in the milestone; a Feature in it with open sub-issues outside of it (with their milestone or `none`).
 - `roadmap` (`Set-IssueMilestones.ps1`) refuses an Epic and a Feature whose open PBIs would not all be in its milestone; nothing is written then.
+- GravionLabs/ci: `project-needs.yml` (nightly, mode `project`) and `issue-events.yml` (on milestoned and demilestoned events) run `Sync-ProjectNeeds.ps1`, which checks the Current and Milestones fields of the project against the issues' milestones; it does not check the milestone rule itself.
 - Fix a warning by moving the PBIs into the milestone or clearing the milestone of the Feature or Epic.
