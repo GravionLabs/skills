@@ -53,6 +53,29 @@ describe.skipIf(!hasPwsh || process.platform === 'win32')('Report-Progress.ps1',
     fs.rmSync(root, { recursive: true, force: true });
   });
 
+  it('prints STOP requested after step.finished only when the stop file of the run contains now (#476)', async () => {
+    const dir = path.join(root, 'ev-stop');
+    const loopDir = path.join(root, 'loopdir');
+    const env = baseEnv({
+      AGENT_EVENTS_DIR: dir,
+      AGENT_EVENTS_RUN: 'stop-run',
+      DELIVER_LOOP_DIR: loopDir,
+    });
+    const args = ['-Type', 'step.finished', '-Issue', '1', '-Step', 'review', '-Result', 'clean'];
+    const stop = path.join(loopDir, 'stop-run', 'stop');
+    fs.mkdirSync(path.dirname(stop), { recursive: true });
+    expect((await worker.run(args, { cwd: repo, env })).stdout).not.toContain('STOP requested');
+    fs.writeFileSync(stop, '');
+    expect((await worker.run(args, { cwd: repo, env })).stdout).not.toContain('STOP requested');
+    fs.writeFileSync(stop, 'now\n');
+    const r = await worker.run(args, { cwd: repo, env });
+    expect(r.status).toBe(0);
+    expect(r.stdout.trim()).toBe('STOP requested');
+    expect(events(dir, 'stop-run')).toHaveLength(3);
+    const other = await worker.run(['-Type', 'attention', '-Kind', 'paused'], { cwd: repo, env });
+    expect(other.stdout).not.toContain('STOP requested');
+  });
+
   it('creates a run on run.started, host from the environment, and every type validates in seq order', async () => {
     const dir = path.join(root, 'ev1');
     const start = await worker.run(

@@ -47,6 +47,8 @@ type Fixture = {
   milestones?: Record<string, number[]>;
   effect?: 'none' | 'close-first' | 'hold-first';
   stream?: object[];
+  stopBefore?: boolean; // gh creates the stop file of the run once the run directory exists (before iteration 1)
+  stopDuring?: boolean; // the harness stub creates the stop file of the run during the iteration
   events?: string[][]; // Report-Progress.ps1 arguments the harness stub runs after its stream
 };
 
@@ -81,6 +83,16 @@ describe.skipIf(!hasPwsh || process.platform === 'win32')('Invoke-DeliverLoop.ps
         const fs = require('fs');
         const s = JSON.parse(fs.readFileSync(${JSON.stringify(state)}, 'utf8'));
         const a = call.args;
+        if (s.stopBefore) {
+          // the run directory of every run that already wrote run.started (its event file) gets the stop file
+          const ev = require('path').join(process.cwd(), 'events');
+          const root = require('path').join(process.cwd(), '.agents/deliver-loop');
+          if (fs.existsSync(ev)) for (const f of fs.readdirSync(ev)) {
+            const d = require('path').join(root, f.replace(/\\.jsonl$/, ''));
+            fs.mkdirSync(d, { recursive: true });
+            fs.writeFileSync(require('path').join(d, 'stop'), '');
+          }
+        }
         const get = (n) => { if (!s.issues[n]) throw new Error('no issue ' + n); return s.issues[n]; };
         let m = /^repos\\/\\{owner\\}\\/\\{repo\\}\\/issues\\/(\\d+)$/.exec(a[1] || '');
         if (a[0] === 'api' && m) {
@@ -119,16 +131,21 @@ fs.writeFileSync(f, JSON.stringify(s));`,
       full.stream.map((r) => JSON.stringify(r)).join('\n') + '\n',
     );
     const bin = path.join(cwd, 'bin');
-    const events = full.events.map((e) => reportEventCmd(e) + '\n').join('');
+    const events = full.events
+      .map((e) => reportEventCmd(e) + (full.stopDuring ? ` >> ${cwd}/stop-out.txt` : '') + '\n')
+      .join('');
+    const stopDuring = full.stopDuring
+      ? `echo now > "$(cat ${cwd}/.agents/deliver-loop/latest.txt)/stop"\n`
+      : '';
     const stub = (name: string, body: string) =>
       fs.writeFileSync(path.join(gh.bin, name), `#!/bin/sh\n${body}\n`, { mode: 0o755 });
     stub(
       'claude',
-      `echo "$*" >> ${cwd}/harness-calls.txt\necho "herdr_env=[$HERDR_ENV]" >> ${cwd}/harness-calls.txt\ncat ${cwd}/stream.jsonl\n${events}node ${cwd}/effect.js`,
+      `echo "$*" >> ${cwd}/harness-calls.txt\necho "herdr_env=[$HERDR_ENV]" >> ${cwd}/harness-calls.txt\ncat ${cwd}/stream.jsonl\n${stopDuring}${events}node ${cwd}/effect.js`,
     );
     stub(
       'copilot',
-      `echo "$*" >> ${cwd}/harness-calls.txt\necho "herdr_env=[$HERDR_ENV]" >> ${cwd}/harness-calls.txt\ncat ${cwd}/stream.jsonl\n${events}node ${cwd}/effect.js`,
+      `echo "$*" >> ${cwd}/harness-calls.txt\necho "herdr_env=[$HERDR_ENV]" >> ${cwd}/harness-calls.txt\ncat ${cwd}/stream.jsonl\n${stopDuring}${events}node ${cwd}/effect.js`,
     );
     stub('herdr', `echo "$*" >> ${cwd}/herdr-calls.txt`);
     stub('osascript', `echo "$*" >> ${cwd}/notices.txt`);
@@ -381,6 +398,101 @@ fs.writeFileSync(f, JSON.stringify(s));`,
       ]);
       expect(r.stdout).toContain('no progress');
       expect(r.stdout).toMatch(/ {2}\d\d:\d\d:\d\d » working on it/);
+    });
+  });
+
+  describe('stop request (#474)', () => {
+    const records = () =>
+      fs
+        .readFileSync(
+          path.join(read('.agents/deliver-loop/latest.txt').trim(), 'progress.jsonl'),
+          'utf8',
+        )
+        .trim()
+        .split('\n')
+        .map((l) => JSON.parse(l));
+
+    it('stops before the first iteration when the stop file exists: exit 0, stopped, resume command, file deleted', async () => {
+      const gh = setup({
+        issues: { 71: pbi(), 72: pbi() },
+        effect: 'close-first',
+        stopBefore: true,
+      });
+      const r = await run(gh, ['-Target', '71,72', '-Max', '5', '-Model', 'opus'], {
+        AGENT_EVENTS_DIR: path.join(cwd, 'events'),
+      });
+      expect(r.status).toBe(0);
+      expect(harnessCalls()).toEqual([]);
+      expect(r.stdout).toContain('loop result: stopped (0 iteration(s)');
+      expect(r.stdout.trim().split('\n').pop()).toMatch(
+        /resume: deliver-loop -Target 71,72 -Max 5 -Model opus$/,
+      );
+      expect(records().pop()).toMatchObject({
+        event: 'result',
+        result: 'stopped',
+        code: 0,
+        iterations: 0,
+      });
+      const dir = read('.agents/deliver-loop/latest.txt').trim();
+      expect(fs.existsSync(path.join(dir, 'stop'))).toBe(false);
+    });
+
+    it('a stop file with now: the harness sees STOP requested, an unchanged PBI set ends stopped, not no progress (#476)', async () => {
+      const gh = setup({
+        issues: { 81: pbi(), 82: pbi() },
+        effect: 'none',
+        stopDuring: true,
+        events: [step(81, 'implement', 'done')],
+        stream: [{ type: 'assistant', message: { content: [{ type: 'text', text: 'working' }] } }],
+      });
+      const r = await run(gh, ['-Target', '81,82', '-Max', '5'], {
+        AGENT_EVENTS_DIR: path.join(cwd, 'events'),
+      });
+      expect(r.status).toBe(0);
+      expect(read('stop-out.txt')).toContain('STOP requested');
+      expect(harnessCalls()).toHaveLength(1);
+      expect(r.stdout).toContain('loop result: stopped');
+      expect(r.stdout).not.toContain('no progress');
+      expect(records().pop()).toMatchObject({ result: 'stopped', code: 0 });
+    });
+
+    it('a stop file created during iteration 1 finishes that PBI, reports stopping, then stops with -Max reduced', async () => {
+      const gh = setup({
+        issues: { 81: pbi(), 82: pbi() },
+        effect: 'close-first',
+        stopDuring: true,
+        stream: [{ type: 'assistant', message: { content: [{ type: 'text', text: 'working' }] } }],
+      });
+      const r = await run(gh, ['-Target', '81,82', '-Max', '5'], {
+        AGENT_EVENTS_DIR: path.join(cwd, 'events'),
+      });
+      expect(r.status).toBe(0);
+      expect(harnessCalls()).toHaveLength(1);
+      expect(r.stdout).toContain('stop requested: stops after #81');
+      expect(r.stdout).toContain('loop result: stopped (1 iteration(s), 1 PBI(s) open)');
+      expect(r.stdout.trim().split('\n').pop()).toMatch(
+        /resume: deliver-loop -Target 81,82 -Max 4$/,
+      );
+      const recs = records();
+      expect(recs.map((x) => x.event)).toEqual([
+        'start',
+        'iteration-start',
+        'iteration-end',
+        'result',
+      ]);
+      expect(recs[3]).toMatchObject({ result: 'stopped', code: 0, iterations: 1, open: 1 });
+      const dir = read('.agents/deliver-loop/latest.txt').trim();
+      expect(fs.existsSync(path.join(dir, 'stop'))).toBe(false);
+      const evFile = fs.readdirSync(path.join(cwd, 'events')).find((f) => f.endsWith('.jsonl'));
+      const evs = fs
+        .readFileSync(path.join(cwd, 'events', evFile ?? ''), 'utf8')
+        .trim()
+        .split('\n')
+        .map((l) => JSON.parse(l));
+      const stopping = evs.filter((e) => e.type === 'attention' && e.kind === 'stopping');
+      expect(stopping).toHaveLength(1);
+      expect(stopping[0]).toMatchObject({ reason: 'stops after #81', tone: 'neutral' });
+      expect(evs.pop()).toMatchObject({ type: 'run.finished', result: 'stopped' });
     });
   });
 

@@ -65,7 +65,23 @@ describe.skipIf(!hasPwsh || process.platform === 'win32')(
       });
       expect(r.status).toBe(2);
       const logDir = path.join(dir, '.agents/deliver-loop');
-      const doc = JSON.parse(fs.readFileSync(path.join(logDir, 'status.json'), 'utf8'));
+      expect(fs.existsSync(path.join(logDir, 'status.json'))).toBe(false);
+      // the state is the projection of the run's event file
+      const eventsDir = path.join(dir, '.agents/events');
+      const [eventFile] = fs.readdirSync(eventsDir);
+      const reduced = spawnSync(
+        'pwsh',
+        [
+          '-NoProfile',
+          '-File',
+          path.join(path.dirname(SCRIPT), 'ConvertFrom-ProgressEvents.ps1'),
+          '-Path',
+          path.join(eventsDir, eventFile),
+          '-NoPidCheck',
+        ],
+        { encoding: 'utf8' },
+      );
+      const doc = JSON.parse(reduced.stdout);
       expect(doc.delivered).toEqual([]);
       expect(doc.paused).toMatchObject([{ number: 10 }]);
       expect(r.stdout).not.toContain('loop: delivered');

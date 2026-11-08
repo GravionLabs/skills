@@ -12,12 +12,12 @@
   (long text is cut to the terminal width, 120 characters when redirected), desktop notifications for the attention steps (macOS osascript,
   Windows toast), progress events (Report-Progress.ps1: run.started, issue.started, step.finished, attention, milestone.progress,
   issue.finished, release.updated, run.finished; its terminal sink sets the pane tokens and the agent state), a progress line per step
-  and status.json (deprecated; the projection of the events, -Milestone; references/loop.md) and, with -LogPane in herdr on a terminal,
+  (references/loop.md) and, with -LogPane in herdr on a terminal,
   a split pane labeled deliver-log below the session that tails the log (TerminalBackend.ps1; never closed by the loop).
   Stdout is colored when it is a terminal and neither -NoColor nor NO_COLOR is set; otherwise it is plain.
   Machine-readable progress for a control session (`deliver` `references/control.md`): .agents/deliver-loop/<run>/progress.jsonl,
   one JSON object per line (`start`, `iteration-start`, `iteration-end`, `result`), and .agents/deliver-loop/latest.txt with the path of the newest run directory.
-  Run it from the repository root. Exit code: 0 done or max reached, 1 no progress, 2 blocked, 64 bad arguments.
+  Run it from the repository root. Exit code: 0 done, max reached or stopped (stop file), 1 no progress, 2 blocked, 64 bad arguments.
 .PARAMETER Target
   Issue numbers (PBI, Feature or Epic), as for `/deliver`: `-Target 12,14` or `-Target 12 14` (a comma list also works
   under `pwsh -File`, which does not split it itself).
@@ -145,12 +145,11 @@ $MilestoneScript = @('../../github-milestone', '../../../github/github-milestone
 # step.finished and attention followed from the harness's events, attention, milestone.progress and the waiting / needs-you items of
 # Get-DeliverStatus.ps1, issue.finished from the GitHub state, run.finished) and is the owner of the terminal sink of
 # Report-Progress.ps1: tokens and agent state come from there, never from the loop. The harness gets AGENT_EVENTS_RUN with an
-# empty AGENT_EVENTS_TERMINAL (nested: its own events skip the sink). status.json (deprecated) is the projection
-# (ConvertFrom-ProgressEvents.ps1) of the event file after every event; it needs -Milestone.
+# empty AGENT_EVENTS_TERMINAL (nested: its own events skip the sink). The projection
+# (ConvertFrom-ProgressEvents.ps1) of the event file is read after every event; nothing is written to disk.
 $ReportScript = Join-Path $PSScriptRoot 'Report-Progress.ps1'
 $ReducerScript = Join-Path $PSScriptRoot 'ConvertFrom-ProgressEvents.ps1'
 $StatusScript = Join-Path $PSScriptRoot 'Get-DeliverStatus.ps1'
-$StatusFile = Join-Path (Get-Location) '.agents/deliver-loop/status.json'
 # one events directory for the loop, Report-Progress and the harness: AGENT_EVENTS_DIR, else <git-common-dir>/.agents/events,
 # outside a git repository .agents/events
 if (-not $env:AGENT_EVENTS_DIR) {
@@ -168,6 +167,8 @@ $Block = $null
 $Delivered = @()
 $Prs = @{}
 $LineOutcome = @{}
+# PBIs whose PR has auto-merge on (outcome merging): handed to GitHub, out of the stop-rule set, they count as progress
+$Merging = @()
 $Reported = @{}
 $ReleaseKey = ''
 
@@ -181,23 +182,14 @@ function Get-BaseUrl {
 
 function Get-PrUrl([string]$n) { $base = Get-BaseUrl; if ($base) { "$base/pull/$n" } else { "#$n" } }
 
-# status.json: the projection of the event file plus schemaVersion 1; abandoned (a pid that no longer lives, e.g. of a
-# nested run.started) becomes running, its old updatedAt marks it stale. Atomic: temp file, then rename.
+# The projection of the event file, read for the progress line and the release state.
 function Update-Projection {
   if (-not $EventFile -or -not (Test-Path -LiteralPath $EventFile)) { return }
   try {
     $json = (@(& $ReducerScript -Path $EventFile 2>$null) -join "`n").Trim()
     if (-not $json.StartsWith('{')) { return }
     $script:Projection = $json | ConvertFrom-Json
-    $p = $script:Projection
-    if (-not $Milestone -or -not $p.milestone -or -not $p.milestone.title -or -not $p.repository) { return }
-    $doc = "{`n  `"schemaVersion`": 1," + $json.Substring(1)
-    $doc = $doc -replace '"result": "abandoned"(\s*)\}$', '"result": "running"$1}'
-    New-Item -ItemType Directory -Force -Path (Split-Path $StatusFile) | Out-Null
-    $tmp = "$StatusFile.tmp"
-    [IO.File]::WriteAllText($tmp, $doc)
-    Move-Item -LiteralPath $tmp -Destination $StatusFile -Force
-  } catch { Write-Verbose "status.json not written: $_" }
+  } catch { Write-Verbose "projection not read: $_" }
 }
 
 # One event through Report-Progress.ps1 (in-process, so run.started records the pid of the loop). The sink sees the
@@ -257,7 +249,7 @@ function Stop-Run([string]$RunResult) {
 function Read-StatusBlock {
   if (-not $Milestone -or -not $MilestoneScript) { return }
   try {
-    $raw = & $StatusScript -Milestone $Milestone -Delivered ([int[]]@($Delivered)) -MilestonesScript $MilestoneScript 2>$null
+    $raw = & $StatusScript -Milestone $Milestone -Delivered ([int[]]@($Delivered)) -Merging ([int[]]@($Merging)) -MilestonesScript $MilestoneScript 2>$null
     # no $LASTEXITCODE test: the script ends after a native call (the release PR lookup) that may fail on its own
     if ($raw) { $script:Block = ($raw | Out-String) | ConvertFrom-Json }
   } catch { Write-Verbose "status block not read: $_" }
@@ -307,6 +299,7 @@ function Send-BlockEvents {
 # open blocker blocked; else the paused/blocked progress line, else skipped (still open and ready: no progress).
 function Get-IssueOutcome([int]$nr, $after) {
   $line = $LineOutcome["$nr"]
+  if ($line -and $line.Outcome -eq 'merging') { return $line }
   $labels = @($after.Labels[$nr])
   $held = @($labels | Where-Object { $_ -in 'needs-decision', 'interactive' })
   if ($held) { return @{ Outcome = 'paused'; Reason = $(if ($line) { $line.Reason } else { $held[0] }) } }
@@ -382,7 +375,7 @@ function Get-State {
     }
   }
   # release-test (the RC test of the milestone, always last and manual): not part of the stop-rule set, so it neither keeps the loop from done nor makes it blocked
-  $found = [System.Collections.Generic.List[object]]::new(@($found | Where-Object { $_.Labels -notcontains 'release-test' }))
+  $found = [System.Collections.Generic.List[object]]::new(@($found | Where-Object { $_.Labels -notcontains 'release-test' -and $script:Merging -notcontains [int]$_.Number }))
   # release-review pause (references/release-review.md): nothing open, but a closed PBI or Bug of the milestone carries needs-decision
   $paused = $false
   if ($Milestone -and $found.Count -eq 0) {
@@ -443,7 +436,31 @@ function Write-TextStep([string]$prefix, [string]$text) {
 }
 
 $ToneColor = @{ success = 'green'; info = 'cyan'; warning = 'yellow'; danger = 'red' }
-$AttentionText = @{ pr_opened = 'PR opened'; review_fix = 'review fix round'; ci_red = 'CI red'; paused = 'paused'; blocked = 'blocked' }
+# Stop request: the file .agents/deliver-loop/<run>/stop (any content) ends the loop before the next iteration.
+function Test-StopRequested { [bool]$script:RunDir -and (Test-Path -LiteralPath (Join-Path $script:RunDir 'stop')) }
+# `now` in the stop file: the session stopped after its current step, the PBI stays open (not "no progress")
+function Test-StopNow { (Test-StopRequested) -and ((Get-Content -LiteralPath (Join-Path $script:RunDir 'stop') -Raw) -match '^\s*now\s*$') }
+$StopSeen = $false
+$CurrentPbi = 0
+# once per iteration: one attention event `stopping`; Show-NewEvents prints it as `stop requested: stops after #<nr>`
+function Watch-Stop {
+  if ($script:StopSeen -or -not $script:CurrentPbi -or -not (Test-StopRequested)) { return }
+  $script:StopSeen = $true
+  Send-Event @{ Type = 'attention'; Kind = 'stopping'; Issue = $script:CurrentPbi; Reason = "stops after #$($script:CurrentPbi)" }
+}
+
+# The command that continues a stopped run: the same arguments, -Max reduced by the iterations run.
+function Get-ResumeCommand([int]$ran) {
+  $parts = @('deliver-loop')
+  if ($Nrs.Count) { $parts += @('-Target', ($Nrs -join ',')) }
+  if ($Milestone) { $parts += @('-Milestone', "'$Milestone'") }
+  if ($Max -gt 0) { $parts += @('-Max', [string][Math]::Max(1, $Max - $ran)) }
+  if ($Model -and -not ($Harness -eq 'copilot' -and $Model -eq 'auto')) { $parts += @('-Model', $Model) }
+  if ($Harness -ne 'claude') { $parts += @('-Harness', $Harness) }
+  $parts -join ' '
+}
+
+$AttentionText = @{ stopping = 'stop requested'; pr_opened = 'PR opened'; review_fix = 'review fix round'; ci_red = 'CI red'; paused = 'paused'; blocked = 'blocked' }
 $EventOffset = 0
 
 # The new events of the run's event file (written by the harness through Report-Progress.ps1 while it runs): one line
@@ -451,6 +468,7 @@ $EventOffset = 0
 # attention and issue.finished delivered; the urgency from tone. Each event also goes through the terminal sink
 # (Report-Progress.ps1 -SinkEvent), since the harness runs nested and reports nothing itself.
 function Show-NewEvents {
+  Watch-Stop
   if (-not $EventFile -or -not (Test-Path -LiteralPath $EventFile)) { return }
   $text = ''
   for ($try = 0; $try -lt 10; $try++) {
@@ -482,11 +500,14 @@ function Show-NewEvents {
         if ($AttentionText.ContainsKey($step)) { $notice = $AttentionText[$step] }
         if ($ev.kind -in 'paused', 'blocked' -and $nr) { $LineOutcome["$nr"] = @{ Outcome = [string]$ev.kind; Reason = $(if ($res) { $res } else { [string]$ev.kind }) } }
       }
-      'issue.finished' { $step = [string]$ev.outcome; $res = [string]$ev.reason; if ($ev.outcome -eq 'delivered') { $notice = 'merged' } }
+      'issue.finished' {
+        $step = [string]$ev.outcome; $res = [string]$ev.reason; if ($ev.outcome -eq 'delivered') { $notice = 'merged' }
+        if ($ev.outcome -eq 'merging' -and $nr) { $LineOutcome["$nr"] = @{ Outcome = 'merging'; Reason = $(if ($res) { $res } else { 'auto-merge on, waits for checks' }) } }
+      }
       default { continue }
     }
     if ($nr -and $ev.prUrl) { $Prs["$nr"] = [string]$ev.prUrl }
-    $head = if ($nr) { "#$nr $step" } else { $step }
+    $head = if ($nr -and $step -ne 'stopping') { "#$nr $step" } elseif ($step -eq 'stopping') { 'stop requested' } else { $step }
     Write-Step $(if ($res) { "${head}: $res" } else { $head }) $ToneColor[[string]$ev.tone]
     Send-SinkEvent $raw ([string]$ev.prUrl)
     if ($notice) { Send-Notice "$(if ($nr) { "#$nr " })$notice" -Tone ([string]$ev.tone) }
@@ -563,6 +584,7 @@ function Invoke-Iteration([int]$n, [int]$total, $state) {
   Write-Step "iteration $n/$total start: $prompt"
   Write-ProgressRecord 'iteration-start' @{ n = $n; total = $total; pbi = [int]$state.Ready[0]; open = $state.Open; model = $iterModel }
   $nr = [int]$state.Ready[0]
+  $script:CurrentPbi = $nr; $script:StopSeen = $false
   $LineOutcome.Remove("$nr")
   $started = @{ Type = 'issue.started'; Issue = $nr }
   $base = Get-BaseUrl
@@ -571,8 +593,9 @@ function Invoke-Iteration([int]$n, [int]$total, $state) {
   Send-Event $started
   $script:EventOffset = if ($EventFile -and (Test-Path -LiteralPath $EventFile)) { (Get-Item -LiteralPath $EventFile).Length } else { 0 }
   # the harness reports nothing to the terminal: HERDR_ENV empty, and nested for the sink (AGENT_EVENTS_RUN without the owner marker)
-  $savedHerdr = $env:HERDR_ENV; $savedTerminal = $env:AGENT_EVENTS_TERMINAL
+  $savedHerdr = $env:HERDR_ENV; $savedTerminal = $env:AGENT_EVENTS_TERMINAL; $savedLoopDir = $env:DELIVER_LOOP_DIR
   $env:HERDR_ENV = ''; $env:AGENT_EVENTS_TERMINAL = ''
+  $env:DELIVER_LOOP_DIR = Split-Path $RunDir -Parent  # Report-Progress finds the stop file (stop --now) here
   try {
     $cli = if ($Harness -eq 'copilot') {
       @('-p', $prompt, '--model', $iterModel, '--allow-all-tools', '--allow-all-paths', '--allow-all-urls', '--no-ask-user', '--output-format', 'json')
@@ -589,7 +612,7 @@ function Invoke-Iteration([int]$n, [int]$total, $state) {
     Show-NewEvents
     $exit = $LASTEXITCODE
     if ($exit -ne 0) { Write-Step "$Harness exited with $exit" 'red' }
-  } finally { $env:HERDR_ENV = $savedHerdr; $env:AGENT_EVENTS_TERMINAL = $savedTerminal }
+  } finally { $env:HERDR_ENV = $savedHerdr; $env:AGENT_EVENTS_TERMINAL = $savedTerminal; $env:DELIVER_LOOP_DIR = $savedLoopDir }
 }
 
 $result = $null
@@ -612,17 +635,20 @@ try {
   $result = Get-StopReason $state
   $total = if ($Max -gt 0) { [Math]::Min($Max, $state.Eligible.Count) } else { $state.Eligible.Count }
   while (-not $result) {
+    if (Test-StopRequested) { $result = 'stopped'; break }
     $i++
     Invoke-Iteration $i $total $state
+    if ($LineOutcome["$([int]$state.Ready[0])"].Outcome -eq 'merging') { $Merging = @($Merging) + [int]$state.Ready[0] }
     $after = Get-State
     # delivered = left the open set; a PBI that is only held (needs-decision) stays open and is paused (#346)
-    $gone = @($state.Eligible | Where-Object { $after.Eligible -notcontains $_ -and $after.OpenNrs -notcontains $_ })
+    $gone = @($state.Eligible | Where-Object { $after.Eligible -notcontains $_ -and $after.OpenNrs -notcontains $_ -and $Merging -notcontains $_ })
     $Delivered = @($Delivered) + $gone
     Send-IterationOutcome ([int]$state.Ready[0]) $gone $after
     Read-StatusBlock
     Send-BlockEvents
     Write-ProgressLine
     Write-ProgressRecord 'iteration-end' @{ n = $i; pbi = [int]$state.Ready[0]; delivered = ($gone -join ','); open = $after.Open }
+    if (($after.Eligible -join ',') -eq ($state.Eligible -join ',') -and (Test-StopNow)) { $result = 'stopped'; break }
     if (($after.Eligible -join ',') -eq ($state.Eligible -join ',')) {
       $result = 'no progress'
       Write-Step 'no progress: the open PBIs did not change. Last log lines:' 'yellow'
@@ -639,6 +665,10 @@ try {
   Stop-Run $result
   Write-ProgressRecord 'result' @{ result = $result; code = $code; iterations = $i; open = $state.Open }
   Send-Notice "loop result: $result"
+  if ($result -eq 'stopped') {
+    Remove-Item -LiteralPath (Join-Path $RunDir 'stop') -Force -ErrorAction SilentlyContinue
+    Write-Step "resume: $(Get-ResumeCommand $i)" 'yellow'
+  }
 } finally {
   # error or Ctrl+C: the run ends here, as no progress (the sink clears the tokens and releases the agent state)
   Stop-Run 'no progress'
