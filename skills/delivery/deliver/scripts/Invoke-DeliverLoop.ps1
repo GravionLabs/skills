@@ -8,13 +8,13 @@
   labels needs-decision / needs-refinement / interactive (deliver skips interactive PBIs unattended). No change stops
   the loop ("no progress"); nothing open means done (unless a closed PBI of the milestone carries needs-decision, the paused release review: blocked); open PBIs that all wait on an open blocker or a label mean blocked.
   Observability: every stream record goes to .agents/deliver-loop/<run>/<nr>.jsonl (<nr> is the first PBI that was ready
-  at the start of the iteration), a summary line per step to .agents/deliver-loop.log (plain) and stdout, the same line
-  with ANSI colors to .agents/deliver-loop.ansi.log (long text is cut to the terminal width, 120 characters when redirected), desktop notifications for the attention steps (macOS osascript,
+  at the start of the iteration), a summary line per step to .agents/deliver-loop.log (plain) and stdout, colored on a terminal
+  (long text is cut to the terminal width, 120 characters when redirected), desktop notifications for the attention steps (macOS osascript,
   Windows toast), progress events (Report-Progress.ps1: run.started, issue.started, step.finished, attention, milestone.progress,
   issue.finished, release.updated, run.finished; its terminal sink sets the pane tokens and the agent state), a progress line per step
   and status.json (deprecated; the projection of the events, -Milestone; references/loop.md) and, with -LogPane in herdr on a terminal,
   a split pane labeled deliver-log below the session that tails the log (TerminalBackend.ps1; never closed by the loop).
-  Stdout carries the colors of the .ansi.log when it is a terminal and neither -NoColor nor NO_COLOR is set; otherwise it is plain.
+  Stdout is colored when it is a terminal and neither -NoColor nor NO_COLOR is set; otherwise it is plain.
   Machine-readable progress for a control session (`deliver` `references/control.md`): .agents/deliver-loop/<run>/progress.jsonl,
   one JSON object per line (`start`, `iteration-start`, `iteration-end`, `result`), and .agents/deliver-loop/latest.txt with the path of the newest run directory.
   Run it from the repository root. Exit code: 0 done or max reached, 1 no progress, 2 blocked, 64 bad arguments.
@@ -36,7 +36,7 @@
 .PARAMETER NoPane
   Deprecated no-op (the pane is off by default); use -LogPane to open it.
 .PARAMETER NoColor
-  Writes no .ansi.log and colors no stdout (as does a non-empty NO_COLOR); the pane tails the plain log.
+  Colors no stdout (as does a non-empty NO_COLOR); the pane tails the plain log.
 #>
 [CmdletBinding()]
 param(
@@ -85,12 +85,12 @@ $Nrs = @($Nrs | ForEach-Object { [int]$_ })
 
 $Held = @('needs-decision', 'needs-refinement', 'interactive')
 $LogFile = Join-Path (Get-Location) '.agents/deliver-loop.log'
-$AnsiFile = if ($NoColor -or $env:NO_COLOR) { '' } else { Join-Path (Get-Location) '.agents/deliver-loop.ansi.log' }
+$UseColor = -not ($NoColor -or $env:NO_COLOR)
 $Esc = [char]27
 $Ansi = @{ dim = "$Esc[2m"; cyan = "$Esc[36m"; red = "$Esc[31m"; yellow = "$Esc[33m"; green = "$Esc[32m"; reset = "$Esc[0m" }
-# stdout gets the colors of the .ansi.log when it is a terminal (Test-LoopTerminal in TerminalBackend.ps1 defines "terminal").
+# stdout is colored when it is a terminal (Test-LoopTerminal in TerminalBackend.ps1 defines "terminal").
 . (Join-Path $PSScriptRoot 'TerminalBackend.ps1')
-$ColorStdout = [bool]$AnsiFile -and (Test-LoopTerminal)
+$ColorStdout = $UseColor -and (Test-LoopTerminal)
 # named after the run id once run.started is written (Start-Run); the time stamp is the fallback
 $RunDir = Join-Path (Get-Location) ".agents/deliver-loop/$((Get-Date).ToString('yyyyMMdd-HHmmss'))"
 $Progress = Join-Path $RunDir 'progress.jsonl'
@@ -100,7 +100,7 @@ $AgentNames = @{}
 $Backend = Get-TerminalBackend
 $Pane = Get-LoopPane $Backend
 
-# One step: plain to the log; colored to the .ansi.log and a terminal stdout (time dim, $Tool cyan, the rest in $Color).
+# One step: plain to the log; colored to a terminal stdout (time dim, $Tool cyan, the rest in $Color).
 # $Tool is looked up from $ToolAt on (after the subagent prefix).
 function Write-Step([string]$text, [string]$Color = '', [string]$Tool = '', [int]$ToolAt = 0) {
   $time = (Get-Date).ToString('HH:mm:ss')
@@ -108,12 +108,11 @@ function Write-Step([string]$text, [string]$Color = '', [string]$Tool = '', [int
   New-Item -ItemType Directory -Force -Path (Split-Path $LogFile) | Out-Null
   [IO.File]::AppendAllText($LogFile, $line + "`n")
   $colored = $line
-  if ($AnsiFile) {
+  if ($ColorStdout) {
     $body = if ($Color) { "$($Ansi[$Color])$text$($Ansi.reset)" } else { $text }
     $at = if ($Tool) { $text.IndexOf($Tool, $ToolAt) } else { -1 }
     if ($at -ge 0 -and -not $Color) { $body = $text.Substring(0, $at) + "$($Ansi.cyan)$Tool$($Ansi.reset)" + $text.Substring($at + $Tool.Length) }
     $colored = "$($Ansi.dim)$time$($Ansi.reset) $body"
-    [IO.File]::AppendAllText($AnsiFile, $colored + "`n")
   }
   Write-Host $(if ($ColorStdout) { $colored } else { $line })
   $Recent.Add($line)
@@ -598,7 +597,7 @@ $code = 0
 $i = 0
 $state = $null
 try {
-  if ($LogPane) { Open-LogPane -LogFile $(if ($AnsiFile) { $AnsiFile } else { $LogFile }) -Backend $Backend }
+  if ($LogPane) { Open-LogPane -LogFile $LogFile -Backend $Backend }
   # the sink checks this itself per event; the loop only says why the pane shows no state
   if (Test-LoopAgentConflict -Pane $Pane -Backend $Backend) {
     Write-Step 'agent state not reported: another agent runs in this pane (start the loop in its own pane)' 'yellow'
