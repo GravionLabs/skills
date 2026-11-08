@@ -49,7 +49,7 @@ describe('pr-checks.yml', () => {
 });
 
 describe('GravionLabs/ci node/setup pin', () => {
-  it.each(['.github/workflows/ci.yml', '.github/workflows/pages.yml'])(
+  it.each(['.github/workflows/ci.yml'])(
     '%s follows node/setup on the major tag v1, without a SHA pin',
     (rel) => {
       const wfText = fs.readFileSync(path.join(root, rel), 'utf-8');

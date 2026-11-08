@@ -57,7 +57,7 @@ Both folders are gitignored. An existing link is replaced; a real directory of t
 
 ## Docs site
 
-`site/` is a VitePress site and holds the public docs (`docs/` keeps only the internal ADRs and spikes, which are not published); the home page is the hero and feature landing page `site/index.md`; the root `README.md` is the GitHub landing page only. Preview it with `pnpm --filter site dev`. A local build needs the generated list first: `pnpm run generate`, then `pnpm --filter site build`. A PR touching `site/**`, `docs/**`, `skills/**` or `README.md` runs the "Build the site" check (`.github/workflows/pages.yml`). Only `main` deploys, and only while the repository variable `DEPLOY_PAGES` is `true`; the site is at <https://gravionlabs.github.io/skills/>. Details in `site/README.md`.
+`site/` is a VitePress site and holds the public docs (`docs/` keeps only the internal ADRs and spikes, which are not published); the home page is the hero and feature landing page `site/index.md`; the root `README.md` is the GitHub landing page only. Preview it with `pnpm --filter site dev`. A local build needs the generated list first: `pnpm run generate`, then `pnpm --filter site build`. A PR touching `site/**`, `docs/**`, `skills/**` or `README.md` runs the "Build the site" check (`.github/workflows/pages.yml`). Only `main` deploys (the `deploy` input of `pages.yml`, default `true`); the site is at <https://gravionlabs.github.io/skills/>. Details in `site/README.md`.
 
 ## Public surface and renames
 
