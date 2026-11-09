@@ -116,6 +116,17 @@ describe('Get-ReleaseState.ps1', () => {
     }
   });
 
+  it('releaseWorkflow is true when a workflow calls release-branch.yml by its local path (#506)', async () => {
+    const wf = path.join(fx.clone, '.github/workflows');
+    fs.mkdirSync(wf, { recursive: true });
+    fs.writeFileSync(path.join(wf, 'rb.yml'), 'uses: ./.github/workflows/release-branch.yml\n');
+    try {
+      expect((await state('cut', 'release/next')).releaseWorkflow).toBe(true);
+    } finally {
+      fs.rmSync(path.join(fx.clone, '.github'), { recursive: true, force: true });
+    }
+  });
+
   it('invalid branch name: exit 1 with a message on stderr', async () => {
     const r = await worker.run(['-Mode', 'finish', '-Branch', 'feature/x'], {
       cwd: fx.clone,
