@@ -5,6 +5,32 @@ Versioning follows [Semantic Versioning](https://semver.org/).
 
 ---
 
+## [4.0.0] — 2026-11-09
+
+### Bug Fixes
+- **deliver**: Loop starts the session with the PBI it logs the iteration under (#488) (#497)
+- Deliver-loop tests ignore the developer's poimen and herdr terminal (#460) (#500)
+
+
+### Documentation
+- **github-issue**: The RC of a desktop app installs side by side (#504)
+
+
+### Features
+- **deliver**: Deliver-loop stops before the next PBI on a stop request (#474) (#484)
+- **deliver**: Deliver-loop stop requests a stop of the running loop (#475) (#486)
+- **deliver**: Deliver-loop stop --now ends the iteration after the current step (#476) (#487)
+- **deliver**: Merge by auto-merge instead of watching the checks (#480) (#489)
+- **deliver**: Pick up PRs waiting for auto-merge in select (#481) (#496)
+- Github-pages skill for a site/ on GitHub Pages (#492) (#499)
+
+
+### Refactoring
+- ⚠️ **Breaking**: **delivery**: Remove status.json, its writer and the file contract (#376) (#495)
+- Move the public docs from docs/ to site/ (493) (#498)
+- Pages.yml uses the ci VitePress workflow (#494) (#501)
+
+
 ## [3.4.0] — 2026-11-08
 
 ### Bug Fixes
@@ -23,6 +49,7 @@ Versioning follows [Semantic Versioning](https://semver.org/).
 - Set milestones only through github-milestone assign (#440) (#449)
 - **adr**: The progress event format lives in agent-events (#451) (#456)
 - M<nnn> milestone format in skills and guides (#436) (#444)
+- Update CHANGELOG.md for v3.4.0 [skip ci]
 
 
 ### Features
