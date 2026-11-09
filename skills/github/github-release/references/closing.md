@@ -18,7 +18,7 @@ Issues labelled `merged` from the old label lifecycle are still open. Run the wo
 
 ## Rollout to existing repos
 
-One PR per repo: copy `templates/release-branch.yml` to `.github/workflows/release-branch.yml` (replace an inline copy of the workflow; set the input project-url) and open the PR with `github-pull-request`. `cut` offers this when no workflow in `.github/workflows/` calls `release-branch.yml` of GravionLabs/ci.
+One PR per repo: copy `templates/release-branch.yml` to `.github/workflows/release-branch.yml` (replace an inline copy of the workflow; set the input project-url) and open the PR with `github-pull-request`. `cut` offers this when no workflow in `.github/workflows/` calls `release-branch.yml` of GravionLabs/ci (`GravionLabs/ci/.github/workflows/release-branch.yml@v1`, or `./.github/workflows/release-branch.yml` inside ci itself).
 
 ## Permissions
 
