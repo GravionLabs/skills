@@ -54,6 +54,8 @@ Claude Code denies any command with a quoted `$(…)` substitution even when its
 
 Headless: `claude -p "/deliver <nr> --unattended"` reads the same file; `--allowedTools` adds entries for one run.
 
+Wait ceiling: `claude -p` stops background tasks (subagents) 10 minutes after the last turn of the session. `Invoke-DeliverLoop.ps1` sets `CLAUDE_CODE_PRINT_BG_WAIT_CEILING_MS=0` (wait indefinitely) when it is unset; a value you set before the loop is passed unchanged. Set it yourself for manual `-p` runs (#461).
+
 ## OpenCode
 
 `opencode.json` of the repository, key `permission.bash`. Patterns are globs; the last matching rule wins, so the catch-all comes first.
@@ -129,7 +131,7 @@ Trial #5 (Copilot CLI 1.0.105, `-p` mode):
 
 - `shell(git)` covered read-only subcommands only; `git push`, `commit`, `switch`, `rebase`, `fetch`, `add`, `worktree` and `clone` were denied until each had its own `shell(git <sub>)` entry.
 - The `--deny-tool` lines did not block `git push --force --dry-run origin release/next` while `shell(git push)` was allowed. The ruleset on `release/next` is the gate.
-- `-p` gives up on the background CI watch after 600 s and ends before the merge. Set `COPILOT_TASK_WAIT_TIMEOUT_SECONDS=3600` for `-p` runs; `copilot --resume=<id> -p "continue"` finishes a run that ended early.
+- `-p` gives up on the background CI watch after 600 s and ends before the merge. `Invoke-DeliverLoop.ps1 -Harness copilot` sets `COPILOT_TASK_WAIT_TIMEOUT_SECONDS=3600` when it is unset (override by setting it before the loop); set it yourself for manual `-p` runs; `copilot --resume=<id> -p "continue"` finishes a run that ended early.
 - The model per subagent is set only in `~/.copilot/settings.json` (`subagents.agents.general-purpose.model`), not per repository.
 
 Live check of the unattended flags (Copilot CLI 1.0.105, `-p --no-ask-user`): `--allow-all-tools` alone denies `view` of paths outside the cwd (worktrees of subagents) and shell commands with URLs; adding `--allow-all-paths --allow-all-urls` allows both, in the orchestrator and in subagents. `Invoke-DeliverLoop.ps1 -Harness copilot` passes these three flags (`references/loop.md`); the per-tool list above is for runs that must stay narrower.

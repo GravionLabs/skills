@@ -53,6 +53,36 @@ describe.skipIf(!hasPwsh || process.platform === 'win32')('Invoke-DeliverLoop.ps
     });
   });
 
+  describe('wait ceiling of the harness (#461)', () => {
+    const unset = {
+      CLAUDE_CODE_PRINT_BG_WAIT_CEILING_MS: undefined,
+      COPILOT_TASK_WAIT_TIMEOUT_SECONDS: undefined,
+    };
+    const one = () =>
+      fx.setup({ issues: { 91: pbi() }, milestones: { M9: [91] }, effect: 'close-first' });
+
+    it.each([
+      ['claude', {}, 'ceiling=[0] copilot_wait=[]'],
+      ['claude', { CLAUDE_CODE_PRINT_BG_WAIT_CEILING_MS: '90000' }, 'ceiling=[90000] copilot_wait=[]'],
+      ['copilot', {}, 'ceiling=[] copilot_wait=[3600]'],
+      ['copilot', { COPILOT_TASK_WAIT_TIMEOUT_SECONDS: '60' }, 'ceiling=[] copilot_wait=[60]'],
+    ])('%s with %j: the child sees %s', async (harness, env, seen) => {
+      const r = await fx.run(one(), ['-Milestone', 'M9', '-Harness', harness, '-Model', 'm'], {
+        ...unset,
+        ...env,
+      });
+      expect(r.status).toBe(0);
+      expect(fx.harnessWaits()).toEqual([seen]);
+    });
+
+    it('does not leave the default in the loop environment', async () => {
+      const r = await fx.run(one(), ['-Milestone', 'M9', '-Harness', 'claude'], unset);
+      expect(r.status).toBe(0);
+      expect(r.stdout + r.stderr).not.toContain('CLAUDE_CODE_PRINT_BG_WAIT_CEILING_MS=<');
+      expect(fx.harnessWaits()).toEqual(['ceiling=[0] copilot_wait=[]']);
+    });
+  });
+
   describe('stop request (#474)', () => {
     const records = () =>
       fs

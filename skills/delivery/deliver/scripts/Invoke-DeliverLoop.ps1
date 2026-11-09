@@ -646,6 +646,13 @@ function Invoke-Iteration([int]$n, [int]$total, $state) {
   # the harness reports nothing to the terminal: HERDR_ENV empty, and nested for the sink (AGENT_EVENTS_RUN without the owner marker)
   $savedHerdr = $env:HERDR_ENV; $savedTerminal = $env:AGENT_EVENTS_TERMINAL; $savedLoopDir = $env:DELIVER_LOOP_DIR
   $env:HERDR_ENV = ''; $env:AGENT_EVENTS_TERMINAL = ''
+  # wait ceiling (#461): the harness stops background tasks (subagents) 10 minutes after the last turn of `-p`; unset means no cut-off
+  # (claude 0 = wait indefinitely, copilot 3600 s); a value the user already set stays
+  $ceilingVar = if ($Harness -eq 'copilot') { 'COPILOT_TASK_WAIT_TIMEOUT_SECONDS' } else { 'CLAUDE_CODE_PRINT_BG_WAIT_CEILING_MS' }
+  $ceilingDefault = if ($Harness -eq 'copilot') { '3600' } else { '0' }
+  $savedCeiling = [Environment]::GetEnvironmentVariable($ceilingVar)
+  if ([string]::IsNullOrEmpty($savedCeiling)) { [Environment]::SetEnvironmentVariable($ceilingVar, $ceilingDefault) }
+  $script:CeilingStop = $null
   $env:DELIVER_LOOP_DIR = Split-Path $RunDir -Parent  # Report-Progress finds the stop file (stop --now) here
   try {
     $cli = if ($Harness -eq 'copilot') {
@@ -655,7 +662,10 @@ function Invoke-Iteration([int]$n, [int]$total, $state) {
     }
     & $Harness @cli 2>&1 | ForEach-Object {
       $line = "$_"
-      if ($_ -is [System.Management.Automation.ErrorRecord]) { Write-Step "stderr $(Get-Short $line)" 'red'; return }
+      if ($_ -is [System.Management.Automation.ErrorRecord]) {
+        if ($line -match 'Background tasks still running .* stopping them') { $script:CeilingStop = "$ceilingVar=$([Environment]::GetEnvironmentVariable($ceilingVar))" }
+        Write-Step "stderr $(Get-Short $line)" 'red'; return
+      }
       [IO.File]::AppendAllText($jsonl, $line + "`n")
       if ($Harness -eq 'copilot') { Read-CopilotRecord $line } else { Read-Record $line }
       Show-NewEvents
@@ -663,7 +673,10 @@ function Invoke-Iteration([int]$n, [int]$total, $state) {
     Show-NewEvents
     $exit = $LASTEXITCODE
     if ($exit -ne 0) { Write-Step "$Harness exited with $exit" 'red' }
-  } finally { $env:HERDR_ENV = $savedHerdr; $env:AGENT_EVENTS_TERMINAL = $savedTerminal; $env:DELIVER_LOOP_DIR = $savedLoopDir }
+  } finally {
+    $env:HERDR_ENV = $savedHerdr; $env:AGENT_EVENTS_TERMINAL = $savedTerminal; $env:DELIVER_LOOP_DIR = $savedLoopDir
+    [Environment]::SetEnvironmentVariable($ceilingVar, $savedCeiling)
+  }
 }
 
 $result = $null
@@ -704,7 +717,8 @@ try {
     if (($after.Eligible -join ',') -eq ($state.Eligible -join ',') -and (Test-StopNow)) { $result = 'stopped'; break }
     if (($after.Eligible -join ',') -eq ($state.Eligible -join ',')) {
       $result = 'no progress'
-      Write-Step 'no progress: the open PBIs did not change. Last log lines:' 'yellow'
+      $why = if ($script:CeilingStop) { "a subagent was stopped by the wait ceiling ($script:CeilingStop)" } else { 'the open PBIs did not change' }
+      Write-Step "no progress: $why. Last log lines:" 'yellow'
       foreach ($l in $Recent.ToArray()) { Write-Host "  $l" }
       break
     }

@@ -42,6 +42,7 @@ export type Fixture = {
   stream?: object[];
   stopBefore?: boolean; // gh creates the stop file of the run once the run directory exists (before iteration 1)
   stopDuring?: boolean; // the harness stub creates the stop file of the run during the iteration
+  stderr?: string; // the harness stub prints this line to stderr after its stream
   events?: string[][]; // Report-Progress.ps1 arguments the harness stub runs after its stream
 };
 
@@ -133,15 +134,16 @@ fs.writeFileSync(f, JSON.stringify(s));`,
     const stopDuring = full.stopDuring
       ? `echo now > "$(cat ${this.cwd}/.agents/deliver-loop/latest.txt)/stop"\n`
       : '';
+    const stderrLine = full.stderr ? `echo ${JSON.stringify(full.stderr)} >&2\n` : '';
     const stub = (name: string, body: string) =>
       fs.writeFileSync(path.join(gh.bin, name), `#!/bin/sh\n${body}\n`, { mode: 0o755 });
     stub(
       'claude',
-      `echo "$*" >> ${this.cwd}/harness-calls.txt\necho "herdr_env=[$HERDR_ENV]" >> ${this.cwd}/harness-calls.txt\ncat ${this.cwd}/stream.jsonl\n${stopDuring}${events}node ${this.cwd}/effect.js`,
+      `echo "$*" >> ${this.cwd}/harness-calls.txt\necho "herdr_env=[$HERDR_ENV]" >> ${this.cwd}/harness-calls.txt\necho "ceiling=[$CLAUDE_CODE_PRINT_BG_WAIT_CEILING_MS] copilot_wait=[$COPILOT_TASK_WAIT_TIMEOUT_SECONDS]" >> ${this.cwd}/harness-calls.txt\ncat ${this.cwd}/stream.jsonl\n${stderrLine}${stopDuring}${events}node ${this.cwd}/effect.js`,
     );
     stub(
       'copilot',
-      `echo "$*" >> ${this.cwd}/harness-calls.txt\necho "herdr_env=[$HERDR_ENV]" >> ${this.cwd}/harness-calls.txt\ncat ${this.cwd}/stream.jsonl\n${stopDuring}${events}node ${this.cwd}/effect.js`,
+      `echo "$*" >> ${this.cwd}/harness-calls.txt\necho "herdr_env=[$HERDR_ENV]" >> ${this.cwd}/harness-calls.txt\necho "ceiling=[$CLAUDE_CODE_PRINT_BG_WAIT_CEILING_MS] copilot_wait=[$COPILOT_TASK_WAIT_TIMEOUT_SECONDS]" >> ${this.cwd}/harness-calls.txt\ncat ${this.cwd}/stream.jsonl\n${stderrLine}${stopDuring}${events}node ${this.cwd}/effect.js`,
     );
     stub('herdr', `echo "$*" >> ${this.cwd}/herdr-calls.txt`);
     stub('osascript', `echo "$*" >> ${this.cwd}/notices.txt`);
@@ -152,6 +154,11 @@ fs.writeFileSync(f, JSON.stringify(s));`,
     const p = path.join(this.cwd, f);
     return fs.existsSync(p) ? fs.readFileSync(p, 'utf8') : '';
   };
+  // the wait-ceiling variables each harness call saw, e.g. 'ceiling=[0] copilot_wait=[]'
+  harnessWaits = () =>
+    this.read('harness-calls.txt')
+      .split('\n')
+      .filter((l) => l.startsWith('ceiling='));
   harnessCalls = () =>
     this.read('harness-calls.txt')
       .split('\n')
