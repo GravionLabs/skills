@@ -5,6 +5,22 @@ Versioning follows [Semantic Versioning](https://semver.org/).
 
 ---
 
+## [4.1.0] — 2026-11-09
+
+### Bug Fixes
+- **github-release**: Recognize the local path of release-branch.yml (#506)
+- **deliver**: A nested session's run.finished no longer sets the loop result to done (#463)
+- **deliver**: Loop sets a wait ceiling that does not cut a subagent off (#461)
+
+
+### Features
+- **shared**: Test key in the project config and a runner that does not guess the test tool (#507)
+
+
+### Refactoring
+- **delivery**: Remove the terminal sink, the owner rule and the token functions (#417)
+
+
 ## [4.0.0] — 2026-11-09
 
 ### Bug Fixes
@@ -14,6 +30,7 @@ Versioning follows [Semantic Versioning](https://semver.org/).
 
 ### Documentation
 - **github-issue**: The RC of a desktop app installs side by side (#504)
+- Update CHANGELOG.md for v4.0.0 [skip ci]
 
 
 ### Features
