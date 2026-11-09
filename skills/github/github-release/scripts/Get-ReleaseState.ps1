@@ -171,7 +171,7 @@ else {
 
 $workflow = $false
 if (Test-Path .github/workflows) {
-  $workflow = [bool](Select-String -Path .github/workflows/*.yml -SimpleMatch 'ci/.github/workflows/release-branch.yml' -List -ErrorAction SilentlyContinue)
+  $workflow = [bool](Select-String -Path .github/workflows/*.yml -SimpleMatch @('ci/.github/workflows/release-branch.yml', './.github/workflows/release-branch.yml') -List -ErrorAction SilentlyContinue)
 }
 $releasePr = $null
 if ($Mode -eq 'finish' -and $onOrigin) {

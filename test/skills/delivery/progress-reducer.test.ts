@@ -135,6 +135,59 @@ describe.skipIf(!hasPwsh || process.platform === 'win32')(
       expect(r.state).toEqual(readJson(path.join(FIXTURES, 'done.state.json')));
     });
 
+    describe('nested run.finished (#463)', () => {
+      const ev = (type: string, extra: object = {}) =>
+        JSON.stringify({
+          v: 1,
+          seq: 0,
+          ts: '2026-11-07T11:00:00.000Z',
+          run: 'r1',
+          type,
+          tone: 'neutral',
+          ...extra,
+        });
+      const issue = (n: number) => ({
+        issue: { number: n, url: `https://github.com/a/b/issues/${n}` },
+      });
+      const fold1 = (name: string, lines: string[]) =>
+        fold(writeEvents(name, lines.join('\n') + '\n'));
+
+      it('events after a run.finished clear the result: running, current is the new PBI', async () => {
+        const r = await fold1('nested-after', [
+          ev('run.started', { source: 'loop' }),
+          ev('issue.started', issue(1)),
+          ev('issue.finished', { ...issue(1), outcome: 'delivered' }),
+          ev('run.finished', { result: 'done' }),
+          ev('issue.started', issue(2)),
+        ]);
+        expect(r.status, r.stderr).toBe(0);
+        expect(r.state.result).toBe('running');
+        expect(r.state.current.number).toBe(2);
+      });
+
+      it.each([
+        ['step.finished', { ...issue(2), step: 'implement', result: 'ok' }],
+        ['attention', { ...issue(2), kind: 'review_fix' }],
+      ])('a %s after run.finished clears the result', async (type, extra) => {
+        const r = await fold1(`nested-${type}`, [
+          ev('run.started'),
+          ev('run.finished', { result: 'done' }),
+          ev(type, extra),
+        ]);
+        expect(r.state.result).toBe('running');
+      });
+
+      it('a run.finished that is the last lifecycle event still counts', async () => {
+        const r = await fold1('nested-last', [
+          ev('run.started'),
+          ev('issue.started', issue(1)),
+          ev('run.finished', { result: 'done' }),
+          ev('run.finished', { result: 'blocked' }),
+        ]);
+        expect(r.state.result).toBe('blocked');
+      });
+    });
+
     it('yields the same state for the same events and Now', async () => {
       const f = path.join(FIXTURES, 'rc-test-open.jsonl');
       expect((await fold(f)).stdout).toBe((await fold(f)).stdout);

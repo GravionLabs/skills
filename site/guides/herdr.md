@@ -3,18 +3,17 @@
 [herdr](https://herdr.dev) is a terminal multiplexer for coding agents. It fits the skills for two reasons:
 
 - Parallel worktrees: several `/deliver` sessions run side by side, one worktree and one pane each ([parallel runs](../delivery.md#parallel-runs)).
-- Agent state in the sidebar: herdr detects by itself whether an agent works, waits for you or is done, and `deliver` adds what it is doing.
+- Agent state in the sidebar: herdr detects by itself whether an agent works, waits for you or is done.
 
-Nothing here is required. Without herdr the events are still written and shown in whatever terminal backend is active (herdr, poimen or none).
+Nothing here is required. Without herdr the events are still written.
 
-## Pane tokens and sidebar layout
+## Events, not pane tokens
 
-`deliver` does not call herdr itself. The session (and `Invoke-DeliverLoop.ps1`) sends every progress line as an event through `Report-Progress.ps1`; its terminal sink shows the event in a herdr pane as pane tokens of source `deliver`: `deliver` (issue), `deliver_step` (step and result) and `deliver_pr` (PR), cleared at the end. The agent name in the sidebar stays the harness. herdr shows a token only where a row of `[ui.sidebar.agents]` names it. The layout (space and state, agent and terminal title, `deliver` tokens last) and its alternatives live in one place: [Sidebar layout](../../skills/delivery/deliver/references/terminal-backends.md#sidebar-layout) in `references/terminal-backends.md` of the `deliver` skill. Copy the TOML from there into your herdr config. No bus or daemon is involved.
+`deliver` does not call herdr itself and pushes no pane tokens or agent state. The session (and `Invoke-DeliverLoop.ps1`) sends every progress line as an event through `Report-Progress.ps1`, which only appends it to the event file. A herdr plugin or poimen reads that file ([agent-events](https://github.com/GravionLabs/agent-events)) and shows what it wants.
 
 ## The loop in herdr
 
 - `deliver-loop` (shim, `Install-LoopShim.ps1`) opens the workspace `<repo> · deliver` (`Start-LoopWorkspace.ps1`) and runs the [loop](deliver.md#a-release-in-fresh-sessions) there in its own pane.
-- The loop reports its own agent state with `report-agent --source deliver-loop` (`working`, `blocked`, `idle`, then `release-agent`; not in a pane that already runs another agent).
 - The log pane `deliver-log` is opt-in with `-LogPane` (the console is already colored); a herdr key toggles it with `Switch-LogPane.ps1`.
 
 Details: `references/terminal-backends.md` and `references/loop.md` of the `deliver` skill.

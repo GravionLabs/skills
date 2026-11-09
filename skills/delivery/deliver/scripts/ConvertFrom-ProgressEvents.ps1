@@ -132,6 +132,9 @@ end {
       if ($e.prUrl -and $type -ne 'release.updated') { $prs[$nr] = [string]$e.prUrl }
     }
     $isCurrent = $nr -and $s.current -and $s.current.number -eq $nr
+    # only a run.finished that is the last lifecycle event counts: a nested session's run.finished is followed by the loop's next
+    # iteration (#463)
+    if ($s.result -and $type -in 'issue.started', 'step.finished', 'attention') { $s.result = $null }
 
     switch ($type) {
       'run.started' {

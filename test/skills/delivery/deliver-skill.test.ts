@@ -463,28 +463,6 @@ describe('deliver SKILL.md', () => {
       expect(herdr).not.toContain('`printenv HERDR_PANE_ID` once');
       expect(herdrCalls).toEqual([]);
     });
-
-    it('never uses --display-agent in deliver; the agent name stays the harness (#16)', () => {
-      const files = fs
-        .readdirSync(skillDir, { recursive: true, withFileTypes: true })
-        .filter((e) => e.isFile())
-        .map((e) => path.join(e.parentPath, e.name));
-      for (const f of [...files, path.resolve(__dirname, '../../../site/delivery.md')]) {
-        expect(fs.readFileSync(f, 'utf8'), f).not.toContain('display-agent');
-      }
-      expect(herdr).toContain('never replace the agent name');
-    });
-
-    it('documents a sidebar layout with the tokens without writing the config (#16)', () => {
-      expect(herdr).toContain('rows = [\n  ["state_icon", { token = "workspace", bold = true }');
-      expect(herdr).toContain('[{ token = "agent", dim = true }, "terminal_title_stripped"],');
-      expect(herdr).not.toContain('{ token = "tab", bold = true }');
-      for (const t of ['$deliver', '$deliver_step', '$deliver_pr']) expect(herdr).toContain(t);
-      for (const alt of ['compact two-line', '`deliver` line first', '`row_gap = 1`']) {
-        expect(herdr).toContain(alt);
-      }
-      expect(herdr).toContain('propose it, never write it');
-    });
   });
 
   describe('cleanup after the merge (#858)', () => {
@@ -881,14 +859,5 @@ describe('M<nnn> milestones (#235)', () => {
       expect(t).toContain('no stash, checkout, switch or commit in any existing checkout');
       expect(t).toContain('temporary worktree');
     }
-  });
-});
-
-describe('permissions.md terminal rows (#356)', () => {
-  const rows = permissions.split('\n');
-  const poimenRow = rows.find((l) => l.startsWith('| `poimen-server report`')) ?? '';
-
-  it('gives poimen-server report its own row for a poimen terminal', () => {
-    expect(poimenRow).toContain('inside a poimen terminal');
   });
 });

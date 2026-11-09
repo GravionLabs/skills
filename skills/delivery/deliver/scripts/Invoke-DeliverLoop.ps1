@@ -11,7 +11,7 @@
   at the start of the iteration), a summary line per step to .agents/deliver-loop.log (plain) and stdout, colored on a terminal
   (long text is cut to the terminal width, 120 characters when redirected), desktop notifications for the attention steps (macOS osascript,
   Windows toast), progress events (Report-Progress.ps1: run.started, issue.started, step.finished, attention, milestone.progress,
-  issue.finished, release.updated, run.finished; its terminal sink sets the pane tokens and the agent state), a progress line per step
+  issue.finished, release.updated, run.finished), a progress line per step
   (references/loop.md) and, with -LogPane in herdr on a terminal,
   a split pane labeled deliver-log below the session that tails the log (TerminalBackend.ps1; never closed by the loop).
   Stdout is colored when it is a terminal and neither -NoColor nor NO_COLOR is set; otherwise it is plain.
@@ -96,9 +96,8 @@ $RunDir = Join-Path (Get-Location) ".agents/deliver-loop/$((Get-Date).ToString('
 $Progress = Join-Path $RunDir 'progress.jsonl'
 $Recent = [System.Collections.Generic.List[string]]::new()
 $AgentNames = @{}
-# resolved once, for the log pane and the agent conflict notice; tokens and agent state go through the sink of Report-Progress.ps1
+# resolved once, for the log pane
 $Backend = Get-TerminalBackend
-$Pane = Get-LoopPane $Backend
 
 # One step: plain to the log; colored to a terminal stdout (time dim, $Tool cyan, the rest in $Color).
 # $Tool is looked up from $ToolAt on (after the subagent prefix).
@@ -143,9 +142,9 @@ $MilestoneScript = @('../../github-milestone', '../../../github/github-milestone
 
 # Progress events (ADR 0001, #372): the loop opens the run (run.started), emits what it knows itself (issue.started,
 # step.finished and attention followed from the harness's events, attention, milestone.progress and the waiting / needs-you items of
-# Get-DeliverStatus.ps1, issue.finished from the GitHub state, run.finished) and is the owner of the terminal sink of
-# Report-Progress.ps1: tokens and agent state come from there, never from the loop. The harness gets AGENT_EVENTS_RUN with an
-# empty AGENT_EVENTS_TERMINAL (nested: its own events skip the sink). The projection
+# Get-DeliverStatus.ps1, issue.finished from the GitHub state, run.finished). The loop owns the run: its own calls carry
+# AGENT_EVENTS_OWNER=1. The harness gets AGENT_EVENTS_RUN with an empty AGENT_EVENTS_OWNER (nested: its run.started and
+# run.finished are not written, #411, #463). The projection
 # (ConvertFrom-ProgressEvents.ps1) of the event file is read after every event; nothing is written to disk.
 $ReportScript = Join-Path $PSScriptRoot 'Report-Progress.ps1'
 $ReducerScript = Join-Path $PSScriptRoot 'ConvertFrom-ProgressEvents.ps1'
@@ -159,7 +158,6 @@ if (-not $env:AGENT_EVENTS_DIR) {
     Join-Path ([IO.Path]::GetFullPath($common, (Get-Location).Path)) '.agents/events'
   } else { Join-Path (Get-Location) '.agents/events' }
 }
-$LoopHerdrEnv = $env:HERDR_ENV
 $RunId = ''
 $EventFile = ''
 $Finished = $false
@@ -196,38 +194,28 @@ function Update-Projection {
 }
 
 # One event through Report-Progress.ps1 (in-process, so run.started records the pid of the loop). The sink sees the
-# loop's own HERDR_ENV and the owner marker, also while the harness runs with both blanked. Never throws into the loop.
+# loop's own owner marker, also while the harness runs with it blanked. Never throws into the loop.
 function Send-Event([hashtable]$Fields) {
   if (-not $RunId -and $Fields.Type -ne 'run.started') { return }
-  $herdr = $env:HERDR_ENV; $term = $env:AGENT_EVENTS_TERMINAL
-  $env:HERDR_ENV = $LoopHerdrEnv
-  $env:AGENT_EVENTS_TERMINAL = if ($RunId) { 'owner' } else { $null }
+  $owner = $env:AGENT_EVENTS_OWNER
+  $env:AGENT_EVENTS_OWNER = if ($RunId) { '1' } else { $null }
   $out = @()
   try { $out = @(& $ReportScript @Fields) } catch { Write-Verbose "event $($Fields.Type) not written: $_" }
-  finally { $env:HERDR_ENV = $herdr; $env:AGENT_EVENTS_TERMINAL = $term }
+  finally { $env:AGENT_EVENTS_OWNER = $owner }
   if ($Fields.Type -eq 'run.started') {
     $id = $out | Where-Object { "$_" -match '^AGENT_EVENTS_RUN=([\w.-]+)$' } | ForEach-Object { $Matches[1] } | Select-Object -First 1
     if (-not $id) { return }
     $script:RunId = $id
     $script:EventFile = Join-Path $env:AGENT_EVENTS_DIR "$id.jsonl"
     $env:AGENT_EVENTS_RUN = $id
-    $env:AGENT_EVENTS_TERMINAL = 'owner'
+    $env:AGENT_EVENTS_OWNER = '1'
     Update-Projection
   } elseif ($Milestone) { Update-Projection }
 }
 
-# One followed event through the terminal sink only (tokens and agent state), as Send-Event sets the environment.
-function Send-SinkEvent([string]$Json, [string]$Pr) {
-  if (-not $RunId -or $env:DELIVER_TERMINAL_SINK -eq '0') { return }
-  $herdr = $env:HERDR_ENV; $term = $env:AGENT_EVENTS_TERMINAL
-  $env:HERDR_ENV = $LoopHerdrEnv; $env:AGENT_EVENTS_TERMINAL = 'owner'
-  try { & $ReportScript -Type step.finished -SinkEvent $Json -Pr $Pr | Out-Null } catch { Write-Verbose "sink event not shown: $_" }
-  finally { $env:HERDR_ENV = $herdr; $env:AGENT_EVENTS_TERMINAL = $term }
-}
-
 function Start-Run {
   # the loop always opens its own run, whatever the calling shell exported
-  $env:AGENT_EVENTS_RUN = $null; $env:AGENT_EVENTS_TERMINAL = $null
+  $env:AGENT_EVENTS_RUN = $null; $env:AGENT_EVENTS_OWNER = $null
   $f = @{ Type = 'run.started'; Source = 'loop'; Harness = $Harness; Model = $Model }
   $base = Get-BaseUrl
   if ($base) { $f.Repository = (($base -split '/')[-2..-1] -join '/') }
@@ -517,8 +505,7 @@ $EventOffset = 0
 
 # The new events of the run's event file (written by the harness through Report-Progress.ps1 while it runs): one line
 # `#<nr> <step>: <result>` each, colored by tone (the tone rules live in Report-Progress.ps1). Notifications come from
-# attention and issue.finished delivered; the urgency from tone. Each event also goes through the terminal sink
-# (Report-Progress.ps1 -SinkEvent), since the harness runs nested and reports nothing itself.
+# attention and issue.finished delivered; the urgency from tone.
 function Show-NewEvents {
   Watch-Stop
   if (-not $EventFile -or -not (Test-Path -LiteralPath $EventFile)) { return }
@@ -561,7 +548,6 @@ function Show-NewEvents {
     if ($nr -and $ev.prUrl) { $Prs["$nr"] = [string]$ev.prUrl }
     $head = if ($nr -and $step -ne 'stopping') { "#$nr $step" } elseif ($step -eq 'stopping') { 'stop requested' } else { $step }
     Write-Step $(if ($res) { "${head}: $res" } else { $head }) $ToneColor[[string]$ev.tone]
-    Send-SinkEvent $raw ([string]$ev.prUrl)
     if ($notice) { Send-Notice "$(if ($nr) { "#$nr " })$notice" -Tone ([string]$ev.tone) }
     $shown = $true
   }
@@ -643,9 +629,16 @@ function Invoke-Iteration([int]$n, [int]$total, $state) {
   if ($Block -and $Block.ready.next -and [int]$Block.ready.next.number -eq $nr) { $started.Title = [string]$Block.ready.next.title; $started.Url = [string]$Block.ready.next.url }
   Send-Event $started
   $script:EventOffset = if ($EventFile -and (Test-Path -LiteralPath $EventFile)) { (Get-Item -LiteralPath $EventFile).Length } else { 0 }
-  # the harness reports nothing to the terminal: HERDR_ENV empty, and nested for the sink (AGENT_EVENTS_RUN without the owner marker)
-  $savedHerdr = $env:HERDR_ENV; $savedTerminal = $env:AGENT_EVENTS_TERMINAL; $savedLoopDir = $env:DELIVER_LOOP_DIR
-  $env:HERDR_ENV = ''; $env:AGENT_EVENTS_TERMINAL = ''
+  # the harness is nested: AGENT_EVENTS_RUN without the owner marker (its run.started and run.finished are not written)
+  $savedOwner = $env:AGENT_EVENTS_OWNER; $savedLoopDir = $env:DELIVER_LOOP_DIR
+  $env:AGENT_EVENTS_OWNER = ''
+  # wait ceiling (#461): the harness stops background tasks (subagents) 10 minutes after the last turn of `-p`; unset means no cut-off
+  # (claude 0 = wait indefinitely, copilot 3600 s); a value the user already set stays
+  $ceilingVar = if ($Harness -eq 'copilot') { 'COPILOT_TASK_WAIT_TIMEOUT_SECONDS' } else { 'CLAUDE_CODE_PRINT_BG_WAIT_CEILING_MS' }
+  $ceilingDefault = if ($Harness -eq 'copilot') { '3600' } else { '0' }
+  $savedCeiling = [Environment]::GetEnvironmentVariable($ceilingVar)
+  if ([string]::IsNullOrEmpty($savedCeiling)) { [Environment]::SetEnvironmentVariable($ceilingVar, $ceilingDefault) }
+  $script:CeilingStop = $null
   $env:DELIVER_LOOP_DIR = Split-Path $RunDir -Parent  # Report-Progress finds the stop file (stop --now) here
   try {
     $cli = if ($Harness -eq 'copilot') {
@@ -655,7 +648,10 @@ function Invoke-Iteration([int]$n, [int]$total, $state) {
     }
     & $Harness @cli 2>&1 | ForEach-Object {
       $line = "$_"
-      if ($_ -is [System.Management.Automation.ErrorRecord]) { Write-Step "stderr $(Get-Short $line)" 'red'; return }
+      if ($_ -is [System.Management.Automation.ErrorRecord]) {
+        if ($line -match 'Background tasks still running .* stopping them') { $script:CeilingStop = "$ceilingVar=$([Environment]::GetEnvironmentVariable($ceilingVar))" }
+        Write-Step "stderr $(Get-Short $line)" 'red'; return
+      }
       [IO.File]::AppendAllText($jsonl, $line + "`n")
       if ($Harness -eq 'copilot') { Read-CopilotRecord $line } else { Read-Record $line }
       Show-NewEvents
@@ -663,7 +659,10 @@ function Invoke-Iteration([int]$n, [int]$total, $state) {
     Show-NewEvents
     $exit = $LASTEXITCODE
     if ($exit -ne 0) { Write-Step "$Harness exited with $exit" 'red' }
-  } finally { $env:HERDR_ENV = $savedHerdr; $env:AGENT_EVENTS_TERMINAL = $savedTerminal; $env:DELIVER_LOOP_DIR = $savedLoopDir }
+  } finally {
+    $env:AGENT_EVENTS_OWNER = $savedOwner; $env:DELIVER_LOOP_DIR = $savedLoopDir
+    [Environment]::SetEnvironmentVariable($ceilingVar, $savedCeiling)
+  }
 }
 
 $result = $null
@@ -672,10 +671,6 @@ $i = 0
 $state = $null
 try {
   if ($LogPane) { Open-LogPane -LogFile $LogFile -Backend $Backend }
-  # the sink checks this itself per event; the loop only says why the pane shows no state
-  if (Test-LoopAgentConflict -Pane $Pane -Backend $Backend) {
-    Write-Step 'agent state not reported: another agent runs in this pane (start the loop in its own pane)' 'yellow'
-  }
   Read-StatusBlock
   Start-Run
   Send-BlockEvents
@@ -704,7 +699,8 @@ try {
     if (($after.Eligible -join ',') -eq ($state.Eligible -join ',') -and (Test-StopNow)) { $result = 'stopped'; break }
     if (($after.Eligible -join ',') -eq ($state.Eligible -join ',')) {
       $result = 'no progress'
-      Write-Step 'no progress: the open PBIs did not change. Last log lines:' 'yellow'
+      $why = if ($script:CeilingStop) { "a subagent was stopped by the wait ceiling ($script:CeilingStop)" } else { 'the open PBIs did not change' }
+      Write-Step "no progress: $why. Last log lines:" 'yellow'
       foreach ($l in $Recent.ToArray()) { Write-Host "  $l" }
       break
     }
@@ -723,7 +719,7 @@ try {
     Write-Step "resume: $(Get-ResumeCommand $i)" 'yellow'
   }
 } finally {
-  # error or Ctrl+C: the run ends here, as no progress (the sink clears the tokens and releases the agent state)
+  # error or Ctrl+C: the run ends here, as no progress 
   Stop-Run 'no progress'
 }
 exit $code

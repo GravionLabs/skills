@@ -26,6 +26,16 @@
         }
       ]
     },
+    "test": {
+      "description": "false disables every test run of Invoke-Tests.ps1; a map sets the test command per language (precedence: this key, package.json scripts.test, the default of the detected test tool).",
+      "oneOf": [
+        { "const": false },
+        {
+          "type": "object",
+          "additionalProperties": { "$ref": "#/$defs/testEntry" }
+        }
+      ]
+    },
     "governance": {
       "description": "Architecture decisions and specs; read by adr, github-issue, planner, implementation, code-review, deliver, detect-techstack and the CI checks adr and spec of GravionLabs/ci.",
       "type": "object",
@@ -160,6 +170,19 @@
       "properties": {
         "extensions": { "type": "array", "items": { "type": "string", "minLength": 1 } },
         "command": { "$ref": "#/$defs/commands" }
+      }
+    },
+    "testEntry": {
+      "type": "object",
+      "required": ["command"],
+      "additionalProperties": false,
+      "properties": {
+        "command": { "$ref": "#/$defs/commands" },
+        "targeted": {
+          "description": "Command of the targeted run per commit; {files} is replaced by the test files of the changed paths.",
+          "type": "string",
+          "minLength": 1
+        }
       }
     },
     "formatEntry": {

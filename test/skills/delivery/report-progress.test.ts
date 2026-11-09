@@ -105,7 +105,7 @@ describe.skipIf(!hasPwsh || process.platform === 'win32')('Report-Progress.ps1',
     const env = baseEnv({
       AGENT_EVENTS_DIR: dir,
       AGENT_EVENTS_RUN: run,
-      AGENT_EVENTS_TERMINAL: 'owner',
+      AGENT_EVENTS_OWNER: '1',
     });
     const calls: string[][] = [
       ['-Type', 'milestone.progress', '-Closed', '7', '-Total', '19'],
@@ -181,18 +181,47 @@ describe.skipIf(!hasPwsh || process.platform === 'win32')('Report-Progress.ps1',
     });
   });
 
+  it('an explicit -Run equal to the inherited run is nested too, unless the owner marker is set (#463)', async () => {
+    const dir = path.join(root, 'ev-explicit');
+    const nested = baseEnv({
+      AGENT_EVENTS_DIR: dir,
+      AGENT_EVENTS_RUN: 'loop-run2',
+      AGENT_EVENTS_OWNER: '',
+    });
+    const own = baseEnv({
+      AGENT_EVENTS_DIR: dir,
+      AGENT_EVENTS_RUN: 'loop-run2',
+      AGENT_EVENTS_OWNER: '1',
+    });
+    await worker.run(['-Type', 'run.started', '-Source', 'loop', '-Run', 'loop-run2'], {
+      cwd: repo,
+      env: own,
+    });
+    for (const t of [
+      ['-Type', 'run.started', '-Source', 'session', '-Run', 'loop-run2'],
+      ['-Type', 'run.finished', '-RunResult', 'done', '-Run', 'loop-run2'],
+    ])
+      expect((await worker.run(t, { cwd: repo, env: nested })).status).toBe(0);
+    expect(events(dir, 'loop-run2').map((e) => e.type)).toEqual(['run.started']);
+    await worker.run(['-Type', 'run.finished', '-RunResult', 'done', '-Run', 'loop-run2'], {
+      cwd: repo,
+      env: own,
+    });
+    expect(events(dir, 'loop-run2').map((e) => e.type)).toEqual(['run.started', 'run.finished']);
+  });
+
   it('a nested session with an inherited AGENT_EVENTS_RUN neither starts nor finishes the run (#411)', async () => {
     const dir = path.join(root, 'ev-nested');
     // empty marker: the worker keeps variables a previous call set
     const env = baseEnv({
       AGENT_EVENTS_DIR: dir,
       AGENT_EVENTS_RUN: 'loop-run',
-      AGENT_EVENTS_TERMINAL: '',
+      AGENT_EVENTS_OWNER: '',
     });
     const own = baseEnv({
       AGENT_EVENTS_DIR: dir,
       AGENT_EVENTS_RUN: 'loop-run',
-      AGENT_EVENTS_TERMINAL: 'owner',
+      AGENT_EVENTS_OWNER: '1',
     });
     expect(
       (await worker.run(['-Type', 'run.started', '-Source', 'loop'], { cwd: repo, env: own }))
@@ -256,7 +285,7 @@ describe.skipIf(!hasPwsh || process.platform === 'win32')('Report-Progress.ps1',
     const env = baseEnv({
       AGENT_EVENTS_DIR: dir,
       AGENT_EVENTS_RUN: 'tones',
-      AGENT_EVENTS_TERMINAL: 'owner',
+      AGENT_EVENTS_OWNER: '1',
     });
     const cases: [string[], string, boolean?][] = [
       [['-Type', 'attention', '-Kind', 'pr_opened'], 'success'],
