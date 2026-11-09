@@ -82,6 +82,16 @@ For a desktop app (Tauri) the template says to install the RC next to the stable
 }
 ```
 
+- `test`: `false` skips every test run (`skipped: disabled`), or a map keyed by language. An entry has `command` (string or array, run in order, the first non-zero exit stops) and optional `targeted` (one string with `{files}`, the test files of a commit's changed paths). Precedence: this key, then `scripts.test` of `package.json` (ts, ng), then the default of the detected tool (vitest `npx vitest run`, jest `npx jest`, `uv run pytest`, `cargo test`, `go test ./...`, `dotnet test`); without any of them the run fails instead of guessing. `Invoke-Tests.ps1` of the `implementation` skill runs it; `implementation` and the `<lang>-test` skills point to it.
+
+```json
+{
+  "test": {
+    "ts": { "command": "npx vitest run", "targeted": "npx vitest run {files}" }
+  }
+}
+```
+
 `/project-setup` (skill `project-setup`) writes the `format` and `lint` keys for you: it asks per detected language for the formatter and the linter and writes only the non-default choices. When ADR or spec folders exist without a `governance` key it also offers that key, with `adrPaths` and `specMap` proposed from the repo and `specMode: warn`; an existing key is shown and only changed on `merge` or `replace`. On request, per editor, it also writes the VS Code files `.vscode/settings.json` (format on save, default formatter per language), `extensions.json`, `tasks.json` (build, test) and `launch.json` (debug starts); an existing file is never changed, the missing entries are shown.
 
 ## Precedence

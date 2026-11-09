@@ -1,6 +1,6 @@
 <#
 .SYNOPSIS
-  Plans (default, dry run) or applies the project setup: the `format` and `lint` keys of .agents/config.json per language, the `governance` key and the .editorconfig.
+  Plans (default, dry run) or applies the project setup: the `format`, `lint` and `test` keys of .agents/config.json per language, the `governance` key and the .editorconfig.
 .DESCRIPTION
   Runs detect-techstack, maps its languages to the keys of `format` (ts, ng, py, dotnet, rust, go) and prints the plan as JSON:
   per language the default formatter, the detected tool, the options and the choice; the .editorconfig action; tool checks.
@@ -22,6 +22,12 @@
   `lang=option` entries for the linter, e.g. 'dotnet=jb','py=pyright'. `default` (or no entry) keeps the default. Options are listed in the plan (`languages[].lint.options`).
 .PARAMETER LintCommand
   `lang=command` for a `custom` lint choice (the lint command, {files} placeholder).
+.PARAMETER TestChoice
+  `lang=option` entries for the test command, e.g. 'ts=jest'. `default` (or no entry) keeps the default (the detected test tool). Options are listed in the plan (`languages[].test.options`).
+.PARAMETER TestCommand
+  `lang=command` for a `custom` test choice (the test command).
+.PARAMETER TestTargeted
+  `lang=command` with {files}: the optional targeted command of a `custom` test choice.
 .PARAMETER Governance
   `enable` writes the proposed `governance` key when none exists; `merge` adds the proposal to an existing key (its values stay, lists and specMap are extended);
   `replace` writes the proposal over an existing key. Without it the governance key is only proposed. An existing key is never changed otherwise.
@@ -38,6 +44,9 @@ param(
   [string[]]$CheckCommand = @(),
   [string[]]$LintChoice = @(),
   [string[]]$LintCommand = @(),
+  [string[]]$TestChoice = @(),
+  [string[]]$TestCommand = @(),
+  [string[]]$TestTargeted = @(),
   [ValidateSet('enable', 'merge', 'replace')]
   [string]$Governance,
   [string]$StackJson,
@@ -299,6 +308,74 @@ function Write-LintPlan($Plan) {
   'written'
 }
 
+# ---- test plan --------------------------------------------------------------------------------------------------------
+# option table: id -> entry (null = the default of the language, nothing is written); runner: implementation/scripts/Invoke-Tests.ps1
+function Get-TestOptions([string]$Lang, [string[]]$Tools) {
+  $opts = [ordered]@{}
+  switch ($Lang) {
+    { $_ -in 'ts', 'ng' } {
+      $defaultId = if ($Tools -contains 'vitest') { 'vitest' } elseif ($Tools -contains 'jest') { 'jest' } else { 'npm-test' }
+      $all = [ordered]@{
+        'vitest'   = [ordered]@{ command = 'npx vitest run'; targeted = 'npx vitest run {files}' }
+        'jest'     = [ordered]@{ command = 'npx jest'; targeted = 'npx jest {files}' }
+        'npm-test' = [ordered]@{ command = 'npm test' }
+      }
+      foreach ($k in $all.Keys) { $opts[$k] = if ($k -eq $defaultId) { $null } else { $all[$k] } }
+    }
+    'py' { $opts['pytest'] = $null; $defaultId = 'pytest' }
+    'dotnet' { $opts['dotnet-test'] = $null; $defaultId = 'dotnet-test' }
+    'rust' { $opts['cargo-test'] = $null; $defaultId = 'cargo-test' }
+    'go' { $opts['go-test'] = $null; $defaultId = 'go-test' }
+  }
+  $opts['custom'] = 'custom'
+  [pscustomobject]@{ Options = $opts; DefaultId = $defaultId }
+}
+
+function Get-TestPlan([string]$Lang, $Stack, $Choices, $Commands, $Targeted) {
+  $o = Get-TestOptions $Lang $Stack.Tools
+  $want = if ($Choices.ContainsKey($Lang)) { $Choices[$Lang] } else { 'default' }
+  if ($want -eq 'default') { $want = $o.DefaultId }
+  if (-not $o.Options.Contains($want)) { Fail "unknown test option '$want' for $Lang (options: $($o.Options.Keys -join ', '))" }
+  $entry = $null
+  if ($want -eq 'custom') {
+    if (-not $Commands.ContainsKey($Lang)) { Fail "custom test for $Lang needs -TestCommand '$Lang=<cmd>'" }
+    $entry = [ordered]@{ command = $Commands[$Lang] }
+    if ($Targeted.ContainsKey($Lang)) { $entry['targeted'] = $Targeted[$Lang] }
+  }
+  elseif ($null -ne $o.Options[$want]) { $entry = [ordered]@{} + $o.Options[$want] }
+  $tools = @()
+  if ($want -eq 'custom') { $tools += , (Get-ToolStatus (($Commands[$Lang] -split '\s+')[0]) $null $true) }
+  [ordered]@{
+    default = $o.DefaultId
+    options = @($o.Options.Keys)
+    choice  = $want
+    write   = ($null -ne $entry)
+    entry   = $entry
+    tools   = $tools
+  }
+}
+
+function Write-TestPlan($Plan) {
+  $todo = @($Plan | Where-Object { $_.test.write })
+  if (-not $todo.Count) { return 'unchanged' }
+  $cfg = Read-Config
+  if ($null -eq $cfg) { $cfg = [pscustomobject]@{ '$schema' = 'https://raw.githubusercontent.com/GravionLabs/skills/main/skills/shared/implementation/schema/config.schema.json' } }
+  $has = $cfg.PSObject.Properties.Name -contains 'test'
+  if ($has -and $cfg.test -is [bool] -and -not $cfg.test) { return 'skipped: test is false (disabled) in .agents/config.json' }
+  if ($has -and $null -ne $cfg.test -and $cfg.test.GetType().Name -ne 'PSCustomObject') { Fail 'test in .agents/config.json is neither false nor a map' }
+  if (-not $has) { $cfg | Add-Member -NotePropertyName test -NotePropertyValue ([pscustomobject]@{}) }
+  foreach ($p in $todo) {
+    $en = $p.test.entry
+    if (-not ($en['command'] -is [string] -and $en['command'])) { Fail "test.$($p.language) has no valid command" }
+    $cfg.test | Add-Member -NotePropertyName $p.language -NotePropertyValue ([pscustomobject]$en) -Force
+  }
+  $path = Get-ConfigPath
+  New-Item -ItemType Directory -Force -Path (Split-Path $path) | Out-Null
+  [System.IO.File]::WriteAllText($path, (($cfg | ConvertTo-Json -Depth 10) + "`
+"), $utf8)
+  'written'
+}
+
 function Get-ConfigPath { Join-Path $root '.agents/config.json' }
 
 function Read-Config {
@@ -501,25 +578,31 @@ $formats = ConvertTo-Map $FormatCommand '-FormatCommand'
 $checks = ConvertTo-Map $CheckCommand '-CheckCommand'
 $lintChoices = ConvertTo-Map $LintChoice '-LintChoice'
 $lintCommands = ConvertTo-Map $LintCommand '-LintCommand'
+$testChoices = ConvertTo-Map $TestChoice '-TestChoice'
+$testCommands = ConvertTo-Map $TestCommand '-TestCommand'
+$testTargetedMap = ConvertTo-Map $TestTargeted '-TestTargeted'
 $stack = Get-Stack
 foreach ($k in $lintChoices.Keys) { if ($k -notin $stack.Keys) { Fail "-LintChoice names '$k', which is not a detected language ($($stack.Keys -join ', '))" } }
+foreach ($k in $testChoices.Keys) { if ($k -notin $stack.Keys) { Fail "-TestChoice names '$k', which is not a detected language ($($stack.Keys -join ', '))" } }
 foreach ($k in $choices.Keys) { if ($k -notin $stack.Keys) { Fail "-Choice names '$k', which is not a detected language ($($stack.Keys -join ', '))" } }
 
 $formatPlan = Get-FormatPlan $stack $choices $formats $checks
 foreach ($p in $formatPlan) { $p['lint'] = Get-LintPlan $p.language $stack $lintChoices $lintCommands }
+foreach ($p in $formatPlan) { $p['test'] = Get-TestPlan $p.language $stack $testChoices $testCommands $testTargetedMap }
 $ecPlan = Get-EditorconfigPlan $stack
 $ecText = Get-EditorconfigText $stack
 $govPlan = Get-GovernancePlan $stack
-$result = [ordered]@{ mode = if ($Apply) { 'apply' } else { 'dry-run' }; languages = $formatPlan; editorconfig = $null; format = $null; lint = $null; governance = $null }
+$result = [ordered]@{ mode = if ($Apply) { 'apply' } else { 'dry-run' }; languages = $formatPlan; editorconfig = $null; format = $null; lint = $null; test = $null; governance = $null }
 if ($Apply) {
   $result.format = Write-FormatPlan $formatPlan
   $result.lint = Write-LintPlan $formatPlan
+  $result.test = Write-TestPlan $formatPlan
   $govPlan['result'] = Write-GovernancePlan $govPlan
   $ecPlan.result = Write-EditorconfigPlan $ecPlan $ecText
 }
 $result.governance = $govPlan
 $result.editorconfig = $ecPlan
 $warnings = @()
-foreach ($p in $formatPlan) { foreach ($t in @($p.tools) + @($p.lint.tools)) { if ($t.needed -and -not $t.found) { $warnings += "$($t.name) not found" + $(if ($t.installHint) { ": $($t.installHint)" }) } } }
+foreach ($p in $formatPlan) { foreach ($t in @($p.tools) + @($p.lint.tools) + @($p.test.tools)) { if ($t.needed -and -not $t.found) { $warnings += "$($t.name) not found" + $(if ($t.installHint) { ": $($t.installHint)" }) } } }
 $result.warnings = @($warnings | Select-Object -Unique)
 $result | ConvertTo-Json -Depth 10
