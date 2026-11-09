@@ -16,6 +16,7 @@ Test behavior through the public interface, never internals; expected values com
 - [ ] Tests for every new or modified function
 - [ ] Tests follow the good-tests rules (no internals coupling, no tautological assertions)
 - [ ] Build passes when the stack compiles and compiled sources changed; targeted tests pass (test files of the changed paths and direct neighbours, `<lang>-test` "Targeted run"; unknown mapping: the fast/unit group, never the full suite)
+- [ ] Test command: `scripts/Invoke-Tests.ps1` runs the configured one (`references/test-runner.md`); read the `test` key in `.agents/config.json` or run `detect-techstack`, never guess the tool (vitest or jest)
 - [ ] Full suite: one full run before the pull request, and again after the last fix round
 - [ ] Every item of an Invariants section in the PBI or Bug body has a test that exercises it
 - [ ] Changed files formatted: `scripts/Format-Changed.ps1` formats them, detecting the formatter from the file extensions when no `-Language` is given (`references/format.md`); a `format.<lang>` entry in `.agents/config.json` overrides it (`"format": false` disables)

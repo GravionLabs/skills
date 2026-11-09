@@ -152,6 +152,77 @@ describe.skipIf(!hasPwsh)('Set-ProjectSetup.ps1', () => {
     });
   });
 
+  describe('test key (#507)', () => {
+    it('plans the test options per language: the default follows the detected tool, nothing is written in a dry run', async () => {
+      use(['ts', 'py'], ['vitest']);
+      const r = await run();
+      expect(lang(r.json, 'ts').test).toMatchObject({
+        default: 'vitest',
+        options: ['vitest', 'jest', 'npm-test', 'custom'],
+        choice: 'vitest',
+        write: false,
+      });
+      expect(lang(r.json, 'py').test).toMatchObject({
+        default: 'pytest',
+        options: ['pytest', 'custom'],
+        write: false,
+      });
+      expect(exists('.agents/config.json')).toBe(false);
+    });
+
+    it('without a detected tool ts defaults to npm-test, with jest to jest', async () => {
+      use(['ts']);
+      expect(lang((await run()).json, 'ts').test.default).toBe('npm-test');
+      use(['ts'], ['jest']);
+      expect(lang((await run()).json, 'ts').test.default).toBe('jest');
+    });
+
+    it('writes only non-default choices under test and keeps other keys', async () => {
+      use(['ts', 'py', 'rust'], ['vitest']);
+      write('.agents/config.json', JSON.stringify({ format: { go: { format: 'x' } } }));
+      const r = await run(['-Apply', '-TestChoice', 'ts=jest']);
+      expect(r.json.test).toBe('written');
+      const cfg = JSON.parse(read('.agents/config.json'));
+      expect(cfg).toEqual({
+        format: { go: { format: 'x' } },
+        test: { ts: { command: 'npx jest', targeted: 'npx jest {files}' } },
+      });
+      expect(validate(cfg)).toBe(true);
+    });
+
+    it('custom test needs a command; targeted is optional and the entry validates', async () => {
+      use(['py']);
+      const bad = await run(['-TestChoice', 'py=custom']);
+      expect(bad.status).toBe(1);
+      expect(bad.stderr).toContain('-TestCommand');
+      const r = await run([
+        '-Apply',
+        '-TestChoice',
+        'py=custom',
+        '-TestCommand',
+        'py=uv run pytest -x',
+        '-TestTargeted',
+        'py=uv run pytest -x {files}',
+      ]);
+      expect(r.json.test).toBe('written');
+      const cfg = JSON.parse(read('.agents/config.json'));
+      expect(cfg.test.py).toEqual({
+        command: 'uv run pytest -x',
+        targeted: 'uv run pytest -x {files}',
+      });
+      expect(validate(cfg)).toBe(true);
+    });
+
+    it('an unknown option fails; test false is respected', async () => {
+      use(['ts']);
+      expect((await run(['-TestChoice', 'ts=nope'])).status).toBe(1);
+      write('.agents/config.json', '{"test": false}');
+      const off = await run(['-Apply', '-TestChoice', 'ts=jest']);
+      expect(off.json.test).toMatch(/^skipped: test is false/);
+      expect(JSON.parse(read('.agents/config.json'))).toEqual({ test: false });
+    });
+  });
+
   describe('lint key', () => {
     it('plans the lint options per language without writing in a dry run', async () => {
       use(['dotnet', 'py']);

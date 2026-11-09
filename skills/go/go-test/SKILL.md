@@ -12,6 +12,8 @@ description: >
 
 ## Test Runner
 
+The project's test command: the `test` key of `.agents/config.json`, run by `implementation`'s `scripts/Invoke-Tests.ps1`; the list below is the default.
+
 - **Framework**: standard `testing` package; `testify` (`assert`/`require`) optional, only if already in `go.mod`
 - **Run all**: `go test ./...`
 - **Targeted run** (per commit): `go test ./path/to/pkg -run '^TestName$'` for the packages of the changed code; unknown mapping: `go test -short ./...`

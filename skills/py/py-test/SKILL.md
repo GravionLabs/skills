@@ -12,6 +12,8 @@ description: >
 
 ## Test Runner
 
+The project's test command: the `test` key of `.agents/config.json`, run by `implementation`'s `scripts/Invoke-Tests.ps1`; the list below is the default.
+
 - **Framework**: pytest + pytest-asyncio (`asyncio_mode = "auto"`)
 - **Config**: `[tool.pytest.ini_options]` in `pyproject.toml`
 - **Run all**: `uv run pytest`
