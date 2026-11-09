@@ -259,6 +259,52 @@ describe('deliver-loop runs in the repository root (#227)', () => {
   });
 });
 
+describe('deliver-loop stop subcommand', () => {
+  let home: string;
+  let root: string;
+  let sub: string;
+  beforeAll(() => {
+    home = mk('sh');
+    root = mk('sp');
+    spawnSync('git', ['init', '-q'], { cwd: root });
+    sub = mk('sp/a/b');
+    const dir = mk('sh/.claude/skills/deliver/scripts');
+    fs.writeFileSync(
+      path.join(dir, 'Invoke-DeliverLoop.ps1'),
+      'Write-Output "loop|$($args -join \',\')"\n',
+    );
+    fs.writeFileSync(
+      path.join(dir, 'Request-LoopStop.ps1'),
+      'Write-Output "stop|$((Get-Location).Path)|$($args -join \',\')"\n',
+    );
+  });
+  const check = (out: string, args: string) =>
+    expect(out.trim()).toBe(`stop|${fs.realpathSync(root)}|${args}`);
+
+  it.skipIf(!posix)('bash/zsh shim maps --now/--cancel and runs from the toplevel', async () => {
+    check((await runShimAsync(sub, home, ['stop', '--now'])).stdout, '-Now');
+    check((await runShimAsync(sub, home, ['stop', '--cancel'])).stdout, '-Cancel');
+    const other = await runShimAsync(sub, home, ['-Max', '1']);
+    expect(other.stdout.trim()).toBe('loop|-Max,1');
+  });
+
+  it('PowerShell shim maps --now/--cancel and runs from the toplevel', async () => {
+    const ps = (a: string) =>
+      spawnAsync('pwsh', ['-NoProfile', '-Command', `. '${shimPs1}'; deliver-loop ${a}`], {
+        cwd: sub,
+        env: { HOME: home, PATH: process.env.PATH },
+      });
+    const [now, cancel, other] = await Promise.all([
+      ps('stop --now'),
+      ps('stop --cancel'),
+      ps('-Max 1'),
+    ]);
+    check(now.stdout, '-Now');
+    check(cancel.stdout, '-Cancel');
+    expect(other.stdout.trim()).toBe('loop|-Max,1');
+  });
+});
+
 describe('Install-LoopShim.ps1', () => {
   let worker: PwshWorker;
   beforeAll(() => {

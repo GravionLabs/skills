@@ -39,4 +39,4 @@ Settings (status lines and the hook) are written, not read from `.agents/config.
 ## See also
 
 - `npx skills update` refreshes the scripts (the settings point at the installed skill, no copy).
-- Docs: https://github.com/GravionLabs/skills/blob/main/docs/usage/statusline.md
+- Docs: https://github.com/GravionLabs/skills/blob/main/site/usage/statusline.md

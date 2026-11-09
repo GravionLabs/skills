@@ -18,11 +18,13 @@ export default withMermaid(
       'Agent skills for Claude Code, OpenCode and GitHub Copilot, installed with npx skills.',
     lang: 'en',
     base,
-    // VitePress does not prefix `head` with the base: the favicon (docs/public/icon.svg) adds it itself.
+    // VitePress does not prefix `head` with the base: the favicon (site/public/icon.svg) adds it itself.
     head: [['link', { rel: 'icon', type: 'image/svg+xml', href: `${base}icon.svg` }]],
-    // The site is the documentation of the repository: its pages are the files of `docs`.
-    // The home page `docs/index.md` includes the README at the repository root (see site/README.md).
-    srcDir: '../docs',
+    // The site is the documentation of the repository: its pages are the markdown files of `site/`
+    // (`docs/` keeps the internal ADRs and spikes, which are no pages). This folder's README, the tests
+    // and the installed packages are not pages. The home page is `site/index.md` (see site/README.md).
+    srcDir: '.',
+    srcExclude: ['README.md', 'tests/**', 'node_modules/**'],
     cleanUrls: true,
     lastUpdated: false,
     appearance: 'dark',
@@ -61,7 +63,7 @@ export default withMermaid(
       sidebar,
       search: { provider: 'local' },
       editLink: {
-        pattern: `${REPO_URL}/edit/main/docs/:path`,
+        pattern: `${REPO_URL}/edit/main/site/:path`,
         text: 'Edit this page on GitHub',
       },
       socialLinks: [{ icon: 'github', link: REPO_URL }],

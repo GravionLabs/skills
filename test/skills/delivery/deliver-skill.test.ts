@@ -29,6 +29,15 @@ describe('deliver SKILL.md', () => {
     expect(steps).toContain('only from these events');
   });
 
+  it('has the stop now rule (#476)', () => {
+    const rules = body.slice(body.indexOf('## Rules'));
+    expect(rules).toContain('`STOP requested`');
+    expect(rules).toContain('gh issue edit <nr> --remove-assignee @me');
+    expect(rules).toContain('#<nr> stop: stopped after <step>, continue with /deliver <nr>');
+    expect(rules).toContain('-Outcome skipped -Reason "stop requested"');
+    expect(rules).toContain('A running subagent is not interrupted');
+  });
+
   it('names PRs and issues as full URLs, the release PR included', () => {
     expect(body).toContain('full URL');
     expect(body).toContain('not as a bare `#<n>`');
@@ -66,7 +75,7 @@ describe('deliver SKILL.md', () => {
     }
     expect(text.split('\n').length).toBeLessThanOrEqual(100);
     expect(
-      fs.readFileSync(path.resolve(__dirname, '../../../docs/guides/deliver.md'), 'utf8'),
+      fs.readFileSync(path.resolve(__dirname, '../../../site/guides/deliver.md'), 'utf8'),
     ).toContain('## Feedback during a run');
   });
 
@@ -250,7 +259,7 @@ describe('deliver SKILL.md', () => {
   describe('release review (#100)', () => {
     const release = body.slice(body.indexOf('**Release.**'), body.indexOf('## Pause rules'));
     const ref = fs.readFileSync(path.join(skillDir, 'references/release-review.md'), 'utf8');
-    const docs = fs.readFileSync(path.resolve(__dirname, '../../../docs/delivery.md'), 'utf8');
+    const docs = fs.readFileSync(path.resolve(__dirname, '../../../site/delivery.md'), 'utf8');
 
     it('takes criteria and round markers from one batched milestone list (#127)', () => {
       expect(ref).toContain('Get-Milestones.ps1 -Mode issues -Name <name> -State all');
@@ -369,7 +378,7 @@ describe('deliver SKILL.md', () => {
       expect(roles).toMatch(/\| `release-review` +\| opus +\| high +\|/);
     });
 
-    it('docs/delivery.md describes the release review', () => {
+    it('site/delivery.md describes the release review', () => {
       expect(docs).toContain('## Release review');
       expect(docs).toContain('`release-review`');
       expect(docs).toContain('Found in release review round <n>');
@@ -460,7 +469,7 @@ describe('deliver SKILL.md', () => {
         .readdirSync(skillDir, { recursive: true, withFileTypes: true })
         .filter((e) => e.isFile())
         .map((e) => path.join(e.parentPath, e.name));
-      for (const f of [...files, path.resolve(__dirname, '../../../docs/delivery.md')]) {
+      for (const f of [...files, path.resolve(__dirname, '../../../site/delivery.md')]) {
         expect(fs.readFileSync(f, 'utf8'), f).not.toContain('display-agent');
       }
       expect(herdr).toContain('never replace the agent name');
@@ -507,7 +516,7 @@ describe('deliver SKILL.md', () => {
     const select = body.slice(body.indexOf('**Select.**'), body.indexOf('**Resume.**'));
     const merge = body.slice(body.indexOf('**Merge.**'), body.indexOf('## Pause rules'));
     const pause = body.slice(body.indexOf('## Pause rules'), body.indexOf('## Report'));
-    const delivery = fs.readFileSync(path.resolve(__dirname, '../../../docs/delivery.md'), 'utf8');
+    const delivery = fs.readFileSync(path.resolve(__dirname, '../../../site/delivery.md'), 'utf8');
 
     it('claims the announced PBI by assigning it', () => {
       expect(select).toContain(
@@ -547,7 +556,7 @@ describe('deliver SKILL.md', () => {
       expect(claim).toContain('When the PBI is merged (step 8), blocked or paused');
     });
 
-    it('documents parallel runs in docs/delivery.md', () => {
+    it('documents parallel runs in site/delivery.md', () => {
       expect(delivery).toContain('## Parallel runs');
       expect(delivery).toContain('one worktree per session');
       expect(delivery).toContain('independent issues');
@@ -701,7 +710,7 @@ describe('config schema deliver key', () => {
 
   describe('governance (#87)', () => {
     const gov = fs.readFileSync(path.join(skillDir, 'references/governance.md'), 'utf8');
-    const docs = fs.readFileSync(path.resolve(__dirname, '../../../docs/delivery.md'), 'utf8');
+    const docs = fs.readFileSync(path.resolve(__dirname, '../../../site/delivery.md'), 'utf8');
     const body = text.slice(text.indexOf('\n---', 3) + 4);
     const sect = (a: string, b: string) => body.slice(body.indexOf(a), body.indexOf(b));
 
@@ -744,7 +753,7 @@ describe('config schema deliver key', () => {
       );
     });
 
-    it('docs/delivery.md describes the decision PBI and the spec note', () => {
+    it('site/delivery.md describes the decision PBI and the spec note', () => {
       expect(docs).toContain('## Decision PBIs and spec notes');
       expect(docs).toContain('`## Spec`');
     });
@@ -785,7 +794,7 @@ describe('M<nnn> milestones (#235)', () => {
   const ref = fs.readFileSync(path.join(skillDir, 'references/release-review.md'), 'utf8');
   const loop = fs.readFileSync(path.join(skillDir, 'references/loop.md'), 'utf8');
   const help = fs.readFileSync(path.join(skillDir, 'references/help.md'), 'utf8');
-  const guide = fs.readFileSync(path.resolve(__dirname, '../../../docs/guides/deliver.md'), 'utf8');
+  const guide = fs.readFileSync(path.resolve(__dirname, '../../../site/guides/deliver.md'), 'utf8');
   const schemaText = fs.readFileSync(
     path.join(skillDir, 'schema/deliver-release-review.schema.json'),
     'utf8',
@@ -831,9 +840,9 @@ describe('M<nnn> milestones (#235)', () => {
       `${skillDir}/references/release-review.md`,
       `${skillDir}/references/loop.md`,
       `${skillDir}/schema/deliver-release-review.schema.json`,
-      path.resolve(__dirname, '../../../docs/delivery.md'),
-      path.resolve(__dirname, '../../../docs/guides/deliver.md'),
-      path.resolve(__dirname, '../../../docs/guides/release.md'),
+      path.resolve(__dirname, '../../../site/delivery.md'),
+      path.resolve(__dirname, '../../../site/guides/deliver.md'),
+      path.resolve(__dirname, '../../../site/guides/release.md'),
       path.resolve(__dirname, '../../../skills/github/github-milestone/SKILL.md'),
     ]) {
       expect(fs.readFileSync(f, 'utf8'), f).not.toMatch(/release-review-M\d{3}/);

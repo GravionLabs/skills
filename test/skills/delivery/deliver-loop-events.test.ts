@@ -3,27 +3,23 @@ import { spawnSync } from 'child_process';
 import * as fs from 'fs';
 import * as os from 'os';
 import * as path from 'path';
+import { STATE_SCHEMA } from '../../helpers/agent-events';
 import { REPORT_PROGRESS } from '../../helpers/report-progress';
 import { createFakeGh } from '../../helpers/fake-gh';
 import { PwshWorker } from '../../helpers/pwsh-worker';
 
 // #372: Invoke-DeliverLoop.ps1 opens a run (run.started), emits the events it knows, ends it with exactly one run.finished
-// (also on error) and writes status.json as the projection of the event file (ConvertFrom-ProgressEvents.ps1).
-// gh and claude are stubs on PATH; the claude stub snapshots status.json and the event file at the start of each iteration.
+// (also on error) and writes no status.json (#376); the state is the projection of the event file (ConvertFrom-ProgressEvents.ps1).
+// gh and claude are stubs on PATH; the claude stub snapshots the event file at the start of each iteration.
 const ROOT = path.resolve(__dirname, '../../..');
 const SCRIPTS = path.join(ROOT, 'skills/delivery/deliver/scripts');
-const schema = JSON.parse(
-  fs.readFileSync(
-    path.join(ROOT, 'skills/delivery/deliver/schema/deliver-loop-status.schema.json'),
-    'utf8',
-  ),
-);
-const validate = new Ajv({ allErrors: true }).compile(schema);
+const schema = JSON.parse(fs.readFileSync(STATE_SCHEMA, 'utf8'));
+const validate = new Ajv({ allErrors: true, validateFormats: false }).compile(schema);
 const hasPwsh = spawnSync('pwsh', ['-NoProfile', '-Command', '1']).status === 0;
 const BASE = 'https://github.com/acme/app';
 
 describe.skipIf(!hasPwsh || process.platform === 'win32')(
-  'Invoke-DeliverLoop.ps1 run events and status.json',
+  'Invoke-DeliverLoop.ps1 run events without status.json',
   () => {
     let dir: string;
     let cwd: string;
@@ -79,7 +75,6 @@ const nFile = path.join(cwd, 'iteration'); const n = (fs.existsSync(nFile) ? Num
 fs.writeFileSync(nFile, String(n));
 const env = process.env; const ev = path.join(env.AGENT_EVENTS_DIR, env.AGENT_EVENTS_RUN + '.jsonl');
 fs.appendFileSync(path.join(cwd, 'harness-env.jsonl'), JSON.stringify({ run: env.AGENT_EVENTS_RUN, terminal: env.AGENT_EVENTS_TERMINAL || '', dir: env.AGENT_EVENTS_DIR, herdr: env.HERDR_ENV || '' }) + '\\n');
-fs.copyFileSync(path.join(cwd, '.agents/deliver-loop/status.json'), path.join(cwd, 'snap' + n + '-status.json'));
 fs.copyFileSync(ev, path.join(cwd, 'snap' + n + '-events.jsonl'));
 const f = ${JSON.stringify(state)}; const s = JSON.parse(fs.readFileSync(f, 'utf8'));
 // the harness reports its steps itself (deliver SKILL.md): Report-Progress.ps1, nested in the loop's run
@@ -126,18 +121,13 @@ fs.writeFileSync(f, JSON.stringify(s));`,
         .trim()
         .split('\n')
         .map((l) => JSON.parse(l));
-    const json = (f: string) => JSON.parse(fs.readFileSync(path.join(cwd, f), 'utf8'));
     const project = async (file: string, pidCheck = false) => {
       const r = await reducer.run(['-Path', file, ...(pidCheck ? [] : ['-NoPidCheck'])], { cwd });
       expect(r.status).toBe(0);
       return JSON.parse(r.stdout);
     };
-    const withoutVersion = ({ schemaVersion, ...rest }: Record<string, any>) => {
-      expect(schemaVersion).toBe(1);
-      return rest;
-    };
 
-    it('emits the run events, hands the run to the harness as nested and keeps status.json the projection of the event file', async () => {
+    it('emits the run events, hands the run to the harness as nested and writes no status.json', async () => {
       const r = await run(setup());
       expect(r.status).toBe(2);
       const file = eventFile();
@@ -195,22 +185,19 @@ fs.writeFileSync(f, JSON.stringify(s));`,
         { run: id, terminal: '', dir: path.dirname(file), herdr: '' },
       ]);
 
-      // iteration 1 start: status.json is the projection of the event file at that time
-      const snap1 = json('snap1-status.json');
+      // the loop writes no status.json; the state is the projection of the event file
+      expect(fs.existsSync(path.join(cwd, '.agents/deliver-loop/status.json'))).toBe(false);
+      // iteration 1 start: the projection of the events at that time is running
+      const snap1 = await project(path.join(cwd, 'snap1-events.jsonl'));
       expect(validate(snap1), JSON.stringify(validate.errors)).toBe(true);
-      expect(withoutVersion(snap1)).toEqual(await project(path.join(cwd, 'snap1-events.jsonl')));
       expect(snap1).toMatchObject({ result: 'running', current: { number: 10, title: 'first' } });
-      // iteration 2 start: the nested run.started names a pid that does not live, the projection is abandoned,
-      // status.json says running (schema version 1 has no abandoned)
-      const snap2 = json('snap2-status.json');
-      expect(validate(snap2), JSON.stringify(validate.errors)).toBe(true);
+      // iteration 2 start: the nested run.started names a pid that does not live, the projection is abandoned
       const abandoned = await project(path.join(cwd, 'snap2-events.jsonl'), true);
+      expect(validate(abandoned), JSON.stringify(validate.errors)).toBe(true);
       expect(abandoned.result).toBe('abandoned');
-      expect(withoutVersion(snap2)).toEqual({ ...abandoned, result: 'running' });
       // the end
-      const doc = json('.agents/deliver-loop/status.json');
+      const doc = await project(file, true);
       expect(validate(doc), JSON.stringify(validate.errors)).toBe(true);
-      expect(withoutVersion(doc)).toEqual(await project(file, true));
       expect(doc).toMatchObject({
         run: id,
         result: 'blocked',
@@ -223,16 +210,15 @@ fs.writeFileSync(f, JSON.stringify(s));`,
       });
     });
 
-    it('an error after run.started still ends the run with exactly one run.finished, and status.json shows it', async () => {
+    it('an error after run.started still ends the run with exactly one run.finished', async () => {
       const r = await run(setup({ failOpenRead: true }));
       expect(r.status).not.toBe(0);
       const all = events(eventFile());
       expect(all[0].type).toBe('run.started');
       expect(all.filter((e) => e.type === 'run.finished')).toHaveLength(1);
       expect(all.at(-1)).toMatchObject({ type: 'run.finished', result: 'no progress' });
-      const doc = json('.agents/deliver-loop/status.json');
+      const doc = await project(eventFile(), true);
       expect(validate(doc), JSON.stringify(validate.errors)).toBe(true);
-      expect(withoutVersion(doc)).toEqual(await project(eventFile(), true));
       expect(doc.result).toBe('no progress');
     });
   },

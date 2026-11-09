@@ -17,6 +17,7 @@
   "github": [
     "github-issue",
     "github-milestone",
+    "github-pages",
     "github-project",
     "github-pull-request",
     "github-release"

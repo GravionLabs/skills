@@ -1,10 +1,11 @@
 <#
 .SYNOPSIS
-  Remove the worktrees and local branches a merged PBI left behind; prints one JSON object.
+  Remove the worktrees and local branches a merged or merging PBI left behind; prints one JSON object.
 .DESCRIPTION
   Subagents work in worktrees of their own. A harness keeps a worktree whose HEAD left its start commit (Claude Code
   removes an isolated worktree only when the agent left it unchanged), and its `worktree-<name>` branch stays even when
-  the worktree goes. After the merge of PR -Pr this script removes, in the repository of the current directory:
+  the worktree goes. After the merge of PR -Pr, or after auto-merge was set on it (the PR may still be open; only its head branch and commits are read,
+  the remote branch goes with `gh pr merge --delete-branch`), this script removes, in the repository of the current directory:
   - worktrees on the head branch of the PR or on `wip-<Issue>`, and detached worktrees at a commit of the PR,
     when they have no uncommitted changes (the main worktree and the current one are never touched);
   - the local branches `<head branch>` and `wip-<Issue>` when no worktree has them checked out;
@@ -16,7 +17,7 @@
   A `git branch -D` that fails is listed in `left` with reason `git branch -D failed: <first stderr line>`.
   Output: {removed[], branchesDeleted[], left[{path|branch, reason, command}]}. Exit 1 when the PR cannot be read (REST `pulls/<pr>` and `pulls/<pr>/commits`).
 .PARAMETER Pr
-  Number of the merged pull request.
+  Number of the pull request, merged or with auto-merge on.
 .PARAMETER Issue
   Number of the PBI (for the `wip-<Issue>` branch).
 #>

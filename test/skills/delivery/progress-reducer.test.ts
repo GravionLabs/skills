@@ -54,13 +54,17 @@ describe('fixtures/progress-events (#370)', () => {
 describe('deliver-run-state.schema.json (#370)', () => {
   const running = () => readJson(path.join(FIXTURES, 'running.state.json'));
 
-  it('is the status schema without schemaVersion, plus abandoned and the RC fields', () => {
-    const old = readJson(
-      path.join(ROOT, 'skills/delivery/deliver/schema/deliver-loop-status.schema.json'),
-    );
+  it('has no schemaVersion, five run results plus abandoned and the RC fields', () => {
     const next = readJson(STATE_SCHEMA);
-    expect(next.required).toEqual(old.required.filter((k: string) => k !== 'schemaVersion'));
-    expect(next.properties.result.enum).toEqual([...old.properties.result.enum, 'abandoned']);
+    expect(next.required).not.toContain('schemaVersion');
+    expect(next.properties.result.enum).toEqual([
+      'running',
+      'done',
+      'max reached',
+      'blocked',
+      'no progress',
+      'abandoned',
+    ]);
     expect(Object.keys(next.properties.release.properties)).toEqual([
       'reviewRound',
       'prUrl',
@@ -118,6 +122,17 @@ describe.skipIf(!hasPwsh || process.platform === 'win32')(
       expect(r.status, r.stderr).toBe(0);
       expect(r.state).toEqual(readJson(path.join(FIXTURES, `${c}.state.json`)));
       expect(validateState(r.state), JSON.stringify(validateState.errors)).toBe(true);
+    });
+
+    it('folds run.finished with result stopped as a finished run (#474)', async () => {
+      const lines = fixtureLines('done').map((l) => {
+        const e = JSON.parse(l);
+        if (e.type === 'run.finished') e.result = 'stopped';
+        return JSON.stringify(e);
+      });
+      const r = await fold(writeEvents('stopped', lines.join('\n') + '\n'));
+      expect(r.status, r.stderr).toBe(0);
+      expect(r.state).toEqual(readJson(path.join(FIXTURES, 'done.state.json')));
     });
 
     it('yields the same state for the same events and Now', async () => {

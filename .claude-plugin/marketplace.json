@@ -33,6 +33,7 @@
       "skills": [
         "./skills/github/github-issue",
         "./skills/github/github-milestone",
+        "./skills/github/github-pages",
         "./skills/github/github-project",
         "./skills/github/github-pull-request",
         "./skills/github/github-release"

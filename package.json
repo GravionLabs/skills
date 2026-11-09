@@ -10,7 +10,7 @@
     "check": "pnpm run format:check && node scripts/check-marketplace.mjs && pwsh skills/skill-tooling/skill-slim/scripts/Get-SkillReport.ps1 -Root . -FailOnDangling && pnpm run lint:ps && pnpm test",
     "check:marketplace": "node scripts/check-marketplace.mjs",
     "test": "vitest run",
-    "test:ci": "vitest run --coverage",
+    "test:ci": "vitest run",
     "test:watch": "vitest",
     "typecheck": "tsc -p test --noEmit",
     "lint": "biome lint .",

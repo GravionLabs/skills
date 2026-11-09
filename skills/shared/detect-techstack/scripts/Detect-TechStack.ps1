@@ -255,7 +255,7 @@ $adrCount = @(Get-ChildItem -LiteralPath (Join-Path $rootFull $adrRel) -File -Fi
 $specCount = @(Get-ChildItem -LiteralPath (Join-Path $rootFull $specRel) -File -Filter '*.md' -ErrorAction SilentlyContinue).Count
 $govHint = $null
 if (-not $govConfigured -and ($adrCount + $specCount) -gt 0) {
-  $govHint = 'docs/adr or docs/specs found but no governance key in .agents/config.json; add it to opt in (docs/usage/project-config.md)'
+  $govHint = 'docs/adr or docs/specs found but no governance key in .agents/config.json; add it to opt in (site/usage/project-config.md)'
 }
 
 $report = [ordered]@{

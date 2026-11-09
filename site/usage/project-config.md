@@ -16,6 +16,8 @@ By default `Format-Changed.ps1 -Language <lang>` runs the built-in commands of `
 
 `release.test.platforms` (for example `["macOS","Linux","Windows"]`) and `release.test.template` (path of the body template, for example `docs/manual-acceptance.md` or `.github/release-test.md`) make `/github-milestone create M<nnn>` and `insert M<nnn>` also create the `release-test` issue `[PBI] test: release candidate test of M<nnn> on <platforms>` (labels `pbi`, `release-test`, `interactive`; the template with `{milestone}` and `{platforms}` replaced plus a `Tier: interactive` line). `-NoReleaseTest` skips it; a milestone that already has a `release-test` issue gets no second one; without the key nothing is created.
 
+For a desktop app (Tauri) the template says to install the RC next to the stable app: RC and beta builds have their own identifier `<identifier>.rc`, product name `<Name> RC`, own paths and no auto-update (`github-issue` `references/milestones.md`, "Release test").
+
 ## Governance
 
 `governance` names where ADRs and specs live and which changes need them. It is read by `adr`, `github-issue`, `planner`, `implementation`, `code-review`, `deliver` and `detect-techstack`, and the CI checks `adr` and `spec` of GravionLabs/ci read the same names. How they work together: [ADRs and specs](governance.md). Without the key, `adr` works on request with `docs/adr` and no change is held to an ADR or spec rule.

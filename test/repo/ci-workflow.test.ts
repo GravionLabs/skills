@@ -6,41 +6,53 @@ import config from '../../vitest.config';
 const file = path.resolve(__dirname, '../../.github/workflows/ci.yml');
 const wf = parse(fs.readFileSync(file, 'utf-8'));
 
-type Step = { uses?: string; run?: string; with?: Record<string, string> };
+type Step = {
+  name?: string;
+  uses?: string;
+  run?: string;
+  if?: string;
+  env?: Record<string, string>;
+  with?: Record<string, string>;
+};
 const steps = (job: string): Step[] => wf.jobs[job].steps;
+const pkgJson = JSON.parse(fs.readFileSync(path.resolve(__dirname, '../../package.json'), 'utf-8'));
 
-describe('ci.yml test job', () => {
-  it('runs one Vitest project in a single job without a matrix', () => {
+describe('ci.yml test jobs', () => {
+  it('runs one Vitest project as two shards, with an aggregate check named Test', () => {
     expect(config.test?.projects).toBeUndefined();
+    expect(wf.jobs['test-shard'].strategy.matrix.shard).toEqual([1, 2]);
+    expect(wf.jobs['test-shard'].name).toBe('Test (${{ matrix.shard }}/2)');
     expect(wf.jobs.test.strategy).toBeUndefined();
     expect(wf.jobs.test.name).toBe('Test');
     expect(wf.on.push.branches).toEqual(['main', 'release/**']);
   });
 
-  it('runs the whole suite with coverage and uploads the results', () => {
-    expect(steps('test').some((s) => s.run === 'pnpm run test:ci')).toBe(true);
-    const pkg = JSON.parse(fs.readFileSync(path.resolve(__dirname, '../../package.json'), 'utf-8'));
-    expect(pkg.scripts['test:ci']).toBe('vitest run --coverage');
-    const artifacts = steps('test').filter((s) => s.uses?.startsWith('actions/upload-artifact'));
-    expect(artifacts.length).toBe(2);
+  it('runs each shard with vitest --shard and its own junit file', () => {
+    const run = steps('test-shard').find((s) => s.run?.includes('vitest run'));
+    expect(run?.run).toBe('pnpm exec vitest run --shard=${{ matrix.shard }}/2');
+    expect(run?.env?.['VITEST_JUNIT_OUTPUT']).toBe('test-results/junit-${{ matrix.shard }}.xml');
   });
 
-  it('tolerates a missing junit.xml and coverage file', () => {
-    const reporter = steps('test').find((s) => s.uses?.startsWith('dorny/test-reporter'));
-    expect(reporter?.with?.['fail-on-empty']).toBe(false);
-    const summary = steps('test').find((s) => s.uses?.startsWith('irongut/CodeCoverageSummary')) as
-      | (Step & { if?: string })
-      | undefined;
-    expect(summary?.if).toContain("hashFiles('coverage/cobertura-coverage.xml') != ''");
-    expect((summary as Step & { 'continue-on-error'?: boolean })?.['continue-on-error']).toBe(true);
+  it('uploads each shard junit as test-results-<i>', () => {
+    const artifacts = steps('test-shard').filter((s) =>
+      s.uses?.startsWith('actions/upload-artifact'),
+    );
+    expect(artifacts.length).toBe(1);
+    expect(artifacts[0]?.with?.['name']).toBe('test-results-${{ matrix.shard }}');
+    expect(artifacts[0]?.with?.['path']).toBe('test-results/');
   });
 
-  it('publishes a report and coverage summary from the vitest outputs', () => {
-    const reporter = steps('test').find((s) => s.uses?.startsWith('dorny/test-reporter'));
-    expect(reporter?.with?.path).toBe('test-results/junit.xml');
-    const summary = steps('test').find((s) => s.uses?.startsWith('irongut/CodeCoverageSummary'));
-    expect(summary?.with?.filename).toBe('coverage/cobertura-coverage.xml');
-    expect(wf.jobs.test.permissions).toEqual({ checks: 'write', contents: 'read' });
+  it('has no coverage in CI: no flag, no coverage upload, no coverage summary, no dorny reporter', () => {
+    expect(pkgJson.scripts['test:ci']).toBe('vitest run');
+    expect(JSON.stringify(wf)).not.toMatch(/coverage|dorny|--coverage/i);
+  });
+
+  it('keeps the aggregate Test green only when both shards succeeded', () => {
+    expect(wf.jobs.test.needs).toBe('test-shard');
+    expect(wf.jobs.test.if).toBe('always()');
+    const check = steps('test').find((s) => s.run?.includes('exit 1'));
+    expect(check?.env?.['RESULT']).toBe('${{ needs.test-shard.result }}');
+    expect(check?.run).toContain('"$RESULT" != "success"');
   });
 
   it('does not use the fixed-name node/test action in any job', () => {
@@ -73,8 +85,7 @@ describe('ci.yml checks', () => {
   });
 
   it('includes every CI check in the local check script', () => {
-    const pkg = JSON.parse(fs.readFileSync(path.resolve(__dirname, '../../package.json'), 'utf-8'));
-    const checkCommands = pkg.scripts.check.split(' && ');
+    const checkCommands = pkgJson.scripts.check.split(' && ');
     const marketplace = steps('build-test').find((s) => s.run?.includes('check-marketplace.mjs'));
     const report = steps('build-test').find((s) => s.run?.includes('Get-SkillReport.ps1'));
     const formatting = steps('build-test').find((s) => s.run === 'pnpm run format:check');
@@ -97,11 +108,11 @@ describe('ci.yml checks', () => {
     expect(checkCommands).toContain(analysis?.run);
     expect(analyzerInstall?.run).toMatch(/-RequiredVersion \d+\.\d+\.\d+/);
 
-    const ciTest = steps('test').find((s) => s.run === 'pnpm run test:ci');
-    expect(pkg.scripts['test:ci'].replace(/ --coverage$/, '')).toBe(pkg.scripts.test);
-    expect(pkg.scripts.test).toBe('vitest run');
+    const shardRun = steps('test-shard').find((s) => s.run?.includes('vitest run'));
+    expect(pkgJson.scripts['test:ci']).toBe(pkgJson.scripts.test);
+    expect(pkgJson.scripts.test).toBe('vitest run');
     expect(checkCommands).toContain('pnpm test');
-    expect(ciTest?.run).toBe('pnpm run test:ci');
+    expect(shardRun?.run).toContain('vitest run');
   });
 });
 
@@ -111,9 +122,8 @@ describe('ci.yml formatting check and triggers', () => {
   });
 
   it('runs biome check (format and lint) in CI and biome format --write locally', () => {
-    const pkg = JSON.parse(fs.readFileSync(path.resolve(__dirname, '../../package.json'), 'utf-8'));
-    expect(pkg.scripts.format).toBe('biome format --write .');
-    expect(pkg.scripts['format:check']).toBe('biome check .');
+    expect(pkgJson.scripts.format).toBe('biome format --write .');
+    expect(pkgJson.scripts['format:check']).toBe('biome check .');
     expect(steps('build-test').some((s) => s.run === 'pnpm run format:check')).toBe(true);
   });
 });

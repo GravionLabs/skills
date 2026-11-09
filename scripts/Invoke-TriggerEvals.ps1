@@ -8,7 +8,7 @@
   `claude -p --output-format stream-json --verbose`, detects Skill tool_use calls and scores them
   with scripts/skill-trigger-score.mjs (plain Node, no build).
   -DryRun / -WhatIf lists the prompts and the command without calling claude. Skills must be installed
-  (`npx skills add GravionLabs/skills`) in the directory the script runs from. See docs/usage/trigger-evals.md.
+  (`npx skills add GravionLabs/skills`) in the directory the script runs from. See site/usage/trigger-evals.md.
 .PARAMETER Runs     Repeats per prompt (default 3).
 .PARAMETER Out      Results JSON (default evals/results/trigger-results.json).
 .PARAMETER Baseline Earlier results JSON; fail when a rate drops more than 5 points.
