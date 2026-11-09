@@ -14,6 +14,7 @@
   for every child process it starts. An emitter reports when it has no AGENT_EVENTS_RUN (no run owner, interactive /deliver),
   created the run, or has `owner`; an emitter with a run but without `owner` (a nested one) skips the sink. An interactive
   session that exports only AGENT_EVENTS_RUN is therefore treated as nested. Backend none or a failing call: no-op, the event is written anyway.
+  Nested guard (#411, #463): a nested emitter (AGENT_EVENTS_RUN set, AGENT_EVENTS_TERMINAL not owner) writes no run.started or run.finished, with or without an explicit -Run equal to the inherited run.
   Retention: -Type run.started deletes finished and abandoned runs older than AGENT_EVENTS_KEEP_DAYS (default 7) and all
   beyond the newest AGENT_EVENTS_KEEP (default 100), in the events dir and in .agents/deliver-loop/<run>/ (ProgressRetention.ps1).
   Running runs (live pid) and the current run are kept.
@@ -160,7 +161,8 @@ try {
   }
   $run = if ($Run) { $Run } else { $env:AGENT_EVENTS_RUN }
   # a nested emitter (inherited AGENT_EVENTS_RUN without the owner marker, no -Run) neither starts nor finishes the owner's run (#411)
-  if (-not $PSBoundParameters.ContainsKey('Run') -and $env:AGENT_EVENTS_RUN -and $env:AGENT_EVENTS_TERMINAL -ne 'owner' -and $Type -in 'run.started', 'run.finished') { exit 0 }
+  # an explicit -Run equal to the inherited run is nested as well (#463)
+  if ($env:AGENT_EVENTS_RUN -and $env:AGENT_EVENTS_TERMINAL -ne 'owner' -and $Type -in 'run.started', 'run.finished' -and (-not $PSBoundParameters.ContainsKey('Run') -or $Run -eq $env:AGENT_EVENTS_RUN)) { exit 0 }
   $created = $false
   if (-not $run) {
     if ($Type -ne 'run.started') { exit 0 }
