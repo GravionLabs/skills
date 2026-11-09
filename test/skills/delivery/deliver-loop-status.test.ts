@@ -7,7 +7,7 @@ import { createFakeGh } from '../../helpers/fake-gh';
 import { PwshWorker } from '../../helpers/pwsh-worker';
 
 // #329: Invoke-DeliverLoop.ps1 prints a progress line and reports
-// deliver_progress to the terminal backend (herdr, poimen); gh, claude, herdr, poimen-server are stubs on PATH.
+// no status.json and no calls to the terminal backend (herdr, poimen); gh, claude, herdr, poimen-server are stubs on PATH.
 // Own file: deliver-loop.test.ts is at its time budget.
 const ROOT = path.resolve(__dirname, '../../..');
 const SCRIPT = path.join(ROOT, 'skills/delivery/deliver/scripts/Invoke-DeliverLoop.ps1');
@@ -141,74 +141,14 @@ const s = JSON.parse(fs.readFileSync(f, 'utf8')); s.issues[10].state = 'closed';
       expect(r.stderr).toBe('');
     });
 
-    it('herdr: deliver_progress joins the tokens and is cleared on exit', async () => {
-      const r = await run(setup(), { HERDR_ENV: '1', HERDR_PANE_ID: 'p7' });
-      expect(r.status).toBe(0);
-      const calls = lines('herdr-calls.txt').filter((l) => /report-metadata/.test(l));
-      expect(calls.some((l) => l.includes('--token deliver_progress=1/2'))).toBe(true);
-      expect(calls.at(-1)).toContain('--clear-token deliver_progress');
+    it('herdr and poimen: the loop calls neither backend for tokens or agent state (#417)', async () => {
+      const h = await run(setup(), { HERDR_ENV: '1', HERDR_PANE_ID: 'p7' });
+      expect(h.status).toBe(0);
+      expect(lines('herdr-calls.txt')).toEqual([]);
+      const p = await run(setup(), { POIMEN_SOCKET: '/s', POIMEN_TERMINAL_ID: 't1' });
+      expect(p.status).toBe(0);
       expect(lines('poimen-calls.txt')).toEqual([]);
       noStatusFile();
-    });
-
-    it('poimen: the same tokens and the lifecycle state go through poimen-server, a failing server does not stop the loop', async () => {
-      const r = await run(setup({ backendFails: true }), {
-        POIMEN_SOCKET: '/s',
-        POIMEN_TERMINAL_ID: 't1',
-      });
-      expect(r.status).toBe(0);
-      const calls = lines('poimen-calls.txt');
-      expect(
-        calls.some(
-          (l) =>
-            l.startsWith('report tokens --source deliver --ttl 3600 ') &&
-            l.includes(' deliver=#10'),
-        ),
-      ).toBe(true);
-      // #372: the sink reports deliver_progress with milestone.progress, the step tokens with step.finished
-      expect(calls.some((l) => l.includes(' deliver_step='))).toBe(true);
-      expect(calls.some((l) => l.includes(' deliver_progress=1/2'))).toBe(true);
-      expect(calls.some((l) => l.startsWith('report agent --state working'))).toBe(true);
-      expect(calls).toContain('report clear --source deliver');
-      expect(calls.some((l) => l.includes('--token') || l.includes('--ttl-ms'))).toBe(false);
-      expect(lines('herdr-calls.txt')).toEqual([]);
-      noStatusFile();
-    });
-  },
-);
-
-// The adapter alone: a failing or missing poimen-server warns once per run (stderr), calls return normally.
-describe.skipIf(!hasPwsh || process.platform === 'win32')(
-  'TerminalBackend.ps1 poimen warning',
-  () => {
-    const backend = path.join(ROOT, 'skills/delivery/deliver/scripts/TerminalBackend.ps1');
-    const call = (bin: string) =>
-      spawnSync(
-        'pwsh',
-        [
-          '-NoProfile',
-          '-Command',
-          `. '${backend}'; foreach ($i in 1..3) { Set-LoopTokens -Token @{ deliver = '#1'; deliver_progress = '1/2' } -Backend poimen }; Set-LoopAgentState -State idle -Backend poimen; 'ok'`,
-        ],
-        {
-          encoding: 'utf8',
-          env: { ...process.env, PATH: `${bin}${path.delimiter}${process.env.PATH}` },
-        },
-      );
-
-    it.each([
-      ['exits 1', '#!/bin/sh\nexit 1\n'],
-      ['is missing', null],
-    ])('poimen-server %s: one warning, the call returns', (_n, body) => {
-      const bin = fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(), 'poimen-warn-')));
-      try {
-        if (body) fs.writeFileSync(path.join(bin, 'poimen-server'), body, { mode: 0o755 });
-        const r = call(bin);
-        expect(r.stdout.trim()).toBe('ok');
-        expect(r.stderr.match(/poimen-server/g)).toHaveLength(1);
-      } finally {
-        fs.rmSync(bin, { recursive: true, force: true });
-      }
     });
   },
 );

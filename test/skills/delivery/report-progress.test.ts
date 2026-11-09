@@ -105,7 +105,7 @@ describe.skipIf(!hasPwsh || process.platform === 'win32')('Report-Progress.ps1',
     const env = baseEnv({
       AGENT_EVENTS_DIR: dir,
       AGENT_EVENTS_RUN: run,
-      AGENT_EVENTS_TERMINAL: 'owner',
+      AGENT_EVENTS_OWNER: '1',
     });
     const calls: string[][] = [
       ['-Type', 'milestone.progress', '-Closed', '7', '-Total', '19'],
@@ -186,12 +186,12 @@ describe.skipIf(!hasPwsh || process.platform === 'win32')('Report-Progress.ps1',
     const nested = baseEnv({
       AGENT_EVENTS_DIR: dir,
       AGENT_EVENTS_RUN: 'loop-run2',
-      AGENT_EVENTS_TERMINAL: '',
+      AGENT_EVENTS_OWNER: '',
     });
     const own = baseEnv({
       AGENT_EVENTS_DIR: dir,
       AGENT_EVENTS_RUN: 'loop-run2',
-      AGENT_EVENTS_TERMINAL: 'owner',
+      AGENT_EVENTS_OWNER: '1',
     });
     await worker.run(['-Type', 'run.started', '-Source', 'loop', '-Run', 'loop-run2'], {
       cwd: repo,
@@ -216,12 +216,12 @@ describe.skipIf(!hasPwsh || process.platform === 'win32')('Report-Progress.ps1',
     const env = baseEnv({
       AGENT_EVENTS_DIR: dir,
       AGENT_EVENTS_RUN: 'loop-run',
-      AGENT_EVENTS_TERMINAL: '',
+      AGENT_EVENTS_OWNER: '',
     });
     const own = baseEnv({
       AGENT_EVENTS_DIR: dir,
       AGENT_EVENTS_RUN: 'loop-run',
-      AGENT_EVENTS_TERMINAL: 'owner',
+      AGENT_EVENTS_OWNER: '1',
     });
     expect(
       (await worker.run(['-Type', 'run.started', '-Source', 'loop'], { cwd: repo, env: own }))
@@ -285,7 +285,7 @@ describe.skipIf(!hasPwsh || process.platform === 'win32')('Report-Progress.ps1',
     const env = baseEnv({
       AGENT_EVENTS_DIR: dir,
       AGENT_EVENTS_RUN: 'tones',
-      AGENT_EVENTS_TERMINAL: 'owner',
+      AGENT_EVENTS_OWNER: '1',
     });
     const cases: [string[], string, boolean?][] = [
       [['-Type', 'attention', '-Kind', 'pr_opened'], 'success'],

@@ -1,6 +1,6 @@
 <#
 .SYNOPSIS
-  Terminal backend adapter of the deliver scripts: the only file that calls the terminal CLI (herdr, poimen-server).
+  Terminal backend adapter of the deliver scripts: the only file that calls the terminal CLI (herdr).
 .DESCRIPTION
   Dot-source it from Invoke-DeliverLoop.ps1, Start-LoopWorkspace.ps1 and Switch-LogPane.ps1. Backend by Get-TerminalBackend:
   DELIVER_TERMINAL_BACKEND (herdr, poimen, none) wins; else POIMEN_TERMINAL_ID and POIMEN_SOCKET -> poimen; HERDR_ENV=1 -> herdr;
@@ -13,7 +13,6 @@
 
 $script:LogPaneLabel = 'deliver-log'
 $script:BackendNoticed = $false
-$script:PoimenWarned = $false
 
 function Get-TerminalBackend {
   $forced = "$env:DELIVER_TERMINAL_BACKEND".Trim().ToLowerInvariant()
@@ -36,20 +35,7 @@ function Get-LoopPane([string]$Backend = (Get-TerminalBackend)) {
 function Write-BackendNotice([string]$Backend, [string]$Operation) {
   if ($script:BackendNoticed) { return }
   $script:BackendNoticed = $true
-  [Console]::Error.WriteLine("deliver: terminal backend '$Backend' does not support $Operation; terminal display calls are skipped.")
-}
-
-# poimen-server call (terminal.report_tokens and friends): a missing binary, server or method warns once per run, the loop goes on.
-function Invoke-Poimen([string[]]$PoimenArgs) {
-  $failed = $false
-  try {
-    & poimen-server @PoimenArgs 2>$null | Out-Null
-    $failed = $LASTEXITCODE -ne 0
-  } catch { $failed = $true }
-  if ($failed -and -not $script:PoimenWarned) {
-    $script:PoimenWarned = $true
-    [Console]::Error.WriteLine("deliver: poimen-server '$($PoimenArgs[0..1] -join ' ')' failed (server or method missing); poimen display calls may be skipped.")
-  }
+  [Console]::Error.WriteLine("deliver: terminal backend '$Backend' does not support $Operation; terminal calls are skipped.")
 }
 
 # "Terminal" for the loop: stdout is not redirected. DELIVER_LOOP_ASSUME_TTY=1 forces true (tests only).
@@ -57,37 +43,7 @@ function Test-LoopTerminal {
   return (-not [Console]::IsOutputRedirected) -or $env:DELIVER_LOOP_ASSUME_TTY -eq '1'
 }
 
-function Set-LoopTokens {
-  [CmdletBinding()]
-  param([string]$Pane, [Parameter(Mandatory)][System.Collections.IDictionary]$Token, [int]$TtlMs = 3600000, [string]$Backend = (Get-TerminalBackend))
-  try {
-    $tokenArgs = @($Token.Keys | ForEach-Object { '--token'; "$_=$($Token[$_])" })
-    switch ($Backend) {
-      'herdr' { if ($Pane) { & herdr pane report-metadata $Pane --source deliver @tokenArgs --ttl-ms $TtlMs 2>$null | Out-Null } }
-      'poimen' {
-        $pairs = @($Token.Keys | ForEach-Object { "$_=$($Token[$_])" })
-        $ttlSec = [int][math]::Ceiling($TtlMs / 1000)
-        Invoke-Poimen (@('report', 'tokens', '--source', 'deliver', '--ttl', "$ttlSec") + $pairs)
-      }
-      default { Write-BackendNotice $Backend 'tokens' }
-    }
-  } catch { Write-Verbose "$Backend failed: $_" }
-}
-
-function Clear-LoopTokens {
-  [CmdletBinding()]
-  param([string]$Pane, [Parameter(Mandatory)][string[]]$Name, [string]$Backend = (Get-TerminalBackend))
-  try {
-    $clearArgs = @($Name | ForEach-Object { '--clear-token'; $_ })
-    switch ($Backend) {
-      'herdr' { if ($Pane) { & herdr pane report-metadata $Pane --source deliver @clearArgs 2>$null | Out-Null } }
-      'poimen' { Invoke-Poimen @('report', 'clear', '--source', 'deliver') }  # clears all tokens of the source
-      default { Write-BackendNotice $Backend 'tokens' }
-    }
-  } catch { Write-Verbose "$Backend failed: $_" }
-}
-
-# True when another agent than `deliver` runs in the pane (herdr only; report-agent would replace it).
+# True when another agent than `deliver` runs in the pane (herdr only).
 function Test-LoopAgentConflict([string]$Pane, [string]$Backend = (Get-TerminalBackend)) {
   if ($Backend -ne 'herdr' -or -not $Pane) { return $false }
   try {
@@ -96,31 +52,6 @@ function Test-LoopAgentConflict([string]$Pane, [string]$Backend = (Get-TerminalB
     $a = (($out -join "`n") | ConvertFrom-Json).result.pane.agent
     return [bool]$a -and $a -ne 'deliver'
   } catch { return $false }
-}
-
-# Live herdr (2026-11): the pane id must come right after the subcommand; release-agent rejects it as trailing positional.
-function Set-LoopAgentState {
-  [CmdletBinding()]
-  param([string]$Pane, [Parameter(Mandatory)][ValidateSet('working', 'blocked', 'idle')][string]$State, [string]$Backend = (Get-TerminalBackend))
-  try {
-    switch ($Backend) {
-      'herdr' { if ($Pane) { & herdr pane report-agent $Pane --state $State --source deliver-loop --agent deliver 2>$null | Out-Null } }
-      'poimen' { Invoke-Poimen @('report', 'agent', '--state', $State, '--source', 'deliver-loop', '--agent', 'deliver') }
-      default { Write-BackendNotice $Backend 'agent state' }
-    }
-  } catch { Write-Verbose "$Backend failed: $_" }
-}
-
-function Clear-LoopAgentState {
-  [CmdletBinding()]
-  param([string]$Pane, [string]$Backend = (Get-TerminalBackend))
-  try {
-    switch ($Backend) {
-      'herdr' { if ($Pane) { & herdr pane release-agent $Pane --source deliver-loop --agent deliver 2>$null | Out-Null } }
-      'poimen' { Invoke-Poimen @('report', 'agent', '--release', '--source', 'deliver-loop', '--agent', 'deliver') }
-      default { Write-BackendNotice $Backend 'agent state' }
-    }
-  } catch { Write-Verbose "$Backend failed: $_" }
 }
 
 # Own workspace with a tab and a pane running -Command. Returns $true when started, $false for a backend without
