@@ -74,10 +74,6 @@ describe.skipIf(!hasPwsh || process.platform === 'win32')('TerminalBackend.ps1',
 
   it('none: every operation is a no-op with exactly one notice per run', () => {
     const r = run(`
-      Set-LoopTokens -Pane p1 -Token ([ordered]@{ deliver = '#1' })
-      Clear-LoopTokens -Pane p1 -Name deliver
-      Set-LoopAgentState -Pane p1 -State working
-      Clear-LoopAgentState -Pane p1
       Open-LogPane -LogFile (Join-Path '${dir}' 'x.log')
       'workspace=' + (New-LoopWorkspace -Cwd '${dir}' -Label l -TabLabel t -Command c)
       'switch=' + (Switch-LogPane -Pane p1 -Tab t1)`);
@@ -88,65 +84,38 @@ describe.skipIf(!hasPwsh || process.platform === 'win32')('TerminalBackend.ps1',
     expect(recorded()).toEqual([]);
   });
 
-  it('herdr: tokens and agent state keep the pane id right after the subcommand', () => {
+  it('poimen: workspace and log pane are notice-only', () => {
     const r = run(
-      `Set-LoopTokens -Pane w1:p2 -Token ([ordered]@{ deliver = '#7'; deliver_step = '1/2 impl' }) -TtlMs 5
-       Clear-LoopTokens -Pane w1:p2 -Name deliver, deliver_pr
-       Set-LoopAgentState -Pane w1:p2 -State blocked
-       Clear-LoopAgentState -Pane w1:p2`,
-      { HERDR_ENV: '1' },
-    );
-    expect(r.stderr).toBe('');
-    expect(recorded()).toEqual([
-      'herdr pane report-metadata w1:p2 --source deliver --token deliver=#7 --token deliver_step=1/2 impl --ttl-ms 5',
-      'herdr pane report-metadata w1:p2 --source deliver --clear-token deliver --clear-token deliver_pr',
-      'herdr pane report-agent w1:p2 --state blocked --source deliver-loop --agent deliver',
-      'herdr pane release-agent w1:p2 --source deliver-loop --agent deliver',
-    ]);
-  });
-
-  it('poimen: tokens and agent state use poimen-server report; workspace and log pane are notice-only', () => {
-    const r = run(
-      `Set-LoopTokens -Pane t1 -Token ([ordered]@{ deliver = '#7' }) -TtlMs 5
-       Clear-LoopTokens -Pane t1 -Name deliver
-       Set-LoopAgentState -Pane t1 -State idle
-       Clear-LoopAgentState -Pane t1
-       Open-LogPane -LogFile '${path.join(dir, 'x.log')}'
+      `Open-LogPane -LogFile '${path.join(dir, 'x.log')}'
        'workspace=' + (New-LoopWorkspace -Cwd '${dir}' -Label l -TabLabel t -Command c)`,
       { POIMEN_TERMINAL_ID: 't1', POIMEN_SOCKET: '/s' },
     );
     expect(r.stdout).toContain('workspace=False');
     expect(r.stderr.match(/terminal backend 'poimen'/g)).toHaveLength(1);
-    expect(recorded()).toEqual([
-      'poimen-server report tokens --source deliver --ttl 1 deliver=#7',
-      'poimen-server report clear --source deliver',
-      'poimen-server report agent --state idle --source deliver-loop --agent deliver',
-      'poimen-server report agent --release --source deliver-loop --agent deliver',
-    ]);
+    expect(recorded()).toEqual([]);
   });
 
-  it('a failing backend call does not fail the caller', () => {
-    stub('herdr', 'exit 1');
-    stub('poimen-server', 'exit 1');
-    const r = run(
-      `Set-LoopTokens -Pane p -Token ([ordered]@{ a = 'b' }); Set-LoopAgentState -Pane p -State idle; 'ok'`,
-      { HERDR_ENV: '1' },
-    );
-    expect(r.status).toBe(0);
-    expect(r.stdout.trim()).toBe('ok');
-    const p = run(`Set-LoopAgentState -Pane p -State idle; 'ok'`, {
-      DELIVER_TERMINAL_BACKEND: 'poimen',
-    });
-    expect(p.stdout.trim()).toBe('ok');
+  it('the display state functions are gone: nothing reports tokens or agent state (ADR 0002, #417)', () => {
+    const src = fs.readFileSync(path.join(scripts, 'TerminalBackend.ps1'), 'utf8');
+    for (const gone of [
+      'Set-LoopTokens',
+      'Clear-LoopTokens',
+      'Set-LoopAgentState',
+      'Clear-LoopAgentState',
+      'Invoke-Poimen',
+    ])
+      expect(src).not.toContain(gone);
+    for (const f of fs.readdirSync(scripts).filter((x) => x.endsWith('.ps1'))) {
+      const text = fs.readFileSync(path.join(scripts, f), 'utf8');
+      expect(text, f).not.toMatch(/report-metadata|report-agent|release-agent|poimen-server/);
+    }
   });
 
   it('only TerminalBackend.ps1 calls the terminal CLI in the deliver scripts', () => {
     const offenders = fs
       .readdirSync(scripts)
       .filter((f) => f.endsWith('.ps1') && f !== 'TerminalBackend.ps1')
-      .filter((f) =>
-        /&\s*(herdr|poimen-server)\b/.test(fs.readFileSync(path.join(scripts, f), 'utf8')),
-      );
+      .filter((f) => /&\s*herdr\b/.test(fs.readFileSync(path.join(scripts, f), 'utf8')));
     expect(offenders).toEqual([]);
   });
 });

@@ -74,7 +74,7 @@ describe.skipIf(!hasPwsh || process.platform === 'win32')(
 const nFile = path.join(cwd, 'iteration'); const n = (fs.existsSync(nFile) ? Number(fs.readFileSync(nFile, 'utf8')) : 0) + 1;
 fs.writeFileSync(nFile, String(n));
 const env = process.env; const ev = path.join(env.AGENT_EVENTS_DIR, env.AGENT_EVENTS_RUN + '.jsonl');
-fs.appendFileSync(path.join(cwd, 'harness-env.jsonl'), JSON.stringify({ run: env.AGENT_EVENTS_RUN, terminal: env.AGENT_EVENTS_TERMINAL || '', dir: env.AGENT_EVENTS_DIR, herdr: env.HERDR_ENV || '' }) + '\\n');
+fs.appendFileSync(path.join(cwd, 'harness-env.jsonl'), JSON.stringify({ run: env.AGENT_EVENTS_RUN, owner: env.AGENT_EVENTS_OWNER || '', dir: env.AGENT_EVENTS_DIR }) + '\\n');
 fs.copyFileSync(ev, path.join(cwd, 'snap' + n + '-events.jsonl'));
 const f = ${JSON.stringify(state)}; const s = JSON.parse(fs.readFileSync(f, 'utf8'));
 // the harness reports its steps itself (deliver SKILL.md): Report-Progress.ps1, nested in the loop's run
@@ -107,7 +107,7 @@ fs.writeFileSync(f, JSON.stringify(s));`,
           DELIVER_TERMINAL_BACKEND: '',
           NO_COLOR: '1',
           AGENT_EVENTS_RUN: 'stale-run-of-the-shell',
-          AGENT_EVENTS_TERMINAL: 'owner',
+          AGENT_EVENTS_OWNER: '1',
         },
       });
     const eventFile = () => {
@@ -181,8 +181,8 @@ fs.writeFileSync(f, JSON.stringify(s));`,
         .split('\n')
         .map((l) => JSON.parse(l));
       expect(envs).toEqual([
-        { run: id, terminal: '', dir: path.dirname(file), herdr: '' },
-        { run: id, terminal: '', dir: path.dirname(file), herdr: '' },
+        { run: id, owner: '', dir: path.dirname(file) },
+        { run: id, owner: '', dir: path.dirname(file) },
       ]);
 
       // the loop writes no status.json; the state is the projection of the event file

@@ -70,7 +70,7 @@ describe.skipIf(!hasPwsh || process.platform === 'win32')('Invoke-DeliverLoop.ps
       { type: 'assistant', message: { content: [{ type: 'text', text: '#401 merged: squash' }] } },
     ];
 
-    it('logs one line per step with the agent prefix, tool errors, writes every record to the jsonl and owns the herdr display: harness runs without HERDR_ENV, pane tokens per progress line through the sink, cleared at the end (#16, #372)', async () => {
+    it('logs one line per step with the agent prefix, tool errors, writes every record to the jsonl and pushes nothing to herdr (#417)', async () => {
       // 401 is paused by the run (needs-decision) and counts as progress; 402 (open blocker), 403 (needs-refinement) and
       // 404 (interactive) stay behind, so the loop ends blocked
       const gh = fx.setup({
@@ -117,26 +117,8 @@ describe.skipIf(!hasPwsh || process.platform === 'win32')('Invoke-DeliverLoop.ps
         .trim()
         .split('\n');
       expect(jsonl.map((l) => JSON.parse(l))).toEqual(stream);
-      expect(fx.read('harness-calls.txt')).toContain('herdr_env=[]');
-      const calls = fx
-        .read('herdr-calls.txt')
-        .trim()
-        .split('\n')
-        .filter((l) => l.includes('report-metadata'));
-      // #372: the terminal sink of Report-Progress sets the tokens per step.finished: deliver step n/7 and the tone
-      const p =
-        'pane report-metadata p7 --source deliver --token deliver=#401 --token deliver_step=';
-      const pr = '--token deliver_pr=#55';
-      const ttl = '--ttl-ms 3600000';
-      expect(calls).toEqual([
-        `${p}6/7 pr: opened #55 ${pr} --token deliver_tone=success ${ttl}`,
-        // the PR token stays for later steps; the step value is cut at 80 characters
-        `${p}4/7 review: ${'x'.repeat(68)} ${pr} --token deliver_tone=neutral ${ttl}`,
-        `${p}7/7 ci: red ${pr} --token deliver_tone=danger ${ttl}`,
-        `${p}7/7 merged: squash ${pr} --token deliver_tone=success ${ttl}`,
-        'pane report-metadata p7 --source deliver --clear-token deliver --clear-token deliver_step --clear-token deliver_pr --clear-token deliver_progress --clear-token deliver_tone',
-      ]);
-      expect(calls.join('\n')).not.toContain('display-agent');
+      // #417: the loop pushes no pane tokens and no agent state; the events are the only output
+      expect(fx.read('herdr-calls.txt')).not.toMatch(/report-metadata|report-agent|release-agent/);
       // no -LogPane: opens no pane (a TTY and a herdr pane are present); the plain log has no escape codes, stdout is colored and no .ansi.log exists
       expect(fx.read('herdr-calls.txt')).not.toContain('pane list');
       expect(lines).not.toContain(ESC);

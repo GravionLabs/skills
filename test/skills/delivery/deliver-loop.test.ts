@@ -74,7 +74,7 @@ describe.skipIf(!hasPwsh || process.platform === 'win32')('Invoke-DeliverLoop.ps
       { type: 'session.idle', data: {} },
     ];
 
-    it('starts copilot -p per PBI with the default model auto (#220) and non-interactive permissions, logs steps, notices and herdr tokens; stop rules and exit code as for claude', async () => {
+    it('starts copilot -p per PBI with the default model auto (#220) and non-interactive permissions, logs steps and notices; stop rules and exit code as for claude', async () => {
       const gh = fx.setup({
         issues: { 7: pbi() },
         effect: 'close-first',
@@ -94,7 +94,6 @@ describe.skipIf(!hasPwsh || process.platform === 'win32')('Invoke-DeliverLoop.ps
       expect(fx.harnessCalls()).toEqual([
         '-p /deliver 7 --unattended --max 1 --model auto --allow-all-tools --allow-all-paths --allow-all-urls --no-ask-user --output-format json',
       ]);
-      expect(fx.read('harness-calls.txt')).toContain('herdr_env=[]');
       const lines = fx.read('.agents/deliver-loop.log');
       // assistant text is logged as it is; the step line comes from the event
       expect(lines).toMatch(/\d\d:\d\d:\d\d » #7 pr: opened #55/);
@@ -102,9 +101,6 @@ describe.skipIf(!hasPwsh || process.platform === 'win32')('Invoke-DeliverLoop.ps
       expect(lines).toMatch(/\d\d:\d\d:\d\d bash ls -la/);
       expect(lines).toMatch(/\d\d:\d\d:\d\d \[subagent\] view src\/a\.ts/);
       expect(lines).toMatch(/\d\d:\d\d:\d\d ✗ boom/);
-      expect(fx.read('herdr-calls.txt')).toContain(
-        'deliver_step=7/7 ci: red --token deliver_pr=#55 --token deliver_tone=danger',
-      );
       if (process.platform === 'darwin') {
         // osascript stub: notifications exist only on macOS
         expect(fx.read('notices.txt')).toContain('#7 PR opened');
