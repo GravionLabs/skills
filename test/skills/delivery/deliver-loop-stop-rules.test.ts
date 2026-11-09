@@ -67,4 +67,49 @@ describe.skipIf(!hasPwsh || process.platform === 'win32')('Invoke-DeliverLoop.ps
     expect(fx.harnessCalls()).toEqual([]);
     expect(JSON.parse(fx.read('state.json')).issues[11].state ?? 'OPEN').toBe('OPEN');
   });
+  describe('wait ceiling stop (#461)', () => {
+    const line =
+      'Background tasks still running 10m after the last turn (subagent "Implement PBI #1"); stopping them. Set CLAUDE_CODE_PRINT_BG_WAIT_CEILING_MS=0 to wait indefinitely.';
+    const unset = { CLAUDE_CODE_PRINT_BG_WAIT_CEILING_MS: undefined };
+
+    it('names the ceiling when the iteration made no progress and the harness stopped a subagent: no progress, exit 1', async () => {
+      const gh = fx.setup({ issues: { 31: pbi() }, milestones: { M7: [31] }, stderr: line });
+      const r = await fx.run(gh, ['-Milestone', 'M7'], {
+        ...unset,
+        CLAUDE_CODE_PRINT_BG_WAIT_CEILING_MS: '600000',
+      });
+      expect(r.status).toBe(1);
+      expect(r.stdout).toContain(
+        'no progress: a subagent was stopped by the wait ceiling (CLAUDE_CODE_PRINT_BG_WAIT_CEILING_MS=600000)',
+      );
+      expect(r.stdout).not.toContain('the open PBIs did not change');
+      expect(r.stdout).toContain('loop result: no progress');
+    });
+
+    it('reports the default 0 when the loop set the variable itself', async () => {
+      const gh = fx.setup({ issues: { 31: pbi() }, milestones: { M7: [31] }, stderr: line });
+      const r = await fx.run(gh, ['-Milestone', 'M7'], unset);
+      expect(r.status).toBe(1);
+      expect(r.stdout).toContain('(CLAUDE_CODE_PRINT_BG_WAIT_CEILING_MS=0)');
+    });
+
+    it('keeps the plain reason without the stderr line', async () => {
+      const gh = fx.setup({ issues: { 31: pbi() }, milestones: { M7: [31] } });
+      const r = await fx.run(gh, ['-Milestone', 'M7'], unset);
+      expect(r.status).toBe(1);
+      expect(r.stdout).toContain('no progress: the open PBIs did not change');
+    });
+
+    it('does not blame the ceiling when the iteration delivered the PBI', async () => {
+      const gh = fx.setup({
+        issues: { 31: pbi() },
+        milestones: { M7: [31] },
+        effect: 'close-first',
+        stderr: line,
+      });
+      const r = await fx.run(gh, ['-Milestone', 'M7'], unset);
+      expect(r.status).toBe(0);
+      expect(r.stdout).not.toContain('wait ceiling');
+    });
+  });
 });
