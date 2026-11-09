@@ -63,7 +63,11 @@ describe.skipIf(!hasPwsh || process.platform === 'win32')('Invoke-DeliverLoop.ps
 
     it.each([
       ['claude', {}, 'ceiling=[0] copilot_wait=[]'],
-      ['claude', { CLAUDE_CODE_PRINT_BG_WAIT_CEILING_MS: '90000' }, 'ceiling=[90000] copilot_wait=[]'],
+      [
+        'claude',
+        { CLAUDE_CODE_PRINT_BG_WAIT_CEILING_MS: '90000' },
+        'ceiling=[90000] copilot_wait=[]',
+      ],
       ['copilot', {}, 'ceiling=[] copilot_wait=[3600]'],
       ['copilot', { COPILOT_TASK_WAIT_TIMEOUT_SECONDS: '60' }, 'ceiling=[] copilot_wait=[60]'],
     ])('%s with %j: the child sees %s', async (harness, env, seen) => {
