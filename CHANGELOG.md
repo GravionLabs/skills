@@ -5,12 +5,22 @@ Versioning follows [Semantic Versioning](https://semver.org/).
 
 ---
 
+## [4.1.1] — 2026-11-10
+
+### Refactoring
+- **deliver**: Emit agent-events core plus deliver profile (#452) (#518)
+
+
 ## [4.1.0] — 2026-11-09
 
 ### Bug Fixes
 - **github-release**: Recognize the local path of release-branch.yml (#506)
 - **deliver**: A nested session's run.finished no longer sets the loop result to done (#463)
 - **deliver**: Loop sets a wait ceiling that does not cut a subagent off (#461)
+
+
+### Documentation
+- Update CHANGELOG.md for v4.1.0 [skip ci]
 
 
 ### Features
