@@ -238,6 +238,28 @@ describe.skipIf(!hasPwsh || process.platform === 'win32')(
       expect(await status('alive', process.pid)).toBe('running');
     });
 
+    it('a delivered PBI without a seen PR URL has prUrl null, not the issue URL', async () => {
+      const [start] = fixtureLines('running');
+      const subject = { kind: 'github.issue', id: 'GravionLabs/skills#380', title: 'x' };
+      const r = await fold(
+        writeEvents(
+          'no-pr',
+          [
+            start,
+            ev(2, 'task.started', { task: 'issue-380', subject }),
+            ev(3, 'task.finished', {
+              task: 'issue-380',
+              outcome: 'succeeded',
+              deliver: { outcome: 'delivered' },
+            }),
+          ].join('\n') + '\n',
+        ),
+      );
+      expect(r.state.deliver.delivered).toHaveLength(1);
+      expect(r.state.deliver.delivered[0].pbi).toBe(380);
+      expect(r.state.deliver.delivered[0].prUrl).toBeNull();
+    });
+
     it('a later attempt of an issue replaces its earlier outcome; merging waits until delivered', async () => {
       const [start] = fixtureLines('running');
       const subject = { kind: 'github.issue', id: 'GravionLabs/skills#380', title: 'x' };

@@ -178,7 +178,7 @@ end {
         if ($release.testIssue -and $release.testIssue.number -eq $nr -and $needs.Contains("$nr") -and $needs["$nr"].reason -eq 'RC test') { $needs.Remove("$nr") }
         switch ($o) {
           'delivered' {
-            $delivered["$nr"] = [ordered]@{ pbi = $nr; url = (Get-IssueUrl $nr); prUrl = $(if ($prs.ContainsKey($nr)) { $prs[$nr] } else { Get-IssueUrl $nr }) }
+            $delivered["$nr"] = [ordered]@{ pbi = $nr; url = (Get-IssueUrl $nr); prUrl = $(if ($prs.ContainsKey($nr)) { $prs[$nr] } else { $null }) }
             Remove-Nr $nr 'blocked', 'paused', 'needs', 'merging'
           }
           'skipped' { Remove-Nr $nr 'blocked', 'paused', 'needs', 'merging' }
