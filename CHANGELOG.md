@@ -5,11 +5,23 @@ Versioning follows [Semantic Versioning](https://semver.org/).
 
 ---
 
+## [4.1.3] — 2026-11-10
+
+### Bug Fixes
+- **deliver**: Delivered[].prUrl falls back to the issue URL (#511) (#522)
+- **deliver**: Delivered[].prUrl is null without a pull-request link (#511) (#521)
+- **github-release**: Move release/next by fast-forward instead of deleting it (#530)
+
+
 ## [4.1.2] — 2026-11-10
 
 ### Bug Fixes
 - **deliver**: A control session opens no run next to the loop run (#517)
 - **deliver**: Control-session run test uses its own events dir, Select and Watch event ownership stated (#517)
+
+
+### Documentation
+- Update CHANGELOG.md for v4.1.2 [skip ci]
 
 
 ## [4.1.1] — 2026-11-10
