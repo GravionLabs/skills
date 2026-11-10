@@ -127,6 +127,34 @@ fs.writeFileSync(f, JSON.stringify(s));`,
       return JSON.parse(r.stdout);
     };
 
+    // #517: a control session writes no run.started; the loop started from it (no inherited run) leaves exactly one run file
+    it('leaves exactly one run file when started from a control session', async () => {
+      const gh = setup();
+      const eventsDir = path.join(cwd, 'control-events');
+      fs.mkdirSync(eventsDir);
+      const r = await loop.run(['-Milestone', 'M4', '-Model', 'sonnet'], {
+        cwd,
+        env: {
+          ...gh.env(),
+          HERDR_ENV: '',
+          POIMEN_SOCKET: '',
+          DELIVER_TERMINAL_BACKEND: '',
+          NO_COLOR: '1',
+          AGENT_EVENTS_RUN: '',
+          AGENT_EVENTS_OWNER: '',
+          AGENT_EVENTS_DIR: eventsDir,
+        },
+      });
+      expect(r.status).toBe(2);
+      const files = fs.readdirSync(eventsDir).filter((f) => f.endsWith('.jsonl'));
+      expect(files).toHaveLength(1);
+      const all = events(path.join(eventsDir, files[0]));
+      // the control session wrote no run.started before the loop's: the file opens with the loop's and has one
+      expect(all[0]).toMatchObject({ type: 'run.started', deliver: { source: 'loop' } });
+      expect(all.filter((e) => e.type === 'run.started')).toHaveLength(1);
+      expect(all.filter((e) => e.type === 'run.finished')).toHaveLength(1);
+    });
+
     it('emits the run events, hands the run to the harness as nested and writes no status.json', async () => {
       const r = await run(setup());
       expect(r.status).toBe(2);
