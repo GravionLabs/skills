@@ -1,6 +1,7 @@
 import * as fs from 'fs';
 import * as os from 'os';
 import * as path from 'path';
+import { checkEventsDir } from './agent-events';
 import { createFakeGh } from './fake-gh';
 import { reportEventCmd } from './report-progress';
 import { PwshWorker } from './pwsh-worker';
@@ -163,9 +164,23 @@ fs.writeFileSync(f, JSON.stringify(s));`,
     this.read('harness-calls.txt')
       .split('\n')
       .filter((l) => l.startsWith('-p'));
-  run = (gh: ReturnType<typeof createFakeGh>, args: string[], env: NodeJS.ProcessEnv = {}) =>
-    this.worker.run(args, {
+  // Runs the loop; every run file it and the harness stub wrote must be a valid agent-events run with the deliver
+  // profile (#452), else the run throws with the errors.
+  run = async (
+    gh: ReturnType<typeof createFakeGh>,
+    args: string[],
+    env: NodeJS.ProcessEnv = {},
+  ) => {
+    const r = await this.worker.run(args, {
       cwd: this.cwd,
       env: { ...gh.env(), HERDR_ENV: '', NO_COLOR: '', ...env },
     });
+    for (const dir of [env.AGENT_EVENTS_DIR, path.join(this.cwd, '.agents/events')]) {
+      if (!dir || !fs.existsSync(dir)) continue;
+      const errors = checkEventsDir(dir);
+      if (Object.keys(errors).length)
+        throw new Error(`invalid run files: ${JSON.stringify(errors)}`);
+    }
+    return r;
+  };
 }

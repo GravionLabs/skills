@@ -2,13 +2,14 @@
 # Never throws: a failed read or delete is skipped silently.
 
 function Test-RunLive([string]$eventFile, [datetime]$now) {
-  # A run is live when it has no run.finished, its pid lives and the file changed within the last hour.
+  # A run is live when it has no run.finished, its writer pid lives and the file changed within the last hour.
   try {
     if (-not (Test-Path -LiteralPath $eventFile)) { return $false }
     $text = Get-Content -LiteralPath $eventFile -Raw -ErrorAction Stop
     if ($text -match '"type"\s*:\s*"run\.finished"') { return $false }
     if ((Get-Item -LiteralPath $eventFile).LastWriteTimeUtc -lt $now.AddHours(-1)) { return $false }
-    if ($text -notmatch '"pid"\s*:\s*(\d+)') { return $false }
+    # the writer pid of the jsonl-file binding (host "jsonl-file.pid": "<pid>"); "pid": <n> of files before the core format
+    if ($text -notmatch '"(?:jsonl-file\.pid|pid)"\s*:\s*"?(\d+)') { return $false }
     return [bool](Get-Process -Id ([int]$Matches[1]) -ErrorAction SilentlyContinue)
   } catch { return $false }
 }

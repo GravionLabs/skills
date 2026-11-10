@@ -1,13 +1,14 @@
 import * as fs from 'fs';
 import * as path from 'path';
 import Ajv from 'ajv/dist/2020';
-import { AGENT_EVENTS_FIXTURES } from '../../helpers/agent-events';
+import { DELIVER_FIXTURES } from '../../helpers/agent-events';
 
 const ROOT = path.resolve(__dirname, '../../..');
 const SCHEMA = path.join(ROOT, 'skills/delivery/deliver/schema/progress-tokens.schema.json');
 const BACKENDS = path.join(ROOT, 'skills/delivery/deliver/references/terminal-backends.md');
-const FIXTURES = path.join(__dirname, 'fixtures/progress-events'); // *.tokens.json
-const EVENTS = AGENT_EVENTS_FIXTURES; // *.jsonl and *.state.json of the pinned agent-events tag
+// *.jsonl, *.state.json and *.tokens.json of the deliver profile (agent-events core plus deliver@1)
+const FIXTURES = DELIVER_FIXTURES;
+const EVENTS = DELIVER_FIXTURES;
 
 const TOKENS = ['deliver', 'deliver_step', 'deliver_pr', 'deliver_progress', 'deliver_tone'];
 type Tokens = Record<string, string | null>;
@@ -61,7 +62,7 @@ describe('fixtures/progress-events/<case>.tokens.json (#414)', () => {
         }
       });
       expect(entries.filter((e) => e.seq !== undefined).map((e) => e.seq)).toEqual(seqs);
-      const pane = JSON.parse(lines(c)[0]).host?.herdrPane ?? null;
+      const pane = JSON.parse(lines(c)[0]).host?.['herdr.pane'] ?? null;
       for (const e of entries) expect(e.pane).toBe(pane);
     },
   );
@@ -70,9 +71,9 @@ describe('fixtures/progress-events/<case>.tokens.json (#414)', () => {
     '%s: an abandoned entry is the last one, exactly when the run state is abandoned',
     (c) => {
       const entries = expected(c);
-      const result = readJson(path.join(EVENTS, `${c}.state.json`)).result;
+      const status = readJson(path.join(EVENTS, `${c}.state.json`)).status;
       expect(entries.findIndex((e) => e.abandoned)).toBe(
-        result === 'abandoned' ? entries.length - 1 : -1,
+        status === 'abandoned' ? entries.length - 1 : -1,
       );
     },
   );

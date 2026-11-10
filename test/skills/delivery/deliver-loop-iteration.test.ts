@@ -1,6 +1,7 @@
 import { spawnSync } from 'child_process';
 import * as fs from 'fs';
 import * as path from 'path';
+import { checkEventsDir } from '../../helpers/agent-events';
 import { DeliverLoopFixture, pbi, step } from '../../helpers/deliver-loop-fixture';
 
 const SCRIPT = path.resolve(
@@ -175,10 +176,20 @@ describe.skipIf(!hasPwsh || process.platform === 'win32')('Invoke-DeliverLoop.ps
         .trim()
         .split('\n')
         .map((l) => JSON.parse(l));
-      const stopping = evs.filter((e) => e.type === 'attention' && e.kind === 'stopping');
+      const stopping = evs.filter((e) => e.type === 'attention' && e.deliver?.kind === 'stopping');
       expect(stopping).toHaveLength(1);
-      expect(stopping[0]).toMatchObject({ reason: 'stops after #81', tone: 'neutral' });
-      expect(evs.pop()).toMatchObject({ type: 'run.finished', result: 'stopped' });
+      expect(stopping[0]).toMatchObject({
+        reason: 'deliver.stopping',
+        text: 'stops after #81',
+        task: 'issue-81',
+        tone: 'neutral',
+      });
+      expect(evs.pop()).toMatchObject({
+        type: 'run.finished',
+        outcome: 'cancelled',
+        deliver: { result: 'stopped' },
+      });
+      expect(checkEventsDir(path.join(fx.cwd, 'events'))).toEqual({});
     });
   });
 });

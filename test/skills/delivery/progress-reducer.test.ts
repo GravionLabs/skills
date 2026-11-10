@@ -2,31 +2,39 @@ import { spawn, spawnSync } from 'child_process';
 import * as fs from 'fs';
 import * as os from 'os';
 import * as path from 'path';
-import Ajv from 'ajv/dist/2020';
-import { AGENT_EVENTS_FIXTURES, EVENT_SCHEMA, STATE_SCHEMA } from '../../helpers/agent-events';
+import {
+  CORE_DEFAULT_NOW,
+  CORE_STATE_FIXTURES,
+  DELIVER_FIXTURES,
+  validateCoreState,
+  validateDeliverState,
+} from '../../helpers/agent-events';
 import { PwshWorker } from '../../helpers/pwsh-worker';
 
 const ROOT = path.resolve(__dirname, '../../..');
 const SCRIPT = path.join(ROOT, 'skills/delivery/deliver/scripts/ConvertFrom-ProgressEvents.ps1');
-const FIXTURES = AGENT_EVENTS_FIXTURES;
-// every fixture pair is folded with this "now" and without the pid test (the fixture pid is not a live process).
+// the deliver fixtures are folded with this "now" and without the pid test (the fixture pid is not a live process).
 // Written with a space, not a T: the worker reads its request with ConvertFrom-Json, which would turn an ISO string
 // into a DateTime and hand the script a local-time string.
 const NOW = '2026-11-07 12:00:00Z';
 const hasPwsh = spawnSync('pwsh', ['-NoProfile', '-Command', '1']).status === 0;
 
 const readJson = (p: string) => JSON.parse(fs.readFileSync(p, 'utf8'));
-const cases = fs
-  .readdirSync(FIXTURES)
-  .filter((f) => f.endsWith('.jsonl'))
-  .map((f) => f.replace(/\.jsonl$/, ''))
-  .sort();
-const ajv = new Ajv({ allErrors: true, validateFormats: false });
-const validateState = ajv.compile(readJson(STATE_SCHEMA));
-const validateEvent = ajv.compile(readJson(EVENT_SCHEMA));
+const casesOf = (dir: string) =>
+  fs
+    .readdirSync(dir)
+    .filter((f) => f.endsWith('.jsonl'))
+    .map((f) => f.replace(/\.jsonl$/, ''))
+    .sort();
+const coreCases = casesOf(CORE_STATE_FIXTURES);
+const deliverCases = casesOf(DELIVER_FIXTURES);
+const withoutDeliver = (s: Record<string, unknown>) => {
+  const { deliver: _d, ...core } = s;
+  return core;
+};
 
-describe('fixtures/progress-events (#370)', () => {
-  it('has at least the cases of the PBI', () => {
+describe('fixtures/progress-events: the deliver profile fixtures (#370, #452)', () => {
+  it('has at least the cases of the PBIs', () => {
     for (const c of [
       'running',
       'done',
@@ -36,63 +44,27 @@ describe('fixtures/progress-events (#370)', () => {
       'rc-test-open',
       'abandoned',
       'incomplete-last-line',
+      'merging',
     ])
-      expect(cases).toContain(c);
+      expect(deliverCases).toContain(c);
   });
 
-  it.each(cases)('%s: every complete line is a valid progress event, the state is valid', (c) => {
-    const lines = fs.readFileSync(path.join(FIXTURES, `${c}.jsonl`), 'utf8').split('\n');
-    const complete = lines.slice(0, -1);
-    for (const l of complete) {
-      expect(validateEvent(JSON.parse(l)), JSON.stringify(validateEvent.errors)).toBe(true);
-    }
-    const state = readJson(path.join(FIXTURES, `${c}.state.json`));
-    expect(validateState(state), JSON.stringify(validateState.errors)).toBe(true);
-  });
-});
-
-describe('deliver-run-state.schema.json (#370)', () => {
-  const running = () => readJson(path.join(FIXTURES, 'running.state.json'));
-
-  it('has no schemaVersion, five run results plus abandoned and the RC fields', () => {
-    const next = readJson(STATE_SCHEMA);
-    expect(next.required).not.toContain('schemaVersion');
-    expect(next.properties.result.enum).toEqual([
-      'running',
-      'done',
-      'max reached',
-      'blocked',
-      'no progress',
-      'abandoned',
-    ]);
-    expect(Object.keys(next.properties.release.properties)).toEqual([
-      'reviewRound',
-      'prUrl',
-      'rcUrl',
-      'rcVersion',
-      'testIssue',
-    ]);
-  });
-
-  it('rejects a schemaVersion-free state with a result outside the six states', () => {
-    expect(validateState({ ...running(), result: 'stopped' })).toBe(false);
-    expect(validateState({ ...running(), result: 'abandoned' })).toBe(true);
-  });
-
-  it('rejects a test issue without a number', () => {
-    const s = running();
-    s.release.testIssue = { url: 'https://x/400' };
-    expect(validateState(s)).toBe(false);
+  it.each(deliverCases)('%s: the state is a valid core state plus a valid deliver state', (c) => {
+    const state = readJson(path.join(DELIVER_FIXTURES, `${c}.state.json`));
+    expect(validateCoreState(state), JSON.stringify(validateCoreState.errors)).toBe(true);
+    expect(validateDeliverState(state.deliver), JSON.stringify(validateDeliverState.errors)).toBe(
+      true,
+    );
   });
 });
 
 describe.skipIf(!hasPwsh || process.platform === 'win32')(
-  'ConvertFrom-ProgressEvents.ps1 (#370)',
+  'ConvertFrom-ProgressEvents.ps1 (#370, #452)',
   () => {
     let worker: PwshWorker;
     let tmp: string;
-    const fold = async (file: string, ...extra: string[]) => {
-      const r = await worker.run(['-Path', file, '-Now', NOW, '-NoPidCheck', ...extra], {
+    const fold = async (file: string, now = NOW, ...extra: string[]) => {
+      const r = await worker.run(['-Path', file, '-Now', now, '-NoPidCheck', ...extra], {
         cwd: tmp,
       });
       return { ...r, state: r.status === 0 ? JSON.parse(r.stdout) : null };
@@ -104,9 +76,19 @@ describe.skipIf(!hasPwsh || process.platform === 'win32')(
     };
     const fixtureLines = (c: string) =>
       fs
-        .readFileSync(path.join(FIXTURES, `${c}.jsonl`), 'utf8')
+        .readFileSync(path.join(DELIVER_FIXTURES, `${c}.jsonl`), 'utf8')
         .trimEnd()
         .split('\n');
+    const ev = (seq: number, type: string, extra: object = {}) =>
+      JSON.stringify({
+        v: 1,
+        seq,
+        ts: '2026-11-07T11:50:00.000Z',
+        run: 'r',
+        type,
+        tone: 'neutral',
+        ...extra,
+      });
 
     beforeAll(() => {
       tmp = fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(), 'reducer-')));
@@ -117,106 +99,93 @@ describe.skipIf(!hasPwsh || process.platform === 'win32')(
       fs.rmSync(tmp, { recursive: true, force: true });
     });
 
-    it.each(cases)('folds %s.jsonl into %s.state.json, valid against the schema', async (c) => {
-      const r = await fold(path.join(FIXTURES, `${c}.jsonl`));
-      expect(r.status, r.stderr).toBe(0);
-      expect(r.state).toEqual(readJson(path.join(FIXTURES, `${c}.state.json`)));
-      expect(validateState(r.state), JSON.stringify(validateState.errors)).toBe(true);
-    });
-
-    it('folds run.finished with result stopped as a finished run (#474)', async () => {
-      const lines = fixtureLines('done').map((l) => {
-        const e = JSON.parse(l);
-        if (e.type === 'run.finished') e.result = 'stopped';
-        return JSON.stringify(e);
-      });
-      const r = await fold(writeEvents('stopped', lines.join('\n') + '\n'));
-      expect(r.status, r.stderr).toBe(0);
-      expect(r.state).toEqual(readJson(path.join(FIXTURES, 'done.state.json')));
-    });
-
-    describe('nested run.finished (#463)', () => {
-      const ev = (type: string, extra: object = {}) =>
-        JSON.stringify({
-          v: 1,
-          seq: 0,
-          ts: '2026-11-07T11:00:00.000Z',
-          run: 'r1',
-          type,
-          tone: 'neutral',
-          ...extra,
-        });
-      const issue = (n: number) => ({
-        issue: { number: n, url: `https://github.com/a/b/issues/${n}` },
-      });
-      const fold1 = (name: string, lines: string[]) =>
-        fold(writeEvents(name, lines.join('\n') + '\n'));
-
-      it('events after a run.finished clear the result: running, current is the new PBI', async () => {
-        const r = await fold1('nested-after', [
-          ev('run.started', { source: 'loop' }),
-          ev('issue.started', issue(1)),
-          ev('issue.finished', { ...issue(1), outcome: 'delivered' }),
-          ev('run.finished', { result: 'done' }),
-          ev('issue.started', issue(2)),
-        ]);
+    it.each(coreCases)(
+      'core fixture %s: the core state of the pinned agent-events tag',
+      async (c) => {
+        const nowFile = path.join(CORE_STATE_FIXTURES, `${c}.now`);
+        const now = fs.existsSync(nowFile)
+          ? fs.readFileSync(nowFile, 'utf8').trim()
+          : CORE_DEFAULT_NOW;
+        const r = await fold(path.join(CORE_STATE_FIXTURES, `${c}.jsonl`), now.replace('T', ' '));
         expect(r.status, r.stderr).toBe(0);
-        expect(r.state.result).toBe('running');
-        expect(r.state.current.number).toBe(2);
-      });
+        expect(withoutDeliver(r.state)).toEqual(
+          readJson(path.join(CORE_STATE_FIXTURES, `${c}.state.json`)),
+        );
+      },
+    );
 
-      it.each([
-        ['step.finished', { ...issue(2), step: 'implement', result: 'ok' }],
-        ['attention', { ...issue(2), kind: 'review_fix' }],
-      ])('a %s after run.finished clears the result', async (type, extra) => {
-        const r = await fold1(`nested-${type}`, [
-          ev('run.started'),
-          ev('run.finished', { result: 'done' }),
-          ev(type, extra),
-        ]);
-        expect(r.state.result).toBe('running');
-      });
-
-      it('a run.finished that is the last lifecycle event still counts', async () => {
-        const r = await fold1('nested-last', [
-          ev('run.started'),
-          ev('issue.started', issue(1)),
-          ev('run.finished', { result: 'done' }),
-          ev('run.finished', { result: 'blocked' }),
-        ]);
-        expect(r.state.result).toBe('blocked');
-      });
+    it.each(deliverCases)('deliver fixture %s: folds into %s.state.json', async (c) => {
+      const r = await fold(path.join(DELIVER_FIXTURES, `${c}.jsonl`));
+      expect(r.status, r.stderr).toBe(0);
+      expect(r.state).toEqual(readJson(path.join(DELIVER_FIXTURES, `${c}.state.json`)));
     });
 
     it('yields the same state for the same events and Now', async () => {
-      const f = path.join(FIXTURES, 'rc-test-open.jsonl');
+      const f = path.join(DELIVER_FIXTURES, 'rc-test-open.jsonl');
       expect((await fold(f)).stdout).toBe((await fold(f)).stdout);
     });
 
     it.each(['done', 'paused-needs-you', 'rc-test-open'])(
-      '%s: unknown event types and fields never change the state',
+      '%s: unknown fields never change the state, unknown types only lastSeq and updated',
       async (c) => {
         const lines = fixtureLines(c).map((l) => {
           const e = JSON.parse(l);
           e.futureField = { nested: [1, 2] };
-          if (e.issue) e.issue.extra = 'x';
+          if (e.subject) e.subject.extra = 'x';
           return JSON.stringify(e);
         });
-        const unknown = (seq: number) =>
-          JSON.stringify({
-            v: 1,
-            seq,
-            ts: '2026-11-07T11:59:00.000Z',
-            run: 'x',
-            type: 'future.thing',
-            tone: 'info',
-            issue: { number: 999 },
-          });
-        const noisy = [lines[0], unknown(2), ...lines.slice(1), unknown(99)].join('\n') + '\n';
-        const r = await fold(writeEvents(`noisy-${c}`, noisy));
-        expect(r.state).toEqual(readJson(path.join(FIXTURES, `${c}.state.json`)));
+        const r = await fold(writeEvents(`noisy-${c}`, lines.join('\n') + '\n'));
+        const expected = readJson(path.join(DELIVER_FIXTURES, `${c}.state.json`));
+        // the subject copies of the state keep the extra field: compare without it
+        expect(JSON.parse(JSON.stringify(r.state).replaceAll(',"extra":"x"', ''))).toEqual(
+          expected,
+        );
+        const unknown = ev(lines.length + 1, 'future.thing', { task: 'issue-1', deliver: {} });
+        const more = await fold(writeEvents(`more-${c}`, [...lines, unknown].join('\n') + '\n'));
+        expect(more.state.deliver).toEqual(r.state.deliver);
+        expect(more.state.lastSeq).toBe(lines.length + 1);
       },
     );
+
+    it('old-format files: the types before the core format are ignored (#452, one minor of migration)', async () => {
+      const old = (seq: number, type: string, extra: object) =>
+        JSON.stringify({
+          v: 1,
+          seq,
+          ts: '2026-11-07T11:00:00.000Z',
+          run: 'old',
+          type,
+          tone: 'neutral',
+          ...extra,
+        });
+      const issue = { number: 370, url: 'https://github.com/GravionLabs/skills/issues/370' };
+      const r = await fold(
+        writeEvents(
+          'old',
+          [
+            old(1, 'run.started', { source: 'loop', milestone: { key: 'M5' }, pid: 4242 }),
+            old(2, 'milestone.progress', { closed: 3, total: 9 }),
+            old(3, 'issue.started', { issue }),
+            old(4, 'step.finished', {
+              issue,
+              step: { name: 'pr', text: 'opened' },
+              prUrl: 'https://x/pull/1',
+            }),
+            old(5, 'issue.finished', { issue, outcome: 'delivered' }),
+          ].join('\n') + '\n',
+        ),
+      );
+      expect(r.status, r.stderr).toBe(0);
+      expect(r.state).toMatchObject({
+        status: 'running',
+        tasks: [],
+        finished: { succeeded: [], skipped: [] },
+        step: { name: 'pr', text: 'opened' },
+        lastSeq: 5,
+        deliver: { delivered: [], milestone: null, result: 'running' },
+      });
+      expect(r.state.progress).toBeUndefined();
+    });
 
     it('depends only on the events up to the last complete line', async () => {
       const lines = fixtureLines('done');
@@ -224,16 +193,16 @@ describe.skipIf(!hasPwsh || process.platform === 'win32')(
       const cut = await fold(writeEvents('cut', head + lines.at(-1)!.slice(0, 40)));
       const whole = await fold(writeEvents('head', head));
       expect(cut.state).toEqual(whole.state);
-      expect(cut.state.closed).toBe(4);
+      expect(cut.state.progress).toMatchObject({ done: 4, total: 9 });
       expect(cut.stderr).toBe('');
     });
 
-    it('reports a gap in seq on stderr and folds the events anyway', async () => {
-      const lines = fixtureLines('done').filter((l) => JSON.parse(l).seq !== 3);
+    it('records a gap in seq and folds the events anyway', async () => {
+      const lines = fixtureLines('done').filter((l) => JSON.parse(l).seq !== 2);
       const r = await fold(writeEvents('gap', lines.join('\n') + '\n'));
       expect(r.status).toBe(0);
-      expect(r.stderr).toContain('seq gap: expected 3, got 4');
-      expect(r.state.delivered).toEqual([
+      expect(r.state.gaps).toEqual([{ from: 2, to: 2 }]);
+      expect(r.state.deliver.delivered).toEqual([
         {
           pbi: 370,
           url: 'https://github.com/GravionLabs/skills/issues/370',
@@ -243,99 +212,109 @@ describe.skipIf(!hasPwsh || process.platform === 'win32')(
     });
 
     it('a run without run.finished is running within the hour and abandoned after it', async () => {
-      const f = path.join(FIXTURES, 'running.jsonl');
-      const at = async (now: string) =>
-        (await worker.run(['-Path', f, '-Now', now, '-NoPidCheck'], { cwd: tmp })).stdout;
-      expect(JSON.parse(await at('2026-11-07 12:30:00Z')).result).toBe('running');
-      const late = JSON.parse(await at('2026-11-07 12:30:01Z'));
-      expect(late.result).toBe('abandoned');
-      expect(late.current).toBeNull();
+      const f = path.join(DELIVER_FIXTURES, 'running.jsonl');
+      expect((await fold(f, '2026-11-07 12:50:00Z')).state.status).toBe('running');
+      const late = (await fold(f, '2026-11-07 12:50:01Z')).state;
+      expect([late.status, late.deliver.result]).toEqual(['abandoned', 'abandoned']);
     });
 
-    it('a run whose pid no longer lives is abandoned, a live pid keeps it running', async () => {
+    it('a run whose jsonl-file.pid no longer lives is abandoned, a live pid keeps it running', async () => {
       const dead = spawn('true');
       await new Promise((res) => dead.on('exit', res));
       const withPid = (pid: number) =>
         fixtureLines('running')
           .map((l) => {
             const e = JSON.parse(l);
-            if (e.type === 'run.started') e.pid = pid;
+            if (e.type === 'run.started') e.host['jsonl-file.pid'] = String(pid);
             return JSON.stringify(e);
           })
           .join('\n') + '\n';
-      const run = async (name: string, pid: number) =>
+      const status = async (name: string, pid: number) =>
         JSON.parse(
           (await worker.run(['-Path', writeEvents(name, withPid(pid)), '-Now', NOW], { cwd: tmp }))
             .stdout,
-        ).result;
-      expect(await run('dead', dead.pid!)).toBe('abandoned');
-      expect(await run('alive', process.pid)).toBe('running');
+        ).status;
+      expect(await status('dead', dead.pid!)).toBe('abandoned');
+      expect(await status('alive', process.pid)).toBe('running');
     });
 
-    it('numbers a step without n by its name, and a later outcome of an issue replaces the earlier one', async () => {
+    it('a later attempt of an issue replaces its earlier outcome; merging waits until delivered', async () => {
       const [start] = fixtureLines('running');
-      const ev = (seq: number, type: string, extra: object) =>
-        JSON.stringify({
-          v: 1,
-          seq,
-          ts: '2026-11-07T11:50:00.000Z',
-          run: 'r',
-          type,
-          tone: 'neutral',
-          ...extra,
-        });
-      const issue = { number: 380 };
-      const running = await fold(
+      const subject = { kind: 'github.issue', id: 'GravionLabs/skills#380', title: 'x' };
+      const pr = [{ rel: 'pull-request', url: 'https://github.com/GravionLabs/skills/pull/9' }];
+      const r = await fold(
         writeEvents(
-          'names',
+          'attempts',
           [
             start,
-            ev(2, 'issue.started', { issue }),
-            ev(3, 'step.finished', { issue, step: { name: 'fix', text: 'round 1' } }),
+            ev(2, 'task.started', { task: 'issue-380', subject }),
+            ev(3, 'task.finished', {
+              task: 'issue-380',
+              outcome: 'skipped',
+              reason: 'deliver.blocked',
+              text: 'open blocker',
+              deliver: { outcome: 'blocked' },
+            }),
+            ev(4, 'task.started', { task: 'issue-380.2', subject }),
+            ev(5, 'deliver.merging', { task: 'issue-380.2', links: pr, deliver: { issue: 380 } }),
           ].join('\n') + '\n',
         ),
       );
-      expect(running.state.current).toEqual({
-        number: 380,
-        title: '#380',
-        url: 'https://github.com/GravionLabs/skills/issues/380',
-        step: { n: 5, total: 7, text: 'fix: round 1' },
-        prUrl: null,
+      expect(r.state.deliver).toMatchObject({
+        blocked: [],
+        delivered: [],
+        merging: [{ number: 380, prUrl: pr[0].url }],
       });
-      const later = await fold(
+      expect(r.state.tasks.map((t: { task: string }) => t.task)).toEqual(['issue-380.2']);
+      const done = await fold(
         writeEvents(
-          'later',
-          [
-            start,
-            ev(2, 'issue.finished', { issue, outcome: 'blocked' }),
-            ev(3, 'issue.finished', { issue, outcome: 'delivered' }),
-          ].join('\n') + '\n',
+          'attempts-done',
+          fs.readFileSync(path.join(tmp, 'attempts.jsonl'), 'utf8') +
+            ev(6, 'task.finished', {
+              task: 'issue-380.2',
+              outcome: 'succeeded',
+              deliver: { outcome: 'delivered' },
+            }) +
+            '\n',
         ),
       );
-      expect(later.state.blocked).toEqual([]);
-      expect(later.state.delivered.map((d: { pbi: number }) => d.pbi)).toEqual([380]);
+      expect(done.state.deliver).toMatchObject({
+        merging: [],
+        delivered: [{ pbi: 380, prUrl: pr[0].url }],
+      });
+    });
+
+    it('a needs-you attention stays after its PBI pauses and leaves with attention.resolved', async () => {
+      // the fixture without its run.finished (which closes every attention)
+      const lines = fixtureLines('paused-needs-you').slice(0, -1);
+      const paused = await fold(writeEvents('paused', lines.join('\n') + '\n'));
+      expect(paused.state).toMatchObject({
+        needsYou: true,
+        attentions: [{ id: 'a5', reason: 'deliver.needs-you' }],
+        deliver: { needsYou: [{ number: 372 }], paused: [{ number: 372 }] },
+      });
+      const resolved = [...lines, ev(7, 'attention.resolved', { id: 'a5' })];
+      const r = await fold(writeEvents('resolved', resolved.join('\n') + '\n'));
+      expect([r.state.needsYou, r.state.attentions, r.state.deliver.needsYou]).toEqual([
+        false,
+        [],
+        [],
+      ]);
     });
 
     it('a new RC test issue replaces the older one in needsYou', async () => {
       const gh = 'https://github.com/GravionLabs/skills';
       const lines = [
         ...fixtureLines('rc-test-open').slice(0, 5),
-        JSON.stringify({
-          v: 1,
-          seq: 6,
-          ts: '2026-11-07T11:20:00.000Z',
-          run: 'r',
-          type: 'release.updated',
-          tone: 'neutral',
-          rcVersion: '3.3.0-rc.1',
-          testIssue: { number: 410, url: `${gh}/issues/410` },
+        ev(6, 'deliver.release.updated', {
+          deliver: { rcVersion: '3.3.0-rc.1', testIssue: { number: 410, url: `${gh}/issues/410` } },
         }),
       ];
       const r = await fold(writeEvents('replace', lines.join('\n') + '\n'));
-      expect(r.state.needsYou).toEqual([
+      expect(r.state.deliver.needsYou).toEqual([
         { number: 410, url: `${gh}/issues/410`, reason: 'RC test' },
       ]);
-      expect(r.state.release).toMatchObject({
+      expect(r.state.deliver.release).toMatchObject({
         rcVersion: '3.3.0-rc.1',
         testIssue: { number: 410 },
       });
@@ -354,7 +333,7 @@ describe.skipIf(!hasPwsh || process.platform === 'win32')(
 
     it('reads the events from the pipeline', () => {
       // own process: pipeline input from Get-Content
-      const f = path.join(FIXTURES, 'blocked.jsonl');
+      const f = path.join(DELIVER_FIXTURES, 'blocked.jsonl');
       const r = spawnSync(
         'pwsh',
         [
@@ -365,7 +344,9 @@ describe.skipIf(!hasPwsh || process.platform === 'win32')(
         { encoding: 'utf8' },
       );
       expect(r.status, r.stderr).toBe(0);
-      expect(JSON.parse(r.stdout)).toEqual(readJson(path.join(FIXTURES, 'blocked.state.json')));
+      expect(JSON.parse(r.stdout)).toEqual(
+        readJson(path.join(DELIVER_FIXTURES, 'blocked.state.json')),
+      );
     });
   },
 );
