@@ -1,0 +1,66 @@
+{
+  "v": 1,
+  "status": "finished",
+  "run": "20261107-100000-rc-t",
+  "subject": {
+    "kind": "github.milestone",
+    "id": "M5 Events",
+    "title": "M5 Events",
+    "url": "https://github.com/GravionLabs/skills/milestone/5"
+  },
+  "progress": {
+    "done": 8,
+    "total": 9,
+    "label": "PBIs"
+  },
+  "outcome": "succeeded",
+  "text": "done",
+  "tasks": [],
+  "finished": {
+    "succeeded": [],
+    "failed": [],
+    "cancelled": [],
+    "skipped": []
+  },
+  "attentions": [],
+  "needsYou": false,
+  "links": [],
+  "gaps": [],
+  "lastSeq": 7,
+  "updated": "2026-11-07T11:15:05.000Z",
+  "deliver": {
+    "source": "loop",
+    "harness": "claude",
+    "model": "sonnet",
+    "repository": "GravionLabs/skills",
+    "milestone": {
+      "key": "M5",
+      "title": "M5 Events",
+      "url": "https://github.com/GravionLabs/skills/milestone/5"
+    },
+    "startedAt": "2026-11-07T10:00:00.000Z",
+    "result": "done",
+    "iteration": null,
+    "delivered": [],
+    "blocked": [],
+    "paused": [],
+    "merging": [],
+    "needsYou": [
+      {
+        "number": 400,
+        "url": "https://github.com/GravionLabs/skills/issues/400",
+        "reason": "RC test"
+      }
+    ],
+    "release": {
+      "reviewRound": 1,
+      "prUrl": "https://github.com/GravionLabs/skills/pull/391",
+      "rcUrl": "https://github.com/GravionLabs/skills/releases/tag/v3.2.0-rc.1",
+      "rcVersion": "3.2.0-rc.1",
+      "testIssue": {
+        "number": 400,
+        "url": "https://github.com/GravionLabs/skills/issues/400"
+      }
+    }
+  }
+}

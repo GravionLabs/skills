@@ -2,6 +2,7 @@ import { spawnSync } from 'child_process';
 import * as fs from 'fs';
 import * as os from 'os';
 import * as path from 'path';
+import { checkEventsDir } from '../../helpers/agent-events';
 import { createFakeGh } from '../../helpers/fake-gh';
 import { PwshWorker } from '../../helpers/pwsh-worker';
 
@@ -82,8 +83,10 @@ describe.skipIf(!hasPwsh || process.platform === 'win32')(
         { encoding: 'utf8' },
       );
       const doc = JSON.parse(reduced.stdout);
-      expect(doc.delivered).toEqual([]);
-      expect(doc.paused).toMatchObject([{ number: 10 }]);
+      expect(doc.deliver.delivered).toEqual([]);
+      expect(doc.deliver.paused).toMatchObject([{ number: 10 }]);
+      expect(doc.finished.skipped).toMatchObject([{ task: 'issue-10', reason: 'deliver.paused' }]);
+      expect(checkEventsDir(eventsDir)).toEqual({});
       expect(r.stdout).not.toContain('loop: delivered');
       const all = fs
         .readdirSync(logDir)

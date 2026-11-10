@@ -1,0 +1,87 @@
+{
+  "v": 1,
+  "status": "finished",
+  "run": "20261107-100000-bloc",
+  "subject": {
+    "kind": "github.milestone",
+    "id": "M5 Events",
+    "title": "M5 Events",
+    "url": "https://github.com/GravionLabs/skills/milestone/5"
+  },
+  "progress": {
+    "done": 4,
+    "total": 9,
+    "label": "PBIs"
+  },
+  "outcome": "failed",
+  "reason": "deliver.blocked",
+  "text": "blocked",
+  "tasks": [],
+  "finished": {
+    "succeeded": [],
+    "failed": [],
+    "cancelled": [],
+    "skipped": [
+      {
+        "task": "issue-371",
+        "subject": {
+          "kind": "github.issue",
+          "id": "GravionLabs/skills#371",
+          "title": "[PBI] feat: x",
+          "url": "https://github.com/GravionLabs/skills/issues/371"
+        },
+        "links": [
+          {
+            "rel": "pull-request",
+            "url": "https://github.com/GravionLabs/skills/pull/381"
+          }
+        ],
+        "reason": "deliver.blocked",
+        "text": "CI red after 2 fix rounds"
+      }
+    ]
+  },
+  "attentions": [],
+  "needsYou": false,
+  "links": [
+    {
+      "rel": "pull-request",
+      "url": "https://github.com/GravionLabs/skills/pull/381"
+    }
+  ],
+  "gaps": [],
+  "lastSeq": 7,
+  "updated": "2026-11-07T10:45:05.000Z",
+  "deliver": {
+    "source": "loop",
+    "harness": "claude",
+    "model": "sonnet",
+    "repository": "GravionLabs/skills",
+    "milestone": {
+      "key": "M5",
+      "title": "M5 Events",
+      "url": "https://github.com/GravionLabs/skills/milestone/5"
+    },
+    "startedAt": "2026-11-07T10:00:00.000Z",
+    "result": "blocked",
+    "iteration": null,
+    "delivered": [],
+    "blocked": [
+      {
+        "number": 371,
+        "url": "https://github.com/GravionLabs/skills/issues/371",
+        "reason": "CI red after 2 fix rounds"
+      }
+    ],
+    "paused": [],
+    "merging": [],
+    "needsYou": [],
+    "release": {
+      "reviewRound": null,
+      "prUrl": null,
+      "rcUrl": null,
+      "rcVersion": null,
+      "testIssue": null
+    }
+  }
+}

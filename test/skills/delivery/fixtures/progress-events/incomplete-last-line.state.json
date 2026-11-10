@@ -1,0 +1,66 @@
+{
+  "v": 1,
+  "status": "running",
+  "run": "20261107-100000-inco",
+  "subject": {
+    "kind": "github.milestone",
+    "id": "M5 Events",
+    "title": "M5 Events",
+    "url": "https://github.com/GravionLabs/skills/milestone/5"
+  },
+  "tasks": [
+    {
+      "task": "issue-374",
+      "subject": {
+        "kind": "github.issue",
+        "id": "GravionLabs/skills#374",
+        "title": "[PBI] feat: w",
+        "url": "https://github.com/GravionLabs/skills/issues/374"
+      },
+      "step": {
+        "name": "review",
+        "n": 4,
+        "total": 7,
+        "text": "clean"
+      }
+    }
+  ],
+  "finished": {
+    "succeeded": [],
+    "failed": [],
+    "cancelled": [],
+    "skipped": []
+  },
+  "attentions": [],
+  "needsYou": false,
+  "links": [],
+  "gaps": [],
+  "lastSeq": 3,
+  "updated": "2026-11-07T11:30:00.000Z",
+  "deliver": {
+    "source": "loop",
+    "harness": "claude",
+    "model": "sonnet",
+    "repository": "GravionLabs/skills",
+    "milestone": {
+      "key": "M5",
+      "title": "M5 Events",
+      "url": "https://github.com/GravionLabs/skills/milestone/5"
+    },
+    "startedAt": "2026-11-07T10:00:00.000Z",
+    "result": "running",
+    "iteration": null,
+    "delivered": [],
+    "blocked": [],
+    "paused": [],
+    "merging": [],
+    "needsYou": [],
+    "release": {
+      "reviewRound": null,
+      "prUrl": null,
+      "rcUrl": null,
+      "rcVersion": null,
+      "testIssue": null
+    }
+  }
+}

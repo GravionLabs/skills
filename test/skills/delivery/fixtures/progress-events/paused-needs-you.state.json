@@ -1,0 +1,82 @@
+{
+  "v": 1,
+  "status": "finished",
+  "run": "20261107-100000-paus",
+  "subject": {
+    "kind": "github.milestone",
+    "id": "M5 Events",
+    "title": "M5 Events",
+    "url": "https://github.com/GravionLabs/skills/milestone/5"
+  },
+  "progress": {
+    "done": 4,
+    "total": 9,
+    "label": "PBIs"
+  },
+  "outcome": "failed",
+  "reason": "deliver.no-progress",
+  "text": "no progress",
+  "tasks": [],
+  "finished": {
+    "succeeded": [],
+    "failed": [],
+    "cancelled": [],
+    "skipped": [
+      {
+        "task": "issue-372",
+        "subject": {
+          "kind": "github.issue",
+          "id": "GravionLabs/skills#372",
+          "title": "[PBI] feat: y",
+          "url": "https://github.com/GravionLabs/skills/issues/372"
+        },
+        "reason": "deliver.paused",
+        "text": "decision needed"
+      }
+    ]
+  },
+  "attentions": [],
+  "needsYou": false,
+  "links": [],
+  "gaps": [],
+  "lastSeq": 7,
+  "updated": "2026-11-07T10:10:10.000Z",
+  "deliver": {
+    "source": "loop",
+    "harness": "claude",
+    "model": "sonnet",
+    "repository": "GravionLabs/skills",
+    "milestone": {
+      "key": "M5",
+      "title": "M5 Events",
+      "url": "https://github.com/GravionLabs/skills/milestone/5"
+    },
+    "startedAt": "2026-11-07T10:00:00.000Z",
+    "result": "no progress",
+    "iteration": null,
+    "delivered": [],
+    "blocked": [],
+    "paused": [
+      {
+        "number": 372,
+        "url": "https://github.com/GravionLabs/skills/issues/372",
+        "reason": "decision needed"
+      }
+    ],
+    "merging": [],
+    "needsYou": [
+      {
+        "number": 372,
+        "url": "https://github.com/GravionLabs/skills/issues/372",
+        "reason": "decide the config key name"
+      }
+    ],
+    "release": {
+      "reviewRound": null,
+      "prUrl": null,
+      "rcUrl": null,
+      "rcVersion": null,
+      "testIssue": null
+    }
+  }
+}

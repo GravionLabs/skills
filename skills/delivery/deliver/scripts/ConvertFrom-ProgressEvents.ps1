@@ -1,16 +1,20 @@
 <#
 .SYNOPSIS
-  Fold the progress events of one run (<run>.jsonl) into the run state and print it as JSON.
+  Fold the agent-events of one run (<run>.jsonl) into the run state and print it as JSON: the core state plus `deliver`.
 .DESCRIPTION
-  Reference reducer of ADR 0001 ("Projection"). Input: GravionLabs/agent-events schema/progress-event.schema.json, one event per line, from -Path or
-  the pipeline. Output: GravionLabs/agent-events schema/deliver-run-state.schema.json. The fold is a pure function of the event list and -Now; the
-  only other input is the pid check of a run without run.finished (-NoPidCheck turns it off).
-  Rules: current from the last issue.started and step.finished, reset by issue.finished; delivered, blocked and paused from
-  issue.finished (the latest outcome of an issue wins); needsYou from attention with needsYou: true and the open RC test
-  of release.updated (reason 'RC test', until an issue.finished for the test issue); closed/total from milestone.progress;
-  release from release.updated; result from run.finished, else running, or abandoned when the pid does not live or the
-  last ts is older than one hour. Unknown types and fields are ignored, an incomplete last line is skipped, a gap in seq
-  is reported on stderr and folded anyway.
+  Core: the fold of GravionLabs/agent-events (SPEC.md "Run state", reference src/fold.ts, schema/v0/run-state.schema.json;
+  pinned tag in test/skills/delivery/agent-events/VERSION). Its state fixtures are the contract: v, run, status (running,
+  finished, abandoned), outcome, reason, text, subject, progress, step, tasks (open, in start order), finished (per outcome),
+  attentions, needsYou, links, gaps, lastSeq, updated. Lines that are not JSON, an incomplete last line, unknown types
+  (also the types before the core format: issue.started, milestone.progress, ...) and unknown fields are ignored; nothing
+  folds after run.finished. abandoned: no run.finished and the last ts older than one hour at -Now, or (jsonl-file
+  binding) the jsonl-file.pid of run.started no longer lives (-NoPidCheck turns that off).
+  Deliver profile (deliver@1, schema/deliver-state.schema.json): `deliver` next to the core state, folded from the same
+  events: source, harness, model, repository, milestone {key, title, url}, startedAt, result (running, abandoned or the
+  deliver.result of run.finished), iteration {n, max}, delivered[] {pbi, url, prUrl}, blocked[], paused[], merging[],
+  needsYou[] {number, url, reason} and release {reviewRound, prUrl, rcUrl, rcVersion, testIssue}. The latest outcome of an
+  issue wins; the open RC test (deliver.release.updated testIssue) is needsYou with reason `RC test` until a task.finished
+  of the test issue.
 .PARAMETER Path
   The event file <run>.jsonl.
 .PARAMETER Now
@@ -30,13 +34,14 @@ begin {
   $lines = [System.Collections.Generic.List[string]]::new()
 }
 process {
-  foreach ($l in $InputObject) { if ($null -ne $l) { foreach ($p in ($l -split "`r?`n")) { $lines.Add($p) } } }
+  # pipeline items are complete lines (Get-Content strips the newline)
+  foreach ($l in $InputObject) { if ($null -ne $l) { foreach ($p in ($l -split "`n")) { $lines.Add($p) } } }
 }
 end {
   # System.Text.Json instead of ConvertFrom-Json: timestamps stay the strings of the file (no DateTime conversion)
   function ConvertFrom-JsonElement([System.Text.Json.JsonElement]$e) {
     switch ($e.ValueKind.ToString()) {
-      'Object' { $h = @{}; foreach ($p in $e.EnumerateObject()) { $h[$p.Name] = ConvertFrom-JsonElement $p.Value }; return $h }
+      'Object' { $h = [ordered]@{}; foreach ($p in $e.EnumerateObject()) { $h[$p.Name] = ConvertFrom-JsonElement $p.Value }; return $h }
       'Array' { return , @(foreach ($x in $e.EnumerateArray()) { ConvertFrom-JsonElement $x }) }
       'String' { return $e.GetString() }
       'Number' { $n = 0L; if ($e.TryGetInt64([ref]$n)) { return $n }; return $e.GetDouble() }
@@ -46,185 +51,234 @@ end {
     return $null
   }
   function Write-Note([string]$text) { Write-Error "ConvertFrom-ProgressEvents: $text" -ErrorAction Continue }
-  function Test-Int($v) { $v -is [long] -or $v -is [int] }
+  function Test-Number($v) { $v -is [long] -or $v -is [int] -or $v -is [double] }
+  function Test-Map($v) { $v -is [System.Collections.IDictionary] }
+  function Copy-Without($h, [string[]]$drop) { $c = [ordered]@{}; foreach ($k in $h.Keys) { if ($k -notin $drop) { $c[$k] = $h[$k] } }; return $c }
+  function Add-Links($into, $more) {
+    foreach ($l in @($more)) {
+      if (-not (Test-Map $l)) { continue }
+      if (-not @($into | Where-Object { $_.rel -eq $l.rel -and $_.url -eq $l.url })) { $into.Add($l) }
+    }
+  }
+  function Get-Time([string]$ts) {
+    $t = [DateTimeOffset]::MinValue
+    if ($ts -and [DateTimeOffset]::TryParse($ts, [Globalization.CultureInfo]::InvariantCulture, [Globalization.DateTimeStyles]::AssumeUniversal, [ref]$t)) { return $t }
+    return $null
+  }
 
   if ($Path) {
     if (-not (Test-Path -LiteralPath $Path -PathType Leaf)) { Write-Note "no event file '$Path'"; exit 1 }
-    foreach ($p in ([System.IO.File]::ReadAllText((Resolve-Path -LiteralPath $Path).ProviderPath) -split "`r?`n")) { $lines.Add($p) }
+    $text = [System.IO.File]::ReadAllText((Resolve-Path -LiteralPath $Path).ProviderPath)
+    $split = $text -split "`n"
+    # the last line may still be written (no newline yet): skipped; after the last newline the list ends with ''
+    for ($i = 0; $i -lt $split.Count - 1; $i++) { $lines.Add($split[$i]) }
   }
-  $nonEmpty = @(for ($i = 0; $i -lt $lines.Count; $i++) { if ($lines[$i].Trim()) { $i } })
-  $events = [System.Collections.Generic.List[hashtable]]::new()
-  foreach ($i in $nonEmpty) {
-    $ev = $null
+  $events = [System.Collections.Generic.List[System.Collections.Specialized.OrderedDictionary]]::new()
+  foreach ($line in $lines) {
+    if (-not $line.Trim()) { continue }
     try {
-      $doc = [System.Text.Json.JsonDocument]::Parse($lines[$i])
-      try { if ($doc.RootElement.ValueKind.ToString() -eq 'Object') { $ev = ConvertFrom-JsonElement $doc.RootElement } } finally { $doc.Dispose() }
-    } catch { $ev = $null }
-    if ($null -eq $ev) {
-      # the last line may still be written (append in progress): skipped without a note
-      if ($i -ne $nonEmpty[-1]) { Write-Note "line $($i + 1) is not a JSON object, skipped" }
-      continue
-    }
-    $events.Add($ev)
+      $doc = [System.Text.Json.JsonDocument]::Parse($line)
+      try { if ($doc.RootElement.ValueKind.ToString() -eq 'Object') { $events.Add((ConvertFrom-JsonElement $doc.RootElement)) } } finally { $doc.Dispose() }
+    } catch { Write-Verbose "line skipped: not JSON" }
   }
   if (-not $events.Count) { Write-Note 'no progress events'; exit 1 }
 
-  $known = 'run.started', 'milestone.progress', 'issue.started', 'step.finished', 'attention', 'issue.finished', 'release.updated', 'run.finished'
-  # run.finished with another result (e.g. `stopped`, a stop request of the loop) is a finished run: folded as done
-  $results = 'done', 'max reached', 'blocked', 'no progress'
-  $stepNumbers = @{ select = 1; resume = 2; implement = 3; review = 4; fix = 5; pr = 6; ci = 7; merge = 7; merged = 7; cleanup = 7 }
-  $tsPattern = '^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}(\.[0-9]+)?(Z|[+-][0-9]{2}:[0-9]{2})$'
+  # --- core fold (agent-events src/fold.ts) ---
+  $state = [ordered]@{ v = 1; status = 'running' }
+  $tasks = [ordered]@{}
+  $seen = @{}
+  $finished = [ordered]@{ succeeded = [System.Collections.Generic.List[object]]::new(); failed = [System.Collections.Generic.List[object]]::new(); cancelled = [System.Collections.Generic.List[object]]::new(); skipped = [System.Collections.Generic.List[object]]::new() }
+  $attentions = [System.Collections.Generic.List[object]]::new()
+  $links = [System.Collections.Generic.List[object]]::new()
+  $gaps = [System.Collections.Generic.List[object]]::new()
+  $lastSeq = 0
+  $updated = $null
+  $pidValue = $null
 
-  $s = @{
-    run = $null; harness = $null; model = $null; repository = $null; milestone = $null; closed = 0; total = 0
-    current = $null; startedAt = $null; updatedAt = $null; result = $null; pid = $null; lastTs = $null
-  }
-  $delivered = [ordered]@{}; $blocked = [ordered]@{}; $paused = [ordered]@{}; $needs = [ordered]@{}
+  # --- deliver extension ---
+  $dv = [ordered]@{ source = $null; harness = $null; model = $null; repository = $null; milestone = $null; startedAt = $null; result = 'running'; iteration = $null }
+  $delivered = [ordered]@{}; $blocked = [ordered]@{}; $paused = [ordered]@{}; $merging = [ordered]@{}; $needs = [ordered]@{}
+  $needIds = @{}
   $release = [ordered]@{ reviewRound = $null; prUrl = $null; rcUrl = $null; rcVersion = $null; testIssue = $null }
-  $titles = @{}; $urls = @{}; $prs = @{}
+  $urls = @{}; $prs = @{}
 
+  function Get-Nr($task) { if ([string]$task -match '^issue-(\d+)(\.\d+)?$') { return [int]$Matches[1] }; return 0 }
   function Get-IssueUrl([int]$n) {
     if ($urls.ContainsKey($n)) { return $urls[$n] }
-    if ($s.repository) { return "https://github.com/$($s.repository)/issues/$n" }
+    if ($dv.repository) { return "https://github.com/$($dv.repository)/issues/$n" }
     return "#$n"
   }
-  function ConvertTo-Current([int]$n) {
-    [ordered]@{
-      number = $n
-      title = $(if ($titles.ContainsKey($n)) { $titles[$n] } else { "#$n" })
-      url = (Get-IssueUrl $n)
-      step = [ordered]@{ n = 1; total = 7; text = 'select' }
-      prUrl = $(if ($prs.ContainsKey($n)) { $prs[$n] } else { $null })
-    }
-  }
-  function Set-Step($cur, $step) {
-    if ($step -isnot [hashtable] -or -not $step.name) { return }
-    $n = if (Test-Int $step.n) { [int]$step.n } elseif ($stepNumbers.ContainsKey([string]$step.name)) { $stepNumbers[[string]$step.name] } else { $cur.step.n }
-    $cur.step = [ordered]@{
-      n = [Math]::Min(7, [Math]::Max(1, $n))
-      total = 7
-      text = $(if ($step.text) { "$($step.name): $($step.text)" } else { [string]$step.name })
-    }
-  }
-  function ConvertTo-StateItem([int]$n, $reason) { [ordered]@{ number = $n; url = (Get-IssueUrl $n); reason = [string]$reason } }
+  function Get-Pr($ls) { foreach ($l in @($ls)) { if ((Test-Map $l) -and $l.rel -eq 'pull-request' -and $l.url) { return [string]$l.url } }; return $null }
+  function New-Item2([int]$n, $reason) { [ordered]@{ number = $n; url = (Get-IssueUrl $n); reason = [string]$reason } }
+  function Remove-Nr([int]$n, [string[]]$from) { foreach ($m in $from) { (Get-Variable $m -ValueOnly).Remove("$n") } }
 
-  $prevSeq = $null
   foreach ($e in $events) {
-    if (Test-Int $e.seq) {
-      $expected = if ($null -eq $prevSeq) { 1 } else { $prevSeq + 1 }
-      if ($e.seq -ne $expected) { Write-Note "seq gap: expected $expected, got $($e.seq)" }
-      $prevSeq = [long]$e.seq
-    }
+    if (-not (Test-Number $e.seq) -or $e.seq -le $lastSeq) { continue }
+    if ($e.seq -gt $lastSeq + 1) { $gaps.Add([ordered]@{ from = $lastSeq + 1; to = $e.seq - 1 }) }
+    $lastSeq = $e.seq
+    $updated = $e.ts
+    if ($null -eq $state.run -and $null -ne $e.run) { $state.run = $e.run }
+    if ($state.status -eq 'finished') { continue }
     $type = [string]$e.type
-    if ($type -notin $known) { continue }
-
-    if (-not $s.run -and $e.run) { $s.run = [string]$e.run }
-    if ($e.ts -is [string] -and $e.ts -match $tsPattern) {
-      $s.updatedAt = $e.ts
-      if (-not $s.startedAt) { $s.startedAt = $e.ts }
-      $s.lastTs = [DateTimeOffset]::Parse($e.ts, [Globalization.CultureInfo]::InvariantCulture)
-    }
-    $nr = 0
-    if ($e.issue -is [hashtable] -and (Test-Int $e.issue.number) -and $e.issue.number -ge 1) {
-      $nr = [int]$e.issue.number
-      if ($e.issue.title) { $titles[$nr] = [string]$e.issue.title }
-      if ($e.issue.url) { $urls[$nr] = [string]$e.issue.url }
-      if ($e.prUrl -and $type -ne 'release.updated') { $prs[$nr] = [string]$e.prUrl }
-    }
-    $isCurrent = $nr -and $s.current -and $s.current.number -eq $nr
-    # only a run.finished that is the last lifecycle event counts: a nested session's run.finished is followed by the loop's next
-    # iteration (#463)
-    if ($s.result -and $type -in 'issue.started', 'step.finished', 'attention') { $s.result = $null }
-
-    switch ($type) {
+    $nr = Get-Nr $e.task
+    switch -CaseSensitive ($type) {
       'run.started' {
-        foreach ($k in 'harness', 'model', 'repository') { if ($e[$k]) { $s[$k] = [string]$e[$k] } }
-        if ($e.milestone -is [hashtable]) {
-          $s.milestone = [ordered]@{ key = [string]$e.milestone.key; title = [string]$e.milestone.title; url = [string]$e.milestone.url }
-        }
-        if (Test-Int $e.pid) { $s.pid = [int]$e.pid }
-        if ($e.ts -is [string] -and $e.ts -match $tsPattern) { $s.startedAt = $e.ts }
-      }
-      'milestone.progress' {
-        if (Test-Int $e.closed) { $s.closed = [int]$e.closed }
-        if (Test-Int $e.total) { $s.total = [int]$e.total }
-      }
-      'issue.started' {
-        if ($nr) { $s.current = ConvertTo-Current $nr; Set-Step $s.current $e.step }
-      }
-      'step.finished' {
-        if ($nr -and -not $isCurrent) { $s.current = ConvertTo-Current $nr }
-        if ($nr -or $s.current) {
-          Set-Step $s.current $e.step
-          if ($e.prUrl) { $s.current.prUrl = [string]$e.prUrl }
-        }
-      }
-      'attention' {
-        if ($isCurrent -and $e.prUrl) { $s.current.prUrl = [string]$e.prUrl }
-        if ($nr -and $e.needsYou -eq $true) {
-          $reason = if ($e.kind -eq 'release_test') { 'RC test' } elseif ($e.reason) { $e.reason } else { 'needs you' }
-          $needs["$nr"] = ConvertTo-StateItem $nr $reason
-        }
-      }
-      'issue.finished' {
-        if (-not $nr) { break }
-        if ($needs.Contains("$nr") -and $needs["$nr"].reason -eq 'RC test') { $needs.Remove("$nr") }
-        switch ([string]$e.outcome) {
-          'delivered' {
-            $delivered["$nr"] = [ordered]@{ pbi = $nr; url = (Get-IssueUrl $nr); prUrl = $(if ($prs.ContainsKey($nr)) { $prs[$nr] } else { Get-IssueUrl $nr }) }
-            $blocked.Remove("$nr"); $paused.Remove("$nr"); $needs.Remove("$nr")
+        if ($null -ne $e.subject) { $state.subject = $e.subject }
+        if ((Test-Map $e.host) -and [string]$e.host['jsonl-file.pid'] -match '^\d+$') { $pidValue = [int]$e.host['jsonl-file.pid'] }
+        if (-not $dv.startedAt) { $dv.startedAt = $e.ts }
+        if (Test-Map $e.agent) { foreach ($k in 'harness', 'model') { if ($e.agent[$k]) { $dv[$k] = [string]$e.agent[$k] } } }
+        if (Test-Map $e.deliver) {
+          foreach ($k in 'source', 'repository') { if ($e.deliver[$k]) { $dv[$k] = [string]$e.deliver[$k] } }
+          if ((Test-Map $e.deliver.milestone) -and $e.deliver.milestone.key) {
+            $s = $e.subject
+            $dv.milestone = [ordered]@{
+              key = [string]$e.deliver.milestone.key
+              title = $(if ((Test-Map $s) -and $s.title) { [string]$s.title } else { [string]$e.deliver.milestone.key })
+              url = $(if ((Test-Map $s) -and $s.url) { [string]$s.url } else { $null })
+            }
           }
-          'merging' { $blocked.Remove("$nr"); $paused.Remove("$nr"); $needs.Remove("$nr") }  # auto-merge on: waits for GitHub, neither delivered nor blocked
-          'skipped' { $blocked.Remove("$nr"); $paused.Remove("$nr"); $needs.Remove("$nr") }
-          'blocked' { $paused.Remove("$nr"); $blocked["$nr"] = ConvertTo-StateItem $nr $(if ($e.reason) { $e.reason } else { 'blocked' }) }
-          'paused' { $blocked.Remove("$nr"); $paused["$nr"] = ConvertTo-StateItem $nr $(if ($e.reason) { $e.reason } else { 'paused' }) }
-        }
-        if ($isCurrent) { $s.current = $null }
-      }
-      'release.updated' {
-        foreach ($k in 'prUrl', 'rcUrl', 'rcVersion') { if ($e[$k]) { $release[$k] = [string]$e[$k] } }
-        if ((Test-Int $e.reviewRound) -and $e.reviewRound -ge 1) { $release.reviewRound = [int]$e.reviewRound }
-        if ($e.testIssue -is [hashtable] -and (Test-Int $e.testIssue.number) -and $e.testIssue.number -ge 1) {
-          $t = [int]$e.testIssue.number
-          if ($e.testIssue.url) { $urls[$t] = [string]$e.testIssue.url }
-          $old = $release.testIssue
-          if ($old -and $old.number -ne $t -and $needs.Contains("$($old.number)") -and $needs["$($old.number)"].reason -eq 'RC test') { $needs.Remove("$($old.number)") }
-          $release.testIssue = [ordered]@{ number = $t; url = (Get-IssueUrl $t) }
-          $needs["$t"] = ConvertTo-StateItem $t 'RC test'
         }
       }
       'run.finished' {
-        $s.result = if ([string]$e.result -in $results) { [string]$e.result } else { 'done' }
+        $state.status = 'finished'
+        if ($null -ne $e.outcome) { $state.outcome = $e.outcome }
+        if ($null -ne $e.reason) { $state.reason = $e.reason }
+        if ($null -ne $e.text) { $state.text = $e.text }
+        $attentions.Clear()
+        foreach ($t in $tasks.Values) {
+          $c = Copy-Without $t 'step', 'progress'; $c.reason = 'run-finished'; $c.text = 'run finished'; $finished.cancelled.Add($c)
+        }
+        $tasks.Clear()
+        $dv.result = if ((Test-Map $e.deliver) -and $e.deliver.result) { [string]$e.deliver.result } elseif ($e.outcome -eq 'succeeded') { 'done' } else { [string]$e.outcome }
+      }
+      'task.started' {
+        $id = [string]$e.task
+        if ($null -ne $e.task -and -not $seen.ContainsKey($id)) {
+          $seen[$id] = $true
+          $t = [ordered]@{ task = $e.task }
+          if ($null -ne $e.parent) { $t.parent = $e.parent }
+          if ($null -ne $e.subject) { $t.subject = $e.subject }
+          $tasks[$id] = $t
+          if ($nr -and (Test-Map $e.subject) -and $e.subject.url) { $urls[$nr] = [string]$e.subject.url }
+        }
+      }
+      'task.finished' {
+        $id = [string]$e.task
+        if ($null -eq $e.task -or -not $tasks.Contains($id) -or [string]$e.outcome -cnotin 'succeeded', 'failed', 'cancelled', 'skipped') { break }
+        $t = $tasks[$id]; $tasks.Remove($id)
+        $c = Copy-Without $t 'step', 'progress'
+        if ($null -ne $e.reason) { $c.reason = $e.reason }
+        if ($null -ne $e.text) { $c.text = $e.text }
+        $finished[[string]$e.outcome].Add($c)
+        for ($i = $attentions.Count - 1; $i -ge 0; $i--) { if ($attentions[$i].task -eq $e.task) { $attentions.RemoveAt($i) } }
+        if (-not $nr) { break }
+        $pr = Get-Pr $e.links; if (-not $pr) { $pr = Get-Pr $t.links }; if ($pr) { $prs[$nr] = $pr }
+        $o = if ((Test-Map $e.deliver) -and $e.deliver.outcome) { [string]$e.deliver.outcome } elseif ($e.outcome -eq 'succeeded') { 'delivered' } else { 'skipped' }
+        $why = if ($e.text) { [string]$e.text } elseif ($e.reason) { [string]$e.reason } else { $o }
+        if ($release.testIssue -and $release.testIssue.number -eq $nr -and $needs.Contains("$nr") -and $needs["$nr"].reason -eq 'RC test') { $needs.Remove("$nr") }
+        switch ($o) {
+          'delivered' {
+            $delivered["$nr"] = [ordered]@{ pbi = $nr; url = (Get-IssueUrl $nr); prUrl = $(if ($prs.ContainsKey($nr)) { $prs[$nr] } else { Get-IssueUrl $nr }) }
+            Remove-Nr $nr 'blocked', 'paused', 'needs', 'merging'
+          }
+          'skipped' { Remove-Nr $nr 'blocked', 'paused', 'needs', 'merging' }
+          'blocked' { Remove-Nr $nr 'paused', 'merging'; $blocked["$nr"] = New-Item2 $nr $why }
+          'paused' { Remove-Nr $nr 'blocked', 'merging'; $paused["$nr"] = New-Item2 $nr $why }
+        }
+      }
+      { $_ -in 'step.started', 'step.finished' } {
+        $t = $null
+        if ($null -ne $e.task) { $t = $tasks[[string]$e.task]; if (-not $t) { break } }
+        if ($t) { $t.step = $e.step } else { $state.step = $e.step }
+        if ($type -eq 'step.finished' -and @($e.links).Count -and $null -ne $e.links) {
+          if ($t) {
+            if (-not $t.Contains('links')) { $t.links = [System.Collections.Generic.List[object]]::new() }
+            Add-Links $t.links $e.links
+          }
+          Add-Links $links $e.links
+        }
+      }
+      'progress' {
+        $p = [ordered]@{ done = $e.done; total = $e.total }
+        if ($null -ne $e.label) { $p.label = $e.label }
+        if ($null -eq $e.task) { $state.progress = $p }
+        elseif ($tasks.Contains([string]$e.task)) { $tasks[[string]$e.task].progress = $p }
+      }
+      'attention' {
+        if (@($attentions | Where-Object { $_.id -eq $e.id }).Count) { break }
+        $a = [ordered]@{ id = $e.id }
+        if ($null -ne $e.task) { $a.task = $e.task }
+        $a.reason = $e.reason
+        if ($null -ne $e.text) { $a.text = $e.text }
+        $a.needsYou = $e.needsYou
+        if ($null -ne $e.links) { $a.links = $e.links }
+        $attentions.Add($a)
+        Add-Links $links $e.links
+        $n = if ($nr) { $nr } elseif ((Test-Map $e.deliver) -and (Test-Number $e.deliver.issue)) { [int]$e.deliver.issue } else { 0 }
+        if ($n -and $e.needsYou -eq $true) {
+          $kind = if (Test-Map $e.deliver) { [string]$e.deliver.kind } else { '' }
+          $why = if ($kind -eq 'release_test') { 'RC test' } elseif ($e.text) { [string]$e.text } else { 'needs you' }
+          $needs["$n"] = New-Item2 $n $why
+          $needIds[[string]$e.id] = $n
+        }
+      }
+      'attention.resolved' {
+        for ($i = 0; $i -lt $attentions.Count; $i++) { if ($attentions[$i].id -eq $e.id) { $attentions.RemoveAt($i); break } }
+        $k = [string]$e.id
+        if ($needIds.ContainsKey($k)) { $needs.Remove("$($needIds[$k])"); $needIds.Remove($k) }
+      }
+      'deliver.merging' {
+        if (-not $nr -or -not $tasks.Contains([string]$e.task)) { break }
+        $pr = Get-Pr $e.links; if (-not $pr) { $pr = Get-Pr $tasks[[string]$e.task].links }; if ($pr) { $prs[$nr] = $pr }
+        Remove-Nr $nr 'blocked', 'paused', 'needs'
+        $merging["$nr"] = [ordered]@{ number = $nr; url = (Get-IssueUrl $nr); prUrl = $(if ($prs.ContainsKey($nr)) { $prs[$nr] } else { $null }) }
+      }
+      'deliver.release.updated' {
+        $d = $e.deliver
+        if (-not (Test-Map $d)) { break }
+        if ($d.pr) { $release.prUrl = [string]$d.pr }
+        if ($d.rcUrl) { $release.rcUrl = [string]$d.rcUrl }
+        if ($d.rcVersion) { $release.rcVersion = [string]$d.rcVersion }
+        if ((Test-Number $d.round) -and $d.round -ge 1) { $release.reviewRound = [int]$d.round }
+        if ((Test-Map $d.testIssue) -and (Test-Number $d.testIssue.number) -and $d.testIssue.number -ge 1) {
+          $ti = [int]$d.testIssue.number
+          if ($d.testIssue.url) { $urls[$ti] = [string]$d.testIssue.url }
+          $old = $release.testIssue
+          if ($old -and $old.number -ne $ti -and $needs.Contains("$($old.number)") -and $needs["$($old.number)"].reason -eq 'RC test') { $needs.Remove("$($old.number)") }
+          $release.testIssue = [ordered]@{ number = $ti; url = (Get-IssueUrl $ti) }
+          $needs["$ti"] = New-Item2 $ti 'RC test'
+        }
+      }
+      'deliver.iteration' {
+        if ((Test-Map $e.deliver) -and (Test-Number $e.deliver.n)) { $dv.iteration = [ordered]@{ n = [int]$e.deliver.n; max = [int]$e.deliver.max } }
       }
     }
   }
 
-  if (-not $s.result) {
-    $s.result = 'running'
-    $nowAt = if ($Now) { [DateTimeOffset]::Parse($Now, [Globalization.CultureInfo]::InvariantCulture) } else { [DateTimeOffset]::UtcNow }
-    if ($s.lastTs -and ($nowAt - $s.lastTs).TotalHours -gt 1) { $s.result = 'abandoned' }
-    elseif ($s.pid -and -not $NoPidCheck -and -not (Get-Process -Id $s.pid -ErrorAction SilentlyContinue)) { $s.result = 'abandoned' }
+  if ($state.status -eq 'running') {
+    $nowAt = if ($Now) { Get-Time $Now } else { [DateTimeOffset]::UtcNow }
+    $last = Get-Time ([string]$updated)
+    if ($updated -is [string] -and $last -and ($nowAt - $last).TotalMilliseconds -gt 3600000) { $state.status = 'abandoned' }
+    elseif ($pidValue -and -not $NoPidCheck -and -not (Get-Process -Id $pidValue -ErrorAction SilentlyContinue)) { $state.status = 'abandoned' }
   }
-  if ($s.result -ne 'running') { $s.current = $null }
+  if ($state.status -eq 'abandoned') { $dv.result = 'abandoned' }
+  $state.tasks = @($tasks.Values)
+  $state.finished = $finished
+  $state.attentions = $attentions
+  $state.needsYou = [bool]@($attentions | Where-Object { $_.needsYou -eq $true }).Count
+  $state.links = $links
+  $state.gaps = $gaps
+  $state.lastSeq = $lastSeq
+  if ($null -ne $updated) { $state.updated = $updated }
 
-  $state = [ordered]@{
-    run = $s.run
-    harness = $s.harness
-    model = $(if ($s.model) { $s.model } else { 'default' })
-    repository = $s.repository
-    milestone = $s.milestone
-    closed = $s.closed
-    total = $s.total
-    current = $s.current
-    delivered = @($delivered.Values)
-    blocked = @($blocked.Values)
-    paused = @($paused.Values)
-    needsYou = @($needs.Values)
-    release = $release
-    startedAt = $s.startedAt
-    updatedAt = $s.updatedAt
-    result = $s.result
-  }
-  $state | ConvertTo-Json -Depth 8
+  $dv.model = if ($dv.model) { $dv.model } else { 'default' }
+  $dv.delivered = @($delivered.Values)
+  $dv.blocked = @($blocked.Values)
+  $dv.paused = @($paused.Values)
+  $dv.merging = @($merging.Values)
+  $dv.needsYou = @($needs.Values)
+  $dv.release = $release
+  $state.deliver = $dv
+  ConvertTo-Json -InputObject $state -Depth 20
   exit 0
 }

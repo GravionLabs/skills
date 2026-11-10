@@ -1,0 +1,71 @@
+{
+  "v": 1,
+  "status": "running",
+  "run": "20261107-100000-runn",
+  "subject": {
+    "kind": "github.milestone",
+    "id": "M5 Events",
+    "title": "M5 Events",
+    "url": "https://github.com/GravionLabs/skills/milestone/5"
+  },
+  "progress": {
+    "done": 3,
+    "total": 9,
+    "label": "PBIs"
+  },
+  "tasks": [
+    {
+      "task": "issue-370",
+      "subject": {
+        "kind": "github.issue",
+        "id": "GravionLabs/skills#370",
+        "title": "[PBI] feat(delivery): ConvertFrom-ProgressEvents reducer",
+        "url": "https://github.com/GravionLabs/skills/issues/370"
+      },
+      "step": {
+        "name": "implement",
+        "n": 3,
+        "total": 7,
+        "text": "tests green"
+      }
+    }
+  ],
+  "finished": {
+    "succeeded": [],
+    "failed": [],
+    "cancelled": [],
+    "skipped": []
+  },
+  "attentions": [],
+  "needsYou": false,
+  "links": [],
+  "gaps": [],
+  "lastSeq": 6,
+  "updated": "2026-11-07T11:50:00.000Z",
+  "deliver": {
+    "source": "loop",
+    "harness": "claude",
+    "model": "sonnet",
+    "repository": "GravionLabs/skills",
+    "milestone": {
+      "key": "M5",
+      "title": "M5 Events",
+      "url": "https://github.com/GravionLabs/skills/milestone/5"
+    },
+    "startedAt": "2026-11-07T10:00:00.000Z",
+    "result": "running",
+    "iteration": null,
+    "delivered": [],
+    "blocked": [],
+    "paused": [],
+    "merging": [],
+    "needsYou": [],
+    "release": {
+      "reviewRound": null,
+      "prUrl": null,
+      "rcUrl": null,
+      "rcVersion": null,
+      "testIssue": null
+    }
+  }
+}

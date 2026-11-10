@@ -157,7 +157,7 @@ describe.skipIf(!hasPwsh || process.platform === 'win32')('auto-merge scripts (#
       expect(j.ready.next.number).toBe(481);
     });
 
-    it('the progress reducer folds issue.finished merging as neither delivered nor blocked', () => {
+    it('the progress reducer folds deliver.merging as neither delivered nor blocked, the task stays open', () => {
       const ev = (seq: number, type: string, extra: object) =>
         JSON.stringify({
           v: 1,
@@ -168,17 +168,26 @@ describe.skipIf(!hasPwsh || process.platform === 'win32')('auto-merge scripts (#
           tone: 'neutral',
           ...extra,
         });
-      const issue = { number: 480, url: `${base}/issues/480` };
+      const subject = {
+        kind: 'github.issue',
+        id: 'acme/app#480',
+        title: 'x',
+        url: `${base}/issues/480`,
+      };
       const file = path.join(root, 'merging.jsonl');
       fs.writeFileSync(
         file,
         [
-          ev(1, 'run.started', { source: 'loop', harness: 'claude', repository: 'acme/app' }),
-          ev(2, 'issue.started', { issue }),
-          ev(3, 'issue.finished', {
-            issue,
-            outcome: 'merging',
-            reason: 'auto-merge on, waits for checks',
+          ev(1, 'run.started', {
+            profiles: ['deliver@1'],
+            host: {},
+            deliver: { source: 'loop', repository: 'acme/app' },
+          }),
+          ev(2, 'task.started', { task: 'issue-480', subject }),
+          ev(3, 'deliver.merging', {
+            task: 'issue-480',
+            text: 'auto-merge on, waits for checks',
+            deliver: { issue: 480 },
           }),
         ].join('\n') + '\n',
       );
@@ -191,7 +200,9 @@ describe.skipIf(!hasPwsh || process.platform === 'win32')('auto-merge scripts (#
       ]);
       expect(r.status, r.stderr).toBe(0);
       const s = JSON.parse(r.stdout);
-      expect([s.delivered, s.blocked, s.paused, s.current]).toEqual([[], [], [], null]);
+      expect([s.deliver.delivered, s.deliver.blocked, s.deliver.paused]).toEqual([[], [], []]);
+      expect(s.deliver.merging).toEqual([{ number: 480, url: `${base}/issues/480`, prUrl: null }]);
+      expect(s.tasks.map((t: { task: string }) => t.task)).toEqual(['issue-480']);
     });
   });
 });

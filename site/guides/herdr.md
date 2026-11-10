@@ -9,7 +9,7 @@ Nothing here is required. Without herdr the events are still written.
 
 ## Events, not pane tokens
 
-`deliver` does not call herdr itself and pushes no pane tokens or agent state. The session (and `Invoke-DeliverLoop.ps1`) sends every progress line as an event through `Report-Progress.ps1`, which only appends it to the event file. A herdr plugin or poimen reads that file ([agent-events](https://github.com/GravionLabs/agent-events)) and shows what it wants.
+`deliver` does not call herdr itself and pushes no pane tokens or agent state. The session (and `Invoke-DeliverLoop.ps1`) sends every progress line as an event through `Report-Progress.ps1`, which only appends it to the event file. The file holds [agent-events](https://github.com/GravionLabs/agent-events) core events (run subject, open tasks, steps, progress, attentions, links) plus the deliver profile; a herdr plugin or poimen reads the core and shows what it wants.
 
 ## The loop in herdr
 
