@@ -1,6 +1,6 @@
 # Closing the milestone after the release (finish step 5)
 
-Runs in the later `finish` on the merged branch, after `delete-branch`. Needs `github-milestone` installed (`../github-milestone/scripts/Get-Milestones.ps1`); otherwise stop after the deletion as before.
+Runs in the later `finish` on the merged branch, after `fast-forward`. Needs `github-milestone` installed (`../github-milestone/scripts/Get-Milestones.ps1`); otherwise stop after the fast-forward as before.
 
 1. Tag: the newest `v<x.y.z>` on the default branch (`git tag --list 'v*' --sort=-v:refname`). No tag yet: report "release job still running" and stop.
 2. Version check: `pwsh scripts/Test-ReleaseVersion.ps1 -Tag v<x.y.z>` (read-only JSON: `expected`, `match`, `bump`, `deciding[]`). `match` false: report tag, `expected` and the `deciding` commits (for example a `feat:` that should have made a minor release), then stop. Nothing is renamed or closed with a wrong version.

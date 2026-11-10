@@ -24,7 +24,7 @@ flowchart LR
 Cut a release.
 ```
 
-`github-release cut` creates the rolling `release/next` from `main`. A branch that holds unreleased work is never reset; a released one is deleted and recreated; a fresh one is left as it is. PBI pull requests target this branch. Rules for the branch types and merge methods: `references/release-branches.md` of `github-issue`.
+`github-release cut` creates the rolling `release/next` from `main`. A branch that holds unreleased work is never reset; a released one is moved to `main` by a fast-forward; a fresh one is left as it is. PBI pull requests target this branch. Rules for the branch types and merge methods: `references/release-branches.md` of `github-issue`.
 
 ## 2. Create and inspect the milestone
 
@@ -75,7 +75,7 @@ Review the release PR, then merge it with a merge commit:
 gh pr merge <nr> --merge
 ```
 
-`deliver` and `finish` never merge it and never wait for it. After the merge the next `github-release finish` (or `cut`) deletes `release/next`; `cut` recreates it from `main` for the next release.
+`deliver` and `finish` never merge it and never wait for it. `release/next` is never deleted. After the merge the next `github-release finish` (or `cut`) moves it to `main` by a fast-forward for the next release, and open PRs into it keep their base.
 
 ## After a hotfix
 
@@ -100,11 +100,11 @@ and warns when `required_status_checks` is not in the output.
 Settings, in the UI under **Settings > Rules > Rulesets > New ruleset > New branch ruleset**:
 
 - Name `release/next`, enforcement **Active**.
-- **Bypass list**: empty (no bypass for admins, apps or roles).
+- **Bypass list**: the repository admin role only, mode always. `github-release` pushes the fast-forward of `release/next` as the owner; no bypass for apps or other roles.
 - **Target branches**: add target, include exactly `refs/heads/release/next` (a `release/**` pattern would also cover `release/<x.y>` maintenance branches).
 - **Require a pull request before merging**, allowed merge methods **Squash** only (PBI branches squash into the release branch).
 - **Require status checks to pass**: add your CI checks by name; leave "Require branches to be up to date" off unless you want a rebase per PBI.
-- **Block force pushes** on. Leave **Restrict deletions** off: `github-release cut` (recreate) and `finish` (delete branch) run `git push origin --delete release/next`, and with an empty bypass list a deletion rule would reject them.
+- **Block force pushes** on. Turn **Restrict deletions** on: `github-release` moves `release/next` by a fast-forward and never deletes it, and without the rule "Automatically delete head branches" deletes it when the release PR is merged and GitHub moves every open PR into `release/next` to `main` (#528). `Get-ReleaseState.ps1` warns when the rule is missing.
 
 The same through the API (replace `build` with your check names; `integration_id` is optional):
 
@@ -114,10 +114,11 @@ gh api repos/{owner}/{repo}/rulesets --method POST --input - <<'JSON'
   "name": "release/next",
   "target": "branch",
   "enforcement": "active",
-  "bypass_actors": [],
+  "bypass_actors": [ { "actor_id": 5, "actor_type": "RepositoryRole", "bypass_mode": "always" } ],
   "conditions": { "ref_name": { "include": ["refs/heads/release/next"], "exclude": [] } },
   "rules": [
     { "type": "non_fast_forward" },
+    { "type": "deletion" },
     { "type": "pull_request",
       "parameters": {
         "required_approving_review_count": 0,

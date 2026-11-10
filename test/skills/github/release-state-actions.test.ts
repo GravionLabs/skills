@@ -10,7 +10,7 @@ const script = path.join(root, 'skills/github/github-release/scripts/Get-Release
 const fx = useReleaseFixture();
 const { git, commit, dropRef, resetHeads } = fx;
 
-// #769: guards around release/next (delete, recreate), stale lines, workflow detection, read-only and input validation.
+// #769: guards around release/next (fast-forward, never delete), stale lines, workflow detection, read-only and input validation.
 
 describe('Get-ReleaseState.ps1', () => {
   let worker: PwshWorker;
@@ -22,7 +22,14 @@ describe('Get-ReleaseState.ps1', () => {
     fs.mkdirSync(ghDir);
     fake = createFakeGh(
       ghDir,
-      `(call) => ({ rest: JSON.parse((call.args.includes('--head') ? process.env.FAKE_RELEASE_PR : process.env.FAKE_PRS) || '[]') })`,
+      `(call) => {
+        const a = call.args;
+        if (a[0] === 'repo') return { rest: process.env.FAKE_SLUG || '' };
+        if (a[0] === 'api' && a.includes('graphql')) return { rest: JSON.parse(process.env.FAKE_GRAPHQL || '{}') };
+        if (a[0] === 'api' && /rules\\/branches/.test(a[1])) return { rest: JSON.parse(process.env.FAKE_RULES || '[]') };
+        if (a[0] === 'api') return { rest: process.env.FAKE_DELETE_ON_MERGE || '' };
+        return { rest: JSON.parse((a.includes('--head') ? process.env.FAKE_RELEASE_PR : process.env.FAKE_PRS) || '[]') };
+      }`,
     );
   });
   afterAll(() => worker.close());
@@ -47,34 +54,34 @@ describe('Get-ReleaseState.ps1', () => {
   const setRef = (b: string, sha: string) => git(fx.origin, 'update-ref', `refs/heads/${b}`, sha);
 
   describe('release/next merged or released', () => {
-    it('merged tip without open PRs: finish deletes it, cut recreates it, neither touches origin', async () => {
+    it('merged tip without open PRs: finish and cut fast-forward it, neither touches origin', async () => {
       setRef('release/next', 'v2.1.0^2');
       const before = git(fx.origin, 'for-each-ref');
       expect(await state('finish', 'release/next')).toMatchObject({
         state: 'merged',
-        deleteAllowed: true,
-        action: 'delete-branch',
+        fastForwardAllowed: true,
+        action: 'fast-forward',
       });
-      expect(await state('cut', 'release/next')).toMatchObject({ action: 'recreate' });
-      // read-only: the script only reports delete-branch / recreate, it never pushes or deletes
+      expect(await state('cut', 'release/next')).toMatchObject({ action: 'fast-forward' });
+      // read-only: the script only reports fast-forward, it never pushes or deletes
       expect(git(fx.origin, 'for-each-ref')).toBe(before);
     });
 
-    it('released without merge tip: cut recreates', async () => {
+    it('released without merge tip: cut fast-forwards', async () => {
       setRef('release/next', 'release/legacy');
       expect(await state('cut', 'release/next')).toMatchObject({
         state: 'released',
-        deleteAllowed: true,
-        action: 'recreate',
+        fastForwardAllowed: true,
+        action: 'fast-forward',
       });
     });
 
-    it('open PRs block delete and recreate', async () => {
+    it('open PRs do not block the fast-forward (#528)', async () => {
       setRef('release/next', 'v2.1.0^2');
       const prs = { FAKE_PRS: '[{"number":5,"title":"t","url":"u"}]' };
       expect(await state('cut', 'release/next', prs)).toMatchObject({
-        deleteAllowed: false,
-        action: 'stop: open PRs or local commits block the reset',
+        fastForwardAllowed: true,
+        action: 'fast-forward',
       });
     });
 
@@ -86,13 +93,75 @@ describe('Get-ReleaseState.ps1', () => {
       try {
         expect(await state('cut', 'release/next')).toMatchObject({
           localAhead: 1,
-          deleteAllowed: false,
-          action: 'stop: open PRs or local commits block the reset',
+          fastForwardAllowed: false,
+          action: 'stop: local commits block the reset',
         });
       } finally {
         git(fx.clone, 'checkout', '-q', 'main');
         git(fx.clone, 'branch', '-q', '-D', 'release/next');
       }
+    });
+  });
+
+  describe('release/next deletion guard (#528)', () => {
+    const repo = { FAKE_SLUG: 'GravionLabs/demo', FAKE_DELETE_ON_MERGE: 'true' };
+
+    it('warns when delete_branch_on_merge is on and the ruleset has no deletion rule', async () => {
+      setRef('release/next', 'release/legacy');
+      const r = await state('finish', 'release/next', {
+        ...repo,
+        FAKE_RULES: '[{"type":"non_fast_forward"}]',
+      });
+      expect(r).toMatchObject({ deleteOnMerge: true, deletionRule: false });
+      expect(r.warning).toContain('no deletion rule');
+    });
+
+    it('no warning with the deletion rule', async () => {
+      setRef('release/next', 'release/legacy');
+      const r = await state('finish', 'release/next', {
+        ...repo,
+        FAKE_RULES: '[{"type":"deletion"}]',
+      });
+      expect(r).toMatchObject({ deleteOnMerge: true, deletionRule: true, warning: null });
+    });
+
+    it('lists open PRs that GitHub moved from release/next to main', async () => {
+      setRef('release/next', 'release/legacy');
+      const graphql = {
+        data: {
+          repository: {
+            pullRequests: {
+              nodes: [
+                {
+                  number: 7,
+                  title: 'moved',
+                  url: 'u7',
+                  timelineItems: { nodes: [{ previousRefName: 'release/next' }] },
+                },
+                { number: 8, title: 'plain', url: 'u8', timelineItems: { nodes: [] } },
+              ],
+            },
+          },
+        },
+      };
+      const r = await state('finish', 'release/next', {
+        ...repo,
+        FAKE_RULES: '[{"type":"deletion"}]',
+        FAKE_GRAPHQL: JSON.stringify(graphql),
+      });
+      expect(r.retargetedPrs).toEqual([{ number: 7, title: 'moved', url: 'u7' }]);
+      expect(r.warning).toContain('#7');
+    });
+
+    it('stays silent when gh cannot tell', async () => {
+      setRef('release/next', 'release/legacy');
+      const r = await state('finish', 'release/next');
+      expect(r).toMatchObject({
+        deleteOnMerge: null,
+        deletionRule: null,
+        retargetedPrs: [],
+        warning: null,
+      });
     });
   });
 
@@ -142,9 +211,9 @@ describe('github-release SKILL.md finish step 4', () => {
   const skill = fs.readFileSync(path.join(root, 'skills/github/github-release/SKILL.md'), 'utf8');
   const step4 = skill.split('\n').find((l) => l.startsWith('4. Report the PR URL')) ?? '';
 
-  it('names the merge command and the delete-branch path', () => {
+  it('names the merge command and the fast-forward path', () => {
     expect(step4).toContain('gh pr merge <nr> --merge');
-    expect(step4).toContain('delete-branch');
+    expect(step4).toContain('fast-forward');
   });
 
   it('never waits for the user in the fork', () => {
