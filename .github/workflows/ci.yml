@@ -105,6 +105,9 @@ jobs:
       - name: Test
         env:
           VITEST_JUNIT_OUTPUT: test-results/junit-${{ matrix.shard }}.xml
+          # the vendored agent-events copy must equal its pinned tag (test/skills/delivery/agent-events.test.ts)
+          AGENT_EVENTS_VERIFY: '1'
+          GH_TOKEN: ${{ github.token }}
         run: pnpm exec vitest run --shard=${{ matrix.shard }}/2
 
       - name: Upload test results

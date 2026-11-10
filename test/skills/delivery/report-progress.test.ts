@@ -2,25 +2,19 @@ import { execFileSync, spawnSync } from 'child_process';
 import * as fs from 'fs';
 import * as os from 'os';
 import * as path from 'path';
-import Ajv from 'ajv/dist/2020';
-import { EVENT_SCHEMA } from '../../helpers/agent-events';
+import { checkRunFile } from '../../helpers/agent-events';
 import { PwshWorker } from '../../helpers/pwsh-worker';
 
 const SCRIPT = path.resolve(
   __dirname,
   '../../../skills/delivery/deliver/scripts/Report-Progress.ps1',
 );
-const SCHEMA = EVENT_SCHEMA;
 const hasPwsh = spawnSync('pwsh', ['-NoProfile', '-Command', '1']).status === 0;
 
 describe.skipIf(!hasPwsh || process.platform === 'win32')('Report-Progress.ps1', () => {
   let root: string;
   let repo: string;
   let worker: PwshWorker;
-  const validate = (() => {
-    const ajv = new Ajv({ allErrors: true, validateFormats: false });
-    return ajv.compile(JSON.parse(fs.readFileSync(SCHEMA, 'utf8')));
-  })();
   const git = (cwd: string, ...args: string[]) =>
     execFileSync('git', ['-c', 'user.name=Test', '-c', 'user.email=test@example.com', ...args], {
       cwd,
@@ -71,13 +65,19 @@ describe.skipIf(!hasPwsh || process.platform === 'win32')('Report-Progress.ps1',
     const r = await worker.run(args, { cwd: repo, env });
     expect(r.status).toBe(0);
     expect(r.stdout.trim()).toBe('STOP requested');
-    expect(events(dir, 'stop-run')).toHaveLength(3);
+    expect(events(dir, 'stop-run').map((e) => e.type)).toEqual([
+      'task.started',
+      'step.finished',
+      'step.finished',
+      'step.finished',
+    ]);
     const other = await worker.run(['-Type', 'attention', '-Kind', 'paused'], { cwd: repo, env });
     expect(other.stdout).not.toContain('STOP requested');
   });
 
-  it('creates a run on run.started, host from the environment, and every type validates in seq order', async () => {
+  it('creates a run on run.started and writes the core events plus the deliver profile, valid in seq order (#452)', async () => {
     const dir = path.join(root, 'ev1');
+    const base = 'https://github.com/GravionLabs/skills';
     const start = await worker.run(
       [
         '-Type',
@@ -94,6 +94,8 @@ describe.skipIf(!hasPwsh || process.platform === 'win32')('Report-Progress.ps1',
         'M5',
         '-MilestoneTitle',
         'M5 Events',
+        '-MilestoneUrl',
+        `${base}/milestone/5`,
       ],
       {
         cwd: repo,
@@ -107,11 +109,13 @@ describe.skipIf(!hasPwsh || process.platform === 'win32')('Report-Progress.ps1',
       AGENT_EVENTS_RUN: run,
       AGENT_EVENTS_OWNER: '1',
     });
+    const pr = `${base}/pull/5`;
     const calls: string[][] = [
       ['-Type', 'milestone.progress', '-Closed', '7', '-Total', '19'],
-      ['-Type', 'issue.started', '-Issue', '322', '-Title', 'x', '-Url', 'https://x/322'],
+      ['-Type', 'issue.started', '-Issue', '322', '-Title', 'x', '-Url', `${base}/issues/322`],
       ['-Type', 'step.finished', '-Issue', '322', '-Step', 'review', '-Result', 'clean'],
-      ['-Type', 'attention', '-Issue', '322', '-Kind', 'pr_opened', '-Pr', 'https://x/pull/5'],
+      ['-Type', 'attention', '-Issue', '322', '-Kind', 'pr_opened', '-Pr', pr],
+      ['-Type', 'attention', '-Issue', '323', '-Kind', 'needs_you', '-Reason', 'decide the key'],
       [
         '-Type',
         'issue.finished',
@@ -124,61 +128,198 @@ describe.skipIf(!hasPwsh || process.platform === 'win32')('Report-Progress.ps1',
       ],
       [
         '-Type',
+        'issue.finished',
+        '-Issue',
+        '323',
+        '-Outcome',
+        'skipped',
+        '-Reason',
+        'no longer waiting',
+      ],
+      ['-Type', 'issue.finished', '-Issue', '324', '-Outcome', 'merging', '-Pr', `${base}/pull/6`],
+      [
+        '-Type',
         'release.updated',
         '-RcUrl',
-        'https://x/rc',
+        `${base}/rc`,
         '-RcVersion',
         '1.2.0-rc.1',
         '-TestIssue',
         '400',
         '-TestIssueUrl',
-        'https://x/400',
+        `${base}/issues/400`,
         '-PrUrl',
-        'https://x/pull/9',
+        `${base}/pull/9`,
         '-ReviewRound',
         '2',
       ],
-      ['-Type', 'run.finished', '-RunResult', 'done'],
+      ['-Type', 'iteration', '-Iteration', '1', '-IterationMax', '3'],
+      ['-Type', 'step.finished', '-Issue', '322', '-Step', 'resume', '-Result', 'again'],
+      ['-Type', 'run.finished', '-RunResult', 'max reached'],
     ];
     for (const c of calls) expect((await worker.run(c, { cwd: repo, env })).status).toBe(0);
+    const text = fs.readFileSync(path.join(dir, `${run}.jsonl`), 'utf8');
+    expect(checkRunFile(text, { known: true, deliver: true })).toEqual([]);
     const evs = events(dir, run);
-    expect(evs.map((e) => e.seq)).toEqual([1, 2, 3, 4, 5, 6, 7, 8]);
-    expect(evs.map((e) => e.type)).toEqual([
-      'run.started',
-      'milestone.progress',
-      'issue.started',
-      'step.finished',
-      'attention',
-      'issue.finished',
-      'release.updated',
-      'run.finished',
+    expect(evs.map((e) => [e.type, e.task ?? e.id ?? null])).toEqual([
+      ['run.started', null],
+      ['progress', null],
+      ['task.started', 'issue-322'],
+      ['step.finished', 'issue-322'],
+      ['attention', 'issue-322'],
+      ['attention', 'a6'], // needs_you: no task, it outlives the PBI
+      ['task.finished', 'issue-322'],
+      ['task.started', 'issue-323'], // a PBI that was never started: started, then finished
+      ['task.finished', 'issue-323'],
+      ['attention.resolved', 'a6'], // skipped resolves the needs-you attention of the issue
+      ['task.started', 'issue-324'],
+      ['deliver.merging', 'issue-324'],
+      ['deliver.release.updated', null],
+      ['deliver.iteration', null],
+      ['task.started', 'issue-322.2'], // a later attempt of a finished issue
+      ['step.finished', 'issue-322.2'],
+      ['run.finished', null],
     ]);
-    for (const e of evs) {
-      expect(validate(e), JSON.stringify(validate.errors)).toBe(true);
-      expect(e.run).toBe(run);
-    }
-    expect(evs[0]).toMatchObject({
+    expect(evs[0]).toEqual({
       v: 1,
-      source: 'session',
-      harness: 'claude',
-      model: 'opus',
-      repository: 'GravionLabs/skills',
-      milestone: { key: 'M5' },
-      host: { poimenTerminal: 't-1', herdrPane: 'p-2' },
+      seq: 1,
+      ts: expect.any(String),
+      run,
+      type: 'run.started',
+      tone: 'neutral',
+      profiles: ['deliver@1'],
+      profileSchemas: {
+        'deliver@1': expect.stringMatching(/^https:\/\/.+deliver-profile\.schema\.json$/),
+      },
+      agent: { harness: 'claude', model: 'opus' },
+      // #401: a session's run.started comes from a separate process that exits at once, so it records no pid
+      host: { 'poimen.terminal': 't-1', 'herdr.pane': 'p-2' },
+      subject: {
+        kind: 'github.milestone',
+        id: 'M5 Events',
+        title: 'M5 Events',
+        url: `${base}/milestone/5`,
+      },
+      deliver: { source: 'session', repository: 'GravionLabs/skills', milestone: { key: 'M5' } },
     });
-    // #401: a session's run.started comes from a separate process that exits at once, so it records no pid
-    expect(evs[0].pid).toBeUndefined();
-    expect(evs[1]).toMatchObject({ closed: 7, total: 19 });
-    expect(evs[3].step).toMatchObject({ name: 'review', n: 4, total: 7, text: 'clean' });
-    // #372: issue.finished carries the reason (the projection's blocked and paused reason)
-    expect(evs[5]).toMatchObject({ outcome: 'blocked', reason: 'open blocker', tone: 'danger' });
+    expect(evs[1]).toMatchObject({ done: 7, total: 19, label: 'PBIs' });
+    expect(evs[1].task).toBeUndefined();
+    expect(evs[2].subject).toEqual({
+      kind: 'github.issue',
+      id: 'GravionLabs/skills#322',
+      title: 'x',
+      url: `${base}/issues/322`,
+    });
+    expect(evs[3].step).toEqual({ name: 'review', n: 4, total: 7, text: 'clean' });
+    expect(evs[4]).toMatchObject({
+      reason: 'deliver.pr-opened',
+      needsYou: false,
+      links: [{ rel: 'pull-request', url: pr }],
+      deliver: { kind: 'pr_opened', issue: 322 },
+    });
+    expect(evs[4].prUrl).toBeUndefined();
+    expect(evs[5]).toMatchObject({
+      needsYou: true,
+      tone: 'warning',
+      text: 'decide the key',
+      deliver: { issue: 323 },
+    });
+    // #372: the reason of blocked and paused, now a code plus the human text (#516)
     expect(evs[6]).toMatchObject({
-      rcUrl: 'https://x/rc',
-      rcVersion: '1.2.0-rc.1',
-      testIssue: { number: 400, url: 'https://x/400' },
-      prUrl: 'https://x/pull/9',
-      reviewRound: 2,
+      outcome: 'skipped',
+      reason: 'deliver.blocked',
+      text: 'open blocker',
+      tone: 'danger',
+      deliver: { outcome: 'blocked' },
     });
+    expect(evs[7].subject).toMatchObject({ title: '#323', url: `${base}/issues/323` });
+    expect(evs[11]).toMatchObject({
+      links: [{ rel: 'pull-request', url: `${base}/pull/6` }],
+      deliver: { issue: 324 },
+    });
+    expect(evs[12].deliver).toEqual({
+      round: 2,
+      pr: `${base}/pull/9`,
+      rcUrl: `${base}/rc`,
+      rcVersion: '1.2.0-rc.1',
+      testIssue: { number: 400, url: `${base}/issues/400` },
+    });
+    expect(evs[13].deliver).toEqual({ n: 1, max: 3 });
+    expect(evs[16]).toMatchObject({
+      outcome: 'succeeded',
+      reason: 'deliver.max-reached',
+      text: 'max reached',
+      deliver: { result: 'max reached' },
+    });
+  });
+
+  it('a subject for /deliver <nr>, the writer pid of a loop, -Code and usage errors', async () => {
+    const dir = path.join(root, 'ev-subject');
+    const env = baseEnv({ AGENT_EVENTS_DIR: dir });
+    const start = await worker.run(
+      [
+        '-Type',
+        'run.started',
+        '-Source',
+        'loop',
+        '-Issue',
+        '7',
+        '-Title',
+        'Seven',
+        '-Repository',
+        'a/b',
+      ],
+      { cwd: repo, env },
+    );
+    const run = /AGENT_EVENTS_RUN=(\S+)/.exec(start.stdout)![1];
+    const own = baseEnv({ AGENT_EVENTS_DIR: dir, AGENT_EVENTS_RUN: run, AGENT_EVENTS_OWNER: '1' });
+    const bad = [
+      ['-Type', 'step.finished', '-Issue', '7'],
+      ['-Type', 'attention', '-Issue', '7'],
+      ['-Type', 'issue.finished', '-Outcome', 'delivered'],
+      ['-Type', 'issue.finished', '-Issue', '7', '-Outcome', 'done'],
+      ['-Type', 'nope'],
+    ];
+    for (const b of bad) {
+      const r = await worker.run(b, { cwd: repo, env: own });
+      expect(r.status).toBe(0);
+    }
+    await worker.run(
+      [
+        '-Type',
+        'issue.finished',
+        '-Issue',
+        '7',
+        '-Outcome',
+        'paused',
+        '-Code',
+        'Needs Decision',
+        '-Reason',
+        'which key?',
+      ],
+      { cwd: repo, env: own },
+    );
+    const evs = events(dir, run);
+    expect(evs[0].subject).toEqual({
+      kind: 'github.issue',
+      id: 'a/b#7',
+      title: 'Seven',
+      url: 'https://github.com/a/b/issues/7',
+    });
+    expect(evs[0].host['jsonl-file.pid']).toMatch(/^\d+$/);
+    // the usage errors wrote nothing
+    expect(evs.map((e) => e.type)).toEqual(['run.started', 'task.started', 'task.finished']);
+    expect(evs[2]).toMatchObject({
+      reason: 'deliver.needs-decision',
+      text: 'which key?',
+      tone: 'warning',
+    });
+    expect(
+      checkRunFile(fs.readFileSync(path.join(dir, `${run}.jsonl`), 'utf8'), {
+        known: true,
+        deliver: true,
+      }),
+    ).toEqual([]);
   });
 
   it('an explicit -Run equal to the inherited run is nested too, unless the owner marker is set (#463)', async () => {
@@ -271,16 +412,16 @@ describe.skipIf(!hasPwsh || process.platform === 'win32')('Report-Progress.ps1',
         ],
         { cwd: repo, env, encoding: 'utf8' },
       );
-      return JSON.parse(r.stdout).result;
+      return JSON.parse(r.stdout).status;
     };
-    expect(events(dir, session)[0].pid).toBeUndefined();
-    expect(typeof events(dir, loop)[0].pid).toBe('number');
+    expect(events(dir, session)[0].host['jsonl-file.pid']).toBeUndefined();
+    expect(events(dir, loop)[0].host['jsonl-file.pid']).toMatch(/^\d+$/);
     // the writing process has exited; the session run is still running, the loop run (dead pid) is abandoned
     expect(result(session)).toBe('running');
     expect(result(loop)).toBe('abandoned');
   });
 
-  it('writes the tone and needsYou of the ADR table', async () => {
+  it('writes the tone and needsYou of the profile tone rules', async () => {
     const dir = path.join(root, 'ev2');
     const env = baseEnv({
       AGENT_EVENTS_DIR: dir,
@@ -304,10 +445,12 @@ describe.skipIf(!hasPwsh || process.platform === 'win32')('Report-Progress.ps1',
       [['-Type', 'step.finished', '-Step', 'done'], 'success'],
       [['-Type', 'step.finished', '-Step', 'implement', '-Result', 'paused: question'], 'warning'],
       [['-Type', 'step.finished', '-Step', 'implement', '-Result', 'blocked by #4'], 'danger'],
-      [['-Type', 'issue.finished', '-Outcome', 'delivered'], 'success'],
-      [['-Type', 'issue.finished', '-Outcome', 'blocked'], 'danger'],
-      [['-Type', 'issue.finished', '-Outcome', 'paused'], 'warning'],
-      [['-Type', 'issue.finished', '-Outcome', 'skipped'], 'neutral'],
+      [['-Type', 'attention', '-Kind', 'stopping'], 'neutral'],
+      [['-Type', 'issue.finished', '-Issue', '1', '-Outcome', 'delivered'], 'success'],
+      [['-Type', 'issue.finished', '-Issue', '1', '-Outcome', 'blocked'], 'danger'],
+      [['-Type', 'issue.finished', '-Issue', '1', '-Outcome', 'paused'], 'warning'],
+      [['-Type', 'issue.finished', '-Issue', '1', '-Outcome', 'skipped'], 'neutral'],
+      [['-Type', 'issue.finished', '-Issue', '1', '-Outcome', 'merging'], 'neutral'],
       [['-Type', 'run.finished', '-RunResult', 'done'], 'success'],
       [['-Type', 'run.finished', '-RunResult', 'no progress'], 'warning'],
       [['-Type', 'run.finished', '-RunResult', 'blocked'], 'danger'],
@@ -315,10 +458,12 @@ describe.skipIf(!hasPwsh || process.platform === 'win32')('Report-Progress.ps1',
       [['-Type', 'milestone.progress', '-Closed', '1', '-Total', '2'], 'neutral'],
     ];
     for (const [args] of cases) expect((await worker.run(args, { cwd: repo, env })).status).toBe(0);
-    const evs = events(dir, 'tones');
+    const all = events(dir, 'tones');
+    expect(all.map((e) => e.seq)).toEqual(all.map((_, i) => i + 1));
+    // the started tasks of the issue.finished calls are not part of the table
+    const evs = all.filter((e) => e.type !== 'task.started');
     expect(evs.map((e) => e.tone)).toEqual(cases.map((c) => c[1]));
     expect(evs.map((e) => e.needsYou === true)).toEqual(cases.map((c) => c[2] === true));
-    expect(evs.map((e) => e.seq)).toEqual(cases.map((_, i) => i + 1));
   });
 
   it('is a no-op without a run for every type but run.started', async () => {
@@ -338,9 +483,9 @@ describe.skipIf(!hasPwsh || process.platform === 'win32')('Report-Progress.ps1',
     const env = baseEnv({ AGENT_EVENTS_RUN: 'fromgit' });
     await worker.run(['-Type', 'issue.started', '-Issue', '1'], { cwd: repo, env });
     await worker.run(['-Type', 'issue.started', '-Issue', '2'], { cwd: wt, env });
-    expect(events(evDir(), 'fromgit').map((e) => [e.seq, e.issue.number])).toEqual([
-      [1, 1],
-      [2, 2],
+    expect(events(evDir(), 'fromgit').map((e) => [e.seq, e.task])).toEqual([
+      [1, 'issue-1'],
+      [2, 'issue-2'],
     ]);
     expect(fs.existsSync(path.join(wt, '.git', 'events'))).toBe(false);
   });

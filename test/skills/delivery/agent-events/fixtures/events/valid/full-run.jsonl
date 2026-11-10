@@ -1,0 +1,11 @@
+{"v":1,"seq":1,"ts":"2026-11-08T10:00:01.000Z","run":"r1","type":"run.started","tone":"neutral","profiles":["deliver@1"],"host":{"herdr.pane":"w1:p2","poimen.terminal":"t3"},"agent":{"harness":"claude","model":"sonnet"},"subject":{"kind":"github.milestone","id":"GravionLabs/skills#5","title":"M5 Events","url":"https://github.com/GravionLabs/skills/milestone/5"}}
+{"v":1,"seq":2,"ts":"2026-11-08T10:00:02.000Z","run":"r1","type":"progress","tone":"neutral","done":0,"total":2,"label":"issues"}
+{"v":1,"seq":3,"ts":"2026-11-08T10:00:03.000Z","run":"r1","type":"task.started","tone":"neutral","task":"t1","subject":{"kind":"github.issue","id":"GravionLabs/skills#370","title":"Reducer","url":"https://github.com/GravionLabs/skills/issues/370"}}
+{"v":1,"seq":4,"ts":"2026-11-08T10:00:04.000Z","run":"r1","type":"step.started","tone":"neutral","task":"t1","step":{"name":"implement","n":1,"total":3,"text":"writing code"}}
+{"v":1,"seq":5,"ts":"2026-11-08T10:00:05.000Z","run":"r1","type":"step.finished","tone":"success","task":"t1","step":{"name":"pr","n":2,"total":3},"links":[{"rel":"pull-request","url":"https://github.com/GravionLabs/skills/pull/9","title":"PR 9"}]}
+{"v":1,"seq":6,"ts":"2026-11-08T10:00:06.000Z","run":"r1","type":"attention","tone":"warning","needsYou":true,"id":"a1","task":"t1","reason":"ci-red","text":"CI is red","links":[{"rel":"log","url":"https://example.com/log"}]}
+{"v":1,"seq":7,"ts":"2026-11-08T10:00:07.000Z","run":"r1","type":"attention.resolved","tone":"neutral","id":"a1"}
+{"v":1,"seq":8,"ts":"2026-11-08T10:00:08.000Z","run":"r1","type":"task.finished","tone":"success","task":"t1","outcome":"succeeded"}
+{"v":1,"seq":9,"ts":"2026-11-08T10:00:09.000Z","run":"r1","type":"task.started","tone":"neutral","task":"t2","parent":"t1","subject":{"kind":"github.issue","id":"x#1","title":"Child"}}
+{"v":1,"seq":10,"ts":"2026-11-08T10:00:10.000Z","run":"r1","type":"task.finished","tone":"neutral","task":"t2","outcome":"skipped","reason":"not-needed","text":"not needed"}
+{"v":1,"seq":11,"ts":"2026-11-08T10:00:11.000Z","run":"r1","type":"run.finished","tone":"success","outcome":"succeeded"}

@@ -1,0 +1,5 @@
+{"v":1,"seq":1,"ts":"2026-11-08T10:00:01.000Z","run":"r1","type":"run.started","tone":"neutral","profiles":[],"host":{},"futureField":{"x":1}}
+{"v":1,"seq":2,"ts":"2026-11-08T10:00:02.000Z","run":"r1","type":"deliver.release.updated","tone":"info","deliver":{"rcVersion":"1.2.0-rc.1"}}
+{"v":1,"seq":3,"ts":"2026-11-08T10:00:03.000Z","run":"r1","type":"future.thing","tone":"neutral","anything":[1,2]}
+{"v":1,"seq":4,"ts":"2026-11-08T10:00:04.000Z","run":"r1","type":"progress","tone":"neutral","done":1,"total":3,"deliver":{"x":true}}
+{"v":1,"seq":5,"ts":"2026-11-08T10:00:05.000Z","run":"r1","type":"run.finished","tone":"danger","outcome":"failed","reason":"boom","text":"boom"}

@@ -1,9 +1,8 @@
-import Ajv from 'ajv/dist/2020';
 import { spawnSync } from 'child_process';
 import * as fs from 'fs';
 import * as os from 'os';
 import * as path from 'path';
-import { STATE_SCHEMA } from '../../helpers/agent-events';
+import { checkRunFile, validateCoreState, validateDeliverState } from '../../helpers/agent-events';
 import { REPORT_PROGRESS } from '../../helpers/report-progress';
 import { createFakeGh } from '../../helpers/fake-gh';
 import { PwshWorker } from '../../helpers/pwsh-worker';
@@ -13,8 +12,10 @@ import { PwshWorker } from '../../helpers/pwsh-worker';
 // gh and claude are stubs on PATH; the claude stub snapshots the event file at the start of each iteration.
 const ROOT = path.resolve(__dirname, '../../..');
 const SCRIPTS = path.join(ROOT, 'skills/delivery/deliver/scripts');
-const schema = JSON.parse(fs.readFileSync(STATE_SCHEMA, 'utf8'));
-const validate = new Ajv({ allErrors: true, validateFormats: false }).compile(schema);
+const valid = (doc: { deliver: unknown }) => {
+  expect(validateCoreState(doc), JSON.stringify(validateCoreState.errors)).toBe(true);
+  expect(validateDeliverState(doc.deliver), JSON.stringify(validateDeliverState.errors)).toBe(true);
+};
 const hasPwsh = spawnSync('pwsh', ['-NoProfile', '-Command', '1']).status === 0;
 const BASE = 'https://github.com/acme/app';
 
@@ -38,8 +39,8 @@ describe.skipIf(!hasPwsh || process.platform === 'win32')(
       fs.rmSync(dir, { recursive: true, force: true });
     });
 
-    // milestone M4: #5 closed, #10 and #11 open, #12 open with needs-decision. Iteration 1 reports step pr 'opened #55' of #10,
-    // appends a nested run.started with a pid that does not live and closes #10; iteration 2 labels #11 needs-refinement.
+    // milestone M4: #5 closed, #10 and #11 open, #12 open with needs-decision. Iteration 1 tries a nested run.started (not
+    // written: the harness is nested), reports step pr 'opened #55' of #10 and closes #10; iteration 2 labels #11 needs-refinement.
     const setup = (opts: { failOpenRead?: boolean } = {}) => {
       cwd = path.join(dir, `case-${++seq}`);
       fs.mkdirSync(cwd, { recursive: true });
@@ -80,8 +81,7 @@ const f = ${JSON.stringify(state)}; const s = JSON.parse(fs.readFileSync(f, 'utf
 // the harness reports its steps itself (deliver SKILL.md): Report-Progress.ps1, nested in the loop's run
 const report = (nr, step, result, pr) => require('child_process').execFileSync('pwsh', ['-NoProfile', '-File', ${JSON.stringify(REPORT_PROGRESS)}, '-Type', 'step.finished', '-Issue', String(nr), '-Step', step, '-Result', result, ...(pr ? ['-Pr', pr] : [])]);
 if (n === 1) {
-  const lines = fs.readFileSync(ev, 'utf8').trim().split('\\n').length;
-  fs.appendFileSync(ev, JSON.stringify({ v: 1, seq: lines + 1, ts: new Date().toISOString(), run: env.AGENT_EVENTS_RUN, type: 'run.started', tone: 'neutral', source: 'session', pid: 2000000000 }) + '\\n');
+  require('child_process').execFileSync('pwsh', ['-NoProfile', '-File', ${JSON.stringify(REPORT_PROGRESS)}, '-Type', 'run.started', '-Source', 'session']);
   report(10, 'pr', 'opened #55', '${BASE}/pull/55');
   require('child_process').execFileSync('pwsh', ['-NoProfile', '-File', ${JSON.stringify(REPORT_PROGRESS)}, '-Type', 'attention', '-Issue', '10', '-Kind', 'pr_opened', '-Reason', 'opened #55', '-Pr', '${BASE}/pull/55']);
   s.issues[10].state = 'closed';
@@ -148,7 +148,8 @@ fs.writeFileSync(f, JSON.stringify(s));`,
         .filter((f) => f.endsWith('.jsonl'));
       expect(files).toHaveLength(1);
       expect(events(path.join(cwd, '.agents/events', files[0]))[0]).toMatchObject({
-        source: 'loop',
+        type: 'run.started',
+        deliver: { source: 'loop' },
       });
     });
 
@@ -161,43 +162,73 @@ fs.writeFileSync(f, JSON.stringify(s));`,
       expect(fs.existsSync(path.join(cwd, '.agents/deliver-loop', id, 'progress.jsonl'))).toBe(
         true,
       );
+      // #452: every event of the run is a core event or a deliver profile type, valid against both schemas
+      expect(checkRunFile(fs.readFileSync(file, 'utf8'), { known: true, deliver: true })).toEqual(
+        [],
+      );
       const all = events(file);
       expect(all.map((e) => e.type)).toEqual([
         'run.started',
-        'milestone.progress',
+        'progress',
         'attention', // #12 needs-decision
-        'issue.started',
-        'run.started', // nested, written by the harness stub
-        'step.finished',
+        'deliver.iteration',
+        'task.started',
+        'step.finished', // the nested run.started of the harness is not written
         'attention', // pr_opened
-        'issue.finished', // #10 delivered
-        'milestone.progress',
-        'issue.started',
+        'task.finished', // #10 delivered
+        'progress',
+        'deliver.iteration',
+        'task.started',
         'step.finished',
-        'issue.finished', // #11 blocked, from the GitHub state; the status block lists it with the same reason
-        'milestone.progress',
+        'task.finished', // #11 blocked, from the GitHub state; the status block lists it with the same reason
+        'progress',
         'run.finished',
       ]);
-      expect(all.map((e) => e.seq)).toEqual(all.map((_e, i) => i + 1));
       expect(all[0]).toMatchObject({
-        source: 'loop',
-        harness: 'claude',
-        model: 'sonnet',
-        repository: 'acme/app',
-        milestone: { key: 'M4', title: 'M4 Status', url: `${BASE}/milestone/4` },
-        pid: expect.any(Number),
+        profiles: ['deliver@1'],
+        agent: { harness: 'claude', model: 'sonnet' },
+        host: { 'jsonl-file.pid': expect.stringMatching(/^\d+$/) },
+        subject: {
+          kind: 'github.milestone',
+          id: 'M4 Status',
+          title: 'M4 Status',
+          url: `${BASE}/milestone/4`,
+        },
+        deliver: { source: 'loop', repository: 'acme/app', milestone: { key: 'M4' } },
       });
-      expect(all.filter((e) => e.type === 'milestone.progress')).toMatchObject([
-        { closed: 1, total: 4 },
-        { closed: 2, total: 4 },
-        { closed: 2, total: 4 },
+      expect(all.filter((e) => e.type === 'progress')).toMatchObject([
+        { done: 1, total: 4, label: 'PBIs' },
+        { done: 2, total: 4 },
+        { done: 2, total: 4 },
       ]);
-      expect(all.filter((e) => e.type === 'issue.finished')).toMatchObject([
-        { issue: { number: 10 }, outcome: 'delivered', prUrl: `${BASE}/pull/55` },
-        { issue: { number: 11 }, outcome: 'blocked', reason: 'needs refinement' },
+      expect(all.filter((e) => e.type === 'deliver.iteration').map((e) => e.deliver)).toEqual([
+        { n: 1, max: 2, issue: 10 },
+        { n: 2, max: 2, issue: 11 },
+      ]);
+      expect(all.filter((e) => e.type === 'task.started')[0]).toMatchObject({
+        task: 'issue-10',
+        subject: {
+          kind: 'github.issue',
+          id: 'acme/app#10',
+          title: 'first',
+          url: `${BASE}/issues/10`,
+        },
+      });
+      expect(all.filter((e) => e.type === 'task.finished')).toMatchObject([
+        {
+          task: 'issue-10',
+          outcome: 'succeeded',
+          links: [{ rel: 'pull-request', url: `${BASE}/pull/55` }],
+        },
+        {
+          task: 'issue-11',
+          outcome: 'skipped',
+          reason: 'deliver.blocked',
+          text: 'needs refinement',
+        },
       ]);
       expect(all.filter((e) => e.type === 'run.finished')).toEqual([
-        expect.objectContaining({ result: 'blocked' }),
+        expect.objectContaining({ outcome: 'failed', deliver: { result: 'blocked' } }),
       ]);
       // the harness gets the run and the events directory, but not the owner marker (nested: its events skip the sink)
       const envs = fs
@@ -212,26 +243,34 @@ fs.writeFileSync(f, JSON.stringify(s));`,
 
       // the loop writes no status.json; the state is the projection of the event file
       expect(fs.existsSync(path.join(cwd, '.agents/deliver-loop/status.json'))).toBe(false);
-      // iteration 1 start: the projection of the events at that time is running
+      // iteration 1 start: the projection of the events at that time is running, #10 is the open task (displays read
+      // the core: subject of the run, open task, progress)
       const snap1 = await project(path.join(cwd, 'snap1-events.jsonl'));
-      expect(validate(snap1), JSON.stringify(validate.errors)).toBe(true);
-      expect(snap1).toMatchObject({ result: 'running', current: { number: 10, title: 'first' } });
-      // iteration 2 start: the nested run.started names a pid that does not live, the projection is abandoned
-      const abandoned = await project(path.join(cwd, 'snap2-events.jsonl'), true);
-      expect(validate(abandoned), JSON.stringify(validate.errors)).toBe(true);
-      expect(abandoned.result).toBe('abandoned');
+      valid(snap1);
+      expect(snap1).toMatchObject({
+        status: 'running',
+        subject: { title: 'M4 Status' },
+        progress: { done: 1, total: 4 },
+        tasks: [{ task: 'issue-10', subject: { title: 'first' } }],
+        needsYou: true,
+        deliver: { result: 'running', iteration: { n: 1, max: 2 } },
+      });
       // the end
       const doc = await project(file, true);
-      expect(validate(doc), JSON.stringify(validate.errors)).toBe(true);
+      valid(doc);
       expect(doc).toMatchObject({
         run: id,
-        result: 'blocked',
-        current: null,
-        delivered: [{ pbi: 10, url: `${BASE}/issues/10`, prUrl: `${BASE}/pull/55` }],
-        blocked: [{ number: 11, url: `${BASE}/issues/11`, reason: 'needs refinement' }],
-        needsYou: [
-          { number: 12, url: `${BASE}/issues/12`, reason: expect.stringContaining('decision') },
-        ],
+        status: 'finished',
+        outcome: 'failed',
+        tasks: [],
+        deliver: {
+          result: 'blocked',
+          delivered: [{ pbi: 10, url: `${BASE}/issues/10`, prUrl: `${BASE}/pull/55` }],
+          blocked: [{ number: 11, url: `${BASE}/issues/11`, reason: 'needs refinement' }],
+          needsYou: [
+            { number: 12, url: `${BASE}/issues/12`, reason: expect.stringContaining('decision') },
+          ],
+        },
       });
     });
 
@@ -241,10 +280,16 @@ fs.writeFileSync(f, JSON.stringify(s));`,
       const all = events(eventFile());
       expect(all[0].type).toBe('run.started');
       expect(all.filter((e) => e.type === 'run.finished')).toHaveLength(1);
-      expect(all.at(-1)).toMatchObject({ type: 'run.finished', result: 'no progress' });
+      expect(all.at(-1)).toMatchObject({
+        type: 'run.finished',
+        deliver: { result: 'no progress' },
+      });
+      expect(
+        checkRunFile(fs.readFileSync(eventFile(), 'utf8'), { known: true, deliver: true }),
+      ).toEqual([]);
       const doc = await project(eventFile(), true);
-      expect(validate(doc), JSON.stringify(validate.errors)).toBe(true);
-      expect(doc.result).toBe('no progress');
+      valid(doc);
+      expect(doc.deliver.result).toBe('no progress');
     });
   },
 );

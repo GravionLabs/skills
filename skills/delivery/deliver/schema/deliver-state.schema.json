@@ -1,0 +1,93 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://raw.githubusercontent.com/GravionLabs/skills/main/skills/delivery/deliver/schema/deliver-state.schema.json",
+  "title": "deliver profile state (deliver@1)",
+  "description": "The `deliver` object that scripts/ConvertFrom-ProgressEvents.ps1 adds next to the agent-events core run state (schema/v0/run-state.schema.json of GravionLabs/agent-events; the core fields are never changed). Folded from the same events as the core: run.started (agent, deliver.source, deliver.repository, deliver.milestone.key with the subject title and url), task.finished (deliver.outcome; the issue number is the one of the task id issue-<nr>; the reason of blocked and paused is the event's text, else its reason code), deliver.merging, attention with needsYou true (reason: text, `RC test` for release_test) until attention.resolved or a task.finished delivered or skipped of the issue, deliver.release.updated (the open RC test issue is needsYou with reason `RC test` until a task.finished of it), deliver.iteration and run.finished (deliver.result). The latest outcome of an issue wins. result is running while the core status is running, abandoned when the core status is abandoned. Unknown fields are allowed at every level.",
+  "type": "object",
+  "required": ["source", "harness", "model", "repository", "milestone", "startedAt", "result", "iteration", "delivered", "blocked", "paused", "merging", "needsYou", "release"],
+  "properties": {
+    "source": { "enum": ["loop", "session", null] },
+    "harness": { "type": ["string", "null"] },
+    "model": { "type": "string", "minLength": 1, "description": "default when run.started names none" },
+    "repository": { "oneOf": [{ "type": "null" }, { "type": "string", "pattern": "^[^/\\s]+/[^/\\s]+$" }] },
+    "milestone": {
+      "oneOf": [
+        { "type": "null" },
+        {
+          "type": "object",
+          "required": ["key", "title", "url"],
+          "properties": {
+            "key": { "type": "string", "minLength": 1, "description": "M<n> or M<n>.<k>; stable across the close rename" },
+            "title": { "type": "string", "minLength": 1 },
+            "url": { "type": ["string", "null"] }
+          }
+        }
+      ]
+    },
+    "startedAt": { "type": ["string", "null"] },
+    "result": {
+      "type": "string",
+      "minLength": 1,
+      "description": "running, abandoned or the run.finished result: done, max reached, blocked, no progress, stopped"
+    },
+    "iteration": {
+      "oneOf": [
+        { "type": "null" },
+        {
+          "type": "object",
+          "required": ["n", "max"],
+          "properties": { "n": { "type": "integer", "minimum": 1 }, "max": { "type": "integer", "minimum": 0 } }
+        }
+      ]
+    },
+    "delivered": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["pbi", "url", "prUrl"],
+        "properties": { "pbi": { "type": "integer", "minimum": 1 }, "url": { "type": "string" }, "prUrl": { "type": "string" } }
+      }
+    },
+    "blocked": { "$ref": "#/$defs/items" },
+    "paused": { "$ref": "#/$defs/items" },
+    "needsYou": { "$ref": "#/$defs/items" },
+    "merging": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["number", "url", "prUrl"],
+        "properties": { "number": { "type": "integer", "minimum": 1 }, "url": { "type": "string" }, "prUrl": { "type": ["string", "null"] } }
+      }
+    },
+    "release": {
+      "type": "object",
+      "required": ["reviewRound", "prUrl", "rcUrl", "rcVersion", "testIssue"],
+      "properties": {
+        "reviewRound": { "type": ["integer", "null"], "minimum": 1 },
+        "prUrl": { "type": ["string", "null"] },
+        "rcUrl": { "type": ["string", "null"] },
+        "rcVersion": { "type": ["string", "null"] },
+        "testIssue": {
+          "oneOf": [
+            { "type": "null" },
+            {
+              "type": "object",
+              "required": ["number", "url"],
+              "properties": { "number": { "type": "integer", "minimum": 1 }, "url": { "type": "string" } }
+            }
+          ]
+        }
+      }
+    }
+  },
+  "$defs": {
+    "items": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["number", "url", "reason"],
+        "properties": { "number": { "type": "integer", "minimum": 1 }, "url": { "type": "string" }, "reason": { "type": "string" } }
+      }
+    }
+  }
+}
