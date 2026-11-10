@@ -98,7 +98,7 @@ describe('deliver SKILL.md', () => {
     expect(start4).toContain('a control session that hands the set to the loop opens no run');
     expect(start4).toContain('only when it delivers a PBI itself');
     expect(control).toContain('writes no run of its own');
-    expect(loop).toContain('opens no session run of its own');
+    expect(loop).toContain('opens no run of its own');
   });
 
   it('hands interactive runs over many PBIs to a control session over the loop (#321)', () => {

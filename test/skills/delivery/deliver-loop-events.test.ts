@@ -127,6 +127,31 @@ fs.writeFileSync(f, JSON.stringify(s));`,
       return JSON.parse(r.stdout);
     };
 
+    // #517: a control session writes no run.started; the loop started from it (no inherited run) leaves exactly one run file
+    it('leaves exactly one run file when started from a control session', async () => {
+      const gh = setup();
+      const r = await loop.run(['-Milestone', 'M4', '-Model', 'sonnet'], {
+        cwd,
+        env: {
+          ...gh.env(),
+          HERDR_ENV: '',
+          POIMEN_SOCKET: '',
+          DELIVER_TERMINAL_BACKEND: '',
+          NO_COLOR: '1',
+          AGENT_EVENTS_RUN: '',
+          AGENT_EVENTS_OWNER: '',
+        },
+      });
+      expect(r.status).toBe(2);
+      const files = fs
+        .readdirSync(path.join(cwd, '.agents/events'))
+        .filter((f) => f.endsWith('.jsonl'));
+      expect(files).toHaveLength(1);
+      expect(events(path.join(cwd, '.agents/events', files[0]))[0]).toMatchObject({
+        source: 'loop',
+      });
+    });
+
     it('emits the run events, hands the run to the harness as nested and writes no status.json', async () => {
       const r = await run(setup());
       expect(r.status).toBe(2);
