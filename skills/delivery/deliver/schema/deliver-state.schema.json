@@ -45,7 +45,7 @@
       "items": {
         "type": "object",
         "required": ["pbi", "url", "prUrl"],
-        "properties": { "pbi": { "type": "integer", "minimum": 1 }, "url": { "type": "string" }, "prUrl": { "type": "string" } }
+        "properties": { "pbi": { "type": "integer", "minimum": 1 }, "url": { "type": "string" }, "prUrl": { "type": ["string", "null"] } }
       }
     },
     "blocked": { "$ref": "#/$defs/items" },

@@ -211,6 +211,20 @@ describe.skipIf(!hasPwsh || process.platform === 'win32')(
       ]);
     });
 
+    // #511: no pull-request link seen for a delivered PBI → prUrl null, not the issue URL
+    it('a delivered PBI without a pull-request link has prUrl null', async () => {
+      const lines = fixtureLines('done').map((l) => {
+        const e = JSON.parse(l);
+        if (Array.isArray(e.links))
+          e.links = e.links.filter((k: { rel: string }) => k.rel !== 'pull-request');
+        return JSON.stringify(e);
+      });
+      const r = await fold(writeEvents('no-pr', lines.join('\n') + '\n'));
+      expect(r.state.deliver.delivered).toEqual([
+        { pbi: 370, url: 'https://github.com/GravionLabs/skills/issues/370', prUrl: null },
+      ]);
+    });
+
     it('a run without run.finished is running within the hour and abandoned after it', async () => {
       const f = path.join(DELIVER_FIXTURES, 'running.jsonl');
       expect((await fold(f, '2026-11-07 12:50:00Z')).state.status).toBe('running');
