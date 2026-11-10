@@ -5,7 +5,18 @@ Versioning follows [Semantic Versioning](https://semver.org/).
 
 ---
 
+## [4.1.2] — 2026-11-10
+
+### Bug Fixes
+- **deliver**: A control session opens no run next to the loop run (#517)
+- **deliver**: Control-session run test uses its own events dir, Select and Watch event ownership stated (#517)
+
+
 ## [4.1.1] — 2026-11-10
+
+### Documentation
+- Update CHANGELOG.md for v4.1.1 [skip ci]
+
 
 ### Refactoring
 - **deliver**: Emit agent-events core plus deliver profile (#452) (#518)

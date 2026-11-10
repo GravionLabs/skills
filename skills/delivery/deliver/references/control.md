@@ -10,7 +10,8 @@ Interactive (no `--unattended`), no `--inline`, and the selected set (step 1) ha
 
 1. Step 1 (Select) runs here, read-only: count the PBIs, list the `interactive` ones (they stay with this session) and the paused ones.
 2. Start the loop in the background with the same targets and `--max`: the shim `deliver-loop` (`pwsh <skill-dir>/scripts/Invoke-DeliverLoop.ps1` without it), `-Harness` the harness of this session (`claude`, `copilot`), no `-Model` unless the user passed one (the loop then picks the model per PBI from its tier, `references/roles.md`; `copilot` picks `auto`). In herdr (`HERDR_ENV=1`) the shim opens its own workspace; elsewhere run it with the harness's background shell. Print `loop: started, log .agents/deliver-loop.log`.
-3. Claims (`references/claim.md`) keep this session and the loop from delivering the same PBI.
+3. Run: the control session writes no run of its own (`Report-Progress.ps1 -Type run.started` of Start 4 is skipped); the loop opens the only run, `source: loop`, and `Invoke-DeliverLoop.ps1` drops an inherited `AGENT_EVENTS_RUN`, so a session run would stay an empty file with a single `run.started`. Select (step 1) runs read-only before any run exists. The events of Watch and step 9 (`attention`, `needs_you`, `release.updated`) belong to the loop's run: the loop emits them itself after each status read, the session adds none of its own. Only when the session delivers an `interactive` PBI itself (steps 2 to 8) does it open a session run (Start 4) and close it after that PBI.
+4. Claims (`references/claim.md`) keep this session and the loop from delivering the same PBI.
 
 ## Watch
 
