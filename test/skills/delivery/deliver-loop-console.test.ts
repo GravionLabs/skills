@@ -149,7 +149,7 @@ esac
     });
   });
 
-  // Lines, colors and notifications come from the events the harness writes (tone, attention, issue.finished); the stream's
+  // Lines, colors and notifications come from the events the harness writes (tone, attention, task.finished); the stream's
   // assistant text is logged uncolored and never parsed. The claude stub appends raw events to the loop's run and closes #401.
   describe('events', () => {
     type Ev = Record<string, unknown>;
@@ -157,13 +157,17 @@ esac
       v: 1,
       type,
       tone,
-      issue: { number: 401 },
+      task: 'issue-401',
       ...extra,
     });
     const stepEv = (name: string, text: string, tone: string) =>
       ev('step.finished', tone, { step: { name, text } });
     const attention = (kind: string, tone: string) =>
-      ev('attention', tone, { kind, reason: 'why' });
+      ev('attention', tone, {
+        reason: `deliver.${kind}`,
+        text: 'why',
+        deliver: { kind, issue: 401 },
+      });
 
     const open = (events: Ev[], text = 'working') => {
       cwd = path.join(dir, `case-${++seq}`);
@@ -232,6 +236,11 @@ fs.writeFileSync(${JSON.stringify(state)}, JSON.stringify({ state: 'closed' }));
       expect(r.stdout).toMatch(/\d\d:\d\d:\d\d #401 ci: red/);
       expect(r.stdout).not.toContain(ESC);
       expect(fs.existsSync(path.join(cwd, '.agents/deliver-loop.ansi.log'))).toBe(false);
+      // #452: a loop over one target names that issue as the subject of the run
+      const evDir = path.join(cwd, '.agents/events');
+      const [file] = fs.readdirSync(evDir);
+      const first = JSON.parse(fs.readFileSync(path.join(evDir, file), 'utf8').split('\n')[0]);
+      expect(first.subject).toMatchObject({ kind: 'github.issue', id: '#401', title: '#401' });
     });
 
     it.skipIf(process.platform !== 'darwin')(
@@ -244,7 +253,10 @@ fs.writeFileSync(${JSON.stringify(state)}, JSON.stringify({ state: 'closed' }));
           attention('paused', 'warning'),
           attention('blocked', 'danger'),
           attention('needs_you', 'warning'),
-          ev('issue.finished', 'success', { outcome: 'delivered' }),
+          ev('task.finished', 'success', {
+            outcome: 'succeeded',
+            deliver: { outcome: 'delivered' },
+          }),
         ]);
         await worker.run(['-Target', '401', '-Model', 'sonnet'], {
           cwd,

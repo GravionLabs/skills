@@ -2,13 +2,16 @@ import { spawnSync } from 'child_process';
 import * as fs from 'fs';
 import * as os from 'os';
 import * as path from 'path';
-import Ajv from 'ajv/dist/2020';
-import { AGENT_EVENTS_FIXTURES, STATE_SCHEMA } from '../../helpers/agent-events';
+import {
+  DELIVER_FIXTURES,
+  validateCoreState,
+  validateDeliverState,
+} from '../../helpers/agent-events';
 import { PwshWorker } from '../../helpers/pwsh-worker';
 
 const ROOT = path.resolve(__dirname, '../../..');
 const SCRIPT = path.join(ROOT, 'skills/delivery/deliver/scripts/Get-RunState.ps1');
-const FIXTURES = AGENT_EVENTS_FIXTURES;
+const FIXTURES = DELIVER_FIXTURES;
 // the reducer's "now" and no pid test, as in progress-reducer.test.ts (written with a space: see there)
 const NOW = '2026-11-07 12:00:00Z';
 const FIXED = ['-Now', NOW, '-NoPidCheck'];
@@ -22,8 +25,13 @@ const cases = fs
   .filter((f) => f.endsWith('.state.json'))
   .map((f) => f.replace(/\.state\.json$/, ''))
   .sort();
-const ajv = new Ajv({ allErrors: true, validateFormats: false });
-const validateState = ajv.compile(readJson(STATE_SCHEMA));
+
+// a running deliver run with one needs-you attention of #372 (deliver profile)
+const url = 'https://github.com/GravionLabs/skills/issues/372';
+const started =
+  '{"v":1,"seq":1,"ts":"2026-11-07T10:00:00.000Z","run":"%RUN%","type":"run.started","tone":"neutral","profiles":["deliver@1"],"host":{},"deliver":{"source":"loop","repository":"GravionLabs/skills"}}';
+const needs =
+  '{"v":1,"seq":2,"ts":"2026-11-07T11:00:00.000Z","run":"%RUN%","type":"attention","tone":"warning","id":"a2","reason":"deliver.needs-you","text":"decide the key","needsYou":true,"deliver":{"kind":"needs_you","issue":372}}';
 
 describe.skipIf(!hasPwsh || process.platform === 'win32')('Get-RunState.ps1 (#415)', () => {
   let worker: PwshWorker;
@@ -70,7 +78,9 @@ describe.skipIf(!hasPwsh || process.platform === 'win32')('Get-RunState.ps1 (#41
 
     const byRun = Object.fromEntries(list.map((e: { run: string }) => [e.run, e]));
     for (const c of cases) {
-      expect(byRun[c].result, c).toBe(readJson(path.join(FIXTURES, `${c}.state.json`)).result);
+      expect(byRun[c].result, c).toBe(
+        readJson(path.join(FIXTURES, `${c}.state.json`)).deliver.result,
+      );
     }
     // literal: the running fixture ends with a heartbeat at 11:50
     expect(byRun.running).toEqual({
@@ -122,11 +132,12 @@ describe.skipIf(!hasPwsh || process.platform === 'win32')('Get-RunState.ps1 (#41
     },
   );
 
-  it('-Run <id>: the fold, valid against deliver-run-state.schema.json', async () => {
+  it('-Run <id>: the fold, the core run state plus the deliver state', async () => {
     const r = await run(['-Run', 'running', ...FIXED]);
     expect(r.status).toBe(0);
     const state = JSON.parse(r.stdout);
-    expect(validateState(state), JSON.stringify(validateState.errors)).toBe(true);
+    expect(validateCoreState(state), JSON.stringify(validateCoreState.errors)).toBe(true);
+    expect(validateDeliverState(state.deliver)).toBe(true);
     expect(state).toEqual(readJson(path.join(FIXTURES, 'running.state.json')));
   });
 
@@ -178,15 +189,8 @@ describe.skipIf(!hasPwsh || process.platform === 'win32')('Get-RunState.ps1 (#41
   it('-NeedsAttention: the open needs-you items of the running runs only', async () => {
     const att = path.join(tmp, 'attention');
     fs.mkdirSync(att);
-    const url = 'https://github.com/GravionLabs/skills/issues/372';
-    const started =
-      '{"v":1,"seq":1,"ts":"2026-11-07T10:00:00.000Z","run":"%RUN%","type":"run.started","tone":"neutral","source":"loop"}';
-    const needs =
-      '{"v":1,"seq":2,"ts":"2026-11-07T11:00:00.000Z","run":"%RUN%","type":"attention","tone":"warning","needsYou":true,"kind":"needs_you","reason":"decide the key","issue":{"number":372,"url":"' +
-      url +
-      '"}}';
     const finished =
-      '{"v":1,"seq":3,"ts":"2026-11-07T11:10:00.000Z","run":"%RUN%","type":"run.finished","tone":"success","result":"done"}';
+      '{"v":1,"seq":3,"ts":"2026-11-07T11:10:00.000Z","run":"%RUN%","type":"run.finished","tone":"success","outcome":"succeeded","deliver":{"result":"done"}}';
     fs.writeFileSync(
       path.join(att, 'live.jsonl'),
       [started, needs].map((l) => l.replace(/%RUN%/g, 'live')).join('\n') + '\n',
@@ -207,9 +211,7 @@ describe.skipIf(!hasPwsh || process.platform === 'win32')('Get-RunState.ps1 (#41
 
   describe('event files without a complete event', () => {
     let broken: string;
-    const live =
-      '{"v":1,"seq":1,"ts":"2026-11-07T10:00:00.000Z","run":"live","type":"run.started","tone":"neutral","source":"loop"}\n' +
-      '{"v":1,"seq":2,"ts":"2026-11-07T11:00:00.000Z","run":"live","type":"attention","tone":"warning","needsYou":true,"kind":"needs_you","reason":"decide the key","issue":{"number":372,"url":"https://github.com/GravionLabs/skills/issues/372"}}\n';
+    const live = `${[started, needs].map((l) => l.replace(/%RUN%/g, 'live')).join('\n')}\n`;
 
     beforeAll(() => {
       broken = path.join(tmp, 'broken');

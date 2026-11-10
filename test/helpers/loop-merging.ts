@@ -1,5 +1,6 @@
 import * as fs from 'fs';
 import * as path from 'path';
+import { checkEventsDir } from './agent-events';
 import { createFakeGh } from './fake-gh';
 import { PwshWorker } from './pwsh-worker';
 
@@ -71,14 +72,17 @@ export const run = (loop: PwshWorker, s: ReturnType<typeof setup>, max: string) 
       AGENT_EVENTS_DIR: path.join(s.cwd, 'events'),
     },
   });
+// The PBI of each iteration (deliver.iteration); every run file of the loop must be a valid agent-events run (#452).
 export const started = (cwd: string) => {
   const dir = path.join(cwd, 'events');
+  const errors = checkEventsDir(dir);
+  if (Object.keys(errors).length) throw new Error(`invalid run files: ${JSON.stringify(errors)}`);
   return fs
     .readdirSync(dir)
     .flatMap((f) => fs.readFileSync(path.join(dir, f), 'utf8').trim().split('\n'))
     .map((l) => JSON.parse(l))
-    .filter((e) => e.type === 'issue.started')
-    .map((e) => e.issue.number);
+    .filter((e) => e.type === 'deliver.iteration')
+    .map((e) => e.deliver.issue);
 };
 export const pr = (sha: string) =>
   `{ number: 55, html_url: '${PR}', head: { ref: 'feat/10-a', sha: '${sha}' }, auto_merge: { merge_method: 'squash' } }`;

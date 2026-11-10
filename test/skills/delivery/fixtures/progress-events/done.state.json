@@ -1,0 +1,84 @@
+{
+  "v": 1,
+  "status": "finished",
+  "run": "20261107-100000-done",
+  "subject": {
+    "kind": "github.milestone",
+    "id": "M5 Events",
+    "title": "M5 Events",
+    "url": "https://github.com/GravionLabs/skills/milestone/5"
+  },
+  "progress": {
+    "done": 4,
+    "total": 9,
+    "label": "PBIs"
+  },
+  "outcome": "succeeded",
+  "text": "done",
+  "tasks": [],
+  "finished": {
+    "succeeded": [
+      {
+        "task": "issue-370",
+        "subject": {
+          "kind": "github.issue",
+          "id": "GravionLabs/skills#370",
+          "title": "[PBI] feat(delivery): ConvertFrom-ProgressEvents reducer",
+          "url": "https://github.com/GravionLabs/skills/issues/370"
+        },
+        "links": [
+          {
+            "rel": "pull-request",
+            "url": "https://github.com/GravionLabs/skills/pull/380"
+          }
+        ]
+      }
+    ],
+    "failed": [],
+    "cancelled": [],
+    "skipped": []
+  },
+  "attentions": [],
+  "needsYou": false,
+  "links": [
+    {
+      "rel": "pull-request",
+      "url": "https://github.com/GravionLabs/skills/pull/380"
+    }
+  ],
+  "gaps": [],
+  "lastSeq": 8,
+  "updated": "2026-11-07T10:55:10.000Z",
+  "deliver": {
+    "source": "loop",
+    "harness": "claude",
+    "model": "sonnet",
+    "repository": "GravionLabs/skills",
+    "milestone": {
+      "key": "M5",
+      "title": "M5 Events",
+      "url": "https://github.com/GravionLabs/skills/milestone/5"
+    },
+    "startedAt": "2026-11-07T10:00:00.000Z",
+    "result": "done",
+    "iteration": null,
+    "delivered": [
+      {
+        "pbi": 370,
+        "url": "https://github.com/GravionLabs/skills/issues/370",
+        "prUrl": "https://github.com/GravionLabs/skills/pull/380"
+      }
+    ],
+    "blocked": [],
+    "paused": [],
+    "merging": [],
+    "needsYou": [],
+    "release": {
+      "reviewRound": null,
+      "prUrl": null,
+      "rcUrl": null,
+      "rcVersion": null,
+      "testIssue": null
+    }
+  }
+}

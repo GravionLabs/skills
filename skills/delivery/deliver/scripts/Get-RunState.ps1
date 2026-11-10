@@ -6,10 +6,11 @@
   directory is resolved like Report-Progress.ps1: $env:AGENT_EVENTS_DIR, else <git-common-dir>/.agents/events.
   Exactly one mode:
   -List: the runs, newest first, JSON array of { run, startedAt, result, lastType, lastTs }; result is running, abandoned
-  or the run.finished result (the fold of ConvertFrom-ProgressEvents.ps1). No events directory: [].
-  -Run <id>: the fold of the run, the reducer's JSON (GravionLabs/agent-events schema/deliver-run-state.schema.json).
+  or the run.finished result (deliver.result of the fold of ConvertFrom-ProgressEvents.ps1). No events directory: [].
+  -Run <id>: the fold of the run, the reducer's JSON: the agent-events core run state (GravionLabs/agent-events
+  schema/v0/run-state.schema.json) plus `deliver` (schema/deliver-state.schema.json).
   -Run <id> -After <seq>: the events with seq greater than <seq>, one JSON event per line (poll the tail).
-  -NeedsAttention: the open needsYou items of all running runs, JSON array of { run, number, url, reason }.
+  -NeedsAttention: the open needsYou items (deliver.needsYou) of all running runs, JSON array of { run, number, url, reason }.
   An unknown run ends with one line on stderr and exit 1. Usage errors exit 2.
 .PARAMETER List
   List the runs.
@@ -71,7 +72,6 @@ function Get-Str($element, [string]$name) {
 }
 
 # The reducer's JSON of one file, as a string, or $null when the reducer has no complete event to fold (it exits 1).
-# The reducer writes to stderr only for a seq gap.
 function Invoke-Fold([string]$File) {
   $reducerArgs = @{ Path = $File }
   if ($Now) { $reducerArgs['Now'] = $Now }
@@ -106,12 +106,12 @@ if ($List) {
     $json = Invoke-Fold $f.FullName
     if ($null -eq $json) { continue }
     $events = @(Get-Events $f.FullName)
-    $root = Get-Root $json
+    $deliver = (Get-Root $json).GetProperty('deliver')
     $last = $events | Select-Object -Last 1
     [pscustomobject][ordered]@{
       run = $f.BaseName
-      startedAt = Get-Str $root 'startedAt'
-      result = Get-Str $root 'result'
+      startedAt = Get-Str $deliver 'startedAt'
+      result = Get-Str $deliver 'result'
       lastType = if ($last) { $last.Type } else { $null }
       lastTs = if ($last) { $last.Ts } else { $null }
     }
@@ -126,8 +126,8 @@ if ($NeedsAttention) {
     $json = Invoke-Fold $f.FullName
     if ($null -eq $json) { continue }
     $root = Get-Root $json
-    if ((Get-Str $root 'result') -ne 'running') { continue }
-    foreach ($n in $root.GetProperty('needsYou').EnumerateArray()) {
+    if ((Get-Str $root 'status') -ne 'running') { continue }
+    foreach ($n in $root.GetProperty('deliver').GetProperty('needsYou').EnumerateArray()) {
       [pscustomobject][ordered]@{
         run = $f.BaseName
         number = $n.GetProperty('number').GetInt64()

@@ -1,0 +1,101 @@
+{
+  "v": 1,
+  "status": "running",
+  "run": "20261107-100000-merg",
+  "subject": {
+    "kind": "github.milestone",
+    "id": "M5 Events",
+    "title": "M5 Events",
+    "url": "https://github.com/GravionLabs/skills/milestone/5"
+  },
+  "tasks": [
+    {
+      "task": "issue-480",
+      "subject": {
+        "kind": "github.issue",
+        "id": "GravionLabs/skills#480",
+        "title": "[PBI] feat: auto-merge",
+        "url": "https://github.com/GravionLabs/skills/issues/480"
+      },
+      "step": {
+        "name": "pr",
+        "n": 6,
+        "total": 7,
+        "text": "opened"
+      },
+      "links": [
+        {
+          "rel": "pull-request",
+          "url": "https://github.com/GravionLabs/skills/pull/482"
+        }
+      ]
+    },
+    {
+      "task": "issue-481",
+      "subject": {
+        "kind": "github.issue",
+        "id": "GravionLabs/skills#481",
+        "title": "[PBI] feat: next",
+        "url": "https://github.com/GravionLabs/skills/issues/481"
+      },
+      "step": {
+        "name": "implement",
+        "n": 3,
+        "total": 7,
+        "text": "started"
+      }
+    }
+  ],
+  "finished": {
+    "succeeded": [],
+    "failed": [],
+    "cancelled": [],
+    "skipped": []
+  },
+  "attentions": [],
+  "needsYou": false,
+  "links": [
+    {
+      "rel": "pull-request",
+      "url": "https://github.com/GravionLabs/skills/pull/482"
+    }
+  ],
+  "gaps": [],
+  "lastSeq": 8,
+  "updated": "2026-11-07T11:40:00.000Z",
+  "deliver": {
+    "source": "loop",
+    "harness": "claude",
+    "model": "sonnet",
+    "repository": "GravionLabs/skills",
+    "milestone": {
+      "key": "M5",
+      "title": "M5 Events",
+      "url": "https://github.com/GravionLabs/skills/milestone/5"
+    },
+    "startedAt": "2026-11-07T11:00:00.000Z",
+    "result": "running",
+    "iteration": {
+      "n": 2,
+      "max": 2
+    },
+    "delivered": [],
+    "blocked": [],
+    "paused": [],
+    "merging": [
+      {
+        "number": 480,
+        "url": "https://github.com/GravionLabs/skills/issues/480",
+        "prUrl": "https://github.com/GravionLabs/skills/pull/482"
+      }
+    ],
+    "needsYou": [],
+    "release": {
+      "reviewRound": null,
+      "prUrl": null,
+      "rcUrl": null,
+      "rcVersion": null,
+      "testIssue": null
+    }
+  }
+}

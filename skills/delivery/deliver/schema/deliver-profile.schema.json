@@ -1,0 +1,144 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://raw.githubusercontent.com/GravionLabs/skills/main/skills/delivery/deliver/schema/deliver-profile.schema.json",
+  "title": "deliver profile v1 (deliver@1) of agent-events",
+  "description": "Applied in addition to the agent-events core schema (GravionLabs/agent-events schema/v0/core.schema.json, pinned tag in test/skills/delivery/agent-events/VERSION) to every line of a run that declares deliver@1. Writer: scripts/Report-Progress.ps1. Profile types: deliver.merging (the PR of the task has auto-merge on; the task stays open until it is merged), deliver.release.updated (release review round, release PR, release candidate, RC test issue), deliver.iteration (loop iteration n of max). Profile fields sit under `deliver`. Tasks are the PBIs and Bugs: id issue-<nr>, a later attempt of the same issue in the run issue-<nr>.<k>. Reason codes are prefixed deliver.; the human sentence is `text`. Tone rules (the writer sets tone and needsYou, displays never derive them): attention by deliver.kind: pr_opened success; review_fix, paused warning; needs_you, release_test warning with needsYou true; ci_red, blocked danger; stopping neutral. task.finished by deliver.outcome: delivered success, blocked danger, paused warning, skipped neutral. run.finished by deliver.result: done success, no progress warning, blocked danger, else neutral. step.finished by step name and text: done, pr, merge, merged success; text with blocked or step blocked danger; text with paused or step paused warning; review with fix warning; ci with red or fail danger; else neutral. Every other event neutral.",
+  "type": "object",
+  "properties": {
+    "deliver": {
+      "type": "object",
+      "properties": {
+        "source": { "enum": ["loop", "session"] },
+        "repository": { "type": "string", "pattern": "^[^/\\s]+/[^/\\s]+$" },
+        "milestone": {
+          "type": "object",
+          "required": ["key"],
+          "properties": { "key": { "type": "string", "minLength": 1 } }
+        },
+        "issue": { "type": "integer", "minimum": 1 },
+        "kind": {
+          "enum": ["pr_opened", "review_fix", "ci_red", "paused", "blocked", "needs_you", "release_test", "stopping"]
+        },
+        "outcome": { "enum": ["delivered", "blocked", "paused", "skipped"] },
+        "result": { "type": "string", "minLength": 1 },
+        "round": { "type": "integer", "minimum": 1 },
+        "pr": { "$ref": "#/$defs/url" },
+        "rcUrl": { "$ref": "#/$defs/url" },
+        "rcVersion": { "type": "string", "minLength": 1 },
+        "testIssue": {
+          "type": "object",
+          "required": ["number"],
+          "properties": { "number": { "type": "integer", "minimum": 1 }, "url": { "$ref": "#/$defs/url" } }
+        },
+        "n": { "type": "integer", "minimum": 1 },
+        "max": { "type": "integer", "minimum": 0 }
+      }
+    }
+  },
+  "allOf": [
+    {
+      "if": { "properties": { "type": { "const": "run.started" } }, "required": ["type"] },
+      "then": {
+        "required": ["deliver"],
+        "properties": { "deliver": { "required": ["source"] }, "tone": { "const": "neutral" } }
+      }
+    },
+    {
+      "if": { "properties": { "type": { "const": "attention" } }, "required": ["type"] },
+      "then": {
+        "required": ["deliver"],
+        "properties": {
+          "deliver": { "required": ["kind"] },
+          "reason": { "pattern": "^deliver\\.[a-z0-9.-]+$" }
+        },
+        "allOf": [
+          { "$ref": "#/$defs/attentionTone" }
+        ]
+      }
+    },
+    {
+      "if": { "properties": { "type": { "const": "task.started" } }, "required": ["type"] },
+      "then": { "properties": { "task": { "$ref": "#/$defs/taskId" }, "tone": { "const": "neutral" } } }
+    },
+    {
+      "if": { "properties": { "type": { "const": "task.finished" } }, "required": ["type"] },
+      "then": {
+        "required": ["deliver"],
+        "properties": {
+          "task": { "$ref": "#/$defs/taskId" },
+          "deliver": { "required": ["outcome"] },
+          "reason": { "pattern": "^deliver\\.[a-z0-9.-]+$" }
+        },
+        "allOf": [
+          { "$ref": "#/$defs/outcomeTone" }
+        ]
+      }
+    },
+    {
+      "if": { "properties": { "type": { "const": "run.finished" } }, "required": ["type"] },
+      "then": {
+        "required": ["deliver"],
+        "properties": { "deliver": { "required": ["result"] } },
+        "allOf": [
+          { "$ref": "#/$defs/resultTone" }
+        ]
+      }
+    },
+    {
+      "if": { "properties": { "type": { "const": "progress" } }, "required": ["type"] },
+      "then": { "properties": { "tone": { "const": "neutral" } } }
+    },
+    {
+      "if": { "properties": { "type": { "const": "deliver.merging" } }, "required": ["type"] },
+      "then": {
+        "required": ["task", "deliver"],
+        "properties": { "task": { "$ref": "#/$defs/taskId" }, "deliver": { "required": ["issue"] }, "tone": { "const": "neutral" } }
+      }
+    },
+    {
+      "if": { "properties": { "type": { "const": "deliver.release.updated" } }, "required": ["type"] },
+      "then": {
+        "required": ["deliver"],
+        "properties": {
+          "deliver": { "anyOf": [{ "required": ["round"] }, { "required": ["pr"] }, { "required": ["rcUrl"] }, { "required": ["rcVersion"] }, { "required": ["testIssue"] }] },
+          "tone": { "const": "neutral" }
+        }
+      }
+    },
+    {
+      "if": { "properties": { "type": { "const": "deliver.iteration" } }, "required": ["type"] },
+      "then": {
+        "required": ["deliver"],
+        "properties": { "deliver": { "required": ["n", "max"] }, "tone": { "const": "neutral" } }
+      }
+    }
+  ],
+  "$defs": {
+    "url": { "type": "string", "pattern": "^https?://" },
+    "taskId": { "type": "string", "pattern": "^issue-[0-9]+(\\.[0-9]+)?$" },
+    "attentionTone": {
+      "allOf": [
+        { "if": { "properties": { "deliver": { "properties": { "kind": { "const": "pr_opened" } }, "required": ["kind"] } } }, "then": { "properties": { "tone": { "const": "success" } } } },
+        { "if": { "properties": { "deliver": { "properties": { "kind": { "enum": ["review_fix", "paused"] } }, "required": ["kind"] } } }, "then": { "properties": { "tone": { "const": "warning" } } } },
+        { "if": { "properties": { "deliver": { "properties": { "kind": { "enum": ["needs_you", "release_test"] } }, "required": ["kind"] } } }, "then": { "required": ["needsYou"], "properties": { "tone": { "const": "warning" }, "needsYou": { "const": true } } }, "else": { "properties": { "needsYou": { "const": false } } } },
+        { "if": { "properties": { "deliver": { "properties": { "kind": { "enum": ["ci_red", "blocked"] } }, "required": ["kind"] } } }, "then": { "properties": { "tone": { "const": "danger" } } } },
+        { "if": { "properties": { "deliver": { "properties": { "kind": { "const": "stopping" } }, "required": ["kind"] } } }, "then": { "properties": { "tone": { "const": "neutral" } } } }
+      ]
+    },
+    "outcomeTone": {
+      "allOf": [
+        { "if": { "properties": { "deliver": { "properties": { "outcome": { "const": "delivered" } }, "required": ["outcome"] } } }, "then": { "properties": { "tone": { "const": "success" }, "outcome": { "const": "succeeded" } } } },
+        { "if": { "properties": { "deliver": { "properties": { "outcome": { "const": "blocked" } }, "required": ["outcome"] } } }, "then": { "properties": { "tone": { "const": "danger" }, "outcome": { "const": "skipped" } } } },
+        { "if": { "properties": { "deliver": { "properties": { "outcome": { "const": "paused" } }, "required": ["outcome"] } } }, "then": { "properties": { "tone": { "const": "warning" }, "outcome": { "const": "skipped" } } } },
+        { "if": { "properties": { "deliver": { "properties": { "outcome": { "const": "skipped" } }, "required": ["outcome"] } } }, "then": { "properties": { "tone": { "const": "neutral" }, "outcome": { "const": "skipped" } } } }
+      ]
+    },
+    "resultTone": {
+      "allOf": [
+        { "if": { "properties": { "deliver": { "properties": { "result": { "const": "done" } }, "required": ["result"] } } }, "then": { "properties": { "tone": { "const": "success" }, "outcome": { "const": "succeeded" } } } },
+        { "if": { "properties": { "deliver": { "properties": { "result": { "const": "no progress" } }, "required": ["result"] } } }, "then": { "properties": { "tone": { "const": "warning" } } } },
+        { "if": { "properties": { "deliver": { "properties": { "result": { "const": "blocked" } }, "required": ["result"] } } }, "then": { "properties": { "tone": { "const": "danger" } } } }
+      ]
+    }
+  }
+}

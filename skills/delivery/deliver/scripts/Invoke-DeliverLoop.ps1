@@ -10,8 +10,9 @@
   Observability: every stream record goes to .agents/deliver-loop/<run>/<nr>.jsonl (<nr> is the first PBI that was ready
   at the start of the iteration), a summary line per step to .agents/deliver-loop.log (plain) and stdout, colored on a terminal
   (long text is cut to the terminal width, 120 characters when redirected), desktop notifications for the attention steps (macOS osascript,
-  Windows toast), progress events (Report-Progress.ps1: run.started, issue.started, step.finished, attention, milestone.progress,
-  issue.finished, release.updated, run.finished), a progress line per step
+  Windows toast), progress events (Report-Progress.ps1, agent-events core plus the deliver profile: run.started, task.started,
+  step.finished, attention, progress, task.finished, deliver.merging, deliver.release.updated, deliver.iteration, run.finished),
+  a progress line per step
   (references/loop.md) and, with -LogPane in herdr on a terminal,
   a split pane labeled deliver-log below the session that tails the log (TerminalBackend.ps1; never closed by the loop).
   Stdout is colored when it is a terminal and neither -NoColor nor NO_COLOR is set; otherwise it is plain.
@@ -140,9 +141,10 @@ function Send-Notice([string]$text, [string]$Tone = '') {
 $MilestoneScript = @('../../github-milestone', '../../../github/github-milestone' | ForEach-Object { Join-Path $PSScriptRoot "$_/scripts/Get-Milestones.ps1" }) |
   Where-Object { Test-Path $_ } | Select-Object -First 1
 
-# Progress events (ADR 0001, #372): the loop opens the run (run.started), emits what it knows itself (issue.started,
-# step.finished and attention followed from the harness's events, attention, milestone.progress and the waiting / needs-you items of
-# Get-DeliverStatus.ps1, issue.finished from the GitHub state, run.finished). The loop owns the run: its own calls carry
+# Progress events (ADR 0001, #372, #452: agent-events core plus the deliver profile, written by Report-Progress.ps1 from its
+# deliver CLI): the loop opens the run (run.started), emits what it knows itself (issue.started -> task.started, iteration,
+# step.finished and attention followed from the harness's events, attention, milestone.progress -> progress and the waiting /
+# needs-you items of Get-DeliverStatus.ps1, issue.finished -> task.finished from the GitHub state, run.finished). The loop owns the run: its own calls carry
 # AGENT_EVENTS_OWNER=1. The harness gets AGENT_EVENTS_RUN with an empty AGENT_EVENTS_OWNER (nested: its run.started and
 # run.finished are not written, #411, #463). The projection
 # (ConvertFrom-ProgressEvents.ps1) of the event file is read after every event; nothing is written to disk.
@@ -177,7 +179,7 @@ function Get-RefNumber([string]$text) { if ($text -match '/(?:issues|pull)/(\d+)
 
 function Get-BaseUrl {
   if ($Block -and $Block.baseUrl) { return ([string]$Block.baseUrl).TrimEnd('/') }
-  if ($Projection -and $Projection.repository) { return "https://github.com/$($Projection.repository)" }
+  if ($Projection -and $Projection.deliver.repository) { return "https://github.com/$($Projection.deliver.repository)" }
   return ''
 }
 
@@ -222,6 +224,10 @@ function Start-Run {
   if ($Milestone) {
     $f.Milestone = if ($Block -and $Block.key) { [string]$Block.key } else { $Milestone }
     if ($Block) { $f.MilestoneTitle = [string]$Block.milestone; $f.MilestoneUrl = [string]$Block.milestoneUrl }
+  } elseif ($Nrs.Count -eq 1) {
+    # the subject of the run: the one target issue (/deliver <nr>)
+    $f.Issue = [int]$Nrs[0]
+    if ($base) { $f.Url = "$base/issues/$($Nrs[0])" }
   }
   Send-Event $f
   if ($RunId) {
@@ -309,15 +315,22 @@ function Send-IterationOutcome([int]$nr, [int[]]$gone, $after) {
   if ($o.Outcome -eq 'blocked') { $Reported["$nr"] = @{ Kind = 'blocked'; Reason = $o.Reason } }
 }
 
-# M5 ▓▓▓▓░░░░ 7/19 · #322 review · 1 blocked · 1 needs you (from the projection; needs a read milestone)
+# M5 ▓▓▓▓░░░░ 7/19 · #322 review · 1 blocked · 1 needs you (from the projection: core progress and open tasks, the deliver
+# state; needs a read milestone)
 function Write-ProgressLine {
   $p = $Projection
-  if (-not $Milestone -or -not $p -or -not $p.milestone -or -not $p.milestone.title) { return }
-  $filled = if ($p.total -gt 0) { [Math]::Min(8, [int][Math]::Round(8 * $p.closed / $p.total)) } else { 0 }
-  $parts = @("$($p.milestone.key) $('▓' * $filled)$('░' * (8 - $filled)) $($p.closed)/$($p.total)")
-  if ($p.current) { $parts += "#$($p.current.number) $(([string]$p.current.step.text -split ':')[0])".TrimEnd() }
-  if (@($p.blocked).Count) { $parts += "$(@($p.blocked).Count) blocked" }
-  $needs = @($p.needsYou).Count + @($p.paused).Count
+  $d = if ($p) { $p.deliver } else { $null }
+  if (-not $Milestone -or -not $d -or -not $d.milestone -or -not $d.milestone.title) { return }
+  $closed = if ($p.progress) { [int]$p.progress.done } else { 0 }
+  $all = if ($p.progress) { [int]$p.progress.total } else { 0 }
+  $filled = if ($all -gt 0) { [Math]::Min(8, [int][Math]::Round(8 * $closed / $all)) } else { 0 }
+  $parts = @("$($d.milestone.key) $('▓' * $filled)$('░' * (8 - $filled)) $closed/$all")
+  # the current PBI: the newest open task that does not only wait for its merge
+  $waiting = @($d.merging | ForEach-Object { "$($_.number)" })
+  $cur = @($p.tasks | Where-Object { $_.task -match '^issue-(\d+)' -and $waiting -notcontains $Matches[1] }) | Select-Object -Last 1
+  if ($cur -and $cur.task -match '^issue-(\d+)') { $parts += "#$($Matches[1]) $(if ($cur.step.name) { $cur.step.name } else { 'select' })" }
+  if (@($d.blocked).Count) { $parts += "$(@($d.blocked).Count) blocked" }
+  $needs = @($d.needsYou).Count + @($d.paused).Count
   if ($needs) { $parts += "$needs needs you" }
   Write-Step ($parts -join ' · ') 'cyan'
 }
@@ -529,23 +542,30 @@ function Show-NewEvents {
   foreach ($raw in ($text.Substring(0, $end) -split "`n")) {
     if (-not $raw.Trim()) { continue }
     try { $ev = $raw | ConvertFrom-Json } catch { continue }
-    $nr = [int]$ev.issue.number
+    # the issue of a task is its id issue-<nr>; an attention without task names it in deliver.issue
+    $nr = if ([string]$ev.task -match '^issue-(\d+)') { [int]$Matches[1] } elseif ($ev.deliver.issue) { [int]$ev.deliver.issue } else { 0 }
+    $pr = @($ev.links | Where-Object { $_ -and $_.rel -eq 'pull-request' } | ForEach-Object { [string]$_.url }) | Select-Object -First 1
     $step = $null; $res = ''; $notice = $null
     switch ($ev.type) {
       'step.finished' { $step = [string]$ev.step.name; $res = [string]$ev.step.text }
       'attention' {
-        if ($ev.kind -eq 'needs_you') { continue }
-        $step = [string]$ev.kind; $res = [string]$ev.reason
+        $kind = [string]$ev.deliver.kind
+        if ($kind -eq 'needs_you') { continue }
+        $step = $kind; $res = [string]$ev.text
         if ($AttentionText.ContainsKey($step)) { $notice = $AttentionText[$step] }
-        if ($ev.kind -in 'paused', 'blocked' -and $nr) { $LineOutcome["$nr"] = @{ Outcome = [string]$ev.kind; Reason = $(if ($res) { $res } else { [string]$ev.kind }) } }
+        if ($kind -in 'paused', 'blocked' -and $nr) { $LineOutcome["$nr"] = @{ Outcome = $kind; Reason = $(if ($res) { $res } else { $kind }) } }
       }
-      'issue.finished' {
-        $step = [string]$ev.outcome; $res = [string]$ev.reason; if ($ev.outcome -eq 'delivered') { $notice = 'merged' }
-        if ($ev.outcome -eq 'merging' -and $nr) { $LineOutcome["$nr"] = @{ Outcome = 'merging'; Reason = $(if ($res) { $res } else { 'auto-merge on, waits for checks' }) } }
+      'task.finished' {
+        $step = if ($ev.deliver.outcome) { [string]$ev.deliver.outcome } else { [string]$ev.outcome }
+        $res = [string]$ev.text; if ($step -eq 'delivered') { $notice = 'merged' }
+      }
+      'deliver.merging' {
+        $step = 'merging'; $res = [string]$ev.text
+        if ($nr) { $LineOutcome["$nr"] = @{ Outcome = 'merging'; Reason = $(if ($res) { $res } else { 'auto-merge on, waits for checks' }) } }
       }
       default { continue }
     }
-    if ($nr -and $ev.prUrl) { $Prs["$nr"] = [string]$ev.prUrl }
+    if ($nr -and $pr) { $Prs["$nr"] = $pr }
     $head = if ($nr -and $step -ne 'stopping') { "#$nr $step" } elseif ($step -eq 'stopping') { 'stop requested' } else { $step }
     Write-Step $(if ($res) { "${head}: $res" } else { $head }) $ToneColor[[string]$ev.tone]
     if ($notice) { Send-Notice "$(if ($nr) { "#$nr " })$notice" -Tone ([string]$ev.tone) }
@@ -620,6 +640,7 @@ function Invoke-Iteration([int]$n, [int]$total, $state) {
   }
   Write-Step "iteration $n/$total start: $prompt"
   Write-ProgressRecord 'iteration-start' @{ n = $n; total = $total; pbi = [int]$state.Ready[0]; open = $state.Open; model = $iterModel }
+  Send-Event @{ Type = 'iteration'; Iteration = $n; IterationMax = $total; Issue = [int]$state.Ready[0] }
   $nr = [int]$state.Ready[0]
   $script:CurrentPbi = $nr; $script:StopSeen = $false
   $LineOutcome.Remove("$nr")
