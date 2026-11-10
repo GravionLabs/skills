@@ -99,6 +99,6 @@ describe('github-release finish closes the milestone (docs)', () => {
     expect(ref.indexOf('-Mode create')).toBeLessThan(ref.indexOf('-Mode close'));
     expect(ref).toMatch(/ready issues/);
     expect(ref).toContain('/github-release cut');
-    expect(ref).toMatch(/otherwise stop after the deletion as before/);
+    expect(ref).toMatch(/otherwise stop after the fast-forward as before/);
   });
 });

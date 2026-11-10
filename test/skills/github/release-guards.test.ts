@@ -66,7 +66,7 @@ describe('Get-ReleaseState.ps1', () => {
       action: 'create',
       openPrs: [],
       localAhead: 0,
-      deleteAllowed: false,
+      fastForwardAllowed: false,
     });
     expect((await state('finish', 'release/7.7')).action).toBe('stop: branch not on origin');
   });
@@ -148,7 +148,7 @@ describe('Get-ReleaseState.ps1', () => {
   it('merged: the tip is the second parent of a merge on main (release/1.0 = v2.1.0^2)', async () => {
     setRef('release/1.0', 'v2.1.0^2');
     const r = await state('finish', 'release/1.0');
-    expect(r).toMatchObject({ state: 'merged', deleteAllowed: false });
+    expect(r).toMatchObject({ state: 'merged', fastForwardAllowed: false });
     expect(r.action).toBe('stop: already released; cut a new release branch');
   });
 });

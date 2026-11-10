@@ -146,11 +146,12 @@ describe('github-release skill refuses a released branch (#252)', () => {
     expect(skill).toMatch(/`released-continued`/);
   });
 
-  it('finish names the branch delete, never waits for the merge and leaves the delete to a later finish', () => {
-    expect(finish).toContain('git push origin --delete <branch>');
+  it('finish never waits for the merge and leaves the fast-forward of release/next to a later finish', () => {
+    expect(finish).toContain('origin/<default>:refs/heads/release/next');
+    expect(finish).not.toContain('delete-branch');
     expect(finish).toContain('never wait for the merge');
     expect(finish).not.toContain('gh pr view <nr> --json merged');
-    expect(finish).toContain('`delete-branch`');
+    expect(finish).toContain('`fast-forward`');
   });
 
   it('cut reports a stale release/<x.y> with the delete command before cutting', () => {

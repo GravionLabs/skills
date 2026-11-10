@@ -12,7 +12,7 @@ builds rare, day-to-day work never targets `main` directly.
 The release PR to `main` is created and refreshed by the caller of the reusable `release-branch.yml` (GravionLabs/ci, step `versioning/release-pr`) on every push to the release branch; the owner only merges it.
 
 One rolling branch, `release/next`, serves every release. `github-release cut` creates it from `main`, or
-deletes and recreates it from `main` when it is released, i.e. its head is an ancestor of `main` and not equal to it (no force push; the git guardrail allows the remote delete of exactly `release/next`). A head equal to `main` is fresh and usable: `cut` is a no-op. While it holds unreleased work (not an ancestor of `main`), `cut` never resets it. `cut --feature` always only records `Release branch: release/next` when the branch is fresh or unreleased. After its
+moves it to `main` by a fast-forward when it is released, i.e. its head is an ancestor of `main` and not equal to it (no delete, no force push; open PRs into it keep their base, #528). A head equal to `main` is fresh and usable: `cut` is a no-op. While it holds unreleased work (not an ancestor of `main`), `cut` never resets it. `cut --feature` always only records `Release branch: release/next` when the branch is fresh or unreleased. After its
 merge the branch is reset by the next `cut`, never continued, so it can never be released under a stale name.
 
 - **Bump rule:** from the Conventional Commits on the branch, no commit needed: `fix:` → patch, `feat:` → minor,
@@ -32,8 +32,7 @@ merge the branch is reset by the next `cut`, never continued, so it can never be
   `main` (equal to it too: a fresh branch has nothing to release), when the branch was already released
   (tag `v<x.y>.0` on origin, or a release tag's merge commit is missing from HEAD while its second parent is
   in it: the branch was continued after its merge; "cut a new release branch"), or when open PRs target it.
-  After the merge the branch is deleted, never continued: `finish` only names `git push origin --delete <branch>`
-  and never waits; a later `finish` on the merged branch returns `delete-branch` from `Get-ReleaseState.ps1` and deletes `release/next`.
+  After the merge `release/next` is never deleted (the ruleset has the `deletion` rule) and never continued: `finish` never waits; a later `finish` on the merged branch returns `fast-forward` from `Get-ReleaseState.ps1` and moves `release/next` to the default branch.
 - **Known limitation:** GravionLabs/ci `versioning/release-pr` may title the release PR with the branch name
   (`release/next`) rather than the computed version; the tag and GitHub Release carry the real version.
 
