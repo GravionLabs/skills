@@ -29,7 +29,7 @@ Label `release-test` (together with `pbi`, usually `interactive`) marks the RC t
 
 Titles are always written with the bracket prefix. Legacy titles (`Epic: …`, `Feature: …`, `[EPIC] …`) are still recognized when reading, never written. `[Task]` issues (label `task`) of older plans are read and closed together with their PBI, never created (`references/sub-issues.md`, "Legacy Task issues").
 
-An `[Objective]` sits above the Epic: body, `Requires:` and runner marker in `references/objectives.md`; a human closes it, no skill does.
+An `[Objective]` sits above the Epic; body, `Requires:` and runner marker in `references/objectives.md`; a human closes it, no skill does.
 
 Parent/child links are **native GitHub sub-issues** — see `references/sub-issues.md` for how to
 read, create, move and verify them. Markdown checklists are not used.
