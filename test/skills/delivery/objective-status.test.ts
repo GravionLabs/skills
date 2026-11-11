@@ -188,6 +188,22 @@ describe('Get-ObjectiveStatus.ps1', () => {
     });
   });
 
+  it('a Requires line on a PBI or Bug applies to the repository of that leaf (#559)', async () => {
+    const { out } = await status(
+      chain({
+        'repos/o/telos/issues/1/sub_issues': [feature('o/a', 10), feature('o/b', 20)],
+        'repos/o/b/issues/20/sub_issues': [
+          issue('o/b', { number: 21, body: 'Requires: o/a@M1 rc' }),
+        ],
+        'repos/o/a/issues/13/comments': [{ body: 'not yet' }],
+      }),
+    );
+    expect(byRepo(out)['o/b']).toBe('waiting(requires o/a@M1 rc)');
+    expect(out.requires).toContainEqual(
+      expect.objectContaining({ source: 'o/b#21', appliesTo: 'o/b', repository: 'o/a' }),
+    );
+  });
+
   it('a closed required milestone meets released and rc', async () => {
     const { out } = await status(
       chain({
