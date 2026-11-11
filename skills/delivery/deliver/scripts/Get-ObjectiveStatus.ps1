@@ -114,7 +114,7 @@ $evalCache = @{}
 foreach ($r in $requires) {
   $k = "$($r.repository)@$($r.milestone) $($r.kind)"
   if (-not $evalCache.ContainsKey($k)) {
-    $e = [ordered]@{ met = $false; milestoneState = 'missing'; releaseTest = $null }
+    $e = [ordered]@{ met = $false; milestoneState = 'missing'; releaseTest = $null; releaseTestTitle = $null }
     $m = Find-Milestone $r.repository $r.milestone
     if ($m) {
       $e.milestoneState = [string]$m.state
@@ -122,10 +122,10 @@ foreach ($r in $requires) {
       elseif ($r.kind -eq 'rc') {
         $tests = @(Get-Paged "repos/$($r.repository)/issues?milestone=$($m.number)&labels=release-test&state=all&per_page=100" | Where-Object { $null -eq (Get-Prop $_ 'pull_request') } | Sort-Object { if ($_.state -eq 'open') { 0 } else { 1 } }, { - [int]$_.number })
         foreach ($t in $tests) {
-          if (-not $e.releaseTest) { $e.releaseTest = Get-Url $r.repository ([int]$t.number) }
+          if (-not $e.releaseTest) { $e.releaseTest = Get-Url $r.repository ([int]$t.number); $e.releaseTestTitle = [string]$t.title }
           $posted = [string](Get-Prop $t 'body') -match '<!-- release-test-rc -->'
           if (-not $posted) { $posted = (@(Get-Paged "repos/$($r.repository)/issues/$($t.number)/comments?per_page=100" | Where-Object { [string]$_.body -match '<!-- release-test-rc -->' })).Count -gt 0 }
-          if ($posted) { $e.met = $true; $e.releaseTest = Get-Url $r.repository ([int]$t.number); break }
+          if ($posted) { $e.met = $true; $e.releaseTest = Get-Url $r.repository ([int]$t.number); $e.releaseTestTitle = [string]$t.title; break }
         }
       }
     }
@@ -177,7 +177,7 @@ foreach ($repo in $repoOrder) {
     $prs = @(Get-Paged "repos/${repo}/pulls?base=$branch&head=${owner}:release/next&state=open&per_page=100")
     if ($prs.Count) {
       $openRelease = [string]$prs[0].html_url
-      $gates.Add([ordered]@{ type = 'release-pr'; repository = $repo; detail = "release/next into $branch open"; url = $openRelease })
+      $gates.Add([ordered]@{ type = 'release-pr'; repository = $repo; detail = "release/next into $branch open"; url = $openRelease; title = [string]$prs[0].title })
     }
   }
   $repos.Add([ordered]@{
@@ -191,7 +191,7 @@ foreach ($k in @($evalCache.Keys | Sort-Object)) {
   if ($evalCache[$k].met) { continue }
   $r = @($requires | Where-Object { "$($_.repository)@$($_.milestone) $($_.kind)" -eq $k })[0]
   $type = if ($r.kind -eq 'rc') { 'rc-missing' } else { 'not-released' }
-  $gates.Add([ordered]@{ type = $type; repository = $r.repository; detail = "$($r.repository)@$($r.milestone) $($r.kind) (milestone $($evalCache[$k].milestoneState))"; url = $evalCache[$k].releaseTest })
+  $gates.Add([ordered]@{ type = $type; repository = $r.repository; detail = "$($r.repository)@$($r.milestone) $($r.kind) (milestone $($evalCache[$k].milestoneState))"; url = $evalCache[$k].releaseTest; title = $evalCache[$k].releaseTestTitle })
 }
 if ($objBody -match '(?ms)^##\s*Acceptance Criteria\s*$(.*?)(?=^##\s|\z)') {
   $openBoxes = [regex]::Matches($Matches[1], '(?m)^\s*[-*]\s*\[ \]').Count
@@ -203,8 +203,8 @@ if ($Text) {
   $allDone = $repos.Count -gt 0 -and @($repos | Where-Object { $_.state -ne 'done' }).Count -eq 0
   $needs = [System.Collections.Generic.List[string]]::new()
   foreach ($g in $gates) {
-    if ($g.type -eq 'release-pr') { $needs.Add("merge the release PR of $($g.repository): $($g.url)") }
-    elseif ($g.type -eq 'rc-missing') { $needs.Add("RC test $($g.detail)" + $(if ($g.url) { ": $($g.url)" } else { '' })) }
+    if ($g.type -eq 'release-pr') { $needs.Add("merge the release PR of $($g.repository): $($g.url) $($g.title)") }
+    elseif ($g.type -eq 'rc-missing') { $needs.Add("RC test $($g.detail)" + $(if ($g.url) { ": $($g.url) $($g.title)" } else { '' })) }
   }
   if ($allDone -and [string]$obj.state -eq 'open') { $needs.Add("Acceptance Criteria von $objRef prüfen und Objective schließen: $objUrl $([string]$obj.title)") }
   $nextRepo = $repos | Where-Object { $_.state -eq 'ready' } | Select-Object -First 1
