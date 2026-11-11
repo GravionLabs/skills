@@ -65,15 +65,17 @@ $blockerId = gh api repos/{owner}/{repo}/issues/<blocker-nr> --jq .id
 
 # add
 gh api -X POST repos/{owner}/{repo}/issues/<nr>/dependencies/blocked_by -F issue_id=$blockerId
-# read
-gh api repos/{owner}/{repo}/issues/<nr>/dependencies/blocked_by --jq '.[] | "\(.number) \(.state)"'
+# read: always with the repository, a blocker may live in another repo with the same number
+gh api repos/{owner}/{repo}/issues/<nr>/dependencies/blocked_by --jq '.[] | "\(.repository_url | sub(".*/repos/"; ""))#\(.number) \(.state)"'
 # remove
 gh api -X DELETE repos/{owner}/{repo}/issues/<nr>/dependencies/blocked_by/$blockerId
 ```
 
 `-F` (capital) sends `issue_id` as the integer the API expects. Adding an existing link
 fails with HTTP 422 "Target issue has already been taken": read the links first or treat that error
-as done, so a resumed run stays safe. The `Depends on` / `Blocked by #N` body line documents the link.
+as done, so a resumed run stays safe. A blocker from another repository: `$blockerId = gh api repos/<owner>/<repo>/issues/<blocker-nr> --jq .id`
+(the database id of the foreign issue), then the same POST. A read without `repository_url` confuses `#<n>` of
+another repo with a local number; `Get-Milestones.ps1` keeps `owner/repo` in `blockedBy[].repository`. The `Depends on` / `Blocked by #N` body line documents the link.
 
 ## Verify
 
@@ -83,7 +85,7 @@ the body line — and that every issue except an Objective or a top-level Epic h
 ```powershell
 gh api repos/{owner}/{repo}/issues/<parent-nr>/sub_issues --jq 'length'
 gh api repos/{owner}/{repo}/issues/<child-nr> --jq '.body | split("\n")[0]'
-gh api repos/{owner}/{repo}/issues/<child-nr>/dependencies/blocked_by --jq '[.[].number]'
+gh api repos/{owner}/{repo}/issues/<child-nr>/dependencies/blocked_by --jq '[.[] | "\(.repository_url | sub(".*/repos/"; ""))#\(.number)"]'
 ```
 
 An issue that was created but never linked looks completely normal in `gh issue list`. Silent
