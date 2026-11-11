@@ -5,12 +5,36 @@ Versioning follows [Semantic Versioning](https://semver.org/).
 
 ---
 
+## [4.2.0] — 2026-11-11
+
+### Bug Fixes
+- **github-issue**: Read cross-repository blocked-by links with their repository (#536) (#552)
+- Get-ObjectiveStatus ignores Requires lines on PBIs and Bugs (#559) (#560)
+
+
+### Documentation
+- **adr**: ADR 0004 Objectives coordinate milestones across repositories (#533) (#549)
+
+
+### Features
+- **github-issue**: The [Objective] level above Epic (#535) (#551)
+- **deliver**: Label contract-change when a PR touches contracts.paths (#537) (#553)
+- **deliver**: Get-ObjectiveStatus.ps1 reads an objective across repositories (JSON) (#538) (#554)
+- **planner**: Plan an objective into Features of the target repositories (#541) (#555)
+- **deliver**: Get-ObjectiveStatus -Text status block with gates (#539) (#556)
+- **planner**: Refine an objective checks repos, release edges and criteria (#542) (#558)
+
+
 ## [4.1.3] — 2026-11-10
 
 ### Bug Fixes
 - **deliver**: Delivered[].prUrl falls back to the issue URL (#511) (#522)
 - **deliver**: Delivered[].prUrl is null without a pull-request link (#511) (#521)
 - **github-release**: Move release/next by fast-forward instead of deleting it (#530)
+
+
+### Documentation
+- Update CHANGELOG.md for v4.1.3 [skip ci]
 
 
 ## [4.1.2] — 2026-11-10
