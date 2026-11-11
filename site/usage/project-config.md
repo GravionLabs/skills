@@ -49,6 +49,18 @@ For a desktop app (Tauri) the template says to install the RC next to the stable
 }
 ```
 
+## Contracts
+
+`contracts.paths` lists globs (`**` any depth, `*` within a segment) of the files that other parts depend on: the SPEC, schemas, fixtures, CLI help. After creating the PR (step 6) `deliver` runs `scripts/Test-ContractChange.ps1`, which compares `gh pr diff --name-only` with the globs. On a hit the PBI gets the label `contract-change` (created if missing) and the line `#<nr> pr: contract-change (<n> paths)` is printed. Without the key nothing changes.
+
+```json
+{
+  "contracts": {
+    "paths": ["SPEC.md", "schema/**", "test/fixtures/**", "docs/cli-help.txt"]
+  }
+}
+```
+
 ## Schema
 
 ```json

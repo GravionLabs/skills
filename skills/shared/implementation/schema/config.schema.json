@@ -62,6 +62,18 @@
         }
       }
     },
+    "contracts": {
+      "description": "Contract files (SPEC, schemas, fixtures, CLI help); deliver step 6 labels the PBI contract-change when its PR touches one.",
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "paths": {
+          "description": "Globs of the contract paths (** any depth, * within a segment).",
+          "type": "array",
+          "items": { "type": "string", "minLength": 1 }
+        }
+      }
+    },
     "release": {
       "description": "Release candidate and RC test; read by deliver (step 9) and github-release finish.",
       "type": "object",
