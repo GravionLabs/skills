@@ -225,6 +225,23 @@ describe('Get-DeliverStatus.ps1', () => {
     expect(j.ready.next.number).toBe(4);
   });
 
+  it('#536: a blocker of another repository with the number of a local PBI keeps its repository', () => {
+    const fake = fixture('same-number', [
+      { number: 2, title: 'feat: two', state: 'open' },
+      {
+        number: 3,
+        title: 'feat: three',
+        state: 'open',
+        blockedBy: [{ number: 2, repository: 'acme/other' }],
+      },
+    ]);
+    const j = JSON.parse(run(fake).stdout);
+    expect(j.waiting.map((w: { reason: string }) => w.reason)).toEqual([
+      'blocked by https://github.com/acme/other/issues/2',
+    ]);
+    expect(j.ready.next.number).toBe(2);
+  });
+
   it('#347: closed and total count only PBIs and Bugs, an open Feature does not count', () => {
     const fake = fixture('feature', [
       { number: 1, title: 'feat: one', state: 'closed' },
