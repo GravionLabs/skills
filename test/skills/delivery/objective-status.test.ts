@@ -157,6 +157,7 @@ describe('Get-ObjectiveStatus.ps1', () => {
         repository: 'o/b',
         detail: 'o/b@M2 released (milestone open)',
         url: null,
+        title: null,
       },
       {
         type: 'acceptance-criteria',
@@ -183,6 +184,7 @@ describe('Get-ObjectiveStatus.ps1', () => {
       repository: 'o/a',
       detail: 'o/a@M1 rc (milestone open)',
       url: 'https://github.com/o/a/issues/13',
+      title: 'T13',
     });
   });
 
@@ -230,7 +232,7 @@ describe('Get-ObjectiveStatus.ps1', () => {
       'repos/o/a/issues/10/sub_issues': closed('o/a', 11),
       'repos/o/b/issues/20/sub_issues': closed('o/b', 21),
       'repos/o/c/issues/30/sub_issues': closed('o/c', 31),
-      'repos/o/c/pulls': [{ html_url: 'https://github.com/o/c/pull/5' }],
+      'repos/o/c/pulls': [{ html_url: 'https://github.com/o/c/pull/5', title: 'Release 1.0' }],
     });
     expect(byRepo(out)).toEqual({ 'o/a': 'done', 'o/b': 'done', 'o/c': 'done' });
     expect(out.gates).toEqual([
@@ -239,6 +241,7 @@ describe('Get-ObjectiveStatus.ps1', () => {
         repository: 'o/c',
         detail: 'release/next into main open',
         url: 'https://github.com/o/c/pull/5',
+        title: 'Release 1.0',
       },
     ]);
     expect(ajv.validate(schema, out)).toBe(true);
@@ -267,7 +270,78 @@ describe('Get-ObjectiveStatus.ps1', () => {
       repository: 'o/a',
       detail: 'o/a@M1 rc (milestone open)',
       url: null,
+      title: null,
     });
+  });
+
+  const text = async (data: Record<string, unknown>) => {
+    const r = await worker.run(['-Objective', 'o/telos#1', '-Text'], {
+      cwd: tmp,
+      env: { ...fake.env(), FAKE_GH: JSON.stringify(data) },
+    });
+    return { r, lines: r.stdout.trimEnd().split('\n') };
+  };
+
+  it('-Text: one line per repo, next ready item with URL and title, needs you numbered, at most 12 lines', async () => {
+    const { r, lines } = await text(chain());
+    expect(r.status).toBe(0);
+    expect(lines).toEqual([
+      'Objective o/telos#1: https://github.com/o/telos/issues/1 [Objective] Chain',
+      'o/a: 1/2 ready',
+      'o/b: 0/1 ready',
+      'o/c: 0/1 waiting(requires o/b@M2 released)',
+      'Next: o/a https://github.com/o/a/issues/12 T12',
+      'Needs you: -',
+    ]);
+  });
+
+  it('-Text: release PR and RC test gates, acceptance criteria once all children are closed', async () => {
+    const closed = (repo: string, n: number) => [issue(repo, { number: n, state: 'closed' })];
+    const { lines } = await text({
+      'repos/o/telos/issues/1': {
+        number: 1,
+        title: 'O',
+        state: 'open',
+        body: '## Acceptance Criteria\n- [ ] x\n',
+      },
+      'repos/o/telos/issues/1/sub_issues': [feature('o/a', 10), feature('o/c', 30)],
+      'repos/o/a/issues/10/sub_issues': closed('o/a', 11),
+      'repos/o/c/issues/30/sub_issues': closed('o/c', 31),
+      'repos/o/c/pulls': [{ html_url: 'https://github.com/o/c/pull/5', title: 'Release 1.0' }],
+    });
+    expect(lines).toEqual([
+      'Objective o/telos#1: https://github.com/o/telos/issues/1 O',
+      'o/a: 1/1 done',
+      'o/c: 1/1 done',
+      'Next: -',
+      'Needs you:',
+      '  1. merge the release PR of o/c: https://github.com/o/c/pull/5 Release 1.0',
+      '  2. Acceptance Criteria von o/telos#1 prüfen und Objective schließen: https://github.com/o/telos/issues/1 O',
+    ]);
+  });
+
+  it('-Text: an unmet rc is a numbered RC test gate with the release-test URL', async () => {
+    const { lines } = await text(chain({ 'repos/o/a/issues/13/comments': [{ body: 'not yet' }] }));
+    expect(lines).toContain(
+      '  1. RC test o/a@M1 rc (milestone open): https://github.com/o/a/issues/13 T13',
+    );
+    expect(lines.length).toBeLessThanOrEqual(12);
+  });
+
+  it('-Text: more repos than fit are cut to 12 lines', async () => {
+    const repos = 'abcdefghijklmnop'.split('');
+    const { lines } = await text({
+      'repos/o/telos/issues/1': { number: 1, title: 'O', state: 'open', body: '' },
+      'repos/o/telos/issues/1/sub_issues': repos.map((x, i) => feature(`o/${x}`, 10 + i)),
+      ...Object.fromEntries(
+        repos.map((x, i) => [
+          `repos/o/${x}/issues/${10 + i}/sub_issues`,
+          [issue(`o/${x}`, { number: 100 + i })],
+        ]),
+      ),
+    });
+    expect(lines).toHaveLength(12);
+    expect(lines[9]).toBe('+8 more repositories');
   });
 
   it.each([

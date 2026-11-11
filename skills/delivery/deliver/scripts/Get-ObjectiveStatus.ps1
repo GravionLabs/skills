@@ -13,15 +13,20 @@
   least one open PBI or Bug without an open blocker, not needs-decision, needs-refinement or release-test), else waiting(<reason>).
   Gates: release-pr (open release PR release/next into the default branch), rc-missing and not-released (unmet Requires, on the
   required repository), acceptance-criteria (unchecked boxes under `## Acceptance Criteria` of the objective).
-  JSON per schema/objective-status.schema.json.
+  JSON per schema/objective-status.schema.json. -Text prints the status block of at most 12 lines instead: the objective, one
+  line per repository `<owner/repo>: <closed>/<total> <ready|waiting(<reason>)|done>`, the next ready item (full URL and title)
+  and "Needs you" as numbered gates (release PR, RC test, acceptance criteria once all children are closed).
 .PARAMETER Objective
   <owner>/<repo>#<nr> of the [Objective] issue.
 .PARAMETER Json
-  JSON output (the only format; accepted for symmetry with the other status scripts).
+  JSON output (the default; accepted for symmetry with the other status scripts).
+.PARAMETER Text
+  Print the status block (at most 12 lines) instead of JSON.
 #>
 param(
   [Parameter(Mandatory)][string]$Objective,
-  [switch]$Json
+  [switch]$Json,
+  [switch]$Text
 )
 $ErrorActionPreference = 'Stop'
 function Fail([string]$m) { Write-Error $m -ErrorAction Continue; exit 1 }
@@ -109,7 +114,7 @@ $evalCache = @{}
 foreach ($r in $requires) {
   $k = "$($r.repository)@$($r.milestone) $($r.kind)"
   if (-not $evalCache.ContainsKey($k)) {
-    $e = [ordered]@{ met = $false; milestoneState = 'missing'; releaseTest = $null }
+    $e = [ordered]@{ met = $false; milestoneState = 'missing'; releaseTest = $null; releaseTestTitle = $null }
     $m = Find-Milestone $r.repository $r.milestone
     if ($m) {
       $e.milestoneState = [string]$m.state
@@ -117,10 +122,10 @@ foreach ($r in $requires) {
       elseif ($r.kind -eq 'rc') {
         $tests = @(Get-Paged "repos/$($r.repository)/issues?milestone=$($m.number)&labels=release-test&state=all&per_page=100" | Where-Object { $null -eq (Get-Prop $_ 'pull_request') } | Sort-Object { if ($_.state -eq 'open') { 0 } else { 1 } }, { - [int]$_.number })
         foreach ($t in $tests) {
-          if (-not $e.releaseTest) { $e.releaseTest = Get-Url $r.repository ([int]$t.number) }
+          if (-not $e.releaseTest) { $e.releaseTest = Get-Url $r.repository ([int]$t.number); $e.releaseTestTitle = [string]$t.title }
           $posted = [string](Get-Prop $t 'body') -match '<!-- release-test-rc -->'
           if (-not $posted) { $posted = (@(Get-Paged "repos/$($r.repository)/issues/$($t.number)/comments?per_page=100" | Where-Object { [string]$_.body -match '<!-- release-test-rc -->' })).Count -gt 0 }
-          if ($posted) { $e.met = $true; $e.releaseTest = Get-Url $r.repository ([int]$t.number); break }
+          if ($posted) { $e.met = $true; $e.releaseTest = Get-Url $r.repository ([int]$t.number); $e.releaseTestTitle = [string]$t.title; break }
         }
       }
     }
@@ -172,7 +177,7 @@ foreach ($repo in $repoOrder) {
     $prs = @(Get-Paged "repos/${repo}/pulls?base=$branch&head=${owner}:release/next&state=open&per_page=100")
     if ($prs.Count) {
       $openRelease = [string]$prs[0].html_url
-      $gates.Add([ordered]@{ type = 'release-pr'; repository = $repo; detail = "release/next into $branch open"; url = $openRelease })
+      $gates.Add([ordered]@{ type = 'release-pr'; repository = $repo; detail = "release/next into $branch open"; url = $openRelease; title = [string]$prs[0].title })
     }
   }
   $repos.Add([ordered]@{
@@ -186,11 +191,39 @@ foreach ($k in @($evalCache.Keys | Sort-Object)) {
   if ($evalCache[$k].met) { continue }
   $r = @($requires | Where-Object { "$($_.repository)@$($_.milestone) $($_.kind)" -eq $k })[0]
   $type = if ($r.kind -eq 'rc') { 'rc-missing' } else { 'not-released' }
-  $gates.Add([ordered]@{ type = $type; repository = $r.repository; detail = "$($r.repository)@$($r.milestone) $($r.kind) (milestone $($evalCache[$k].milestoneState))"; url = $evalCache[$k].releaseTest })
+  $gates.Add([ordered]@{ type = $type; repository = $r.repository; detail = "$($r.repository)@$($r.milestone) $($r.kind) (milestone $($evalCache[$k].milestoneState))"; url = $evalCache[$k].releaseTest; title = $evalCache[$k].releaseTestTitle })
 }
 if ($objBody -match '(?ms)^##\s*Acceptance Criteria\s*$(.*?)(?=^##\s|\z)') {
   $openBoxes = [regex]::Matches($Matches[1], '(?m)^\s*[-*]\s*\[ \]').Count
   if ($openBoxes) { $gates.Add([ordered]@{ type = 'acceptance-criteria'; repository = $objRepo; detail = "$openBoxes open"; url = Get-Url $objRepo $objNumber }) }
+}
+
+if ($Text) {
+  $objUrl = Get-Url $objRepo $objNumber
+  $allDone = $repos.Count -gt 0 -and @($repos | Where-Object { $_.state -ne 'done' }).Count -eq 0
+  $needs = [System.Collections.Generic.List[string]]::new()
+  foreach ($g in $gates) {
+    if ($g.type -eq 'release-pr') { $needs.Add("merge the release PR of $($g.repository): $($g.url) $($g.title)") }
+    elseif ($g.type -eq 'rc-missing') { $needs.Add("RC test $($g.detail)" + $(if ($g.url) { ": $($g.url) $($g.title)" } else { '' })) }
+  }
+  if ($allDone -and [string]$obj.state -eq 'open') { $needs.Add("Acceptance Criteria von $objRef prüfen und Objective schließen: $objUrl $([string]$obj.title)") }
+  $nextRepo = $repos | Where-Object { $_.state -eq 'ready' } | Select-Object -First 1
+  $shownNeeds = [math]::Min($needs.Count, 3)
+  $cap = 12 - 3 - $shownNeeds
+  $lines = [System.Collections.Generic.List[string]]::new()
+  $lines.Add("Objective ${objRef}: $objUrl $([string]$obj.title)")
+  $rl = @($repos | ForEach-Object { "$($_.repository): $($_.closed)/$($_.open + $_.closed) $($_.status)" })
+  if ($rl.Count -gt $cap) { $rl = @($rl[0..($cap - 2)]) + "+$($rl.Count - $cap + 1) more repositories" }
+  foreach ($l in $rl) { $lines.Add($l) }
+  $lines.Add('Next: ' + $(if ($nextRepo) { $f = $nextRepo.ready[0]; "$($nextRepo.repository) $($f.url) $($f.title)" } else { '-' }))
+  $lines.Add('Needs you:' + $(if ($needs.Count) { '' } else { ' -' }))
+  for ($n = 0; $n -lt $shownNeeds; $n++) {
+    $t = $needs[$n]
+    if ($n -eq 2 -and $needs.Count -gt 3) { $t += " (+$($needs.Count - 3) more)" }
+    $lines.Add("  $($n + 1). $t")
+  }
+  $lines -join "`n"
+  exit 0
 }
 
 [ordered]@{
