@@ -91,8 +91,8 @@ while ($stack.Count) {
     if ($seen[$key]) { continue }
     $seen[$key] = $true
     if (-not $repoOrder.Contains($repo)) { $repoOrder.Add($repo) }
-    if (Test-Leaf $s) { $leaves.Add([pscustomobject]@{ repo = $repo; issue = $s }); continue }
     foreach ($r in @(Get-Requires ([string](Get-Prop $s 'body')) $key $repo)) { $requires.Add($r) }
+    if (Test-Leaf $s) { $leaves.Add([pscustomobject]@{ repo = $repo; issue = $s }); continue }
     $stack.Push(@($repo, [int]$s.number))
   }
 }
