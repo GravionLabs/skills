@@ -12,7 +12,7 @@ A group is a set of skills for one domain, listed in `.claude-plugin/marketplace
 | :-------------- | :----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | `shared`        | `implementation` (tests per change), `detect-techstack`, `code-review` (blocking findings and notes), `diagnose` (bug diagnosis), `check-prerequisites`, `lessons` (approved project lessons per role), `adr` (ADR with the next free number, see [governance](usage/governance.md)) |
 | `delivery`      | `deliver`, `planner`, `grill-me`, `retro`, `skills-manage`                                                                                                                                                                                                                           |
-| `github`        | `github-issue` (Epic → Feature → PBI hierarchy with native sub-issues), `github-pull-request`, `github-release`, `github-milestone` (milestones `M<nnn>`, renamed `M<nnn> (x.y.z)` on close: current and all with their progress, create, close after the release tag)               |
+| `github`        | `github-issue` ([Objective] → Epic → Feature → PBI hierarchy with native sub-issues), `github-pull-request`, `github-release`, `github-milestone` (milestones `M<nnn>`, renamed `M<nnn> (x.y.z)` on close: current and all with their progress, create, close after the release tag) |
 | `dotnet`        | `dotnet-implementation`, `dotnet-test`, `dotnet-create-solution`, `dotnet-mcp-server-generator`, `dotnet-aspire` (AppHost for local orchestration)                                                                                                                                   |
 | `ts`            | `ts-implementation`, `ts-test`, `ts-create-project`, `ts-mcp-server-generator`, `ts-pnpm-workflow`, `setup-biome-husky`, `setup-prettier-eslint-husky`                                                                                                                               |
 | `py`            | `py-implementation`, `py-test`, `py-create-project`                                                                                                                                                                                                                                  |
@@ -34,7 +34,7 @@ Skills delegate by name instead of repeating each other. One skill owns a workfl
 
 - [Quick start](quick-start.md): install the skills and run a first prompt
 - [Skills](concepts/skills.md): how skills load on each platform and how they are structured
-- [Skill composition](concepts/composition.md) and [issue model](concepts/issue-model.md): how the skills call each other, and the Epic, Feature, PBI and Bug hierarchy with its labels
+- [Skill composition](concepts/composition.md) and [issue model](concepts/issue-model.md): how the skills call each other, and the Objective, Epic, Feature, PBI and Bug hierarchy with its labels
 - [Skill frontmatter convention](concepts/skill-frontmatter.md): the restricted frontmatter that keeps skills portable
 - [Stack setups](guides/stack-setups.md), [work an issue by hand](guides/work-an-issue-by-hand.md) and [fix a bug](guides/fix-a-bug.md): end-to-end examples with the installed skills
 - [Learn from runs](guides/learn-from-runs.md): `retro`, lessons and the flow diagram
