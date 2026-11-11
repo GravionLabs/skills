@@ -64,3 +64,18 @@ describe('planner refine definition of ready (#891)', () => {
     ).toBe(true);
   });
 });
+
+describe('planner refine of an Objective (#542)', () => {
+  it('ready.md lists the Objective points', () => {
+    const o = section('Objective');
+    expect(o).toMatch(/Outcome present/);
+    expect(o).toMatch(/Every repository[\s\S]*at least one child/);
+    expect(o).toMatch(/checklist/);
+    expect(o).toMatch(/No implementation details/);
+    expect(o).toMatch(/SOURCE\.txt[\s\S]*Requires:/);
+  });
+
+  it('Refine routes Objective gaps through grill-me into ## Decisions', () => {
+    expect(refine).toMatch(/Objective[\s\S]*## Objective[\s\S]*grill-me[\s\S]*## Decisions/);
+  });
+});

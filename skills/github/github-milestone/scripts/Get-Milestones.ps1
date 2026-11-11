@@ -417,6 +417,7 @@ if ($Mode -eq 'assign') {
   foreach ($n in $nums) {
     $i = $info[$n]
     if ($target) {
+      if ($i.labels -contains 'objective') { Fail "issue #$n is an Objective: an Objective never has a milestone, nothing was changed" }
       if ($i.labels -contains 'epic') { Fail "issue #$n is an Epic: an Epic never has a milestone, nothing was changed" }
       if ($i.labels -notcontains 'feature') { continue }
       $sraw = & gh api "repos/$Repo/issues/$n/sub_issues?per_page=100" 2>$null

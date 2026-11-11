@@ -162,6 +162,13 @@ describe('Get-Milestones.ps1 -Mode assign', () => {
     expect(writes).toEqual([]);
   });
 
+  it('refuses an Objective, nothing written', async () => {
+    const { r, writes } = await assign('M3', '1,2', { 1: pbi(), 2: { labels: ['objective'] } });
+    expect(r.status).toBe(1);
+    expect(r.stderr).toContain('Objective never has a milestone');
+    expect(writes).toEqual([]);
+  });
+
   it('none clears an Epic without a warning', async () => {
     const { out } = await assign('none', '2', { 2: { labels: ['epic'], milestone: 'M004' } });
     expect(out.milestone).toBeNull();

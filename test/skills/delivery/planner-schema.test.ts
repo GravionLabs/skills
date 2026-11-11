@@ -21,7 +21,8 @@ function graphErrors(plan: any): string[] {
   }
   for (const it of plan.items) {
     for (const b of it.blocked_by) {
-      if (typeof b === 'string' && !ids.has(b)) errors.push(`dangling ${b} in ${it.id}`);
+      if (typeof b === 'string' && !b.includes('#') && !ids.has(b))
+        errors.push(`dangling ${b} in ${it.id}`);
       if (b === it.id) errors.push(`self reference ${it.id}`);
     }
   }
@@ -42,6 +43,15 @@ function graphErrors(plan: any): string[] {
     return false;
   };
   if ([...ids].some(visit)) errors.push('cycle');
+  const repos = [
+    plan.parent_repo,
+    ...plan.items.flatMap((it: any) => [
+      it.repo,
+      ...it.blocked_by.filter((b: any) => typeof b === 'string' && b.includes('#')),
+      ...(it.requires ?? []),
+    ]),
+  ].filter(Boolean);
+  if (new Set(repos.map((r: string) => r.split('/')[0])).size > 1) errors.push('owner differs');
   return errors;
 }
 
@@ -250,5 +260,99 @@ describe('planner without removed dependencies', () => {
     expect(md).not.toMatch(/gh issue (close|edit|create)|\bclose them\b/);
     expect(md).not.toContain('already merged');
     expect(md).not.toContain('#<task>');
+  });
+});
+
+describe('objective plans across repositories (#541)', () => {
+  const objective = () => ({
+    ...clone(),
+    parent_issue: 3,
+    parent_repo: 'GravionLabs/telos',
+    input_type: 'objective',
+    level: 'feature',
+    questions: [],
+    items: [
+      { ...item('p1'), title: 'CI event format v2', repo: 'GravionLabs/ci' },
+      {
+        ...item('p2', ['p1', 'GravionLabs/ci#12']),
+        title: 'Panel reads event format v2',
+        repo: 'GravionLabs/skills',
+        requires: ['GravionLabs/ci@M004 rc', 'GravionLabs/ci@M003.1 released'],
+      },
+    ],
+  });
+
+  it('accepts an objective plan with repo, requires and a cross-repo blocker', () => {
+    expect(check(objective())).toEqual([]);
+  });
+
+  it('keeps repo optional outside an objective plan', () => {
+    const p = clone();
+    p.items[0].repo = 'GravionLabs/ci';
+    expect(check(p)).toEqual([]);
+    expect(check(clone())).toEqual([]);
+  });
+
+  it.each([
+    ['an item without repo', (p: any) => delete p.items[0].repo],
+    ['no parent_repo', (p: any) => delete p.parent_repo],
+    ['level pbi', (p: any) => (p.level = 'pbi')],
+    ['a repo without owner', (p: any) => (p.items[0].repo = 'ci')],
+    ['requires without state', (p: any) => (p.items[1].requires = ['GravionLabs/ci@M004'])],
+    [
+      'requires with an unknown state',
+      (p: any) => (p.items[1].requires = ['GravionLabs/ci@M004 merged']),
+    ],
+    ['requires without milestone', (p: any) => (p.items[1].requires = ['GravionLabs/ci rc'])],
+    ['requires with a legacy issue ref', (p: any) => (p.items[1].requires = ['GravionLabs/ci#12'])],
+    [
+      'a duplicate requires entry',
+      (p: any) => (p.items[1].requires = ['GravionLabs/ci@M004 rc', 'GravionLabs/ci@M004 rc']),
+    ],
+    ['a blocker ref without number', (p: any) => (p.items[1].blocked_by = ['GravionLabs/ci#'])],
+  ])('rejects %s', (_name, mutate) => {
+    const p = objective();
+    mutate(p);
+    expect(check(p)).toContain('schema');
+  });
+
+  it.each([
+    ['an item repo', (p: any) => (p.items[0].repo = 'other/ci')],
+    ['a requires entry', (p: any) => (p.items[1].requires = ['other/ci@M004 rc'])],
+    ['a cross-repo blocker', (p: any) => (p.items[1].blocked_by = ['other/ci#12'])],
+  ])('rejects another owner in %s', (_name, mutate) => {
+    const p = objective();
+    mutate(p);
+    expect(check(p)).toEqual(['owner differs']);
+  });
+
+  it('plan-schema.md documents repo, requires, parent_repo and the same-owner rule', () => {
+    for (const f of ['`items[].repo`', '`items[].requires[]`', '`parent_repo`', '`objective`'])
+      expect(doc).toContain(f);
+    expect(doc).toMatch(/Same owner: every `items\[\]\.repo`/);
+    expect(schema.properties.input_type.enum).toContain('objective');
+  });
+
+  it('SKILL.md maps an Objective to Features with repo and grills via grill-me', () => {
+    const md = fs.readFileSync(path.join(skillDir, 'SKILL.md'), 'utf-8');
+    const row = md.split('\n').find((l) => l.startsWith('| Objective'))!;
+    expect(row).toContain('`[Feature] …`');
+    expect(row).toContain('`repo`');
+    expect(row).toContain('`grill-me`');
+  });
+
+  it('create-from-plan.md creates in the item repo, links the foreign parent and sets cross-repo blockers', () => {
+    const cfp = fs.readFileSync(
+      path.resolve(__dirname, '../../../skills/github/github-issue/references/create-from-plan.md'),
+      'utf-8',
+    );
+    expect(cfp).toContain('gh issue create --repo <repo>');
+    expect(cfp).toContain(
+      'repos/<parent_repo>/issues/<parent_issue>/sub_issues -F sub_issue_id=$childId',
+    );
+    expect(cfp).toContain('gh api repos/<blocker-repo>/issues/<n> --jq .id');
+    expect(cfp).toContain('`Requires: <entry>`');
+    expect(cfp).toContain('-Mode assign -Repo <repo>');
+    expect(cfp).toMatch(/another owner → stop/);
   });
 });

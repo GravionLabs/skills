@@ -6,6 +6,7 @@ Plans an issue one level down with blockers and sizes, grills the open decisions
 
 ```text
 /planner <nr>
+/planner <owner/repo#nr>
 /planner <free description>
 /planner refine <nr>
 /planner help
@@ -14,9 +15,11 @@ Plans an issue one level down with blockers and sizes, grills the open decisions
 ## Arguments and flags
 
 - `<nr>`: issue number to plan; the input level decides the output level:
+  - Objective gives Features in the target repositories (each item names its `repo`, same owner)
   - Epic gives Features
   - Feature gives PBIs
   - PBI or Bug that fits one session: no items (use `refine <nr>`); size L or more than one session: split into sibling PBIs under the same Feature
+- `<owner/repo#nr>`: an issue of another repository, e.g. an Objective; the Features are created in their repositories and linked to it as sub-issues
 - `<free description>`: internal steps only, no issues are created
 - `refine <nr>`: no plan, no new issues except an approved split; checks the issue against the readiness list of its level, grills the gaps, updates the body (`## Decisions`), sets labels (`needs-refinement` removed when ready, `needs-decision` when a question is open)
 - Depth, named in the request: `quick` (~5 key files), `standard` (default), `deep` (call sites, tests, docs of every affected area)
@@ -29,6 +32,7 @@ Plans an issue one level down with blockers and sizes, grills the open decisions
 
 ```text
 /planner 42
+/planner GravionLabs/telos#3
 /planner refine 42
 /planner deep plan for #42
 /planner add rate limiting to the gateway

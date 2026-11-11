@@ -4,12 +4,13 @@ The skills work on one issue hierarchy with a fixed set of labels. `github-issue
 
 ## Levels and titles
 
-| Label     | Title (always `[<Level>] <summary>`)        | Children |
-| :-------- | :------------------------------------------ | :------- |
-| `epic`    | `[Epic] <outcome>`                          | Features |
-| `feature` | `[Feature] <capability>`                    | PBIs     |
-| `pbi`     | `[PBI] feat(scope): …`, `[PBI] refactor: …` | none     |
-| `bug`     | `[Bug] fix: <symptom>`                      | none     |
+| Label       | Title (always `[<Level>] <summary>`)        | Children                                            |
+| :---------- | :------------------------------------------ | :-------------------------------------------------- |
+| `objective` | `[Objective] <outcome>`                     | Features or Epics, also of other repos of the owner |
+| `epic`      | `[Epic] <outcome>`                          | Features                                            |
+| `feature`   | `[Feature] <capability>`                    | PBIs                                                |
+| `pbi`       | `[PBI] feat(scope): …`, `[PBI] refactor: …` | none                                                |
+| `bug`       | `[Bug] fix: <symptom>`                      | none                                                |
 
 - A PBI is the unit of delivery: one pull request. There is no Task level; a PBI that is too large (size L) is split into sibling PBIs. Open `[Task]` issues of older plans are only read and closed with their PBI.
 - The shared `issues.yml` workflow of `GravionLabs/ci` sets the title prefix from the level label.
@@ -31,7 +32,7 @@ A PBI that another session claimed (assignee) is skipped too, see [delivery](../
 
 ## Milestones
 
-A milestone holds the work items that are delivered: PBIs and Bugs always have one. A Feature has one only when all its PBIs are in that milestone, an Epic never. `github-milestone` shows breaks of the rule as `warnings`, `roadmap` refuses them, and `deliver --milestone` skips work items outside the milestone. Closing is independent: after the release PR is merged, Features whose sub-issues are all closed close with them. Details: `references/milestones.md` of `github-issue`.
+A milestone holds the work items that are delivered: PBIs and Bugs always have one. A Feature has one only when all its PBIs are in that milestone, an Epic and an Objective never. `github-milestone` shows breaks of the rule as `warnings`, `roadmap` refuses them, and `deliver --milestone` skips work items outside the milestone. Closing is independent: after the release PR is merged, Features whose sub-issues are all closed close with them. Details: `references/milestones.md` of `github-issue`.
 
 ## Branches and the release branch
 

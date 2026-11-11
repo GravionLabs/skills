@@ -1,0 +1,83 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://raw.githubusercontent.com/GravionLabs/skills/main/skills/delivery/deliver/schema/objective-status.schema.json",
+  "title": "objective status (Get-ObjectiveStatus.ps1)",
+  "description": "Read-only status of an [Objective] across repositories: the Requires lines with their evaluation, per repository ready, waiting(<reason>) or done, and the gates. Built only from REST GET calls; no local cache.",
+  "type": "object",
+  "required": ["objective", "requires", "repos", "gates"],
+  "$defs": {
+    "repository": { "type": "string", "pattern": "^[^/\\s]+/[^/\\s]+$" },
+    "requires": {
+      "type": "object",
+      "required": ["repository", "milestone", "kind", "source", "appliesTo", "met", "milestoneState", "releaseTest"],
+      "properties": {
+        "repository": { "$ref": "#/$defs/repository" },
+        "milestone": { "type": "string", "minLength": 1 },
+        "kind": { "enum": ["released", "rc"] },
+        "source": { "type": "string", "pattern": "^[^/\\s]+/[^/\\s]+#[0-9]+$", "description": "owner/repo#nr of the issue with the Requires line" },
+        "appliesTo": { "description": "repository the line gates; null: a line of the objective, it gates every repository except the required one", "oneOf": [{ "type": "null" }, { "$ref": "#/$defs/repository" }] },
+        "met": { "type": "boolean" },
+        "milestoneState": { "enum": ["open", "closed", "missing"] },
+        "releaseTest": { "type": ["string", "null"], "description": "URL of the release-test issue read for rc" }
+      }
+    },
+    "item": {
+      "type": "object",
+      "required": ["repository", "number", "title", "url"],
+      "properties": {
+        "repository": { "$ref": "#/$defs/repository" },
+        "number": { "type": "integer", "minimum": 1 },
+        "title": { "type": "string" },
+        "url": { "type": "string", "pattern": "^https://github\\.com/" },
+        "reason": { "type": "string", "minLength": 1 }
+      }
+    }
+  },
+  "properties": {
+    "objective": {
+      "type": "object",
+      "required": ["repository", "number", "title", "state", "url"],
+      "properties": {
+        "repository": { "$ref": "#/$defs/repository" },
+        "number": { "type": "integer", "minimum": 1 },
+        "title": { "type": "string" },
+        "state": { "enum": ["open", "closed"] },
+        "url": { "type": "string" }
+      }
+    },
+    "requires": { "type": "array", "items": { "$ref": "#/$defs/requires" } },
+    "repos": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["repository", "status", "state", "reason", "open", "closed", "ready", "waiting", "requires", "releasePr"],
+        "properties": {
+          "repository": { "$ref": "#/$defs/repository" },
+          "status": { "type": "string", "pattern": "^(ready|done|waiting\\(.+\\))$" },
+          "state": { "enum": ["ready", "waiting", "done"] },
+          "reason": { "type": ["string", "null"] },
+          "open": { "type": "integer", "minimum": 0 },
+          "closed": { "type": "integer", "minimum": 0 },
+          "ready": { "type": "array", "items": { "$ref": "#/$defs/item" } },
+          "waiting": { "type": "array", "items": { "allOf": [{ "$ref": "#/$defs/item" }, { "required": ["reason"] }] } },
+          "requires": { "type": "array", "items": { "$ref": "#/$defs/requires" } },
+          "releasePr": { "type": ["string", "null"] }
+        }
+      }
+    },
+    "gates": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["type", "repository", "detail", "url"],
+        "properties": {
+          "type": { "enum": ["release-pr", "rc-missing", "not-released", "acceptance-criteria"] },
+          "repository": { "$ref": "#/$defs/repository" },
+          "detail": { "type": "string" },
+          "url": { "type": ["string", "null"] },
+          "title": { "type": ["string", "null"] }
+        }
+      }
+    }
+  }
+}
