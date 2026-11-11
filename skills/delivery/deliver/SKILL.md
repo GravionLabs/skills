@@ -74,7 +74,7 @@ A blocked or paused PBI releases its claim: `gh issue edit <nr> --remove-assigne
 
 With `--milestone`, after every delivered, blocked or paused PBI and at the end, print the block of `pwsh scripts/Get-DeliverStatus.ps1 -Milestone <name> -Delivered <nr…> [-Merging <nr…>] -Text` (JSON without `-Text`; the loop and the terminal integrations read that): at most 10 lines with progress `<closed>/<total>` (PBIs and Bugs only; Features and Epics do not count), delivered in this run, ready (count, next), waiting with reason (a `merging` PBI: `merging, waits for checks`, not delivered), **needs you** as numbered items (decisions, `interactive`, manual tests, the release PR to merge), release state, next milestone. Every issue is a full URL with its title. One `Get-Milestones.ps1` read (REST).
 
-An `[Objective]` across repositories (`github-issue` `references/objectives.md`): `pwsh scripts/Get-ObjectiveStatus.ps1 -Objective <owner>/<repo>#<nr>` prints, read-only (REST GET), per repository `ready`, `waiting(<reason>)` or `done` after `blocked-by` and `Requires:`, plus the gates (release PR, RC missing, acceptance criteria); JSON per `schema/objective-status.schema.json`.
+An `[Objective]` across repositories (`github-issue` `references/objectives.md`): `pwsh scripts/Get-ObjectiveStatus.ps1 -Objective <owner>/<repo>#<nr>` prints, read-only (REST GET), per repository `ready`, `waiting(<reason>)` or `done` after `blocked-by` and `Requires:`, plus the gates (release PR, RC missing, acceptance criteria); `-Text` prints the block of at most 12 lines (a line per repo, next ready item, needs you as numbered gates); JSON per `schema/objective-status.schema.json`.
 
 ## Report
 
