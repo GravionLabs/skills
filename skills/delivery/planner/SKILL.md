@@ -26,6 +26,7 @@ Planning only: no source edits. The planning steps below ask nothing (open decis
 
 - Read the issue and its children (`gh issue view <nr> --json title,body,labels,comments`; sub-issues as in `## Steps` 3). Explore the code it names; facts are not asked.
 - Check the list of its level in `references/ready.md`. Collect the gaps only. With `governance` in `.agents/config.json`: also `references/governance.md` for the ADR and spec gaps.
+- An Objective (`refine <owner/repo#nr>`, read with `--repo`): the `## Objective` list of `references/ready.md`, children and pins of every affected repository read-only (`## Steps` 1). Gaps (repo without child, missing `Requires:` edge, missing criteria) go to `grill-me`; the result goes under `## Decisions` of the Objective body.
 - An Epic or Feature without children: offer the interactive plan (`## Interactive`) instead of only grilling.
 - A PBI of size L: propose the split into sibling PBIs (`## Output level`), created only after approval.
 - Load `grill-me` with the gaps only. Update the body with the decisions (`## Decisions`) and the sharpened criteria and notes via `gh api -X PATCH repos/{owner}/{repo}/issues/<nr> -F body=@file`.

@@ -64,6 +64,8 @@ refine 42
 - Is an existing file overwritten? — No, fail with a clear error
 ```
 
+An Objective (`refine owner/telos#7`) is checked across its repositories: the outcome is stated, every affected repository has at least one child, the acceptance criteria are a checklist and the body holds no implementation details. Every child issue that pulls in a pin (`SOURCE.txt`, a tag in a dependency) needs a `Requires:` edge. The gaps go through `grill-me`; the answers land in the Objective body under `## Decisions`.
+
 Labels ([issue model](../concepts/issue-model.md#labels)) follow the result: a ready issue loses `needs-refinement`; with an open decision it gets `needs-decision` and the question as a comment. A size L PBI gets a proposed split into sibling PBIs, created only after approval. `/deliver` skips issues labelled `needs-refinement`.
 
 ## Plan an Objective across repositories
