@@ -7,7 +7,7 @@ nothing validates it, and a missed edit is invisible. Native sub-issues drive th
 bar and completion % automatically, so **closing a child is the only action needed** — there is no
 checklist to tick.
 
-Keep a human-readable parent line as the **first line of the child's body** (`Parent Epic: #12`,
+Keep a human-readable parent line as the **first line of the child's body** (`Parent Objective: #3`, `Parent Epic: #12`,
 `Parent Feature: #34`) so the relationship is legible in plain text and in
 search. That line is documentation; the native link is the mechanism. Both must agree.
 
@@ -78,7 +78,7 @@ as done, so a resumed run stays safe. The `Depends on` / `Blocked by #N` body li
 ## Verify
 
 After any batch that creates or moves issues, confirm the two sources agree — the native link and
-the body line — and that every non-Epic issue has exactly one parent:
+the body line — and that every issue except an Objective or a top-level Epic has exactly one parent:
 
 ```powershell
 gh api repos/{owner}/{repo}/issues/<parent-nr>/sub_issues --jq 'length'

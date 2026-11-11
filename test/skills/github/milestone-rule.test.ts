@@ -72,3 +72,21 @@ describe('milestone rule (#327)', () => {
     expect(read('site/guides/release.md')).toContain('/github-milestone assign');
   });
 });
+
+describe('objective level (#535)', () => {
+  it('github-issue knows the level, the slug regex and the reference', () => {
+    const skill = read('skills/github/github-issue/SKILL.md');
+    expect(skill).toMatch(/\| `objective` \| `\[Objective\] <outcome>`/);
+    expect(skill).toContain('(Objective|Epic|Feature|PBI|Task|Bug)');
+    const ref = read('skills/github/github-issue/references/objectives.md');
+    expect(ref).toContain('Requires: <owner>/<repo>@<milestone> released|rc');
+    expect(ref).toContain('<!-- release-test-rc -->');
+    expect(ref).toContain(
+      '<!-- objective-runner: host=<machine|cloud-id> since=<iso> heartbeat=<iso> -->',
+    );
+    expect(read('skills/github/github-issue/references/milestones.md')).toMatch(
+      /\| Objective\s+\| Never/,
+    );
+    expect(read('site/concepts/issue-model.md')).toContain('[Objective] <outcome>');
+  });
+});
