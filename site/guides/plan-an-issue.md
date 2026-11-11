@@ -6,6 +6,7 @@
 
 | You plan   | Plan items                                                                                                  |
 | :--------- | :---------------------------------------------------------------------------------------------------------- |
+| Objective  | Features in the target repositories (each item names its `repo`)                                            |
 | Epic       | Features                                                                                                    |
 | Feature    | PBIs (`feat: …`, `fix: …`)                                                                                  |
 | PBI or Bug | nothing when it fits one session (use `refine <nr>`); too big (size L): sibling PBIs under the same Feature |
@@ -64,6 +65,16 @@ refine 42
 ```
 
 Labels ([issue model](../concepts/issue-model.md#labels)) follow the result: a ready issue loses `needs-refinement`; with an open decision it gets `needs-decision` and the question as a comment. A size L PBI gets a proposed split into sibling PBIs, created only after approval. `/deliver` skips issues labelled `needs-refinement`.
+
+## Plan an Objective across repositories
+
+An Objective ([issue model](../concepts/issue-model.md)) usually lives in another repository than the code. Name it with its repository:
+
+```text
+/planner GravionLabs/telos#3
+```
+
+Every item of the plan is a Feature with a `repo` (`owner/repo`, the same owner as the Objective) and optional `requires[]` entries such as `GravionLabs/ci@M004 rc`. After approval `github-issue` creates each Feature in its repository, links it as a sub-issue to the Objective, sets blocked-by links across repositories and writes one `Requires:` line per entry into the body. A Feature gets a milestone only when you name one of its repository; the Objective never gets one.
 
 ## Decision PBIs with governance
 

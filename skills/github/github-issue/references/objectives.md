@@ -9,6 +9,7 @@ An `[Objective]` (label `objective`) is the level above the Epic, an outcome tha
 - `## Requires`: one line per prerequisite, see below.
 - `## Acceptance Criteria`: a checklist a human verifies.
 - Children are native sub-issues (Features or Epics, `sub-issues.md`), not a checklist. No implementation details.
+- Planned with `planner <owner/repo#nr>`: Features in the target repositories, created and linked by `create-from-plan.md`.
 
 ## Requires
 
