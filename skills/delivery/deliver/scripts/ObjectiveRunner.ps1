@@ -159,6 +159,22 @@ function Invoke-RunnerRelease([string]$repo, [int]$nr, [string]$ref, [string]$ho
   $lines
 }
 
+# One heartbeat: read, re-read right before the PATCH, PATCH, read again. A foreign marker at any of the reads (a
+# `takeover -Force` landed in between, #573) sets $Shared.Foreign, asks the repository loops ($Shared.Checkout) to stop
+# after their PBI and returns $true; the foreign marker is never overwritten by a PATCH that follows the re-read.
+function Invoke-RunnerBeat([string]$repo, [int]$nr, [string]$hostId, [string]$since, [hashtable]$Shared) {
+  $s = Get-RunnerState $repo $nr $hostId
+  if ($s.State -eq 'own') { $s = Get-RunnerState $repo $nr $hostId }
+  if ($s.State -eq 'own') {
+    [void](Write-RunnerMarker $repo $nr $s.Id $hostId $since)
+    $s = Get-RunnerState $repo $nr $hostId
+  }
+  if ($s.State -ne 'foreign') { return $false }
+  $Shared.Foreign = $s.Holder.Host
+  foreach ($co in @($Shared.Checkout)) { [void](Request-RepoLoopStop $co) }
+  $true
+}
+
 # The heartbeat timer: a thread that refreshes the marker every $Seconds while the repository loops run. A foreign marker
 # sets $Shared.Foreign and asks the running repository loops ($Shared.Checkout, one path or several) to stop after their PBI.
 function Start-RunnerHeartbeat([string]$repo, [int]$nr, [string]$hostId, [string]$since, [hashtable]$Shared, [int]$Seconds) {
@@ -170,13 +186,7 @@ function Start-RunnerHeartbeat([string]$repo, [int]$nr, [string]$hostId, [string
       $until = [DateTime]::UtcNow.AddSeconds($using:Seconds)
       while (-not $shared.Stop -and [DateTime]::UtcNow -lt $until) { Start-Sleep -Milliseconds 200 }
       if ($shared.Stop) { break }
-      $s = Get-RunnerState $repo $nr $hostId
-      if ($s.State -eq 'foreign') {
-        $shared.Foreign = $s.Holder.Host
-        foreach ($co in @($shared.Checkout)) { [void](Request-RepoLoopStop $co) }
-        break
-      }
-      if ($s.State -eq 'own') { [void](Write-RunnerMarker $repo $nr $s.Id $hostId $since) }
+      if (Invoke-RunnerBeat $repo $nr $hostId $since $shared) { break }
     }
   }
 }
