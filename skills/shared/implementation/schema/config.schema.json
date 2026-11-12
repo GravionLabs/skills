@@ -123,6 +123,12 @@
           "type": "integer",
           "minimum": 1000
         },
+        "parallel": {
+          "description": "How many repository loops deliver-loop -Objective runs at the same time in one round, one per repository (default 1: one after the other).",
+          "type": "integer",
+          "minimum": 1,
+          "default": 1
+        },
         "roles": {
           "description": "Model and effort per role; unset keys keep the defaults.",
           "type": "object",

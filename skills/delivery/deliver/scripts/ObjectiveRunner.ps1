@@ -105,10 +105,12 @@ function Get-LocalRunner([string]$repo, [int]$nr) {
   $r
 }
 
-function Set-LocalRunner([string]$repo, [int]$nr, [string]$hostId, [string]$checkout) {
+# $checkout: the checkouts whose repository loops run now (deliver.parallel > 1: several); `checkout` is the first of them.
+function Set-LocalRunner([string]$repo, [int]$nr, [string]$hostId, [string[]]$checkout) {
   $dir = Get-RunnerStateDir $repo $nr
   New-Item -ItemType Directory -Force -Path $dir | Out-Null
-  [IO.File]::WriteAllText((Join-Path $dir 'running.json'), ([ordered]@{ pid = $PID; host = $hostId; checkout = $checkout } | ConvertTo-Json -Compress))
+  $all = @($checkout | Where-Object { $_ })
+  [IO.File]::WriteAllText((Join-Path $dir 'running.json'), ([ordered]@{ pid = $PID; host = $hostId; checkout = $all[0]; checkouts = $all } | ConvertTo-Json -Compress))
 }
 
 # Asks the running repository loop in $checkout to stop after its running PBI (stop file of Request-LoopStop.ps1).
@@ -158,7 +160,7 @@ function Invoke-RunnerRelease([string]$repo, [int]$nr, [string]$ref, [string]$ho
 }
 
 # The heartbeat timer: a thread that refreshes the marker every $Seconds while the repository loops run. A foreign marker
-# sets $Shared.Foreign and asks the running repository loop ($Shared.Checkout) to stop after its PBI.
+# sets $Shared.Foreign and asks the running repository loops ($Shared.Checkout, one path or several) to stop after their PBI.
 function Start-RunnerHeartbeat([string]$repo, [int]$nr, [string]$hostId, [string]$since, [hashtable]$Shared, [int]$Seconds) {
   $module = Join-Path $PSScriptRoot 'ObjectiveRunner.ps1'
   Start-ThreadJob -ScriptBlock {
@@ -171,7 +173,7 @@ function Start-RunnerHeartbeat([string]$repo, [int]$nr, [string]$hostId, [string
       $s = Get-RunnerState $repo $nr $hostId
       if ($s.State -eq 'foreign') {
         $shared.Foreign = $s.Holder.Host
-        [void](Request-RepoLoopStop $shared.Checkout)
+        foreach ($co in @($shared.Checkout)) { [void](Request-RepoLoopStop $co) }
         break
       }
       if ($s.State -eq 'own') { [void](Write-RunnerMarker $repo $nr $s.Id $hostId $since) }
