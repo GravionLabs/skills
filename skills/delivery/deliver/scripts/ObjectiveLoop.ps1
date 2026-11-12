@@ -177,6 +177,26 @@ function Invoke-ContractPause($s, [DateTime]$since, [hashtable]$handled, [switch
   $paused
 }
 
+# #546: the context file of a downstream repository: the PRs merged since $since in the repositories it `Requires:` (link, title,
+# diff stat), so the fix subagent sees causes in other repos. Returns the file path, or '' when there is nothing to say.
+function Write-ContextFile($s, $r, [string]$checkout, [DateTime]$since) {
+  $lines = @()
+  foreach ($up in @($r.requires | Where-Object { $_ } | ForEach-Object { [string]$_.repository } | Select-Object -Unique)) {
+    $prs = @(Get-ObjectiveRest "repos/$up/pulls?state=closed&sort=updated&direction=desc&per_page=30" | Where-Object {
+        $_ -and $_.merged_at -and (ConvertTo-UtcTime $_.merged_at) -ge $since })
+    foreach ($pr in $prs) {
+      $d = @(Get-ObjectiveRest "repos/$up/pulls/$($pr.number)")[0]
+      $stat = if ($d -and $null -ne $d.changed_files) { "$($d.changed_files) files, +$($d.additions) -$($d.deletions)" } else { 'diff stat n/a' }
+      $lines += "- $up#$($pr.number) $($pr.html_url) $([string]$pr.title -replace '[\r\n]+', ' ') ($stat)"
+    }
+  }
+  if (-not $lines.Count) { return '' }
+  $file = Join-Path $checkout '.agents/deliver-loop/context.md'
+  New-Item -ItemType Directory -Force -Path (Split-Path $file -Parent) | Out-Null
+  Set-Content -LiteralPath $file -Value (@("Upstream PRs merged since $($since.ToString('u')) in the repositories of $($r.repository)'s Requires:") + $lines) -Encoding utf8
+  $file
+}
+
 # Rule 2 (#545): an unmet `Requires: <repo>@<M> rc` whose milestone is finished (no open `pbi` or `bug` but the release-test one, as deliver step 9)
 # and whose release-test issue exists -> /deliver --milestone <M> in the upstream checkout, once per run. It reaches step 9
 # (cut the RC, post it); the release PR stays a human gate (deliver never merges it).
@@ -232,6 +252,7 @@ function Invoke-ObjectiveLoop {
   $loop = Join-Path $PSScriptRoot 'Invoke-DeliverLoop.ps1'
   $round = 0; $prev = $null; $result = $null; $s = $null
   $since = ([DateTime]::UtcNow.AddSeconds(-1)); $handled = @{}; $triggered = @{}
+  $lastGreen = @{}; $ctxStart = [DateTime]::UtcNow.AddDays(-7)
   $hostId = Get-RunnerHostId
   $shared = [hashtable]::Synchronized(@{ Stop = $false; Foreign = $null; Checkout = $telos })
   $releaseFile = Join-Path (Get-RunnerStateDir $objRepo $objNr) 'release'
@@ -335,11 +356,17 @@ function Invoke-ObjectiveLoop {
             } catch { Write-Step "[$repo] preflight failed: $_" 'yellow' }
           }
           $cli = @('-NoProfile', '-File', $loop, '-Target', ($nrs -join ','), '-Harness', $Harness)
+          # #546: the upstream PRs since the last green run of this repository (first round: the last 7 days)
+          $ctxSince = if ($lastGreen.ContainsKey($repo)) { $lastGreen[$repo] } else { $ctxStart }
+          $roundStart = [DateTime]::UtcNow
+          $ctx = Write-ContextFile $s $r $co.Path $ctxSince
+          if ($ctx) { $cli += @('-Context', $ctx); Write-Step "[$repo] context file $ctx" }
           if ($Max -gt 0) { $cli += @('-Max', [string]$Max) }
           if ($Model -and -not ($Harness -eq 'copilot' -and $Model -eq 'auto')) { $cli += @('-Model', $Model) }
           if ($NoColor) { $cli += '-NoColor' }
           & pwsh @cli 2>&1 | ForEach-Object { Write-Host "  [$repo] $_" }
           Write-Step "[$repo] loop exit $LASTEXITCODE"
+          if ($LASTEXITCODE -eq 0) { $lastGreen[$repo] = $roundStart }
         } finally { Pop-Location }
       }
       if ($result) { break }
