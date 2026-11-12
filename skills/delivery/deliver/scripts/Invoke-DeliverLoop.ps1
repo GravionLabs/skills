@@ -19,8 +19,9 @@
   Machine-readable progress for a control session (`deliver` `references/control.md`): .agents/deliver-loop/<run>/progress.jsonl,
   one JSON object per line (`start`, `iteration-start`, `iteration-end`, `result`), and .agents/deliver-loop/latest.txt with the path of the newest run directory.
   Run it from the repository root. Exit code: 0 done, max reached or stopped (stop file), 1 no progress, 2 blocked, 64 bad arguments.
-  Mode -Objective (ObjectiveLoop.ps1): rounds over the ready repositories of an [Objective]; exit 0 done, 1 no progress,
-  2 blocked, 3 gated (needs you).
+  Mode -Objective (ObjectiveLoop.ps1): rounds over the ready repositories of an [Objective] on exactly one runner (runner
+  marker with heartbeat, ObjectiveRunner.ps1); exit 0 done or released, 1 no progress, 2 blocked, 3 gated (needs you),
+  4 handed over (a foreign live runner). Takeover and release: Set-ObjectiveRunner.ps1 (deliver-loop takeover|release).
 .PARAMETER Target
   Issue numbers (PBI, Feature or Epic), as for `/deliver`: `-Target 12,14` or `-Target 12 14` (a comma list also works
   under `pwsh -File`, which does not split it itself).
