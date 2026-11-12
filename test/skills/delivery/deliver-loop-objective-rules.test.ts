@@ -58,6 +58,33 @@ describe.skipIf(!hasPwsh || process.platform === 'win32')(
       expect(r.stdout).not.toContain('rc trigger');
     });
 
+    it('#546: the downstream repo gets a context file with the upstream PRs and its loop passes it as --context', async () => {
+      const st = twoRepos();
+      st.issues['o/a#10'].children = ['o/a#11'];
+      delete st.issues['o/a#12'];
+      st.issues['o/b#20'].body = 'Requires: o/a@M1 released';
+      st.issues['o/a#11'].state = 'closed';
+      st.milestones['o/a'][0].state = 'closed';
+      st.prs = {
+        'o/a': [
+          {
+            number: 7,
+            html_url: 'https://github.com/o/a/pull/7',
+            title: 'feat: new field',
+            merged_at: new Date().toISOString().replace(/\.\d+Z$/, 'Z'),
+            labels: [],
+          },
+        ],
+      };
+      const c = setup(st);
+      await c.run(['-NoPreflight']);
+      const file = path.join(c.root, 'elsewhere', 'b', '.agents/deliver-loop/context.md');
+      expect(fs.readFileSync(file, 'utf8')).toContain(
+        'o/a#7 https://github.com/o/a/pull/7 feat: new field',
+      );
+      expect(c.harness().find((x) => x.startsWith('o/b '))).toContain('--context');
+    });
+
     it('rule 2 -DryRun names the trigger and runs nothing', async () => {
       const st = twoRepos();
       st.issues['o/a#11'].state = 'closed';
