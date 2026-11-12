@@ -17,6 +17,28 @@ describe.skipIf(!hasPwsh || process.platform === 'win32')('Invoke-DeliverLoop.ps
   afterAll(() => fx.stop());
 
   describe('iteration PBI (#488)', () => {
+    // #546: -Context file present -> --context in the prompt; missing -> prompt unchanged
+    it.each([
+      ['present', true],
+      ['missing', false],
+    ])('-Context file %s', async (_n, present) => {
+      const gh = fx.setup({
+        issues: { 91: pbi() },
+        milestones: { M5: [91] },
+        effect: 'close-first',
+      });
+      const file = path.join(fx.cwd, 'ctx-546.md');
+      if (present) fs.writeFileSync(file, 'o/a#7 https://github.com/o/a/pull/7 (1 files, +1 -0)\n');
+      const r = await fx.run(gh, ['-Milestone', 'M5', '-Context', file]);
+      expect(r.status).toBe(0);
+      const prompt = fx.harnessCalls()[0];
+      if (present)
+        expect(prompt).toContain(
+          `/deliver 91 --unattended --max 1 --context "${fs.realpathSync(file)}"`,
+        );
+      else expect(prompt).toContain('-p /deliver 91 --unattended --max 1 --model');
+    });
+
     it('hands the session the PBI the iteration is logged under: file, records and tier model agree', async () => {
       const gh = fx.setup({
         issues: {

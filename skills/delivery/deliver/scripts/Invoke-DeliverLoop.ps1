@@ -34,6 +34,9 @@
   <owner>/<repo>#<nr> of an [Objective]: per round Get-ObjectiveStatus.ps1, then in every `ready` repository its own loop
   `-Target <open sub-issues of the objective in that repo>` in the checkout of the repo (references/loop.md, Objective).
   Not combined with -Target or -Milestone.
+.PARAMETER Context
+  File with context for the fix subagent (e.g. upstream PRs of other repositories): passed on as `--context <file>` to `/deliver`
+  when the file exists (missing: the prompt is unchanged). With -Objective the loop writes it per downstream repository.
 .PARAMETER DryRun
   With -Objective: print which repositories would be started with which targets, and start (and clone) nothing.
 .PARAMETER NoPreflight
@@ -62,6 +65,7 @@ param(
   [switch]$NoPane,
   [switch]$NoColor,
   [string]$Objective = '',
+  [string]$Context = '',
   [switch]$DryRun,
   [switch]$NoPreflight,
   [Parameter(ValueFromRemainingArguments)][string[]]$MoreTargets = @()
@@ -537,6 +541,7 @@ function Get-ResumeCommand([int]$ran) {
   if ($Nrs.Count) { $parts += @('-Target', ($Nrs -join ',')) }
   if ($Milestone) { $parts += @('-Milestone', "'$Milestone'") }
   if ($Max -gt 0) { $parts += @('-Max', [string][Math]::Max(1, $Max - $ran)) }
+  if ($Context) { $parts += @('-Context', "'$Context'") }
   if ($Model -and -not ($Harness -eq 'copilot' -and $Model -eq 'auto')) { $parts += @('-Model', $Model) }
   if ($Harness -ne 'claude') { $parts += @('-Harness', $Harness) }
   $parts -join ' '
@@ -661,6 +666,7 @@ function Invoke-Iteration([int]$n, [int]$total, $state) {
   $jsonl = Join-Path $RunDir "$($state.Ready[0]).jsonl"
   # the session gets the PBI of this iteration, so its select, tier, log file and events agree (#488)
   $prompt = "/deliver $([int]$state.Ready[0]) --unattended --max 1"
+  if ($Context -and (Test-Path -LiteralPath $Context -PathType Leaf)) { $prompt += " --context `"$((Resolve-Path -LiteralPath $Context).Path)`"" }
   $iterModel = $Model
   if ($Harness -eq 'claude' -and -not $Model) {
     $t = Get-PbiTier ([int]$state.Ready[0])
