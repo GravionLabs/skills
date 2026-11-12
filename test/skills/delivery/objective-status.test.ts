@@ -204,6 +204,25 @@ describe('Get-ObjectiveStatus.ps1', () => {
     );
   });
 
+  it('a Requires line with `..` segments or a malformed owner/repo is ignored (#574)', async () => {
+    const { out } = await status(
+      chain({
+        'repos/o/b/issues/20/sub_issues': [
+          issue('o/b', {
+            number: 21,
+            body: 'Requires: ../x/..@rc rc\nRequires: ../..@M1 released\nRequires: a/b/c@M1 rc\nRequires: o/a@M1 rc',
+          }),
+        ],
+        'repos/o/a/issues/13/comments': [{ body: 'not yet' }],
+      }),
+    );
+    const repos = (out.requires as { repository: string }[]).map((r) => r.repository);
+    expect(repos).not.toContain('../x/..');
+    expect(repos).not.toContain('../..');
+    expect(repos).not.toContain('a/b/c');
+    expect(repos).toContain('o/a');
+  });
+
   it('a closed required milestone meets released and rc', async () => {
     const { out } = await status(
       chain({

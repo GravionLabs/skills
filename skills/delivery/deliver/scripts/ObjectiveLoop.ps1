@@ -55,8 +55,12 @@ function Test-OriginOf([string]$path, [string]$repo) {
   $LASTEXITCODE -eq 0 -and "$url" -match "[:/]$([regex]::Escape($repo))(\.git)?/?$"
 }
 
+# #574: <owner>/<repo> must be two [\w.-] segments, neither `.` nor `..`, before any path is built from it.
+function Test-RepoRef([string]$repo) { $repo -match '^[\w.-]+/[\w.-]+$' -and $repo -notmatch '(^|/)\.\.?(/|$)' }
+
 # Where <owner>/<repo> is checked out: {Path, From (current, checkouts.json, sibling, clone), Exists}.
 function Resolve-Checkout([string]$repo, [string]$objRepo, [string]$telos) {
+  if (-not (Test-RepoRef $repo)) { throw "invalid <owner>/<repo> '$repo'" }
   if ($repo -eq $objRepo) { return [pscustomobject]@{ Path = $telos; From = 'current'; Exists = $true } }
   $cfg = Join-Path (Get-ObjectiveHome) '.config/deliver/checkouts.json'
   if (Test-Path -LiteralPath $cfg) {
@@ -216,6 +220,7 @@ function Invoke-RcTriggers($s, [string]$objRepo, [string]$telos, [string]$Harnes
   $edges = @($s.repos | ForEach-Object { @($_.requires) } | Where-Object { $_ -and $_.kind -eq 'rc' -and -not $_.met -and [string]$_.milestoneState -eq 'open' -and $_.releaseTest })
   foreach ($e in @($edges | Sort-Object { "$($_.repository)@$($_.milestone)" } -Unique)) {
     $key = "$($e.repository)@$($e.milestone)"
+    if (-not (Test-RepoRef ([string]$e.repository))) { Write-Step "invalid repository '$($e.repository)' in a Requires line, rc trigger skipped" 'red'; continue }
     if ($triggered[$key]) { continue }
     $norm = { param($t) if ($t -match '^M([0-9]+(?:\.[0-9]+)*)(?=\s|\(|$)') { 'M' + ((@($Matches[1] -split '\.' | ForEach-Object { [string][int]$_ })) -join '.') } else { $null } }
     $want = & $norm ([string]$e.milestone)

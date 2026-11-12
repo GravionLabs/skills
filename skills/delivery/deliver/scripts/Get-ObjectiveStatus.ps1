@@ -67,6 +67,12 @@ function Test-Leaf($i) {
 $requiresRx = '(?im)^\s*(?:[-*]\s*)?Requires:\s*([^/\s]+/[^@\s]+)@(\S+)\s+(released|rc)\b'
 function Get-Requires([string]$body, [string]$source, $appliesTo) {
   foreach ($m in [regex]::Matches($body, $requiresRx)) {
+    # #574: owner/repo comes from issue text and ends up in paths; anything but <owner>/<repo> of [\w.-] without `..` is reported, not used
+    $ref = $m.Groups[1].Value
+    if ($ref -notmatch '^[\w.-]+/[\w.-]+$' -or $ref -match '(^|/)\.\.?(/|$)') {
+      [Console]::Error.WriteLine("Requires: invalid <owner>/<repo> '$ref' in $source ignored")
+      continue
+    }
     [ordered]@{ repository = $m.Groups[1].Value; milestone = $m.Groups[2].Value; kind = $m.Groups[3].Value.ToLowerInvariant(); source = $source; appliesTo = $appliesTo }
   }
 }
