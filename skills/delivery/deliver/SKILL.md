@@ -14,10 +14,12 @@ Delivers the open PBIs and Bugs of an issue (a work item = open issue labelled `
 
 `/deliver status --milestone <name>`: print the status block (`## Status block`) and stop, nothing is delivered.
 
+`/deliver --objective <owner>/<repo>#<nr> [--max <n>]`: control session over an `[Objective]` (`references/control.md`, Objective); not combined with numbers or `--milestone`; `--unattended` runs `deliver-loop -Objective` without a session.
+
 `/deliver <nr> [<nr> …] [--milestone <name>] [--unattended] [--inline] [--max <n>]`: each number is a PBI, Bug, Feature or Epic; `--milestone <name>` (a release, `M<nnn>` or a legacy title) adds the open work items of that milestone (one batched read of the milestone (`pwsh <skill-dir>/../github-milestone/scripts/Get-Milestones.ps1 -Mode issues -Name <name> -State open`: REST, all pages, no PRs; the `github-milestone` lookup resolves `M004` to the title `M004` or, after `close`, `M004 (0.2.0)`; filter the returned list by label: `pbi`, `bug`), plus the work items below the Features and Epics in it). The `milestone.title` of that read is the title for `gh issue create --milestone`; `<key>` is its unpadded `M<n>` or sub-number `M<n>.<m>` (`M003` → `M3`, `M011.1` → `M11.1`; `M3` and `M003` share one state file; legacy: the title) and names the state file and the hints. Missing: ask once. `--max <n>` stops after `n` delivered, blocked or paused PBIs and prints the report (`scripts/Invoke-DeliverLoop.ps1` uses `--max 1` per fresh session, `references/loop.md`).
 
 - **Interactive** (default): a pause rule asks the user in the chat; a blocked PBI asks: retry, skip or an instruction.
-- **Control session**: interactive with more PBIs than `deliver.loopThreshold` (default 3), e.g. every `--milestone`: do not deliver them here, start `Invoke-DeliverLoop.ps1` and stay a thin session for decisions, `interactive` PBIs and step 9 (`references/control.md`). `--inline` delivers them all in this session (steps 1 to 9). `--no-preflight` skips Start 3.
+- **Control session**: interactive with more PBIs than `deliver.loopThreshold` (default 3), e.g. every `--milestone`, and every `--objective`: do not deliver them here, start `Invoke-DeliverLoop.ps1` and stay a thin session for decisions, `interactive` PBIs and step 9 (`references/control.md`). `--inline` delivers them all in this session (steps 1 to 9). `--no-preflight` skips Start 3.
 - **`--unattended`** (`claude -p`, `opencode run`, `copilot -p`): never ask. A pause comments on the issue, adds the label `needs-decision` and continues with the next PBI that does not depend on it.
 
 ## Start
