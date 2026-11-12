@@ -44,7 +44,7 @@ When the loop result is `done` and no `interactive` PBI is left, run step 9 once
 
 - Status: after each round print the block of `pwsh <skill-dir>/scripts/Get-ObjectiveStatus.ps1 -Objective <ref> -Text` (at most 12 lines) instead of the milestone block.
 - Gates: the numbered `needs you` items of that block (acceptance criteria, RC test, release PR) are asked here in the chat, one at a time with a full URL; the answer is posted as a comment, then the loop starts again. Exit 3 (gated) of the loop means exactly this.
-- Stop: an objective loop has no stop file; the only stop is `deliver-loop release <ref>` on the runner's host, which ends the round as `released` after the running PBI (see Release). Never resume by itself.
+- Stop: an objective loop has no stop file; the only stop is `deliver-loop release <ref>` on the runner's host, which ends the round as `released` after the running PBI (see Release). `deliver-loop stop` while an objective runner of this host runs the checkout refuses (exit 1, pointer to `release`, no stop file written), because it would end only the repository loop and the next round would start again. Never resume by itself.
 - Takeover: exit 4 (handed over, a foreign live runner) is reported; on the user's choice run `deliver-loop takeover <ref>` (`-Force` only after an explicit yes), then start the loop again.
 - Release: `deliver-loop release <ref>` on the runner's host hands the objective back (pushes unpushed branches, posts the status comment, deletes the marker).
 
