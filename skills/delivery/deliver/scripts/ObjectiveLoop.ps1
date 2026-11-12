@@ -4,7 +4,9 @@
 .DESCRIPTION
   One round reads Get-ObjectiveStatus.ps1 (REST GET only), starts in every repository with state `ready` the loop
   `Invoke-DeliverLoop.ps1 -Target <open sub-issues of the objective in that repo> [-Max <k>]` in the checkout of that
-  repository (one after the other, each repository sequential), and reads the state again. State only from GitHub: an
+  repository (deliver.parallel of .agents/config.json, default 1: one after the other; n > 1: up to n repositories at the
+  same time, one loop per repository, the round waits for all), and reads the state again. Each round logs its results
+  per repository and its REST/GraphQL usage (`gh api rate_limit` before and after). State only from GitHub: an
   aborted round resumes with the same command. Never closes the objective; its only own writes are the two rules between
   rounds (#545): contract-change pauses the downstream children (needs-refinement + comment), a finished milestone with a
   waiting `rc` edge runs `/deliver --milestone <M>` (step 9) in the upstream checkout.
@@ -238,6 +240,89 @@ function Invoke-RcTriggers($s, [string]$objRepo, [string]$telos, [string]$Harnes
   $started
 }
 
+# deliver.parallel of .agents/config.json in $root: how many repository loops a round runs at the same time (default 1).
+function Get-DeliverParallel([string]$root) {
+  $f = Join-Path $root '.agents/config.json'
+  if (-not (Test-Path -LiteralPath $f -PathType Leaf)) { return 1 }
+  $v = try { (Get-Content -LiteralPath $f -Raw | ConvertFrom-Json -AsHashtable).deliver.parallel } catch { $null }
+  if ($null -eq $v) { return 1 }
+  if ($v -is [long] -or $v -is [int]) { if ($v -ge 1) { return [int]$v } }
+  Write-Step "deliver.parallel must be an integer >= 1, got '$v': 1" 'yellow'
+  1
+}
+
+# The used counters of the token's REST (core) and GraphQL rate limits (`gh api rate_limit` itself is not counted), or $null.
+function Get-ApiUsage {
+  $raw = & gh api rate_limit 2>$null
+  if ($LASTEXITCODE -ne 0 -or -not $raw) { return $null }
+  $r = try { ($raw -join "`n") | ConvertFrom-Json } catch { $null }
+  if (-not $r -or -not $r.resources) { return $null }
+  [pscustomobject]@{
+    Rest = [int]$r.resources.core.used; RestLeft = [int]$r.resources.core.remaining
+    Graphql = [int]$r.resources.graphql.used; GraphqlLeft = [int]$r.resources.graphql.remaining
+  }
+}
+
+# One step-log line per round with the API calls of the round (all processes of the token, so the pilot measures the round).
+function Write-ApiUsage([int]$round, $before, $after) {
+  if (-not $before -or -not $after) { Write-Step "round $round api: n/a (rate_limit not read)"; return }
+  $rest = $after.Rest - $before.Rest; $gql = $after.Graphql - $before.Graphql
+  if ($rest -lt 0 -or $gql -lt 0) { Write-Step "round $round api: n/a (rate-limit window reset)"; return }
+  Write-Step "round $round api: rest +$rest, graphql +$gql (remaining rest $($after.RestLeft), graphql $($after.GraphqlLeft))"
+}
+
+# Exit code of a repository loop (Invoke-DeliverLoop.ps1) as the word of the round results.
+function Get-RepoLoopLabel([int]$code) {
+  switch ($code) { 0 { 'done' } 1 { 'no progress' } 2 { 'blocked' } -1 { 'clone failed' } default { "failed ($code)" } }
+}
+
+# deliver.parallel > 1: runs the prepared repository loops ($jobs: Repo, Path, Cli) as thread jobs, at most $limit at a time,
+# streams their output with the [repo] prefix and waits for all. The heartbeat stops every running checkout ($shared.Checkout);
+# running.json lists them for `deliver-loop release`. Returns {Repo, Exit} per repository in the order they ended.
+function Invoke-RepoLoopsParallel($jobs, [int]$limit, [hashtable]$shared, [string]$objRepo, [int]$objNr, [string]$hostId) {
+  $queue = [System.Collections.Generic.Queue[object]]::new()
+  foreach ($j in $jobs) { $queue.Enqueue($j) }
+  $running = [System.Collections.Generic.List[object]]::new()
+  $done = @()
+  $flush = {
+    param($run)
+    foreach ($line in @(Receive-Job -Job $run.Job)) {
+      if ("$line" -match '^@@exit (-?\d+)$') { $run.Exit = [int]$Matches[1] } else { Write-Host "$line" }
+    }
+  }
+  while ($queue.Count -or $running.Count) {
+    $started = $false
+    while ($queue.Count -and $running.Count -lt $limit) {
+      $j = $queue.Dequeue()
+      $jobPath = [string]$j.Path; $jobCli = [string[]]$j.Cli; $jobRepo = [string]$j.Repo
+      $job = Start-ThreadJob -ScriptBlock {
+        $cli = $using:jobCli; $repo = $using:jobRepo
+        Set-Location -LiteralPath $using:jobPath
+        & pwsh @cli 2>&1 | ForEach-Object { "  [$repo] $_" }
+        "@@exit $LASTEXITCODE"
+      }
+      $running.Add([pscustomobject]@{ Repo = $j.Repo; Path = $j.Path; Job = $job; Exit = $null })
+      $started = $true
+    }
+    if ($started) {
+      $paths = @($running | ForEach-Object { $_.Path })
+      $shared.Checkout = $paths
+      Set-LocalRunner $objRepo $objNr $hostId $paths
+    }
+    foreach ($run in @($running)) {
+      & $flush $run
+      if ($run.Job.State -in 'Completed', 'Failed', 'Stopped') {
+        & $flush $run
+        Remove-Job -Job $run.Job -Force
+        [void]$running.Remove($run)
+        $done += [pscustomobject]@{ Repo = $run.Repo; Exit = $(if ($null -ne $run.Exit) { $run.Exit } else { 1 }) }
+      }
+    }
+    if ($running.Count) { Start-Sleep -Milliseconds 200 }
+  }
+  $done
+}
+
 function Invoke-ObjectiveLoop {
   param([string]$Ref, [int]$Max, [string]$Harness, [string]$Model, [switch]$DryRun, [switch]$NoPreflight, [switch]$NoColor)
   if ($Ref -notmatch '^([^/\s#]+/[^/\s#]+)#([0-9]+)$') {
@@ -251,6 +336,8 @@ function Invoke-ObjectiveLoop {
   $preflight = Join-Path $PSScriptRoot 'Test-DeliverPreflight.ps1'
   $loop = Join-Path $PSScriptRoot 'Invoke-DeliverLoop.ps1'
   $round = 0; $prev = $null; $result = $null; $s = $null
+  $parallel = Get-DeliverParallel $telos
+  if ($parallel -gt 1) { Write-Step "deliver.parallel ${parallel}: up to $parallel repository loops at a time, one per repository" }
   $since = ([DateTime]::UtcNow.AddSeconds(-1)); $handled = @{}; $triggered = @{}
   $lastGreen = @{}; $ctxStart = [DateTime]::UtcNow.AddDays(-7)
   $hostId = Get-RunnerHostId
@@ -301,6 +388,7 @@ function Invoke-ObjectiveLoop {
   }
   try {
     while (-not $result) {
+      $apiBefore = if ($DryRun) { $null } else { Get-ApiUsage }
       $result = Test-RunnerBoundary
       if ($result) { break }
       # a closed objective ends the run before the walk over its repositories (one REST GET)
@@ -325,6 +413,7 @@ function Invoke-ObjectiveLoop {
       $round++
       $since = ([DateTime]::UtcNow.AddSeconds(-1))
       $targets = Get-ObjectiveTargets $objRepo $objNr
+      $results = @(); $jobs = @()
       foreach ($r in @($s.repos | Where-Object { $_.state -eq 'ready' })) {
         $repo = [string]$r.repository
         $nrs = @($targets[$repo] | Where-Object { $_ })
@@ -340,12 +429,14 @@ function Invoke-ObjectiveLoop {
         if (-not $co.Exists) {
           New-Item -ItemType Directory -Force -Path (Split-Path $co.Path -Parent) | Out-Null
           & gh repo clone $repo $co.Path 2>&1 | ForEach-Object { Write-Step "[$repo] $_" }
-          if ($LASTEXITCODE -ne 0) { Write-Step "[$repo] clone failed, skipped" 'red'; continue }
+          if ($LASTEXITCODE -ne 0) { Write-Step "[$repo] clone failed, skipped" 'red'; $results += [pscustomobject]@{ Repo = $repo; Exit = -1 }; continue }
         }
-        $shared.Checkout = $co.Path
         if (-not $used.Contains($co.Path)) { $used.Add($co.Path) }
-        Set-LocalRunner $objRepo $objNr $hostId $co.Path
-        $shared.Fresh = $false
+        if ($parallel -le 1) {
+          $shared.Checkout = $co.Path
+          Set-LocalRunner $objRepo $objNr $hostId $co.Path
+          $shared.Fresh = $false
+        }
         Push-Location -LiteralPath $co.Path
         try {
           if (-not $NoPreflight) {
@@ -364,10 +455,29 @@ function Invoke-ObjectiveLoop {
           if ($Max -gt 0) { $cli += @('-Max', [string]$Max) }
           if ($Model -and -not ($Harness -eq 'copilot' -and $Model -eq 'auto')) { $cli += @('-Model', $Model) }
           if ($NoColor) { $cli += '-NoColor' }
+          if ($parallel -gt 1) {
+            $jobs += [pscustomobject]@{ Repo = $repo; Path = $co.Path; Cli = $cli; Start = $roundStart }
+            continue
+          }
+          # deliver.parallel 1: one repository after the other, its output streamed as it comes
           & pwsh @cli 2>&1 | ForEach-Object { Write-Host "  [$repo] $_" }
+          $results += [pscustomobject]@{ Repo = $repo; Exit = $LASTEXITCODE }
           Write-Step "[$repo] loop exit $LASTEXITCODE"
           if ($LASTEXITCODE -eq 0) { $lastGreen[$repo] = $roundStart }
         } finally { Pop-Location }
+      }
+      if ($jobs.Count -and -not $result) {
+        # deliver.parallel > 1: the repository loops run concurrently (at most $parallel at a time); the round waits for all
+        $shared.Fresh = $false
+        foreach ($res in @(Invoke-RepoLoopsParallel $jobs $parallel $shared $objRepo $objNr $hostId)) {
+          $results += $res
+          Write-Step "[$($res.Repo)] loop exit $($res.Exit)"
+          if ($res.Exit -eq 0) { $lastGreen[$res.Repo] = @($jobs | Where-Object { $_.Repo -eq $res.Repo })[0].Start }
+        }
+      }
+      if ($results.Count) {
+        Write-Step "round ${round} results: $(@($results | ForEach-Object { "$($_.Repo) $(Get-RepoLoopLabel $_.Exit)" }) -join ', ')"
+        Write-ApiUsage $round $apiBefore (Get-ApiUsage)
       }
       if ($result) { break }
       if ($DryRun) { $result = 'dry run'; break }

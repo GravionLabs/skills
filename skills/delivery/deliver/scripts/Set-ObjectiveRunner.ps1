@@ -53,7 +53,9 @@ $local = Get-LocalRunner $repo $nr
 if ($local) {
   $dir = Get-RunnerStateDir $repo $nr
   [IO.File]::WriteAllText((Join-Path $dir 'release'), (Get-RunnerNow))
-  $stopped = Request-RepoLoopStop ([string]$local.checkout)
+  $running = if ($local.checkouts) { @($local.checkouts) } else { @($local.checkout) }
+  $stopped = $false
+  foreach ($co in $running) { if (Request-RepoLoopStop ([string]$co)) { $stopped = $true } }
   $after = if ($stopped) { 'after the running PBI' } else { 'at the next round boundary' }
   Write-Output "release requested: the runner of $Objective (pid $($local.pid)) releases $after"
   exit 0

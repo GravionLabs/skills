@@ -28,16 +28,23 @@ export type State = {
   contractPr?: boolean;
   noRcPost?: boolean;
   effect?: 'takeover' | 'release';
+  // #548: the fake claude sleeps this long per PBI and appends `<repo> start|end <ms>` to harness-times.txt
+  sleepMs?: number;
 };
 
 export const marker = (host: string, heartbeat: string, since = heartbeat) =>
   `<!-- objective-runner: host=${host} since=${since} heartbeat=${heartbeat} -->`;
 
-const handler = (stateFile: string) => `(call) => {
+const handler = (stateFile: string) => `(call, ctx) => {
   const fs = require('fs'); const cp = require('child_process');
   const f = ${JSON.stringify(stateFile)};
   const load = () => JSON.parse(fs.readFileSync(f, 'utf8'));
   const a = call.args;
+  // #548: every read of the rate limit adds 10 REST and 3 GraphQL calls
+  if (a[0] === 'api' && a[1] === 'rate_limit') {
+    const n = ctx.count('rate_limit');
+    return { rest: { resources: { core: { used: 10 * n, remaining: 5000 - 10 * n }, graphql: { used: 3 * n, remaining: 5000 - 3 * n } } } };
+  }
   const xi = a.indexOf('-X');
   const method = xi >= 0 ? a[xi + 1] : 'GET';
   if (a[0] === 'repo' && a[1] === 'clone') {
@@ -114,6 +121,13 @@ fs.appendFileSync(${JSON.stringify(calls)}, repo + ' ' + process.argv[2] + '\\n'
 const ms = /\\/deliver --milestone (\\S+)/.exec(process.argv[2]);
 if (ms) { if (!s.noRcPost) s.rcPosted = true; fs.writeFileSync(f, JSON.stringify(s)); process.exit(0); }
 const nr = /\\/deliver (\\d+)/.exec(process.argv[2])[1];
+const times = path.join(path.dirname(f), 'harness-times.txt');
+if (s.sleepMs) {
+  fs.appendFileSync(times, repo + ' start ' + Date.now() + '\\n');
+  Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, s.sleepMs);
+  fs.appendFileSync(times, repo + ' end ' + Date.now() + '\\n');
+  s = load(); // the other repository's harness wrote the state while this one slept
+}
 if (!s.noEffect) {
   s.issues[repo + '#' + nr].state = 'closed';
   if (s.contractPr) { s.prs = s.prs || {}; (s.prs[repo] = s.prs[repo] || []).push({ number: 100 + Number(nr), html_url: 'https://github.com/' + repo + '/pull/' + (100 + Number(nr)), merged_at: new Date().toISOString().replace(/\\.\\d+Z$/, 'Z'), body: 'Closes #' + nr, labels: [{ name: 'contract-change' }] }); }
