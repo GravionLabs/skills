@@ -40,7 +40,9 @@ describe('deliver control session for --objective', () => {
     expect(objective).toMatch(/Get-ObjectiveStatus\.ps1 -Objective <ref> -Text/);
     expect(objective).toMatch(/needs you/);
     expect(objective).toMatch(/Gates:.*in the chat/);
-    expect(objective).toMatch(/Stop:.*stop/);
+    const stop = objective.split('\n').find((l) => l.startsWith('- Stop:')) ?? '';
+    expect(stop).toMatch(/deliver-loop release/);
+    expect(stop).not.toMatch(/\/stop\b|`stopped`|stop file of/);
     expect(objective).toMatch(/deliver-loop takeover <ref>/);
     expect(objective).toMatch(/deliver-loop release <ref>/);
   });
