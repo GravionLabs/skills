@@ -109,6 +109,36 @@ describe.skipIf(!hasPwsh || process.platform === 'win32')(
       }
     });
 
+    it('#578: the rc trigger runs the per-repo preflight first and prints its findings before the harness', async () => {
+      const st = twoRepos();
+      st.issues['o/a#11'].state = 'closed';
+      const c = setup(st);
+      const r = await c.run([]);
+      const out = r.stdout;
+      const allow = out.indexOf('[o/a] preflight allowlist: action needed');
+      expect(allow).toBeGreaterThan(-1);
+      expect(c.harness()).toContain('o/a /deliver --milestone M1 --unattended --max 1');
+      expect(allow).toBeLessThan(out.indexOf('[o/a] rc trigger exit'));
+    });
+
+    it('#578: -NoPreflight skips the preflight of the rc trigger', async () => {
+      const st = twoRepos();
+      st.issues['o/a#11'].state = 'closed';
+      const c = setup(st);
+      const r = await c.run(['-NoPreflight']);
+      expect(r.stdout).not.toContain('rc trigger preflight');
+    });
+
+    it('#578: a context.md left by an earlier round is deleted when there is nothing to write', async () => {
+      const st = twoRepos();
+      const c = setup(st);
+      const file = path.join(c.root, 'elsewhere', 'b', '.agents/deliver-loop/context.md');
+      fs.mkdirSync(path.dirname(file), { recursive: true });
+      fs.writeFileSync(file, 'stale upstream PRs');
+      await c.run(['-NoPreflight']);
+      expect(fs.existsSync(file)).toBe(false);
+    });
+
     it('rule 2 -DryRun names the trigger and runs nothing', async () => {
       const st = twoRepos();
       st.issues['o/a#11'].state = 'closed';
