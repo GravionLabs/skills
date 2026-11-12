@@ -38,6 +38,16 @@ The loop skips `interactive` PBIs. When the loop ends (`done` with only `interac
 
 When the loop result is `done` and no `interactive` PBI is left, run step 9 once in this session (release review, release PR). The control session does not wait for the RC test: step 9 cuts the RC, opens the release PR and ends the run with `needs you: RC test` (`release.test.gate: true` keeps the old gate). `max reached`: report the delivered count and, as open PBIs remain, offer to start the loop again; never release. `stopped` (stop file of the run): the run is finished; print the resume command of the loop's last line and do not start the loop again by itself, never release. `blocked` or `no progress`: report it, never release.
 
+## Objective
+
+`/deliver --objective <owner>/<repo>#<nr>` is always a control session (`--inline` does not apply). Start: `deliver-loop -Objective <ref> [-Max <n>]` (`Invoke-DeliverLoop.ps1 -Objective`, `references/loop.md`, Objective) in the background as above; `-DryRun` first on request.
+
+- Status: after each round print the block of `pwsh <skill-dir>/scripts/Get-ObjectiveStatus.ps1 -Objective <ref> -Text` (at most 12 lines) instead of the milestone block.
+- Gates: the numbered `needs you` items of that block (acceptance criteria, RC test, release PR) are asked here in the chat, one at a time with a full URL; the answer is posted as a comment, then the loop starts again. Exit 3 (gated) of the loop means exactly this.
+- Stop: an objective loop has no stop file; the only stop is `deliver-loop release <ref>` on the runner's host, which ends the round as `released` after the running PBI (see Release). Never resume by itself.
+- Takeover: exit 4 (handed over, a foreign live runner) is reported; on the user's choice run `deliver-loop takeover <ref>` (`-Force` only after an explicit yes), then start the loop again.
+- Release: `deliver-loop release <ref>` on the runner's host hands the objective back (pushes unpushed branches, posts the status comment, deletes the marker).
+
 ## Context guard
 
 `deliver.controlContextTokens` in `.agents/config.json` (default 200000). When this session's own context passes it (as the harness reports it), print the status block and the resume command (`/deliver <same arguments>`; the running loop keeps going), and stop. The next session continues from GitHub.
