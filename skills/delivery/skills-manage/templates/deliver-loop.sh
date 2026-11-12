@@ -17,6 +17,10 @@ deliver-loop() {
     (cd "$root" && pwsh -NoProfile -File "$dir/scripts/Request-LoopStop.ps1" "${stopargs[@]}")
     return $?
   fi
+  if [ "${1:-}" = takeover ] || [ "${1:-}" = release ]; then
+    (cd "$root" && pwsh -NoProfile -File "$dir/scripts/Set-ObjectiveRunner.ps1" "$@")
+    return $?
+  fi
   if [ "${HERDR_ENV:-}" = 1 ] && command -v herdr >/dev/null 2>&1 && [ -f "$dir/scripts/Start-LoopWorkspace.ps1" ]; then
     (cd "$root" && pwsh -NoProfile -File "$dir/scripts/Start-LoopWorkspace.ps1" -ShimCwd "$root" -ShimScript "$dir/scripts/Invoke-DeliverLoop.ps1" "$@") && return 0
   fi

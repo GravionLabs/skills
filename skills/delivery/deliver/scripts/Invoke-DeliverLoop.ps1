@@ -19,13 +19,28 @@
   Machine-readable progress for a control session (`deliver` `references/control.md`): .agents/deliver-loop/<run>/progress.jsonl,
   one JSON object per line (`start`, `iteration-start`, `iteration-end`, `result`), and .agents/deliver-loop/latest.txt with the path of the newest run directory.
   Run it from the repository root. Exit code: 0 done, max reached or stopped (stop file), 1 no progress, 2 blocked, 64 bad arguments.
+  Mode -Objective (ObjectiveLoop.ps1): rounds over the ready repositories of an [Objective] on exactly one runner (runner
+  marker with heartbeat, ObjectiveRunner.ps1); exit 0 done or released, 1 no progress, 2 blocked, 3 gated (needs you),
+  4 handed over (a foreign live runner). Takeover and release: Set-ObjectiveRunner.ps1 (deliver-loop takeover|release).
 .PARAMETER Target
   Issue numbers (PBI, Feature or Epic), as for `/deliver`: `-Target 12,14` or `-Target 12 14` (a comma list also works
   under `pwsh -File`, which does not split it itself).
 .PARAMETER Milestone
   Adds the open PBIs and bugs of this milestone (as `/deliver --milestone`): M<n> or a sub-number M<n>.<m> (also after close renamed it M<n> (x.y.z)) or a legacy title.
 .PARAMETER Max
-  Stop after this many iterations (PBIs delivered, blocked or paused in total).
+  Stop after this many iterations (PBIs delivered, blocked or paused in total). With -Objective: passed as -Max to the loop
+  of every repository per round.
+.PARAMETER Objective
+  <owner>/<repo>#<nr> of an [Objective]: per round Get-ObjectiveStatus.ps1, then in every `ready` repository its own loop
+  `-Target <open sub-issues of the objective in that repo>` in the checkout of the repo (references/loop.md, Objective).
+  Not combined with -Target or -Milestone.
+.PARAMETER Context
+  File with context for the fix subagent (e.g. upstream PRs of other repositories): passed on as `--context <file>` to `/deliver`
+  when the file exists (missing: the prompt is unchanged). With -Objective the loop writes it per downstream repository.
+.PARAMETER DryRun
+  With -Objective: print which repositories would be started with which targets, and start (and clone) nothing.
+.PARAMETER NoPreflight
+  With -Objective: skip Test-DeliverPreflight.ps1 in each repository before its loop.
 .PARAMETER Model
   Model per PBI for every iteration. Without it, claude takes the model of the PBI's tier (fast haiku, standard sonnet,
   strong opus; the `Tier:` line of the body, else the size S/M/L, else standard; `references/roles.md`), and copilot uses auto.
@@ -49,6 +64,10 @@ param(
   [switch]$LogPane,
   [switch]$NoPane,
   [switch]$NoColor,
+  [string]$Objective = '',
+  [string]$Context = '',
+  [switch]$DryRun,
+  [switch]$NoPreflight,
   [Parameter(ValueFromRemainingArguments)][string[]]$MoreTargets = @()
 )
 $ErrorActionPreference = 'Stop'
@@ -78,7 +97,15 @@ function Get-PbiTier([int]$nr) {
 }
 
 $Nrs = @(($Target + $MoreTargets) | ForEach-Object { $_ -split '[,\s]+' } | Where-Object { $_ })
-if (($Nrs | Where-Object { $_ -notmatch '^\d+$' }) -or ($Nrs.Count -eq 0 -and -not $Milestone)) {
+if ($Objective -and ($Nrs.Count -or $Milestone)) {
+  [Console]::Error.WriteLine('-Objective is not combined with -Target or -Milestone.')
+  exit 64
+}
+if (($DryRun -or $NoPreflight) -and -not $Objective) {
+  [Console]::Error.WriteLine('-DryRun and -NoPreflight need -Objective.')
+  exit 64
+}
+if (-not $Objective -and (($Nrs | Where-Object { $_ -notmatch '^\d+$' }) -or ($Nrs.Count -eq 0 -and -not $Milestone))) {
   [Console]::Error.WriteLine('Give -Target <nr...> (issue numbers) and/or -Milestone <name>.')
   exit 64
 }
@@ -135,6 +162,12 @@ function Send-Notice([string]$text, [string]$Tone = '') {
       [Windows.UI.Notifications.ToastNotificationManager]::CreateToastNotifier('PowerShell').Show([Windows.UI.Notifications.ToastNotification]::new($xml))
     }
   } catch { Write-Verbose "notification failed: $_" }
+}
+
+# Mode -Objective: rounds over the repositories (ObjectiveLoop.ps1); each repository runs this script with -Target.
+if ($Objective) {
+  . (Join-Path $PSScriptRoot 'ObjectiveLoop.ps1')
+  exit (Invoke-ObjectiveLoop -Ref $Objective -Max $Max -Harness $Harness -Model $Model -DryRun:$DryRun -NoPreflight:$NoPreflight -NoColor:$NoColor)
 }
 
 # Get-Milestones.ps1 of github-milestone: sibling skill (installed) or skills/github (repository)
@@ -508,6 +541,7 @@ function Get-ResumeCommand([int]$ran) {
   if ($Nrs.Count) { $parts += @('-Target', ($Nrs -join ',')) }
   if ($Milestone) { $parts += @('-Milestone', "'$Milestone'") }
   if ($Max -gt 0) { $parts += @('-Max', [string][Math]::Max(1, $Max - $ran)) }
+  if ($Context) { $parts += @('-Context', "'$Context'") }
   if ($Model -and -not ($Harness -eq 'copilot' -and $Model -eq 'auto')) { $parts += @('-Model', $Model) }
   if ($Harness -ne 'claude') { $parts += @('-Harness', $Harness) }
   $parts -join ' '
@@ -632,6 +666,7 @@ function Invoke-Iteration([int]$n, [int]$total, $state) {
   $jsonl = Join-Path $RunDir "$($state.Ready[0]).jsonl"
   # the session gets the PBI of this iteration, so its select, tier, log file and events agree (#488)
   $prompt = "/deliver $([int]$state.Ready[0]) --unattended --max 1"
+  if ($Context -and (Test-Path -LiteralPath $Context -PathType Leaf)) { $prompt += " --context `"$((Resolve-Path -LiteralPath $Context).Path)`"" }
   $iterModel = $Model
   if ($Harness -eq 'claude' -and -not $Model) {
     $t = Get-PbiTier ([int]$state.Ready[0])

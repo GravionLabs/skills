@@ -10,6 +10,14 @@ By default `Format-Changed.ps1 -Language <lang>` runs the built-in commands of `
 
 `deliver.roles` sets `model` and `effort` per role: the `deliver` skill uses `implement`, `review`, `fix` and `release-review` (the release review before the release PR, default opus/high) for its subagents when the harness takes a model per call; the schema also knows `select`, `plan`, `create`, `gate`, `pr` and `ci`, which the skill does not use; `implement` and `fix` also take `tiers` (`fast`, `standard`, `strong`). Unset keys keep the defaults, see `references/roles.md` of the `deliver` skill.
 
+## Deliver parallel
+
+`deliver.parallel` (integer ≥ 1, default `1`) is how many repository loops `deliver-loop -Objective` runs at the same time in one round, read from the config of the objective's checkout. With `1` the ready repositories run one after the other; with `n > 1` up to `n` of them start together, one loop per repository, and the round waits for all of them before it reads the state again. Within a repository delivery stays sequential, and each PBI is still claimed by `deliver` (`references/claim.md`). Each round logs its result per repository and its REST and GraphQL usage. See `references/loop.md` of the `deliver` skill.
+
+```json
+{ "deliver": { "parallel": 2 } }
+```
+
 ## Release test
 
 `release.prerelease` is the command that cuts a release candidate, for example `gh workflow run release.yml --ref release/next -f prerelease=true`; without it step 9 of `deliver` cuts no RC and the `release-test` comment names `release/next` at its SHA. `release.test.gate` (default `false`): with `true`, `deliver` stops after posting the RC and `github-release finish` refuses while the `release-test` issue is open; with `false` the release PR opens beside the running RC test. See `references/release-review.md` of `deliver`.

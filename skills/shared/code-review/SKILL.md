@@ -24,6 +24,10 @@ Blocking = breaks an acceptance criterion, or is a correctness or security defec
 
 Check every diff for injection, unvalidated input, secrets in code or logs, broken authorization, unsafe deserialization and path traversal. Confirmed defect → blocking; doubt → note.
 
+## Background persistence
+
+A diff that adds a scheduled task, service, autostart entry or script-host call in an installer (list: `implementation` `references/no-background-persistence.md`) is blocking, unless it references an accepted ADR and the owner's approval; then check opt-in, removal by the uninstaller with a test, and signed binaries.
+
 ## Output
 
 Interactive: a readable report, `## Blocking` then `## Notes`, grouped by file, each blocking item as `file:line — title`, why, suggested fix. No praise, no summary of what is fine. With nothing blocking, say so in one line.

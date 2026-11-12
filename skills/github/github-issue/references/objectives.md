@@ -25,7 +25,7 @@ One comment per Objective, replaced in place, never a second one:
 
 `<!-- objective-runner: host=<machine|cloud-id> since=<iso> heartbeat=<iso> -->`
 
-`host` is the machine or cloud id that runs the Objective, `since` the start, `heartbeat` the last sign of life (ISO 8601, UTC).
+`host` is the machine or cloud id that runs the Objective, `since` the start, `heartbeat` the last sign of life (ISO 8601, UTC). A heartbeat older than 30 minutes is dead. `deliver-loop -Objective` sets the marker, refreshes the heartbeat every 10 minutes and hands over with `deliver-loop takeover <objective> [-Force]` or `deliver-loop release <objective>` (`deliver` `references/loop.md`, Objective).
 
 ## Closing
 

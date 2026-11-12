@@ -145,6 +145,7 @@ It stops when everything is done or `-Max` is reached (exit 0), when no progress
 
 - `-Harness copilot` runs `copilot -p … --unattended --max 1` instead. Without `-Model` it uses `auto` (Copilot picks the model); `-Model` overrides it and is passed as given, so pass a Copilot model such as `gpt-5`, not a Claude name.
 - Console: stdout is colored on a terminal (`-NoColor` or `NO_COLOR` turn it off) and lines are cut to the terminal width (at least 120). The herdr log pane is opt-in with `-LogPane`.
+- `-Objective <owner>/<repo>#<nr>` runs an `[Objective]` in rounds over its ready repositories, on exactly one runner: a marker comment on the objective with a heartbeat every 10 minutes. A foreign live marker ends the run `handed over` (exit 4); `deliver-loop takeover <objective>` takes a marker whose heartbeat is older than 30 minutes (`-Force` also a live one), `deliver-loop release <objective>` ends the round, pushes the branches, posts a status comment and releases the marker.
 - In herdr the shim opens its own workspace and reports the loop as an agent: [herdr with the skills](herdr.md#the-loop-in-herdr).
 
 Details: `references/loop.md` of the `deliver` skill.

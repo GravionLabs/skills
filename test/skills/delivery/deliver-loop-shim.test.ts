@@ -277,7 +277,13 @@ describe('deliver-loop stop subcommand', () => {
       path.join(dir, 'Request-LoopStop.ps1'),
       'Write-Output "stop|$((Get-Location).Path)|$($args -join \',\')"\n',
     );
+    fs.writeFileSync(
+      path.join(dir, 'Set-ObjectiveRunner.ps1'),
+      'Write-Output "runner|$((Get-Location).Path)|$($args -join \',\')"\n',
+    );
   });
+  const runner = (out: string, args: string) =>
+    expect(out.trim()).toBe(`runner|${fs.realpathSync(root)}|${args}`);
   const check = (out: string, args: string) =>
     expect(out.trim()).toBe(`stop|${fs.realpathSync(root)}|${args}`);
 
@@ -286,6 +292,12 @@ describe('deliver-loop stop subcommand', () => {
     check((await runShimAsync(sub, home, ['stop', '--cancel'])).stdout, '-Cancel');
     const other = await runShimAsync(sub, home, ['-Max', '1']);
     expect(other.stdout.trim()).toBe('loop|-Max,1');
+    // #544: takeover and release go to Set-ObjectiveRunner.ps1 with their arguments
+    runner(
+      (await runShimAsync(sub, home, ['takeover', 'o/r#1', '-Force'])).stdout,
+      'takeover,o/r#1,-Force',
+    );
+    runner((await runShimAsync(sub, home, ['release', 'o/r#1'])).stdout, 'release,o/r#1');
   });
 
   it('PowerShell shim maps --now/--cancel and runs from the toplevel', async () => {
@@ -294,11 +306,15 @@ describe('deliver-loop stop subcommand', () => {
         cwd: sub,
         env: { HOME: home, PATH: process.env.PATH },
       });
-    const [now, cancel, other] = await Promise.all([
+    const [now, cancel, other, take, release] = await Promise.all([
       ps('stop --now'),
       ps('stop --cancel'),
       ps('-Max 1'),
+      ps('takeover o/r#1 -Force'),
+      ps('release o/r#1'),
     ]);
+    runner(take.stdout, 'takeover,o/r#1,-Force');
+    runner(release.stdout, 'release,o/r#1');
     check(now.stdout, '-Now');
     check(cancel.stdout, '-Cancel');
     expect(other.stdout.trim()).toBe('loop|-Max,1');
