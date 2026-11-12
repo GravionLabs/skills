@@ -10,8 +10,14 @@
   ~/.config/deliver/checkouts.json ({ "<owner/repo>": "<path>" }), else the sibling folder <root>/<repo> of the current
   checkout (its origin must be <owner>/<repo>), else a fresh `gh repo clone` into ~/.cache/deliver/checkouts/<owner>/<repo>.
   Results: done (objective closed, 0), gated (only release gates or the acceptance of the criteria open; prints
-  "needs you", 3), blocked (2), no progress (a round without change, 1); -DryRun prints the first round and exits 0.
+  "needs you", 3), blocked (2), no progress (a round without change, 1), handed over (a foreign live runner marker, 4),
+  released (a release request of Set-ObjectiveRunner.ps1, 0); -DryRun prints the first round and exits 0.
+  Runner (ObjectiveRunner.ps1): at the start the marker comment is set (a foreign live one hands over), a heartbeat
+  thread refreshes it every $env:DELIVER_OBJECTIVE_HEARTBEAT_SECONDS (default 600), and before every round and every
+  repository the marker and the release request are checked; handover and release happen only at these boundaries.
 #>
+
+. (Join-Path $PSScriptRoot 'ObjectiveRunner.ps1')
 
 function Get-ObjectiveHome { if ($env:HOME) { $env:HOME } else { $env:USERPROFILE } }
 
@@ -120,59 +126,120 @@ function Invoke-ObjectiveLoop {
   $preflight = Join-Path $PSScriptRoot 'Test-DeliverPreflight.ps1'
   $loop = Join-Path $PSScriptRoot 'Invoke-DeliverLoop.ps1'
   $round = 0; $prev = $null; $result = $null; $s = $null
-  while (-not $result) {
-    # a closed objective ends the run before the walk over its repositories (one REST GET)
-    $obj = try { (@(& gh api "repos/$objRepo/issues/$objNr" 2>$null) -join "`n") | ConvertFrom-Json } catch { $null }
-    if ($obj -and [string]$obj.state -eq 'closed') { $result = 'done'; break }
-    $s = Read-ObjectiveStatus $statusScript $Ref
-    if (-not $s) { Write-Step "objective status of $Ref not read" 'red'; $result = 'no progress'; break }
-    $result = Get-ObjectiveStop $s
-    if ($result) { break }
-    $key = Get-ObjectiveKey $s
-    if ($null -ne $prev -and $key -eq $prev) { $result = 'no progress'; Write-Step 'no progress: the objective state did not change in the last round' 'yellow'; break }
-    $prev = $key
-    $round++
-    $targets = Get-ObjectiveTargets $objRepo $objNr
-    foreach ($r in @($s.repos | Where-Object { $_.state -eq 'ready' })) {
-      $repo = [string]$r.repository
-      $nrs = @($targets[$repo] | Where-Object { $_ })
-      if (-not $nrs.Count) { $nrs = @($r.ready | ForEach-Object { [int]$_.number }) }
-      $co = Resolve-Checkout $repo $objRepo $telos
-      $cmd = "deliver-loop -Target $($nrs -join ',')$(if ($Max -gt 0) { " -Max $Max" })"
-      $verb = if ($DryRun) { 'would start' } else { 'start' }
-      $clone = if ($co.From -eq 'clone' -and -not $co.Exists) { ', fresh clone' } else { '' }
-      Write-Step "round ${round}: $repo $verb $cmd in $($co.Path) ($($co.From)$clone)" 'cyan'
-      if ($DryRun) { continue }
-      if (-not $co.Exists) {
-        New-Item -ItemType Directory -Force -Path (Split-Path $co.Path -Parent) | Out-Null
-        & gh repo clone $repo $co.Path 2>&1 | ForEach-Object { Write-Step "[$repo] $_" }
-        if ($LASTEXITCODE -ne 0) { Write-Step "[$repo] clone failed, skipped" 'red'; continue }
+  $hostId = Get-RunnerHostId
+  $shared = [hashtable]::Synchronized(@{ Stop = $false; Foreign = $null; Checkout = $telos })
+  $releaseFile = Join-Path (Get-RunnerStateDir $objRepo $objNr) 'release'
+  $used = [System.Collections.Generic.List[string]]::new(); $used.Add($telos)
+  $runner = $null; $hb = $null; $shared.Fresh = $true
+  if (-not $DryRun) {
+    $local = Get-LocalRunner $objRepo $objNr
+    if ($local -and [int]$local.pid -ne $PID) {
+      Write-Step "runner: $Ref already runs on this host (pid $($local.pid))" 'yellow'
+      $result = 'handed over'
+    } else {
+      Remove-Item -LiteralPath $releaseFile -Force -ErrorAction SilentlyContinue
+      $runner = Enter-ObjectiveRunner $objRepo $objNr $hostId
+      switch ($runner.Action) {
+        'error' { Write-Step "runner marker of $Ref not read or written" 'red'; $result = 'no progress' }
+        'handed over' { Write-Step "runner: $Ref runs on $($runner.Holder.Host) (heartbeat $($runner.Holder.Heartbeat))" 'yellow'; $result = 'handed over' }
+        'took over' { Write-Step "runner: $hostId took over the dead marker of $($runner.Holder.Host) (heartbeat $($runner.Holder.Heartbeat))" 'yellow' }
+        default { Write-Step "runner: $hostId since $($runner.Since)" }
       }
-      Push-Location -LiteralPath $co.Path
-      try {
-        if (-not $NoPreflight) {
-          # the repository's own allowlist; unattended: print the lines and go on (references/preflight.md)
-          try {
-            & $preflight -ProjectRoot $co.Path -Harness $Harness -Unattended -Text -Check @('skills', 'allowlist', 'worktrees') 2>&1 |
-              ForEach-Object { Write-Step "[$repo] $_" }
-          } catch { Write-Step "[$repo] preflight failed: $_" 'yellow' }
-        }
-        $cli = @('-NoProfile', '-File', $loop, '-Target', ($nrs -join ','), '-Harness', $Harness)
-        if ($Max -gt 0) { $cli += @('-Max', [string]$Max) }
-        if ($Model -and -not ($Harness -eq 'copilot' -and $Model -eq 'auto')) { $cli += @('-Model', $Model) }
-        if ($NoColor) { $cli += '-NoColor' }
-        & pwsh @cli 2>&1 | ForEach-Object { Write-Host "  [$repo] $_" }
-        Write-Step "[$repo] loop exit $LASTEXITCODE"
-      } finally { Pop-Location }
+      if (-not $result) {
+        Set-LocalRunner $objRepo $objNr $hostId $telos
+        $secs = if ([int]$env:DELIVER_OBJECTIVE_HEARTBEAT_SECONDS -gt 0) { [int]$env:DELIVER_OBJECTIVE_HEARTBEAT_SECONDS } else { 600 }
+        $hb = Start-RunnerHeartbeat $objRepo $objNr $hostId $runner.Since $shared $secs
+      }
     }
-    if ($DryRun) { $result = 'dry run'; break }
   }
-  $code = switch ($result) { 'done' { 0 } 'dry run' { 0 } 'gated' { 3 } 'blocked' { 2 } default { 1 } }
+  # a round boundary: a foreign marker hands over, a release request releases; $null goes on
+  function Test-RunnerBoundary {
+    if ($DryRun -or $shared.Fresh) { return $null }
+    $st = Get-RunnerState $objRepo $objNr $hostId
+    if ($st.State -eq 'foreign' -or ($shared.Foreign -and $st.State -ne 'own')) {
+      $holder = if ($st.Holder) { $st.Holder.Host } else { $shared.Foreign }
+      Write-Step "runner: $Ref was taken over by ${holder}: handed over" 'yellow'
+      return 'handed over'
+    }
+    if (Test-Path -LiteralPath $releaseFile) {
+      Write-Step "runner: release of $Ref requested" 'cyan'
+      $id = if ($st.State -eq 'own') { $st.Id } else { $runner.Id }
+      foreach ($l in (Invoke-RunnerRelease $objRepo $objNr $Ref $hostId $id @($used) $statusScript)) { Write-Step "runner: $l" }
+      Remove-Item -LiteralPath $releaseFile -Force -ErrorAction SilentlyContinue
+      return 'released'
+    }
+    if ($st.State -eq 'missing') { $runner.Id = Write-RunnerMarker $objRepo $objNr $null $hostId $runner.Since }
+    $shared.Fresh = $true
+    $null
+  }
+  try {
+    while (-not $result) {
+      $result = Test-RunnerBoundary
+      if ($result) { break }
+      # a closed objective ends the run before the walk over its repositories (one REST GET)
+      $obj = try { (@(& gh api "repos/$objRepo/issues/$objNr" 2>$null) -join "`n") | ConvertFrom-Json } catch { $null }
+      if ($obj -and [string]$obj.state -eq 'closed') { $result = 'done'; break }
+      $s = Read-ObjectiveStatus $statusScript $Ref
+      if (-not $s) { Write-Step "objective status of $Ref not read" 'red'; $result = 'no progress'; break }
+      $result = Get-ObjectiveStop $s
+      if ($result) { break }
+      $key = Get-ObjectiveKey $s
+      if ($null -ne $prev -and $key -eq $prev) { $result = 'no progress'; Write-Step 'no progress: the objective state did not change in the last round' 'yellow'; break }
+      $prev = $key
+      $round++
+      $targets = Get-ObjectiveTargets $objRepo $objNr
+      foreach ($r in @($s.repos | Where-Object { $_.state -eq 'ready' })) {
+        $repo = [string]$r.repository
+        $nrs = @($targets[$repo] | Where-Object { $_ })
+        if (-not $nrs.Count) { $nrs = @($r.ready | ForEach-Object { [int]$_.number }) }
+        $result = Test-RunnerBoundary
+        if ($result) { break }
+        $co = Resolve-Checkout $repo $objRepo $telos
+        $cmd = "deliver-loop -Target $($nrs -join ',')$(if ($Max -gt 0) { " -Max $Max" })"
+        $verb = if ($DryRun) { 'would start' } else { 'start' }
+        $clone = if ($co.From -eq 'clone' -and -not $co.Exists) { ', fresh clone' } else { '' }
+        Write-Step "round ${round}: $repo $verb $cmd in $($co.Path) ($($co.From)$clone)" 'cyan'
+        if ($DryRun) { continue }
+        if (-not $co.Exists) {
+          New-Item -ItemType Directory -Force -Path (Split-Path $co.Path -Parent) | Out-Null
+          & gh repo clone $repo $co.Path 2>&1 | ForEach-Object { Write-Step "[$repo] $_" }
+          if ($LASTEXITCODE -ne 0) { Write-Step "[$repo] clone failed, skipped" 'red'; continue }
+        }
+        $shared.Checkout = $co.Path
+        if (-not $used.Contains($co.Path)) { $used.Add($co.Path) }
+        Set-LocalRunner $objRepo $objNr $hostId $co.Path
+        $shared.Fresh = $false
+        Push-Location -LiteralPath $co.Path
+        try {
+          if (-not $NoPreflight) {
+            # the repository's own allowlist; unattended: print the lines and go on (references/preflight.md)
+            try {
+              & $preflight -ProjectRoot $co.Path -Harness $Harness -Unattended -Text -Check @('skills', 'allowlist', 'worktrees') 2>&1 |
+                ForEach-Object { Write-Step "[$repo] $_" }
+            } catch { Write-Step "[$repo] preflight failed: $_" 'yellow' }
+          }
+          $cli = @('-NoProfile', '-File', $loop, '-Target', ($nrs -join ','), '-Harness', $Harness)
+          if ($Max -gt 0) { $cli += @('-Max', [string]$Max) }
+          if ($Model -and -not ($Harness -eq 'copilot' -and $Model -eq 'auto')) { $cli += @('-Model', $Model) }
+          if ($NoColor) { $cli += '-NoColor' }
+          & pwsh @cli 2>&1 | ForEach-Object { Write-Host "  [$repo] $_" }
+          Write-Step "[$repo] loop exit $LASTEXITCODE"
+        } finally { Pop-Location }
+      }
+      if ($result) { break }
+      if ($DryRun) { $result = 'dry run'; break }
+    }
+  } finally {
+    Stop-RunnerHeartbeat $hb $shared
+    $local = Get-LocalRunner $objRepo $objNr
+    if ($runner -and $local -and [int]$local.pid -eq $PID) { Remove-Item -LiteralPath (Join-Path (Get-RunnerStateDir $objRepo $objNr) 'running.json') -Force -ErrorAction SilentlyContinue }
+  }
+  $code = switch ($result) { 'done' { 0 } 'dry run' { 0 } 'released' { 0 } 'gated' { 3 } 'blocked' { 2 } 'handed over' { 4 } default { 1 } }
   if ($s) {
     foreach ($r in @($s.repos)) { Write-Step "$($r.repository): $($r.closed)/$($r.open + $r.closed) $($r.status)" }
   }
   if ($result -eq 'gated') { Write-NeedsYou $s }
-  $color = if ($result -in 'done', 'dry run') { 'green' } else { 'yellow' }
+  $color = if ($result -in 'done', 'dry run', 'released') { 'green' } else { 'yellow' }
   Write-Step "objective result: $result ($round round(s))" $color
   if ($result -ne 'dry run') { Send-Notice "objective $Ref`: $result" }
   return $code

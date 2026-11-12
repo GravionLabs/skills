@@ -59,6 +59,15 @@ deliver-loop -Objective GravionLabs/telos#12 -DryRun
 
 Checkout of `<owner>/<repo>`: the objective's own repository is the current checkout; else the entry of `~/.config/deliver/checkouts.json` (`{ "<owner/repo>": "<path>" }`, cloned there when the path is missing); else the sibling folder `<root>/<repo>` of the current checkout (its `origin` must be `<owner>/<repo>`); else a fresh `gh repo clone` into `~/.cache/deliver/checkouts/<owner>/<repo>` (reused by later runs). Before each repository's loop the preflight runs in that checkout (`Test-DeliverPreflight.ps1 -Unattended -Text -Check skills,allowlist,worktrees`, its own allowlist; unattended: lines printed, the run goes on); `-NoPreflight` skips it.
 
+Runner: an objective runs on exactly one runner (`scripts/ObjectiveRunner.ps1`). At the start the loop sets the runner marker on the objective (`github-issue` `references/objectives.md`, "Runner marker": one comment, replaced in place, never a second one; host `DELIVER_RUNNER_HOST`, else the machine name); a foreign live marker ends the run `handed over` before any repository, a dead one (heartbeat older than 30 minutes) is taken over (`runner: <host> took over the dead marker of <other>`). A heartbeat thread refreshes the marker every 10 minutes (`DELIVER_OBJECTIVE_HEARTBEAT_SECONDS`), also while a repository loop runs; when it finds a foreign host it writes the stop file of the running repository loop, so that loop ends after its running PBI. Before every round and every repository the loop checks the marker: a foreign host ends the run `handed over`. Handover happens only at these boundaries. The marker stays after the run; its heartbeat ages, so after 30 minutes another host starts without a takeover. A second objective loop of the same objective on the same host ends `handed over` at once (`~/.cache/deliver/objectives/<owner>/<repo>/<nr>/running.json`).
+
+```powershell
+deliver-loop takeover GravionLabs/telos#12 [-Force]
+deliver-loop release GravionLabs/telos#12
+```
+
+`takeover` (`scripts/Set-ObjectiveRunner.ps1`) sets the marker to this host: without asking when it is missing, own or dead, a foreign live one only with `-Force` (else exit 1, nothing written); the old runner hands over at its next heartbeat or boundary, then start `deliver-loop -Objective` here. `release` on the runner's host: with a running objective loop it writes the release request and the stop file of the running repository loop; at the boundary the loop pushes every local branch with commits on no remote (not `main`, `master`, `release/*`) in the checkouts of the run, posts a status comment (the `Get-ObjectiveStatus.ps1 -Text` block), deletes the marker and ends `released`. Without a running loop `release` does that itself (own marker only, a foreign one: exit 1).
+
 `-DryRun` prints for the first round which repositories would be started with which targets and checkouts (`round 1: <repo> would start deliver-loop -Target <nr…> in <path> (<sibling, checkouts.json, clone, current>)`) and starts, clones and checks nothing.
 
 | Result      | When                                                                                                                                                                                                                               | Exit |
@@ -67,6 +76,8 @@ Checkout of `<owner>/<repo>`: the objective's own repository is the current chec
 | gated       | no repository is ready and every open one waits only on a gate (an unmet `Requires:` line, only `release-test` items open) or all are done; prints `needs you:` with the gates (release PR, RC test, release, acceptance criteria) | 3    |
 | blocked     | no repository is ready and one waits on something else (blocker, `needs-decision`, `needs-refinement`, no PBI yet)                                                                                                                 | 2    |
 | no progress | a round left the objective state (per repository status, open/closed counts, ready items, gates) unchanged                                                                                                                         | 1    |
+| handed over | a foreign live runner marker at the start or at a round boundary                                                                                                                                                                   | 4    |
+| released    | `deliver-loop release` during the run: branches pushed, status comment posted, marker deleted                                                                                                                                      | 0    |
 | dry run     | `-DryRun`                                                                                                                                                                                                                          | 0    |
 
 ## Stop a run
