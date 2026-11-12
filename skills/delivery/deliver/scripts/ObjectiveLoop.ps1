@@ -5,7 +5,9 @@
   One round reads Get-ObjectiveStatus.ps1 (REST GET only), starts in every repository with state `ready` the loop
   `Invoke-DeliverLoop.ps1 -Target <open sub-issues of the objective in that repo> [-Max <k>]` in the checkout of that
   repository (one after the other, each repository sequential), and reads the state again. State only from GitHub: an
-  aborted round resumes with the same command. Never closes the objective (no write call of its own).
+  aborted round resumes with the same command. Never closes the objective; its only own writes are the two rules between
+  rounds (#545): contract-change pauses the downstream children (needs-refinement + comment), a finished milestone with a
+  waiting `rc` edge runs `/deliver --milestone <M>` (step 9) in the upstream checkout.
   Checkout of <owner>/<repo>: the objective's own repository is the current checkout; else an entry of
   ~/.config/deliver/checkouts.json ({ "<owner/repo>": "<path>" }), else the sibling folder <root>/<repo> of the current
   checkout (its origin must be <owner>/<repo>), else a fresh `gh repo clone` into ~/.cache/deliver/checkouts/<owner>/<repo>.
@@ -113,6 +115,109 @@ function Write-NeedsYou($s) {
   foreach ($l in $lines) { $n++; Write-Step "  $n. $l" 'yellow' }
 }
 
+# gh api write with a JSON body on stdin; $true on success.
+function Invoke-ObjectiveWrite([string]$method, [string]$path, $body) {
+  ($body | ConvertTo-Json -Compress) | & gh api -X $method $path --input - 2>&1 | Out-Null
+  $LASTEXITCODE -eq 0
+}
+
+function Get-ObjectiveRest([string]$path) {
+  $raw = & gh api $path --paginate --slurp 2>$null
+  if ($LASTEXITCODE -ne 0 -or -not $raw) { return @() }
+  $out = @()
+  $pages = ($raw -join "`n") | ConvertFrom-Json -NoEnumerate
+  foreach ($page in @($pages)) { $out += @($page) }
+  $out
+}
+
+# ConvertFrom-Json turns ISO timestamps into DateTime; a string stays one: both as UTC.
+function ConvertTo-UtcTime($v) {
+  if ($v -is [DateTime]) { return $v.ToUniversalTime() }
+  [DateTime]::Parse([string]$v, [Globalization.CultureInfo]::InvariantCulture, [Globalization.DateTimeStyles]::AssumeUniversal -bor [Globalization.DateTimeStyles]::AdjustToUniversal)
+}
+
+# Rule 1 (#545): a PBI with the label contract-change merged since $since in a repository of the objective -> the open
+# downstream children (their repository `Requires:` the PR's repository, or they are blocked by the issue the PR closes)
+# get needs-refinement and a comment with the PR link. $handled (PR keys) makes a PR count once per run. Returns the paused refs.
+function Invoke-ContractPause($s, [DateTime]$since, [hashtable]$handled, [switch]$DryRun) {
+  $paused = @()
+  foreach ($up in @($s.repos)) {
+    $upRepo = [string]$up.repository
+    $prs = @(Get-ObjectiveRest "repos/$upRepo/pulls?state=closed&sort=updated&direction=desc&per_page=30" | Where-Object {
+        $_ -and $_.merged_at -and (ConvertTo-UtcTime $_.merged_at) -ge $since -and
+        @($_.labels | Where-Object { $_.name -eq 'contract-change' }).Count -and -not $handled["$upRepo#$($_.number)"]
+      })
+    foreach ($pr in $prs) {
+      $handled["$upRepo#$($pr.number)"] = $true
+      $closes = @([regex]::Matches([string]$pr.body, '(?i)\b(?:closes|fixes|resolves)\s+(?:([\w.-]+/[\w.-]+))?#(\d+)') |
+          ForEach-Object { "$(if ($_.Groups[1].Value) { $_.Groups[1].Value } else { $upRepo })#$($_.Groups[2].Value)" })
+      foreach ($r in @($s.repos)) {
+        $viaRequires = [bool]@(@($r.requires) | Where-Object { $_ -and [string]$_.repository -eq $upRepo }).Count
+        $items = @(@($r.ready) + @($r.waiting) | Where-Object { $_ -and [string]$_.reason -notin 'release test', 'needs-refinement', 'needs-decision' })
+        foreach ($i in $items) {
+          $isDown = $viaRequires
+          if (-not $isDown -and $closes.Count) {
+            $deps = @(Get-ObjectiveRest "repos/$($r.repository)/issues/$($i.number)/dependencies/blocked_by?per_page=100")
+            foreach ($d in $deps) {
+              $dRepo = if ($d.repository_url) { [string]$d.repository_url -replace '^.*/repos/', '' } else { [string]$r.repository }
+              if ($closes -contains "$dRepo#$($d.number)") { $isDown = $true }
+            }
+          }
+          if (-not $isDown) { continue }
+          $ref = "$($r.repository)#$($i.number)"
+          if ($DryRun) { Write-Step "would pause $ref (needs-refinement): contract-change $($pr.html_url)" 'cyan'; $paused += $ref; continue }
+          $ok = (Invoke-ObjectiveWrite 'POST' "repos/$($r.repository)/issues/$($i.number)/labels" @{ labels = @('needs-refinement') }) -and
+          (Invoke-ObjectiveWrite 'POST' "repos/$($r.repository)/issues/$($i.number)/comments" @{ body = "Paused by deliver-loop: the upstream change $($pr.html_url) carries ``contract-change``. Refine this item against the new contract (``planner refine $($i.number)``), then remove ``needs-refinement``." })
+          if ($ok) { Write-Step "paused $ref (needs-refinement): contract-change $($pr.html_url)" 'yellow'; $paused += $ref }
+          else { Write-Step "pause of $ref failed" 'red' }
+        }
+      }
+    }
+  }
+  $paused
+}
+
+# Rule 2 (#545): an unmet `Requires: <repo>@<M> rc` whose milestone is finished (no open `pbi` or `bug` but the release-test one, as deliver step 9)
+# and whose release-test issue exists -> /deliver --milestone <M> in the upstream checkout, once per run. It reaches step 9
+# (cut the RC, post it); the release PR stays a human gate (deliver never merges it).
+function Invoke-RcTriggers($s, [string]$objRepo, [string]$telos, [string]$Harness, [string]$Model, [hashtable]$triggered, [switch]$DryRun) {
+  $started = @()
+  $edges = @($s.repos | ForEach-Object { @($_.requires) } | Where-Object { $_ -and $_.kind -eq 'rc' -and -not $_.met -and [string]$_.milestoneState -eq 'open' -and $_.releaseTest })
+  foreach ($e in @($edges | Sort-Object { "$($_.repository)@$($_.milestone)" } -Unique)) {
+    $key = "$($e.repository)@$($e.milestone)"
+    if ($triggered[$key]) { continue }
+    $norm = { param($t) if ($t -match '^M([0-9]+(?:\.[0-9]+)*)(?=\s|\(|$)') { 'M' + ((@($Matches[1] -split '\.' | ForEach-Object { [string][int]$_ })) -join '.') } else { $null } }
+    $want = & $norm ([string]$e.milestone)
+    $m = @(Get-ObjectiveRest "repos/$($e.repository)/milestones?state=all&per_page=100" |
+        Where-Object { $_ -and ($_.title -eq $e.milestone -or ($want -and (& $norm ([string]$_.title)) -eq $want)) })[0]
+    if (-not $m) { continue }
+    $open = @(Get-ObjectiveRest "repos/$($e.repository)/issues?milestone=$($m.number)&state=open&per_page=100" | Where-Object {
+        $names = @($_.labels | ForEach-Object { $_.name })
+        $_ -and -not $_.pull_request -and ($names -contains 'pbi' -or $names -contains 'bug') -and $names -notcontains 'release-test' })
+    if ($open.Count) { continue }
+    $triggered[$key] = $true
+    $co = Resolve-Checkout ([string]$e.repository) $objRepo $telos
+    $prompt = "/deliver --milestone $($e.milestone) --unattended --max 1"
+    Write-Step "$(if ($DryRun) { 'would run' } else { 'run' }) rc trigger: $($e.repository) $prompt in $($co.Path) ($($co.From)); the release PR stays yours" 'cyan'
+    $started += $key
+    if ($DryRun) { continue }
+    if (-not $co.Exists) {
+      New-Item -ItemType Directory -Force -Path (Split-Path $co.Path -Parent) | Out-Null
+      & gh repo clone $e.repository $co.Path 2>&1 | ForEach-Object { Write-Step "[$($e.repository)] $_" }
+      if ($LASTEXITCODE -ne 0) { Write-Step "[$($e.repository)] clone failed, rc trigger skipped" 'red'; continue }
+    }
+    Push-Location -LiteralPath $co.Path
+    try {
+      $mdl = if ($Model) { $Model } else { 'sonnet' }
+      $cli = if ($Harness -eq 'copilot') { @('-p', $prompt, '--model', $mdl, '--allow-all-tools', '--allow-all-paths', '--allow-all-urls', '--no-ask-user') }
+      else { @('-p', $prompt, '--model', $mdl, '--permission-mode', 'auto') }
+      & $Harness @cli 2>&1 | ForEach-Object { Write-Host "  [$($e.repository)] $_" }
+      Write-Step "[$($e.repository)] rc trigger exit $LASTEXITCODE"
+    } finally { Pop-Location }
+  }
+  $started
+}
+
 function Invoke-ObjectiveLoop {
   param([string]$Ref, [int]$Max, [string]$Harness, [string]$Model, [switch]$DryRun, [switch]$NoPreflight, [switch]$NoColor)
   if ($Ref -notmatch '^([^/\s#]+/[^/\s#]+)#([0-9]+)$') {
@@ -126,6 +231,7 @@ function Invoke-ObjectiveLoop {
   $preflight = Join-Path $PSScriptRoot 'Test-DeliverPreflight.ps1'
   $loop = Join-Path $PSScriptRoot 'Invoke-DeliverLoop.ps1'
   $round = 0; $prev = $null; $result = $null; $s = $null
+  $since = ([DateTime]::UtcNow.AddSeconds(-1)); $handled = @{}; $triggered = @{}
   $hostId = Get-RunnerHostId
   $shared = [hashtable]::Synchronized(@{ Stop = $false; Foreign = $null; Checkout = $telos })
   $releaseFile = Join-Path (Get-RunnerStateDir $objRepo $objNr) 'release'
@@ -181,12 +287,22 @@ function Invoke-ObjectiveLoop {
       if ($obj -and [string]$obj.state -eq 'closed') { $result = 'done'; break }
       $s = Read-ObjectiveStatus $statusScript $Ref
       if (-not $s) { Write-Step "objective status of $Ref not read" 'red'; $result = 'no progress'; break }
+      if ([string]$s.objective.state -ne 'closed') {
+        # rule 1: contract-change merged since the last round pauses the downstream children; rule 2: an rc edge on a finished milestone
+        $paused = @(Invoke-ContractPause $s $since $handled -DryRun:$DryRun)
+        $rc = @(Invoke-RcTriggers $s $objRepo $telos $Harness $Model $triggered -DryRun:$DryRun)
+        if (($paused.Count -or $rc.Count) -and -not $DryRun) {
+          $s = Read-ObjectiveStatus $statusScript $Ref
+          if (-not $s) { Write-Step "objective status of $Ref not read" 'red'; $result = 'no progress'; break }
+        }
+      }
       $result = Get-ObjectiveStop $s
       if ($result) { break }
       $key = Get-ObjectiveKey $s
       if ($null -ne $prev -and $key -eq $prev) { $result = 'no progress'; Write-Step 'no progress: the objective state did not change in the last round' 'yellow'; break }
       $prev = $key
       $round++
+      $since = ([DateTime]::UtcNow.AddSeconds(-1))
       $targets = Get-ObjectiveTargets $objRepo $objNr
       foreach ($r in @($s.repos | Where-Object { $_.state -eq 'ready' })) {
         $repo = [string]$r.repository

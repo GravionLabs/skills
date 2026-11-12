@@ -24,6 +24,9 @@ export type State = {
   checkouts: Record<string, string>;
   comments?: Record<string, Comment[]>;
   noEffect?: boolean;
+  prs?: Record<string, unknown[]>;
+  contractPr?: boolean;
+  noRcPost?: boolean;
   effect?: 'takeover' | 'release';
 };
 
@@ -50,10 +53,14 @@ const handler = (stateFile: string) => `(call) => {
   let m;
   if (method !== 'GET') {
     const bi = a.indexOf('-f');
-    const body = bi >= 0 ? a[bi + 1].replace(/^body=/, '') : '';
+    const body = bi >= 0 ? a[bi + 1].replace(/^body=/, '') : (call.body || {}).body || '';
     s.comments = s.comments || {};
     let out = '';
-    if (method === 'POST' && (m = /^repos\\/([^/]+\\/[^/]+)\\/issues\\/(\\d+)\\/comments$/.exec(bare))) {
+    const input = call.body || {};
+    if (method === 'POST' && (m = /^repos\\/([^/]+\\/[^/]+)\\/issues\\/(\\d+)\\/labels$/.exec(bare))) {
+      const k = m[1] + '#' + m[2]; if (!s.issues[k]) throw new Error('404 ' + k);
+      s.issues[k].labels = (s.issues[k].labels || ['pbi']).concat(input.labels); out = [];
+    } else if (method === 'POST' && (m = /^repos\\/([^/]+\\/[^/]+)\\/issues\\/(\\d+)\\/comments$/.exec(bare))) {
       const id = 1000 + Object.values(s.comments).flat().length + Math.floor(Math.random() * 1000);
       (s.comments[m[1] + '#' + m[2]] = s.comments[m[1] + '#' + m[2]] || []).push({ id, body });
       out = { id };
@@ -83,8 +90,9 @@ const handler = (stateFile: string) => `(call) => {
     v = own ? own : s.rcPosted ? [{ id: 1, body: '<!-- release-test-rc --> RC 1.0.0-rc.1' }] : [];
   }
   else if ((m = /^repos\\/([^/]+\\/[^/]+)\\/milestones$/.exec(bare))) v = s.milestones[m[1]] || [];
+  else if ((m = /^repos\\/([^/]+\\/[^/]+)\\/issues$/.exec(bare)) && !p.includes('labels=release-test')) v = Object.keys(s.issues).filter((k) => k.startsWith(m[1] + '#') && (s.issues[k].state || 'open') === 'open' && !(s.issues[k].labels || ['pbi']).includes('release-test')).map(issue);
   else if ((m = /^repos\\/([^/]+\\/[^/]+)\\/issues$/.exec(bare))) v = Object.keys(s.issues).filter((k) => k.startsWith(m[1] + '#') && (s.issues[k].labels || []).includes('release-test')).map(issue);
-  else if (/^repos\\/[^/]+\\/[^/]+\\/pulls$/.test(bare)) v = [];
+  else if ((m = /^repos\\/([^/]+\\/[^/]+)\\/pulls$/.exec(bare))) v = p.includes('state=closed') ? (s.prs || {})[m[1]] || [] : [];
   else if (/^repos\\/[^/]+\\/[^/]+$/.test(bare)) v = { default_branch: 'main' };
   else throw new Error('unexpected gh ' + a.join(' '));
   return { rest: a.includes('--paginate') ? [v] : v };
@@ -103,8 +111,14 @@ const load = () => JSON.parse(fs.readFileSync(f, 'utf8'));
 let s = load();
 const repo = s.checkouts[fs.realpathSync(process.cwd())];
 fs.appendFileSync(${JSON.stringify(calls)}, repo + ' ' + process.argv[2] + '\\n');
+const ms = /\\/deliver --milestone (\\S+)/.exec(process.argv[2]);
+if (ms) { if (!s.noRcPost) s.rcPosted = true; fs.writeFileSync(f, JSON.stringify(s)); process.exit(0); }
 const nr = /\\/deliver (\\d+)/.exec(process.argv[2])[1];
-if (!s.noEffect) { s.issues[repo + '#' + nr].state = 'closed'; fs.writeFileSync(f, JSON.stringify(s)); }
+if (!s.noEffect) {
+  s.issues[repo + '#' + nr].state = 'closed';
+  if (s.contractPr) { s.prs = s.prs || {}; (s.prs[repo] = s.prs[repo] || []).push({ number: 100 + Number(nr), html_url: 'https://github.com/' + repo + '/pull/' + (100 + Number(nr)), merged_at: new Date().toISOString().replace(/\\.\\d+Z$/, 'Z'), body: 'Closes #' + nr, labels: [{ name: 'contract-change' }] }); }
+  fs.writeFileSync(f, JSON.stringify(s));
+}
 const stopFile = () => { const d = path.join(process.cwd(), '.agents/deliver-loop');
   return fs.existsSync(d) && fs.readdirSync(d).some((r) => fs.existsSync(path.join(d, r, 'stop'))); };
 const sleep = (ms) => Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, ms);

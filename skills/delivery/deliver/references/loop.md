@@ -40,6 +40,13 @@ Checked from GitHub (not from the output) before and after each iteration, on th
 
 An open `release-test` issue is not part of that set (also when passed explicitly as a Target: `Invoke-DeliverLoop.ps1` drops it from the targets): as the last open item it neither keeps the loop from `done` nor makes it `blocked`. `Get-DeliverStatus.ps1` counts it in `total`, as waiting (`release test`, or `release test, waits for <n> open items`) and, once an RC is posted on it (comment marker `<!-- release-test-rc -->`), as needs you `RC test <issue URL>`.
 
+Between the rounds two rules run (`ObjectiveLoop.ps1`, before the stop check; `-DryRun` only prints them):
+
+- **contract-change**: a merged PR labeled `contract-change` since the start of the last round (in any repository of the objective; each PR once per run) sets `needs-refinement` and a comment with the PR link on every open child downstream of it: the children of a repository that has a `Requires:` line on the PR's repository, and the children whose `blocked-by` list holds an issue the PR closes (`Closes #<nr>` in its body). A child that already waits on `needs-refinement`, `needs-decision` or `release-test` is left alone. The next round then skips them (`planner refine <nr>` lifts the pause by hand).
+- **rc edge**: an unmet `Requires: <repo>@<M> rc` on a milestone that has a `release-test` issue and no open `pbi` or `bug` besides it runs `/deliver --milestone <M> --unattended --max 1` once per run in the checkout of that upstream repository (the harness of the loop, `-Model` or sonnet). The session reaches step 9 and posts the RC; the release PR into `main` stays the human gate (deliver never merges it), and the edge is met once the RC marker is posted.
+
+These two rules and the repositories' own loops are the only writes of the mode (labels and comments through `gh api -X POST`); it still never closes the objective.
+
 | Result      | When                                                                                        | Exit |
 | :---------- | :------------------------------------------------------------------------------------------ | :--- |
 | done        | no open PBI left (a `merging` PBI, auto-merge on, is handed to GitHub and no longer counts) | 0    |

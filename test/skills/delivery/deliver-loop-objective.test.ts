@@ -36,6 +36,7 @@ describe.skipIf(!hasPwsh || process.platform === 'win32')(
       // #544: a dead marker of another host (heartbeat older than 30 minutes) is taken over in place
       const c = setup({
         ...twoRepos(),
+        noRcPost: true,
         comments: { 'o/telos#1': [{ id: 7, body: marker('there', '2020-01-01T00:00:00Z') }] },
       });
       const r = await c.run([]);
@@ -47,7 +48,11 @@ describe.skipIf(!hasPwsh || process.platform === 'win32')(
       );
       expect(r.stdout).toContain('[o/a] preflight allowlist');
       expect(r.stdout).not.toMatch(/round \d+: o\/b/);
-      expect(c.harness()).toEqual(['o/a /deliver 11 --unattended --max 1']);
+      // rule 2 (#545): the milestone is finished, so step 9 runs in o/a once; the fake posts no RC, the gate stays
+      expect(c.harness()).toEqual([
+        'o/a /deliver 11 --unattended --max 1',
+        'o/a /deliver --milestone M1 --unattended --max 1',
+      ]);
       expect(r.stdout).toContain('o/b: 0/1 waiting(requires o/a@M1 rc)');
       expect(r.stdout).toContain('needs you:');
       expect(r.stdout).toContain(
@@ -64,8 +69,8 @@ describe.skipIf(!hasPwsh || process.platform === 'win32')(
       expect(again.stdout).toContain(
         `round 1: o/b start deliver-loop -Target 20 in ${path.join(c.root, 'elsewhere/b')} (checkouts.json)`,
       );
-      expect(c.harness()).toHaveLength(2);
-      expect(c.harness()[1]).toBe('o/b /deliver 21 --unattended --max 1');
+      expect(c.harness()).toHaveLength(3);
+      expect(c.harness()[2]).toBe('o/b /deliver 21 --unattended --max 1');
       expect(again.stdout).toContain(
         '1. check the acceptance criteria of o/telos#1 and close the objective: https://github.com/o/telos/issues/1',
       );
