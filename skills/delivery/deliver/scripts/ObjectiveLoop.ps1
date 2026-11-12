@@ -221,8 +221,9 @@ function Write-ContextFile($s, $r, [string]$checkout, [DateTime]$since) {
       $lines += "- $up#$($pr.number) $($pr.html_url) $([string]$pr.title -replace '[\r\n]+', ' ') ($stat)"
     }
   }
-  if (-not $lines.Count) { return '' }
   $file = Join-Path $checkout '.agents/deliver-loop/context.md'
+  # #578: nothing to say -> no stale file from an earlier round for a hand-run `deliver-loop -Context`
+  if (-not $lines.Count) { Remove-Item -LiteralPath $file -Force -ErrorAction SilentlyContinue; return '' }
   New-Item -ItemType Directory -Force -Path (Split-Path $file -Parent) | Out-Null
   Set-Content -LiteralPath $file -Value (@("Upstream PRs merged since $($since.ToString('u')) in the repositories of $($r.repository)'s Requires:") + $lines) -Encoding utf8
   $file
@@ -231,7 +232,7 @@ function Write-ContextFile($s, $r, [string]$checkout, [DateTime]$since) {
 # Rule 2 (#545): an unmet `Requires: <repo>@<M> rc` whose milestone is finished (no open `pbi` or `bug` but the release-test one, as deliver step 9)
 # and whose release-test issue exists -> /deliver --milestone <M> in the upstream checkout, once per run. It reaches step 9
 # (cut the RC, post it); the release PR stays a human gate (deliver never merges it).
-function Invoke-RcTriggers($s, [string]$objRepo, [string]$telos, [string]$Harness, [string]$Model, [hashtable]$triggered, [switch]$DryRun) {
+function Invoke-RcTriggers($s, [string]$objRepo, [string]$telos, [string]$Harness, [string]$Model, [hashtable]$triggered, [switch]$DryRun, [string]$Preflight = '', [switch]$NoPreflight) {
   $started = @()
   $edges = @($s.repos | ForEach-Object { @($_.requires) } | Where-Object { $_ -and $_.kind -eq 'rc' -and -not $_.met -and [string]$_.milestoneState -eq 'open' -and $_.releaseTest })
   foreach ($e in @($edges | Sort-Object { "$($_.repository)@$($_.milestone)" } -Unique)) {
@@ -260,11 +261,20 @@ function Invoke-RcTriggers($s, [string]$objRepo, [string]$telos, [string]$Harnes
     }
     Push-Location -LiteralPath $co.Path
     try {
+      # #578: the per-repo preflight of every repository loop (#543); a failure is reported as such, the trigger goes on
+      if (-not $NoPreflight -and $Preflight) {
+        try {
+          & $Preflight -ProjectRoot $co.Path -Harness $Harness -Unattended -Text -Check @('skills', 'allowlist', 'worktrees') 2>&1 |
+            ForEach-Object { Write-Step "[$($e.repository)] $_" }
+          if ($LASTEXITCODE -ne 0) { Write-Step "[$($e.repository)] rc trigger preflight failed (exit $LASTEXITCODE)" 'red' }
+        } catch { Write-Step "[$($e.repository)] rc trigger preflight failed: $_" 'red' }
+      }
       $mdl = if ($Model) { $Model } else { 'sonnet' }
       $cli = if ($Harness -eq 'copilot') { @('-p', $prompt, '--model', $mdl, '--allow-all-tools', '--allow-all-paths', '--allow-all-urls', '--no-ask-user') }
       else { @('-p', $prompt, '--model', $mdl, '--permission-mode', 'auto') }
       & $Harness @cli 2>&1 | ForEach-Object { Write-Host "  [$($e.repository)] $_" }
-      Write-Step "[$($e.repository)] rc trigger exit $LASTEXITCODE"
+      if ($LASTEXITCODE -ne 0) { Write-Step "[$($e.repository)] rc trigger failed: harness exit $LASTEXITCODE" 'red' }
+      else { Write-Step "[$($e.repository)] rc trigger exit $LASTEXITCODE" }
     } finally { Pop-Location }
   }
   $started
@@ -447,7 +457,7 @@ function Invoke-ObjectiveLoop {
       if ([string]$s.objective.state -ne 'closed') {
         # rule 1: contract-change merged since the last round pauses the downstream children; rule 2: an rc edge on a finished milestone
         $paused = @(Invoke-ContractPause $s $since $handled -DryRun:$DryRun)
-        $rc = @(Invoke-RcTriggers $s $objRepo $telos $Harness $Model $triggered -DryRun:$DryRun)
+        $rc = @(Invoke-RcTriggers $s $objRepo $telos $Harness $Model $triggered -DryRun:$DryRun -Preflight $preflight -NoPreflight:$NoPreflight)
         if (($paused.Count -or $rc.Count) -and -not $DryRun) {
           $s = Read-ObjectiveStatus $statusScript $Ref
           if (-not $s) { Write-Step "objective status of $Ref not read" 'red'; $result = 'no progress'; break }
