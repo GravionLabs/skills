@@ -82,6 +82,44 @@ describe('Request-LoopStop.ps1', () => {
     expect(fs.existsSync(r.stop)).toBe(false);
   });
 
+  describe('objective runner active (#576)', () => {
+    const objRun = (name: string, pid: number, cancel = false) => {
+      const r = repo(name, ['start', 'iteration-start']);
+      const home = path.join(tmp, `${name}-home`);
+      const dir = path.join(home, '.cache/deliver/objectives/o/r/1');
+      fs.mkdirSync(dir, { recursive: true });
+      fs.writeFileSync(
+        path.join(dir, 'running.json'),
+        JSON.stringify({ pid, host: 'h', checkout: r.root, checkouts: [r.root] }),
+      );
+      const args = ['-NoProfile', '-File', script, ...(cancel ? ['-Cancel'] : [])];
+      const p = spawnSync('pwsh', args, {
+        cwd: r.root,
+        encoding: 'utf8',
+        env: { ...process.env, HOME: home, USERPROFILE: home },
+      });
+      return { r, status: p.status, stderr: p.stderr.trim() };
+    };
+
+    it('refuses with a pointer to release and writes no stop file', () => {
+      const o = objRun('obj-live', process.pid);
+      expect(o.status).toBe(1);
+      expect(o.stderr).toContain('deliver-loop release');
+      expect(fs.existsSync(o.r.stop)).toBe(false);
+    });
+
+    it('-Cancel is not refused', () => {
+      const o = objRun('obj-cancel', process.pid, true);
+      expect(o.status).toBe(0);
+    });
+
+    it('a dead runner pid does not block the stop', () => {
+      const o = objRun('obj-dead', 2147483646);
+      expect(o.status).toBe(0);
+      expect(fs.existsSync(o.r.stop)).toBe(true);
+    });
+  });
+
   it('no latest.txt: exit 1, nothing written', async () => {
     const root = path.join(tmp, 'none');
     fs.mkdirSync(root, { recursive: true });
