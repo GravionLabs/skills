@@ -111,9 +111,12 @@ function Write-NeedsYou($s) {
         'release-pr' { "merge the release PR of $($g.repository): $($g.url)" }
         'rc-missing' { "RC test $($g.detail)$(if ($g.url) { ": $($g.url)" })" }
         'not-released' { "release $($g.detail)" }
+        'acceptance-criteria' { "check the acceptance criteria of $ref and close the objective: $($g.url)" }
+        default { "$($g.type)$(if ($g.detail) { " $($g.detail)" })$(if ($g.url) { ": $($g.url)" })" }
       }
     })
-  if (-not @($s.repos | Where-Object { $_.state -ne 'done' }).Count) {
+  $hasCriteria = @($s.gates | Where-Object { $_.type -eq 'acceptance-criteria' }).Count
+  if (-not $hasCriteria -and -not @($s.repos | Where-Object { $_.state -ne 'done' }).Count) {
     $lines += "check the acceptance criteria of $ref and close the objective: $($s.objective.url)"
   }
   Write-Step 'needs you:' 'yellow'
@@ -285,9 +288,27 @@ function Write-ApiUsage([int]$round, $before, $after) {
   Write-Step "round $round api: rest +$rest, graphql +$gql (remaining rest $($after.RestLeft), graphql $($after.GraphqlLeft))"
 }
 
-# Exit code of a repository loop (Invoke-DeliverLoop.ps1) as the word of the round results.
-function Get-RepoLoopLabel([int]$code) {
-  switch ($code) { 0 { 'done' } 1 { 'no progress' } 2 { 'blocked' } -1 { 'clone failed' } default { "failed ($code)" } }
+# Result word of a repository loop for the round results line. Exit 0 covers done, max reached and stopped, so it is read
+# from the last `result` record of the progress.jsonl of the newest run in that checkout (.agents/deliver-loop/latest.txt);
+# without a record: `ok (0)`. Other exit codes keep their word.
+function Get-RepoLoopLabel([int]$code, [string]$path) {
+  if ($code -eq 0) {
+    $word = $null
+    try {
+      $latest = if ($path) { Join-Path $path '.agents/deliver-loop/latest.txt' }
+      if ($latest -and (Test-Path -LiteralPath $latest)) {
+        $progress = Join-Path (Get-Content -LiteralPath $latest -Raw).Trim() 'progress.jsonl'
+        if (Test-Path -LiteralPath $progress) {
+          foreach ($l in @(Get-Content -LiteralPath $progress)) {
+            $rec = try { $l | ConvertFrom-Json } catch { $null }
+            if ($rec -and $rec.event -eq 'result' -and $rec.result) { $word = [string]$rec.result }
+          }
+        }
+      }
+    } catch { $word = $null }
+    if ($word) { return $word } else { return 'ok (0)' }
+  }
+  switch ($code) { 1 { 'no progress' } 2 { 'blocked' } -1 { 'clone failed' } default { "failed ($code)" } }
 }
 
 # deliver.parallel > 1: runs the prepared repository loops ($jobs: Repo, Path, Cli) as thread jobs, at most $limit at a time,
@@ -329,7 +350,7 @@ function Invoke-RepoLoopsParallel($jobs, [int]$limit, [hashtable]$shared, [strin
         & $flush $run
         Remove-Job -Job $run.Job -Force
         [void]$running.Remove($run)
-        $done += [pscustomobject]@{ Repo = $run.Repo; Exit = $(if ($null -ne $run.Exit) { $run.Exit } else { 1 }) }
+        $done += [pscustomobject]@{ Repo = $run.Repo; Path = $run.Path; Exit = $(if ($null -ne $run.Exit) { $run.Exit } else { 1 }) }
       }
     }
     if ($running.Count) { Start-Sleep -Milliseconds 200 }
@@ -475,7 +496,7 @@ function Invoke-ObjectiveLoop {
           }
           # deliver.parallel 1: one repository after the other, its output streamed as it comes
           & pwsh @cli 2>&1 | ForEach-Object { Write-Host "  [$repo] $_" }
-          $results += [pscustomobject]@{ Repo = $repo; Exit = $LASTEXITCODE }
+          $results += [pscustomobject]@{ Repo = $repo; Path = $co.Path; Exit = $LASTEXITCODE }
           Write-Step "[$repo] loop exit $LASTEXITCODE"
           if ($LASTEXITCODE -eq 0) { $lastGreen[$repo] = $roundStart }
         } finally { Pop-Location }
@@ -490,7 +511,7 @@ function Invoke-ObjectiveLoop {
         }
       }
       if ($results.Count) {
-        Write-Step "round ${round} results: $(@($results | ForEach-Object { "$($_.Repo) $(Get-RepoLoopLabel $_.Exit)" }) -join ', ')"
+        Write-Step "round ${round} results: $(@($results | ForEach-Object { "$($_.Repo) $(Get-RepoLoopLabel $_.Exit $_.Path)" }) -join ', ')"
         Write-ApiUsage $round $apiBefore (Get-ApiUsage)
       }
       if ($result) { break }
