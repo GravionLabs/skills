@@ -145,6 +145,22 @@ function ConvertTo-UtcTime($v) {
   [DateTime]::Parse([string]$v, [Globalization.CultureInfo]::InvariantCulture, [Globalization.DateTimeStyles]::AssumeUniversal -bor [Globalization.DateTimeStyles]::AdjustToUniversal)
 }
 
+# #577: the PRs of $repo merged since $since. Closed PRs are sorted by update time, newest first: read page by page (no --paginate)
+# and stop at the first short page or once a PR was last updated before $since (a PR merged since $since was updated since then).
+function Get-MergedPrsSince([string]$repo, [DateTime]$since) {
+  $out = @()
+  for ($page = 1; $page -le 10; $page++) {
+    $raw = & gh api "repos/$repo/pulls?state=closed&sort=updated&direction=desc&per_page=30&page=$page" 2>$null
+    if ($LASTEXITCODE -ne 0 -or -not $raw) { break }
+    $items = @(($raw -join "`n") | ConvertFrom-Json -NoEnumerate)
+    $items = @($items | ForEach-Object { $_ })
+    $out += @($items | Where-Object { $_ -and $_.merged_at -and (ConvertTo-UtcTime $_.merged_at) -ge $since })
+    $stale = @($items | Where-Object { $_.updated_at -and (ConvertTo-UtcTime $_.updated_at) -lt $since }).Count
+    if ($items.Count -lt 30 -or $stale) { break }
+  }
+  $out
+}
+
 # Rule 1 (#545, #570): a merged PR whose closed PBI issue carries the label contract-change (deliver step 6 labels the issue,
 # not the PR; a label on the PR counts too), merged since $since in a repository of the objective -> the open
 # downstream children (their repository `Requires:` the PR's repository, or they are blocked by the issue the PR closes)
@@ -153,9 +169,7 @@ function Invoke-ContractPause($s, [DateTime]$since, [hashtable]$handled, [switch
   $paused = @()
   foreach ($up in @($s.repos)) {
     $upRepo = [string]$up.repository
-    $prs = @(Get-ObjectiveRest "repos/$upRepo/pulls?state=closed&sort=updated&direction=desc&per_page=30" | Where-Object {
-        $_ -and $_.merged_at -and (ConvertTo-UtcTime $_.merged_at) -ge $since -and -not $handled["$upRepo#$($_.number)"]
-      })
+    $prs = @(Get-MergedPrsSince $upRepo $since | Where-Object { -not $handled["$upRepo#$($_.number)"] })
     foreach ($pr in $prs) {
       $closes = @([regex]::Matches([string]$pr.body, '(?i)\b(?:closes|fixes|resolves)\s+(?:([\w.-]+/[\w.-]+))?#(\d+)') |
           ForEach-Object { "$(if ($_.Groups[1].Value) { $_.Groups[1].Value } else { $upRepo })#$($_.Groups[2].Value)" })
@@ -200,8 +214,7 @@ function Invoke-ContractPause($s, [DateTime]$since, [hashtable]$handled, [switch
 function Write-ContextFile($s, $r, [string]$checkout, [DateTime]$since) {
   $lines = @()
   foreach ($up in @($r.requires | Where-Object { $_ } | ForEach-Object { [string]$_.repository } | Select-Object -Unique)) {
-    $prs = @(Get-ObjectiveRest "repos/$up/pulls?state=closed&sort=updated&direction=desc&per_page=30" | Where-Object {
-        $_ -and $_.merged_at -and (ConvertTo-UtcTime $_.merged_at) -ge $since })
+    $prs = @(Get-MergedPrsSince $up $since)
     foreach ($pr in $prs) {
       $d = @(Get-ObjectiveRest "repos/$up/pulls/$($pr.number)")[0]
       $stat = if ($d -and $null -ne $d.changed_files) { "$($d.changed_files) files, +$($d.additions) -$($d.deletions)" } else { 'diff stat n/a' }

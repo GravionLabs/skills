@@ -85,6 +85,30 @@ describe.skipIf(!hasPwsh || process.platform === 'win32')(
       expect(c.harness().find((x) => x.startsWith('o/b '))).toContain('--context');
     });
 
+    it('#577: a repo with many old closed PRs is read on one page per read, never paginated', async () => {
+      const st = twoRepos();
+      st.issues['o/a#10'].children = ['o/a#11'];
+      delete st.issues['o/a#12'];
+      st.issues['o/b#20'].body = 'Requires: o/a@M1 released';
+      st.prs = {
+        'o/a': Array.from({ length: 60 }, (_, i) => ({
+          number: i + 1,
+          merged_at: '2020-01-01T00:00:00Z',
+          updated_at: '2020-01-01T00:00:00Z',
+          labels: [],
+        })),
+      };
+      const c = setup(st);
+      await c.run(['-NoPreflight']);
+      const reads = c.gh.calls().filter((x) => x.args.join(' ').includes('pulls?state=closed'));
+      expect(reads.length).toBeGreaterThan(0);
+      expect(reads.length).toBeLessThanOrEqual(4);
+      for (const x of reads) {
+        expect(x.args).not.toContain('--paginate');
+        expect(x.args.join(' ')).not.toContain('page=2');
+      }
+    });
+
     it('rule 2 -DryRun names the trigger and runs nothing', async () => {
       const st = twoRepos();
       st.issues['o/a#11'].state = 'closed';
