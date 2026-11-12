@@ -138,7 +138,8 @@ function ConvertTo-UtcTime($v) {
   [DateTime]::Parse([string]$v, [Globalization.CultureInfo]::InvariantCulture, [Globalization.DateTimeStyles]::AssumeUniversal -bor [Globalization.DateTimeStyles]::AdjustToUniversal)
 }
 
-# Rule 1 (#545): a PBI with the label contract-change merged since $since in a repository of the objective -> the open
+# Rule 1 (#545, #570): a merged PR whose closed PBI issue carries the label contract-change (deliver step 6 labels the issue,
+# not the PR; a label on the PR counts too), merged since $since in a repository of the objective -> the open
 # downstream children (their repository `Requires:` the PR's repository, or they are blocked by the issue the PR closes)
 # get needs-refinement and a comment with the PR link. $handled (PR keys) makes a PR count once per run. Returns the paused refs.
 function Invoke-ContractPause($s, [DateTime]$since, [hashtable]$handled, [switch]$DryRun) {
@@ -146,13 +147,21 @@ function Invoke-ContractPause($s, [DateTime]$since, [hashtable]$handled, [switch
   foreach ($up in @($s.repos)) {
     $upRepo = [string]$up.repository
     $prs = @(Get-ObjectiveRest "repos/$upRepo/pulls?state=closed&sort=updated&direction=desc&per_page=30" | Where-Object {
-        $_ -and $_.merged_at -and (ConvertTo-UtcTime $_.merged_at) -ge $since -and
-        @($_.labels | Where-Object { $_.name -eq 'contract-change' }).Count -and -not $handled["$upRepo#$($_.number)"]
+        $_ -and $_.merged_at -and (ConvertTo-UtcTime $_.merged_at) -ge $since -and -not $handled["$upRepo#$($_.number)"]
       })
     foreach ($pr in $prs) {
-      $handled["$upRepo#$($pr.number)"] = $true
       $closes = @([regex]::Matches([string]$pr.body, '(?i)\b(?:closes|fixes|resolves)\s+(?:([\w.-]+/[\w.-]+))?#(\d+)') |
           ForEach-Object { "$(if ($_.Groups[1].Value) { $_.Groups[1].Value } else { $upRepo })#$($_.Groups[2].Value)" })
+      # deliver step 6 labels the PBI issue the PR closes; the PR's own label counts too
+      $hit = [bool]@($pr.labels | Where-Object { $_.name -eq 'contract-change' }).Count
+      foreach ($c in $closes) {
+        if ($hit) { break }
+        $cRepo, $cNr = $c -split '#'
+        $iss = @(Get-ObjectiveRest "repos/$cRepo/issues/$cNr")[0]
+        if ($iss -and @($iss.labels | Where-Object { $_.name -eq 'contract-change' }).Count) { $hit = $true }
+      }
+      if (-not $hit) { continue }
+      $handled["$upRepo#$($pr.number)"] = $true
       foreach ($r in @($s.repos)) {
         $viaRequires = [bool]@(@($r.requires) | Where-Object { $_ -and [string]$_.repository -eq $upRepo }).Count
         $items = @(@($r.ready) + @($r.waiting) | Where-Object { $_ -and [string]$_.reason -notin 'release test', 'needs-refinement', 'needs-decision' })
