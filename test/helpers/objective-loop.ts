@@ -130,7 +130,7 @@ if (s.sleepMs) {
 }
 if (!s.noEffect) {
   s.issues[repo + '#' + nr].state = 'closed';
-  if (s.contractPr) { s.prs = s.prs || {}; (s.prs[repo] = s.prs[repo] || []).push({ number: 100 + Number(nr), html_url: 'https://github.com/' + repo + '/pull/' + (100 + Number(nr)), merged_at: new Date().toISOString().replace(/\\.\\d+Z$/, 'Z'), body: 'Closes #' + nr, labels: [{ name: 'contract-change' }] }); }
+  if (s.contractPr) { s.prs = s.prs || {}; (s.prs[repo] = s.prs[repo] || []).push({ number: 100 + Number(nr), html_url: 'https://github.com/' + repo + '/pull/' + (100 + Number(nr)), merged_at: new Date().toISOString().replace(/\\.\\d+Z$/, 'Z'), body: 'Closes #' + nr, labels: [] }); s.issues[repo + '#' + nr].labels = (s.issues[repo + '#' + nr].labels || ['pbi']).concat('contract-change'); } // deliver step 6 labels the PBI issue, not the PR (#570)
   fs.writeFileSync(f, JSON.stringify(s));
 }
 const stopFile = () => { const d = path.join(process.cwd(), '.agents/deliver-loop');
