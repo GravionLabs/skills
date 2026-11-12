@@ -7,11 +7,32 @@ const read = (p: string) => fs.readFileSync(path.join(shared, p), 'utf-8');
 describe('no background persistence', () => {
   const ref = read('implementation/references/no-background-persistence.md');
 
+  // The reference is the single source of the forbidden list and the exception path.
+  const mechanisms = [
+    'schtasks',
+    'Register-ScheduledTask',
+    'New-Service',
+    'sc create',
+    'Run` keys',
+    'RunOnce',
+    'autostart',
+    'LaunchAgent',
+    'LaunchDaemon',
+    'systemd',
+    'cron',
+    'startup-folder',
+    'startup shortcut',
+    'accepted ADR',
+  ];
+
   it('implementation states the rule and links the reference', () => {
     const s = read('implementation/SKILL.md');
     expect(s).toContain('## No background persistence');
     expect(s).toContain('references/no-background-persistence.md');
-    expect(s).toContain('accepted ADR');
+  });
+
+  it.each(mechanisms)('implementation SKILL.md does not repeat the list (%s)', (item) => {
+    expect(read('implementation/SKILL.md')).not.toContain(item);
   });
 
   it.each([
@@ -39,10 +60,14 @@ describe('no background persistence', () => {
     expect(ref).toContain('native NSIS commands');
   });
 
-  it('code-review reports it as blocking unless an ADR is referenced', () => {
+  it('code-review points to the reference and reports a forbidden mechanism as blocking', () => {
     const s = read('code-review/SKILL.md');
     expect(s).toContain('## Background persistence');
-    expect(s).toContain('is blocking, unless it references an accepted ADR');
-    expect(s).toContain('references/no-background-persistence.md');
+    expect(s).toContain('is blocking, unless the exception there applies');
+    expect(s).toContain('`implementation` `references/no-background-persistence.md`');
+  });
+
+  it.each(mechanisms)('code-review SKILL.md does not repeat the list (%s)', (item) => {
+    expect(read('code-review/SKILL.md')).not.toContain(item);
   });
 });
