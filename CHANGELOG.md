@@ -5,6 +5,22 @@ Versioning follows [Semantic Versioning](https://semver.org/).
 
 ---
 
+## [4.3.0] — 2026-11-12
+
+### Bug Fixes
+- Contract-change rule reads the label from the PR, deliver sets it on the PBI (#570) (#571)
+
+
+### Features
+- **deliver**: Deliver-loop -Objective runs rounds over the ready repositories (#543) (#561)
+- **deliver**: Runner marker, heartbeat and takeover for an objective (#544) (#564)
+- **deliver**: Pause downstream on contract-change and trigger the RC (#545) (#565)
+- **deliver**: -Context file with upstream PRs for the fix subagent (#546) (#566)
+- **deliver**: Interactive /deliver --objective control session (#547) (#567)
+- **deliver**: Deliver.parallel runs several loops across repositories (#548) (#568)
+- **implementation**: Forbid background persistence in apps (#563) (#569)
+
+
 ## [4.2.0] — 2026-11-11
 
 ### Bug Fixes
@@ -14,6 +30,7 @@ Versioning follows [Semantic Versioning](https://semver.org/).
 
 ### Documentation
 - **adr**: ADR 0004 Objectives coordinate milestones across repositories (#533) (#549)
+- Update CHANGELOG.md for v4.2.0 [skip ci]
 
 
 ### Features
