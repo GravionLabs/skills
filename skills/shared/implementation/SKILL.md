@@ -26,6 +26,10 @@ Test behavior through the public interface, never internals; expected values com
 - [ ] Never commit red
 - [ ] No debug output left in code
 
+## No background persistence
+
+Apps never install scheduled tasks, services, autostart entries (`Run` keys, LaunchAgents, systemd units, cron, startup shortcuts, autostart libraries) and installers spawn no script hosts. Repeating work runs only while the app runs. Exception only with an accepted ADR and the owner's approval: `references/no-background-persistence.md`.
+
 ## Language dispatch
 
 Run `detect-techstack`, then load each `<lang>-implementation` and `<lang>-test` skill from the report. A listed skill that is not installed: say "run `/skills-manage <stack>` in this project" once and continue with these rules.
