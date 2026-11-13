@@ -5,10 +5,33 @@ Versioning follows [Semantic Versioning](https://semver.org/).
 
 ---
 
+## [4.3.1] — 2026-11-13
+
+### Bug Fixes
+- Takeover-during-a-round runner test is flaky (#572) (#582)
+- Heartbeat PATCH can overwrite a takeover -Force (#573) (#585)
+- Validate owner/repo of Requires: lines before building checkout paths (#574) (#586)
+- Objective loop shows wrong status for repo loops and misses the acceptance-criteria gate (#575) (#587)
+- Deliver-loop stop has no defined effect on an objective run (#576) (#588)
+- **deliver**: Objective rc trigger without preflight and stale context.md (#578) (#590)
+
+
+### Documentation
+- **implementation**: One wording for the background-persistence rule (#579) (#591)
+
+
+### Performance
+- **deliver**: Read only new closed PRs per objective round (#577) (#589)
+
+
 ## [4.3.0] — 2026-11-12
 
 ### Bug Fixes
 - Contract-change rule reads the label from the PR, deliver sets it on the PBI (#570) (#571)
+
+
+### Documentation
+- Update CHANGELOG.md for v4.3.0 [skip ci]
 
 
 ### Features
