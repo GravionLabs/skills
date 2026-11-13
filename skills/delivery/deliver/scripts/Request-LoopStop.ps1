@@ -40,6 +40,34 @@ if (-not $running) {
   exit 1
 }
 
+# An objective runner of this host runs this checkout (running.json of ObjectiveRunner.ps1, pid alive): a stop file
+# would end only the repository loop and the next round would start again. Refuse and point to `release`.
+if (-not $Cancel) {
+  $h = if ($env:HOME) { $env:HOME } else { $env:USERPROFILE }
+  $here = (Get-Location).ProviderPath.TrimEnd('/', '\')
+  $objBase = Join-Path $h '.cache/deliver/objectives'
+  if (Test-Path -LiteralPath $objBase -PathType Container) {
+    foreach ($f in Get-ChildItem -LiteralPath $objBase -Filter running.json -Recurse -File -Depth 4) {
+      $r = try { Get-Content -LiteralPath $f.FullName -Raw | ConvertFrom-Json } catch { $null }
+      if (-not $r -or -not $r.pid -or -not (Get-Process -Id ([int]$r.pid) -ErrorAction SilentlyContinue)) { continue }
+      $cos = @($r.checkouts) + @($r.checkout) | Where-Object { $_ }
+      # real path of each checkout (symlinked temp or home directories), as Get-Location reports it
+      $saved = [Environment]::CurrentDirectory
+      $real = foreach ($c in $cos) {
+        if (Test-Path -LiteralPath ([string]$c) -PathType Container) {
+          [Environment]::CurrentDirectory = [string]$c   # reading it back gives the resolved path
+          [Environment]::CurrentDirectory.TrimEnd('/', '\')
+        }
+      }
+      [Environment]::CurrentDirectory = $saved
+      if ($real | Where-Object { $_ -eq $here }) {
+        [Console]::Error.WriteLine('deliver-loop stop: an objective run is active here; stop would end only this repository loop and the next round would start again. Use `deliver-loop release <ref>` on the runner''s host.')
+        exit 1
+      }
+    }
+  }
+}
+
 $id = Split-Path $runDir -Leaf
 $stop = Join-Path $runDir 'stop'
 if ($Cancel) {

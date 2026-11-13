@@ -55,8 +55,12 @@ function Test-OriginOf([string]$path, [string]$repo) {
   $LASTEXITCODE -eq 0 -and "$url" -match "[:/]$([regex]::Escape($repo))(\.git)?/?$"
 }
 
+# #574: <owner>/<repo> must be two [\w.-] segments, neither `.` nor `..`, before any path is built from it.
+function Test-RepoRef([string]$repo) { $repo -match '^[\w.-]+/[\w.-]+$' -and $repo -notmatch '(^|/)\.\.?(/|$)' }
+
 # Where <owner>/<repo> is checked out: {Path, From (current, checkouts.json, sibling, clone), Exists}.
 function Resolve-Checkout([string]$repo, [string]$objRepo, [string]$telos) {
+  if (-not (Test-RepoRef $repo)) { throw "invalid <owner>/<repo> '$repo'" }
   if ($repo -eq $objRepo) { return [pscustomobject]@{ Path = $telos; From = 'current'; Exists = $true } }
   $cfg = Join-Path (Get-ObjectiveHome) '.config/deliver/checkouts.json'
   if (Test-Path -LiteralPath $cfg) {
@@ -107,9 +111,12 @@ function Write-NeedsYou($s) {
         'release-pr' { "merge the release PR of $($g.repository): $($g.url)" }
         'rc-missing' { "RC test $($g.detail)$(if ($g.url) { ": $($g.url)" })" }
         'not-released' { "release $($g.detail)" }
+        'acceptance-criteria' { "check the acceptance criteria of $ref and close the objective: $($g.url)" }
+        default { "$($g.type)$(if ($g.detail) { " $($g.detail)" })$(if ($g.url) { ": $($g.url)" })" }
       }
     })
-  if (-not @($s.repos | Where-Object { $_.state -ne 'done' }).Count) {
+  $hasCriteria = @($s.gates | Where-Object { $_.type -eq 'acceptance-criteria' }).Count
+  if (-not $hasCriteria -and -not @($s.repos | Where-Object { $_.state -ne 'done' }).Count) {
     $lines += "check the acceptance criteria of $ref and close the objective: $($s.objective.url)"
   }
   Write-Step 'needs you:' 'yellow'
@@ -138,6 +145,22 @@ function ConvertTo-UtcTime($v) {
   [DateTime]::Parse([string]$v, [Globalization.CultureInfo]::InvariantCulture, [Globalization.DateTimeStyles]::AssumeUniversal -bor [Globalization.DateTimeStyles]::AdjustToUniversal)
 }
 
+# #577: the PRs of $repo merged since $since. Closed PRs are sorted by update time, newest first: read page by page (no --paginate)
+# and stop at the first short page or once a PR was last updated before $since (a PR merged since $since was updated since then).
+function Get-MergedPrsSince([string]$repo, [DateTime]$since) {
+  $out = @()
+  for ($page = 1; $page -le 10; $page++) {
+    $raw = & gh api "repos/$repo/pulls?state=closed&sort=updated&direction=desc&per_page=30&page=$page" 2>$null
+    if ($LASTEXITCODE -ne 0 -or -not $raw) { break }
+    $items = @(($raw -join "`n") | ConvertFrom-Json -NoEnumerate)
+    $items = @($items | ForEach-Object { $_ })
+    $out += @($items | Where-Object { $_ -and $_.merged_at -and (ConvertTo-UtcTime $_.merged_at) -ge $since })
+    $stale = @($items | Where-Object { $_.updated_at -and (ConvertTo-UtcTime $_.updated_at) -lt $since }).Count
+    if ($items.Count -lt 30 -or $stale) { break }
+  }
+  $out
+}
+
 # Rule 1 (#545, #570): a merged PR whose closed PBI issue carries the label contract-change (deliver step 6 labels the issue,
 # not the PR; a label on the PR counts too), merged since $since in a repository of the objective -> the open
 # downstream children (their repository `Requires:` the PR's repository, or they are blocked by the issue the PR closes)
@@ -146,9 +169,7 @@ function Invoke-ContractPause($s, [DateTime]$since, [hashtable]$handled, [switch
   $paused = @()
   foreach ($up in @($s.repos)) {
     $upRepo = [string]$up.repository
-    $prs = @(Get-ObjectiveRest "repos/$upRepo/pulls?state=closed&sort=updated&direction=desc&per_page=30" | Where-Object {
-        $_ -and $_.merged_at -and (ConvertTo-UtcTime $_.merged_at) -ge $since -and -not $handled["$upRepo#$($_.number)"]
-      })
+    $prs = @(Get-MergedPrsSince $upRepo $since | Where-Object { -not $handled["$upRepo#$($_.number)"] })
     foreach ($pr in $prs) {
       $closes = @([regex]::Matches([string]$pr.body, '(?i)\b(?:closes|fixes|resolves)\s+(?:([\w.-]+/[\w.-]+))?#(\d+)') |
           ForEach-Object { "$(if ($_.Groups[1].Value) { $_.Groups[1].Value } else { $upRepo })#$($_.Groups[2].Value)" })
@@ -193,16 +214,16 @@ function Invoke-ContractPause($s, [DateTime]$since, [hashtable]$handled, [switch
 function Write-ContextFile($s, $r, [string]$checkout, [DateTime]$since) {
   $lines = @()
   foreach ($up in @($r.requires | Where-Object { $_ } | ForEach-Object { [string]$_.repository } | Select-Object -Unique)) {
-    $prs = @(Get-ObjectiveRest "repos/$up/pulls?state=closed&sort=updated&direction=desc&per_page=30" | Where-Object {
-        $_ -and $_.merged_at -and (ConvertTo-UtcTime $_.merged_at) -ge $since })
+    $prs = @(Get-MergedPrsSince $up $since)
     foreach ($pr in $prs) {
       $d = @(Get-ObjectiveRest "repos/$up/pulls/$($pr.number)")[0]
       $stat = if ($d -and $null -ne $d.changed_files) { "$($d.changed_files) files, +$($d.additions) -$($d.deletions)" } else { 'diff stat n/a' }
       $lines += "- $up#$($pr.number) $($pr.html_url) $([string]$pr.title -replace '[\r\n]+', ' ') ($stat)"
     }
   }
-  if (-not $lines.Count) { return '' }
   $file = Join-Path $checkout '.agents/deliver-loop/context.md'
+  # #578: nothing to say -> no stale file from an earlier round for a hand-run `deliver-loop -Context`
+  if (-not $lines.Count) { Remove-Item -LiteralPath $file -Force -ErrorAction SilentlyContinue; return '' }
   New-Item -ItemType Directory -Force -Path (Split-Path $file -Parent) | Out-Null
   Set-Content -LiteralPath $file -Value (@("Upstream PRs merged since $($since.ToString('u')) in the repositories of $($r.repository)'s Requires:") + $lines) -Encoding utf8
   $file
@@ -211,11 +232,12 @@ function Write-ContextFile($s, $r, [string]$checkout, [DateTime]$since) {
 # Rule 2 (#545): an unmet `Requires: <repo>@<M> rc` whose milestone is finished (no open `pbi` or `bug` but the release-test one, as deliver step 9)
 # and whose release-test issue exists -> /deliver --milestone <M> in the upstream checkout, once per run. It reaches step 9
 # (cut the RC, post it); the release PR stays a human gate (deliver never merges it).
-function Invoke-RcTriggers($s, [string]$objRepo, [string]$telos, [string]$Harness, [string]$Model, [hashtable]$triggered, [switch]$DryRun) {
+function Invoke-RcTriggers($s, [string]$objRepo, [string]$telos, [string]$Harness, [string]$Model, [hashtable]$triggered, [switch]$DryRun, [string]$Preflight = '', [switch]$NoPreflight) {
   $started = @()
   $edges = @($s.repos | ForEach-Object { @($_.requires) } | Where-Object { $_ -and $_.kind -eq 'rc' -and -not $_.met -and [string]$_.milestoneState -eq 'open' -and $_.releaseTest })
   foreach ($e in @($edges | Sort-Object { "$($_.repository)@$($_.milestone)" } -Unique)) {
     $key = "$($e.repository)@$($e.milestone)"
+    if (-not (Test-RepoRef ([string]$e.repository))) { Write-Step "invalid repository '$($e.repository)' in a Requires line, rc trigger skipped" 'red'; continue }
     if ($triggered[$key]) { continue }
     $norm = { param($t) if ($t -match '^M([0-9]+(?:\.[0-9]+)*)(?=\s|\(|$)') { 'M' + ((@($Matches[1] -split '\.' | ForEach-Object { [string][int]$_ })) -join '.') } else { $null } }
     $want = & $norm ([string]$e.milestone)
@@ -239,11 +261,20 @@ function Invoke-RcTriggers($s, [string]$objRepo, [string]$telos, [string]$Harnes
     }
     Push-Location -LiteralPath $co.Path
     try {
+      # #578: the per-repo preflight of every repository loop (#543); a failure is reported as such, the trigger goes on
+      if (-not $NoPreflight -and $Preflight) {
+        try {
+          & $Preflight -ProjectRoot $co.Path -Harness $Harness -Unattended -Text -Check @('skills', 'allowlist', 'worktrees') 2>&1 |
+            ForEach-Object { Write-Step "[$($e.repository)] $_" }
+          if ($LASTEXITCODE -ne 0) { Write-Step "[$($e.repository)] rc trigger preflight failed (exit $LASTEXITCODE)" 'red' }
+        } catch { Write-Step "[$($e.repository)] rc trigger preflight failed: $_" 'red' }
+      }
       $mdl = if ($Model) { $Model } else { 'sonnet' }
       $cli = if ($Harness -eq 'copilot') { @('-p', $prompt, '--model', $mdl, '--allow-all-tools', '--allow-all-paths', '--allow-all-urls', '--no-ask-user') }
       else { @('-p', $prompt, '--model', $mdl, '--permission-mode', 'auto') }
       & $Harness @cli 2>&1 | ForEach-Object { Write-Host "  [$($e.repository)] $_" }
-      Write-Step "[$($e.repository)] rc trigger exit $LASTEXITCODE"
+      if ($LASTEXITCODE -ne 0) { Write-Step "[$($e.repository)] rc trigger failed: harness exit $LASTEXITCODE" 'red' }
+      else { Write-Step "[$($e.repository)] rc trigger exit $LASTEXITCODE" }
     } finally { Pop-Location }
   }
   $started
@@ -280,9 +311,27 @@ function Write-ApiUsage([int]$round, $before, $after) {
   Write-Step "round $round api: rest +$rest, graphql +$gql (remaining rest $($after.RestLeft), graphql $($after.GraphqlLeft))"
 }
 
-# Exit code of a repository loop (Invoke-DeliverLoop.ps1) as the word of the round results.
-function Get-RepoLoopLabel([int]$code) {
-  switch ($code) { 0 { 'done' } 1 { 'no progress' } 2 { 'blocked' } -1 { 'clone failed' } default { "failed ($code)" } }
+# Result word of a repository loop for the round results line. Exit 0 covers done, max reached and stopped, so it is read
+# from the last `result` record of the progress.jsonl of the newest run in that checkout (.agents/deliver-loop/latest.txt);
+# without a record: `ok (0)`. Other exit codes keep their word.
+function Get-RepoLoopLabel([int]$code, [string]$path) {
+  if ($code -eq 0) {
+    $word = $null
+    try {
+      $latest = if ($path) { Join-Path $path '.agents/deliver-loop/latest.txt' }
+      if ($latest -and (Test-Path -LiteralPath $latest)) {
+        $progress = Join-Path (Get-Content -LiteralPath $latest -Raw).Trim() 'progress.jsonl'
+        if (Test-Path -LiteralPath $progress) {
+          foreach ($l in @(Get-Content -LiteralPath $progress)) {
+            $rec = try { $l | ConvertFrom-Json } catch { $null }
+            if ($rec -and $rec.event -eq 'result' -and $rec.result) { $word = [string]$rec.result }
+          }
+        }
+      }
+    } catch { $word = $null }
+    if ($word) { return $word } else { return 'ok (0)' }
+  }
+  switch ($code) { 1 { 'no progress' } 2 { 'blocked' } -1 { 'clone failed' } default { "failed ($code)" } }
 }
 
 # deliver.parallel > 1: runs the prepared repository loops ($jobs: Repo, Path, Cli) as thread jobs, at most $limit at a time,
@@ -324,7 +373,7 @@ function Invoke-RepoLoopsParallel($jobs, [int]$limit, [hashtable]$shared, [strin
         & $flush $run
         Remove-Job -Job $run.Job -Force
         [void]$running.Remove($run)
-        $done += [pscustomobject]@{ Repo = $run.Repo; Exit = $(if ($null -ne $run.Exit) { $run.Exit } else { 1 }) }
+        $done += [pscustomobject]@{ Repo = $run.Repo; Path = $run.Path; Exit = $(if ($null -ne $run.Exit) { $run.Exit } else { 1 }) }
       }
     }
     if ($running.Count) { Start-Sleep -Milliseconds 200 }
@@ -408,7 +457,7 @@ function Invoke-ObjectiveLoop {
       if ([string]$s.objective.state -ne 'closed') {
         # rule 1: contract-change merged since the last round pauses the downstream children; rule 2: an rc edge on a finished milestone
         $paused = @(Invoke-ContractPause $s $since $handled -DryRun:$DryRun)
-        $rc = @(Invoke-RcTriggers $s $objRepo $telos $Harness $Model $triggered -DryRun:$DryRun)
+        $rc = @(Invoke-RcTriggers $s $objRepo $telos $Harness $Model $triggered -DryRun:$DryRun -Preflight $preflight -NoPreflight:$NoPreflight)
         if (($paused.Count -or $rc.Count) -and -not $DryRun) {
           $s = Read-ObjectiveStatus $statusScript $Ref
           if (-not $s) { Write-Step "objective status of $Ref not read" 'red'; $result = 'no progress'; break }
@@ -470,7 +519,7 @@ function Invoke-ObjectiveLoop {
           }
           # deliver.parallel 1: one repository after the other, its output streamed as it comes
           & pwsh @cli 2>&1 | ForEach-Object { Write-Host "  [$repo] $_" }
-          $results += [pscustomobject]@{ Repo = $repo; Exit = $LASTEXITCODE }
+          $results += [pscustomobject]@{ Repo = $repo; Path = $co.Path; Exit = $LASTEXITCODE }
           Write-Step "[$repo] loop exit $LASTEXITCODE"
           if ($LASTEXITCODE -eq 0) { $lastGreen[$repo] = $roundStart }
         } finally { Pop-Location }
@@ -485,7 +534,7 @@ function Invoke-ObjectiveLoop {
         }
       }
       if ($results.Count) {
-        Write-Step "round ${round} results: $(@($results | ForEach-Object { "$($_.Repo) $(Get-RepoLoopLabel $_.Exit)" }) -join ', ')"
+        Write-Step "round ${round} results: $(@($results | ForEach-Object { "$($_.Repo) $(Get-RepoLoopLabel $_.Exit $_.Path)" }) -join ', ')"
         Write-ApiUsage $round $apiBefore (Get-ApiUsage)
       }
       if ($result) { break }

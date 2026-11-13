@@ -26,7 +26,7 @@ Check every diff for injection, unvalidated input, secrets in code or logs, brok
 
 ## Background persistence
 
-A diff that adds a scheduled task, service, autostart entry or script-host call in an installer (list: `implementation` `references/no-background-persistence.md`) is blocking, unless it references an accepted ADR and the owner's approval; then check opt-in, removal by the uninstaller with a test, and signed binaries.
+A diff that adds a mechanism forbidden by `implementation` `references/no-background-persistence.md` is blocking, unless the exception there applies; then check the conditions that reference lists for it.
 
 ## Output
 

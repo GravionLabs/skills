@@ -28,7 +28,7 @@ Test behavior through the public interface, never internals; expected values com
 
 ## No background persistence
 
-Apps never install scheduled tasks, services, autostart entries (`Run` keys, LaunchAgents, systemd units, cron, startup shortcuts, autostart libraries) and installers spawn no script hosts. Repeating work runs only while the app runs. Exception only with an accepted ADR and the owner's approval: `references/no-background-persistence.md`.
+Apps install no background persistence and installers spawn no script hosts. Repeating work runs only while the app runs. The forbidden mechanisms and the only exception path are in `references/no-background-persistence.md`.
 
 ## Language dispatch
 

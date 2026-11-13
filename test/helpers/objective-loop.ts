@@ -39,6 +39,8 @@ const handler = (stateFile: string) => `(call, ctx) => {
   const fs = require('fs'); const cp = require('child_process');
   const f = ${JSON.stringify(stateFile)};
   const load = () => JSON.parse(fs.readFileSync(f, 'utf8'));
+  // atomic: the fake claude reads the state file while the heartbeat's gh writes it (#572)
+  const save = (s) => { const t = f + '.' + process.pid + '.tmp'; fs.writeFileSync(t, JSON.stringify(s)); fs.renameSync(t, f); };
   const a = call.args;
   // #548: every read of the rate limit adds 10 REST and 3 GraphQL calls
   if (a[0] === 'api' && a[1] === 'rate_limit') {
@@ -49,7 +51,7 @@ const handler = (stateFile: string) => `(call, ctx) => {
   const method = xi >= 0 ? a[xi + 1] : 'GET';
   if (a[0] === 'repo' && a[1] === 'clone') {
     cp.execSync('git init -q ' + JSON.stringify(a[3]) + ' && git -C ' + JSON.stringify(a[3]) + ' remote add origin https://github.com/' + a[2] + '.git');
-    const s = load(); s.checkouts[fs.realpathSync(a[3])] = a[2]; fs.writeFileSync(f, JSON.stringify(s));
+    const s = load(); s.checkouts[fs.realpathSync(a[3])] = a[2]; save(s);
     return { rest: '' };
   }
   if (a[0] !== 'api') throw new Error('unexpected gh ' + a.join(' '));
@@ -78,7 +80,7 @@ const handler = (stateFile: string) => `(call, ctx) => {
       if (method === 'PATCH') { s.comments[key].find((c) => c.id === id).body = body; out = { id }; }
       else s.comments[key] = s.comments[key].filter((c) => c.id !== id);
     } else throw new Error('write: ' + a.join(' '));
-    fs.writeFileSync(f, JSON.stringify(s));
+    save(s);
     return { rest: out };
   }
   const issue = (key) => {
@@ -115,11 +117,12 @@ const effect = (
 const path = require('path');
 const f = ${JSON.stringify(stateFile)};
 const load = () => JSON.parse(fs.readFileSync(f, 'utf8'));
+const save = (s) => { const t = f + '.' + process.pid + '.tmp'; fs.writeFileSync(t, JSON.stringify(s)); fs.renameSync(t, f); }; // atomic (#572)
 let s = load();
 const repo = s.checkouts[fs.realpathSync(process.cwd())];
 fs.appendFileSync(${JSON.stringify(calls)}, repo + ' ' + process.argv[2] + '\\n');
 const ms = /\\/deliver --milestone (\\S+)/.exec(process.argv[2]);
-if (ms) { if (!s.noRcPost) s.rcPosted = true; fs.writeFileSync(f, JSON.stringify(s)); process.exit(0); }
+if (ms) { if (!s.noRcPost) s.rcPosted = true; save(s); process.exit(0); }
 const nr = /\\/deliver (\\d+)/.exec(process.argv[2])[1];
 const times = path.join(path.dirname(f), 'harness-times.txt');
 if (s.sleepMs) {
@@ -131,7 +134,7 @@ if (s.sleepMs) {
 if (!s.noEffect) {
   s.issues[repo + '#' + nr].state = 'closed';
   if (s.contractPr) { s.prs = s.prs || {}; (s.prs[repo] = s.prs[repo] || []).push({ number: 100 + Number(nr), html_url: 'https://github.com/' + repo + '/pull/' + (100 + Number(nr)), merged_at: new Date().toISOString().replace(/\\.\\d+Z$/, 'Z'), body: 'Closes #' + nr, labels: [] }); s.issues[repo + '#' + nr].labels = (s.issues[repo + '#' + nr].labels || ['pbi']).concat('contract-change'); } // deliver step 6 labels the PBI issue, not the PR (#570)
-  fs.writeFileSync(f, JSON.stringify(s));
+  save(s);
 }
 const stopFile = () => { const d = path.join(process.cwd(), '.agents/deliver-loop');
   return fs.existsSync(d) && fs.readdirSync(d).some((r) => fs.existsSync(path.join(d, r, 'stop'))); };
@@ -140,7 +143,7 @@ if (s.effect === 'takeover') {
   for (let i = 0; i < 100 && !stopFile(); i++) {
     s = load(); const c = Object.values(s.comments || {}).flat().find((x) => x.body.includes('objective-runner:'));
     const now = new Date().toISOString().replace(/\\.\\d+Z$/, 'Z');
-    if (c && !c.body.includes('host=there')) { c.body = ${JSON.stringify(marker('there', 'NOW'))}.replace(/NOW/g, now); fs.writeFileSync(f, JSON.stringify(s)); }
+    if (c && !c.body.includes('host=there')) { c.body = ${JSON.stringify(marker('there', 'NOW'))}.replace(/NOW/g, now); save(s); }
     sleep(200);
   }
 }
@@ -199,7 +202,11 @@ export function setupObjective(
     JSON.stringify({ 'o/b': path.join(root, 'elsewhere/b') }),
   );
   const stateFile = path.join(root, 'state.json');
-  const save = (s: State) => fs.writeFileSync(stateFile, JSON.stringify(s));
+  const save = (s: State) => {
+    const tmp = `${stateFile}.${process.pid}.tmp`;
+    fs.writeFileSync(tmp, JSON.stringify(s));
+    fs.renameSync(tmp, stateFile);
+  };
   const load = (): State => JSON.parse(fs.readFileSync(stateFile, 'utf8'));
   save({ ...st, checkouts: co });
   const gh = createFakeGh(root, handler(stateFile));
