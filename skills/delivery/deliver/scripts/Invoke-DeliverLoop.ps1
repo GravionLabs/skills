@@ -683,6 +683,8 @@ function Invoke-Iteration([int]$n, [int]$total, $state) {
   $base = Get-BaseUrl
   if ($base) { $started.Url = "$base/issues/$nr" }
   if ($Block -and $Block.ready.next -and [int]$Block.ready.next.number -eq $nr) { $started.Title = [string]$Block.ready.next.title; $started.Url = [string]$Block.ready.next.url }
+  # no status block (target mode): the title comes from the issue itself (one REST call per PBI)
+  if (-not $started.Title) { try { $iv = (& gh issue view $nr --json title,url 2>$null | Out-String) | ConvertFrom-Json; if ($iv.title) { $started.Title = [string]$iv.title; if ($iv.url) { $started.Url = [string]$iv.url } } } catch { Write-Verbose "issue title not read: $_" } }
   Send-Event $started
   $script:EventOffset = if ($EventFile -and (Test-Path -LiteralPath $EventFile)) { (Get-Item -LiteralPath $EventFile).Length } else { 0 }
   # the harness is nested: AGENT_EVENTS_RUN without the owner marker (its run.started and run.finished are not written)

@@ -189,7 +189,7 @@ function New-Events($view, [string]$type, [string]$runId) {
   $new = { param([string]$t, [string]$tone) $script:evCount++; [ordered]@{ v = 1; seq = 0; ts = $ts; run = $runId; type = $t; tone = $tone } }
   $issueUrl = if (Test-Url $Url) { $Url } elseif ($repo -and $Issue) { "https://github.com/$repo/issues/$Issue" } else { $null }
   $subject = {
-    $s = [ordered]@{ kind = 'github.issue'; id = $(if ($repo) { "$repo#$Issue" } else { "#$Issue" }); title = $(if ($Title) { $Title } else { "#$Issue" }) }
+    $s = [ordered]@{ kind = 'github.issue'; id = $(if ($repo) { "$repo#$Issue" } else { "#$Issue" }); title = $(if ($Title) { "#$Issue $Title" } else { "#$Issue" }) }
     Add-If $s url $issueUrl
     $s
   }

@@ -207,7 +207,7 @@ describe.skipIf(!hasPwsh || process.platform === 'win32')('Report-Progress.ps1',
     expect(evs[2].subject).toEqual({
       kind: 'github.issue',
       id: 'GravionLabs/skills#322',
-      title: 'x',
+      title: '#322 x', // the task subject reads "#<nr> <title>"
       url: `${base}/issues/322`,
     });
     expect(evs[3].step).toEqual({ name: 'review', n: 4, total: 7, text: 'clean' });
@@ -303,7 +303,7 @@ describe.skipIf(!hasPwsh || process.platform === 'win32')('Report-Progress.ps1',
     expect(evs[0].subject).toEqual({
       kind: 'github.issue',
       id: 'a/b#7',
-      title: 'Seven',
+      title: '#7 Seven',
       url: 'https://github.com/a/b/issues/7',
     });
     expect(evs[0].host['jsonl-file.pid']).toMatch(/^\d+$/);
