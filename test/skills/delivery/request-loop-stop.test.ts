@@ -83,8 +83,13 @@ describe('Request-LoopStop.ps1', () => {
   });
 
   describe('objective runner active (#576)', () => {
-    const objRun = (name: string, pid: number, cancel = false) => {
-      const r = repo(name, ['start', 'iteration-start']);
+    const objRun = (
+      name: string,
+      pid: number,
+      cancel = false,
+      records = ['start', 'iteration-start'],
+    ) => {
+      const r = repo(name, records);
       const home = path.join(tmp, `${name}-home`);
       const dir = path.join(home, '.cache/deliver/objectives/o/r/1');
       fs.mkdirSync(dir, { recursive: true });
@@ -105,6 +110,14 @@ describe('Request-LoopStop.ps1', () => {
       const o = objRun('obj-live', process.pid);
       expect(o.status).toBe(1);
       expect(o.stderr).toContain('deliver-loop release');
+      expect(fs.existsSync(o.r.stop)).toBe(false);
+    });
+
+    it('between two rounds (no running loop) still points to release (#595)', () => {
+      const o = objRun('obj-between', process.pid, false, ['start', 'result']);
+      expect(o.status).toBe(1);
+      expect(o.stderr).toContain('deliver-loop release');
+      expect(o.stderr).not.toContain('no running loop');
       expect(fs.existsSync(o.r.stop)).toBe(false);
     });
 
