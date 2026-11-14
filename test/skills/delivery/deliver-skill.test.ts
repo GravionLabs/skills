@@ -365,8 +365,8 @@ describe('deliver SKILL.md', () => {
       expect(ref).toContain('Unattended: file them without asking');
     });
 
-    it('passes up to 5 notes to the release PR when nothing blocks', () => {
-      expect(release).toContain('`finish` with `release_review_notes` (the `notes[]`, up to 5)');
+    it('files up to 5 notes as issues and passes their URLs to the release PR when nothing blocks', () => {
+      expect(release).toContain('`finish` with `release_review_notes` (the note issue URLs)');
       expect(ref).toContain('`## Release review notes`');
     });
 
