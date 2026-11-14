@@ -98,6 +98,46 @@ describe.skipIf(!hasPwsh || process.platform === 'win32')(
       expect(r.status).toBe(2);
     });
 
+    it('without config.json two ready repos start at the same time (default 3)', async () => {
+      const c = setupObjective(worker, path.join(dir, `case-${++seq}`), {
+        ...twoReady(),
+        sleepMs: 1500,
+      });
+      const r = await c.run(['-NoPreflight']);
+      expect(r.stdout).toContain(
+        'deliver.parallel 3: up to 3 repository loops at a time, one per repository',
+      );
+      const times = fs
+        .readFileSync(path.join(c.root, 'harness-times.txt'), 'utf8')
+        .trim()
+        .split('\n')
+        .map((l) => l.split(' '));
+      expect(
+        times
+          .map(([repo, ev]) => `${repo} ${ev}`)
+          .slice(0, 2)
+          .sort(),
+      ).toEqual(['o/a start', 'o/b start']);
+      expect(r.stdout).toMatch(/ {2}\[o\/a\] /);
+    });
+
+    it('parallel 1: one repo after the other, streamed (no parallel announcement)', async () => {
+      const c = setup({ ...twoReady(), sleepMs: 300 }, { deliver: { parallel: 1 } });
+      const r = await c.run(['-NoPreflight']);
+      expect(r.stdout).not.toContain('repository loops at a time');
+      const times = fs
+        .readFileSync(path.join(c.root, 'harness-times.txt'), 'utf8')
+        .trim()
+        .split('\n')
+        .map((l) => l.split(' '));
+      expect(times.map(([repo, ev]) => `${repo} ${ev}`)).toEqual([
+        'o/a start',
+        'o/a end',
+        'o/b start',
+        'o/b end',
+      ]);
+    });
+
     it.each([
       [{ deliver: { parallel: 0 } }, "deliver.parallel must be an integer >= 1, got '0': 1"],
       [{ deliver: { parallel: 'two' } }, "deliver.parallel must be an integer >= 1, got 'two': 1"],

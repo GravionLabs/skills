@@ -4,8 +4,8 @@
 .DESCRIPTION
   One round reads Get-ObjectiveStatus.ps1 (REST GET only), starts in every repository with state `ready` the loop
   `Invoke-DeliverLoop.ps1 -Target <open sub-issues of the objective in that repo> [-Max <k>]` in the checkout of that
-  repository (deliver.parallel of .agents/config.json, default 1: one after the other; n > 1: up to n repositories at the
-  same time, one loop per repository, the round waits for all), and reads the state again. Each round logs its results
+  repository (deliver.parallel of .agents/config.json, default 3: up to 3 repositories at the same time; 1: one after the other;
+  n: up to n at the same time, one loop per repository, the round waits for all), and reads the state again. Each round logs its results
   per repository and its REST/GraphQL usage (`gh api rate_limit` before and after). State only from GitHub: an
   aborted round resumes with the same command. Never closes the objective; its only own writes are the two rules between
   rounds (#545): contract-change pauses the downstream children (needs-refinement + comment), a finished milestone with a
@@ -317,12 +317,12 @@ function Invoke-RcTriggers($s, [string]$objRepo, [string]$telos, [string]$Harnes
   $started
 }
 
-# deliver.parallel of .agents/config.json in $root: how many repository loops a round runs at the same time (default 1).
+# deliver.parallel of .agents/config.json in $root: how many repository loops a round runs at the same time (default 3).
 function Get-DeliverParallel([string]$root) {
   $f = Join-Path $root '.agents/config.json'
-  if (-not (Test-Path -LiteralPath $f -PathType Leaf)) { return 1 }
+  if (-not (Test-Path -LiteralPath $f -PathType Leaf)) { return 3 }
   $v = try { (Get-Content -LiteralPath $f -Raw | ConvertFrom-Json -AsHashtable).deliver.parallel } catch { $null }
-  if ($null -eq $v) { return 1 }
+  if ($null -eq $v) { return 3 }
   if ($v -is [long] -or $v -is [int]) { if ($v -ge 1) { return [int]$v } }
   Write-Step "deliver.parallel must be an integer >= 1, got '$v': 1" 'yellow'
   1
