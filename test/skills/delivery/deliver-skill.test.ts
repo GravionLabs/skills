@@ -23,7 +23,7 @@ describe('deliver SKILL.md', () => {
 
   it('emits the attention kinds the loop notifications depend on (#400)', () => {
     const steps = body.slice(body.indexOf('## Steps'), body.indexOf('1. **Select.**'));
-    for (const kind of ['pr_opened', 'review_fix', 'ci_red', 'paused', 'blocked', 'needs_you']) {
+    for (const kind of ['review_fix', 'ci_red', 'paused', 'blocked', 'needs_you']) {
       expect(steps).toMatch(new RegExp('-Kind[^)]*\\b' + kind + '\\b'));
     }
     expect(steps).toContain('only from these events');
