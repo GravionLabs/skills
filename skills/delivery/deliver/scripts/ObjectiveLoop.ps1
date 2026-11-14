@@ -111,7 +111,10 @@ function Write-NeedsYou($s) {
         'release-pr' { "merge the release PR of $($g.repository): $($g.url)" }
         'rc-missing' { "RC test $($g.detail)$(if ($g.url) { ": $($g.url)" })" }
         'not-released' { "release $($g.detail)" }
-        'acceptance-criteria' { "check the acceptance criteria of $ref and close the objective: $($g.url)" }
+        'acceptance-criteria' {
+          if (@($s.repos | Where-Object { $_.state -ne 'done' }).Count) { "acceptance criteria of $ref not confirmed yet ($($g.detail)): $($g.url)" }
+          else { "check the acceptance criteria of $ref and close the objective: $($g.url)" }
+        }
         default { "$($g.type)$(if ($g.detail) { " $($g.detail)" })$(if ($g.url) { ": $($g.url)" })" }
       }
     })
@@ -347,7 +350,7 @@ function Get-RepoLoopLabel([int]$code, [string]$path, $since = $null) {
 
 # deliver.parallel > 1: runs the prepared repository loops ($jobs: Repo, Path, Cli) as thread jobs, at most $limit at a time,
 # streams their output with the [repo] prefix and waits for all. The heartbeat stops every running checkout ($shared.Checkout);
-# running.json lists them for `deliver-loop release`. Returns {Repo, Exit} per repository in the order they ended.
+# running.json lists them for `deliver-loop release`. Returns {Repo, Path, Exit} per repository in the order they ended.
 function Invoke-RepoLoopsParallel($jobs, [int]$limit, [hashtable]$shared, [string]$objRepo, [int]$objNr, [string]$hostId) {
   $queue = [System.Collections.Generic.Queue[object]]::new()
   foreach ($j in $jobs) { $queue.Enqueue($j) }
