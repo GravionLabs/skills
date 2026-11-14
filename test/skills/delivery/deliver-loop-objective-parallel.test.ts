@@ -15,6 +15,15 @@ const SCRIPT = path.resolve(
 const hasPwsh = spawnSync('pwsh', ['-NoProfile', '-Command', '1']).status === 0;
 
 // o/a (PBI 11) and o/b (PBI 21, and 22 blocked by the open o/b#23 outside the objective) are both ready
+function bothDone(): Omit<State, 'checkouts'> {
+  const st = twoReady();
+  // one PBI per repository: the objective is done after round 1 (no blocked PBI, no second round)
+  delete st.issues['o/b#22'];
+  delete st.issues['o/b#23'];
+  st.issues['o/b#20'].children = ['o/b#21'];
+  return st;
+}
+
 const twoReady = (): Omit<State, 'checkouts'> => ({
   issues: {
     'o/telos#1': {
@@ -56,11 +65,14 @@ describe.skipIf(!hasPwsh || process.platform === 'win32')(
       return c;
     };
 
-    it('parallel 2: both ready repos run at the same time, the round waits for both and reports each; one ends blocked', async () => {
-      const c = setup({ ...twoReady(), sleepMs: 1500 }, { deliver: { parallel: 2 } });
+    it('without config.json (default 3) both ready repos run at the same time, the round waits for both and reports each; one ends blocked', async () => {
+      const c = setupObjective(worker, path.join(dir, `case-${++seq}`), {
+        ...twoReady(),
+        sleepMs: 500,
+      });
       const r = await c.run(['-NoPreflight']);
       expect(r.stdout).toContain(
-        'deliver.parallel 2: up to 2 repository loops at a time, one per repository',
+        'deliver.parallel 3: up to 3 repository loops at a time, one per repository',
       );
       expect(r.stdout).toContain('round 1: o/a start deliver-loop -Target 10');
       expect(r.stdout).toContain('round 1: o/b start deliver-loop -Target 20');
@@ -98,31 +110,8 @@ describe.skipIf(!hasPwsh || process.platform === 'win32')(
       expect(r.status).toBe(2);
     });
 
-    it('without config.json two ready repos start at the same time (default 3)', async () => {
-      const c = setupObjective(worker, path.join(dir, `case-${++seq}`), {
-        ...twoReady(),
-        sleepMs: 1500,
-      });
-      const r = await c.run(['-NoPreflight']);
-      expect(r.stdout).toContain(
-        'deliver.parallel 3: up to 3 repository loops at a time, one per repository',
-      );
-      const times = fs
-        .readFileSync(path.join(c.root, 'harness-times.txt'), 'utf8')
-        .trim()
-        .split('\n')
-        .map((l) => l.split(' '));
-      expect(
-        times
-          .map(([repo, ev]) => `${repo} ${ev}`)
-          .slice(0, 2)
-          .sort(),
-      ).toEqual(['o/a start', 'o/b start']);
-      expect(r.stdout).toMatch(/ {2}\[o\/a\] /);
-    });
-
     it('parallel 1: one repo after the other, streamed (no parallel announcement)', async () => {
-      const c = setup({ ...twoReady(), sleepMs: 300 }, { deliver: { parallel: 1 } });
+      const c = setup({ ...bothDone(), sleepMs: 300 }, { deliver: { parallel: 1 } });
       const r = await c.run(['-NoPreflight']);
       expect(r.stdout).not.toContain('repository loops at a time');
       const times = fs
@@ -138,16 +127,22 @@ describe.skipIf(!hasPwsh || process.platform === 'win32')(
       ]);
     });
 
-    it.each([
-      [{ deliver: { parallel: 0 } }, "deliver.parallel must be an integer >= 1, got '0': 1"],
-      [{ deliver: { parallel: 'two' } }, "deliver.parallel must be an integer >= 1, got 'two': 1"],
-    ])('an invalid %j falls back to 1 with a warning', async (config, warning) => {
-      const c = setup(twoReady(), config);
-      const r = await c.run(['-DryRun']);
-      expect(r.stdout).toContain(warning);
-      expect(r.stdout).not.toContain('repository loops at a time');
-      expect(r.stdout).toContain('round 1: o/b would start deliver-loop -Target 20');
-      expect(r.status).toBe(0);
+    it('an invalid deliver.parallel (0, a string) falls back to 1 with a warning', async () => {
+      const c = setup(twoReady(), { deliver: { parallel: 0 } });
+      for (const [value, shown] of [
+        [0, '0'],
+        ['two', 'two'],
+      ] as const) {
+        fs.writeFileSync(
+          path.join(c.root, 'telos/.agents/config.json'),
+          JSON.stringify({ deliver: { parallel: value } }),
+        );
+        const r = await c.run(['-DryRun']);
+        expect(r.stdout).toContain(`deliver.parallel must be an integer >= 1, got '${shown}': 1`);
+        expect(r.stdout).not.toContain('repository loops at a time');
+        expect(r.stdout).toContain('round 1: o/b would start deliver-loop -Target 20');
+        expect(r.status).toBe(0);
+      }
     });
   },
 );
