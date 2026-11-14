@@ -16,7 +16,7 @@ d="$FAKE_GH_DIR"
 if [[ "$*" == *"-X PATCH"* ]]; then
   n=$(cat "$d/patches.txt" 2>/dev/null || echo 0); n=$((n+1)); echo $n > "$d/patches.txt"
   for a in "$@"; do [[ "$a" == body=* ]] && printf '%s' "\${a#body=}" > "$d/body.txt"; done
-  if [[ $n -eq 1 && -f "$d/late.txt" ]]; then cp "$d/late.txt" "$d/body.txt"; fi
+  if [[ -f "$d/late.txt" && ( $n -eq 1 || -f "$d/always.txt" ) ]]; then cp "$d/late.txt" "$d/body.txt"; fi
   echo '{"id":7}'; exit 0
 fi
 body=$(cat "$d/body.txt")
@@ -32,11 +32,12 @@ describe.skipIf(!hasPwsh || process.platform === 'win32')('forced takeover race'
   });
   afterAll(() => fs.rmSync(dir, { recursive: true, force: true }));
 
-  const takeover = (late: boolean) => {
+  const takeover = (late: boolean, always = false) => {
     const d = fs.mkdtempSync(path.join(dir, 'case-'));
     const now = new Date().toISOString().replace(/\.\d+Z$/, 'Z');
     fs.writeFileSync(path.join(d, 'body.txt'), marker('here', now));
     if (late) fs.writeFileSync(path.join(d, 'late.txt'), marker('here', now));
+    if (always) fs.writeFileSync(path.join(d, 'always.txt'), '');
     const r = spawnSync(
       'pwsh',
       [
@@ -72,5 +73,11 @@ describe.skipIf(!hasPwsh || process.platform === 'win32')('forced takeover race'
     expect(r.out).toBe('took over');
     expect(r.body).toContain('host=there');
     expect(r.patches).toBe(2);
+  });
+
+  it('does not report took over when the marker is still foreign after two rewrites', () => {
+    const r = takeover(true, true);
+    expect(r.out).toBe('error');
+    expect(r.patches).toBe(3);
   });
 });

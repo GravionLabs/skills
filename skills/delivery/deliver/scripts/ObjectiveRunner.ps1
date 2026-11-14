@@ -83,12 +83,12 @@ function Enter-ObjectiveRunner([string]$repo, [int]$nr, [string]$hostId, [switch
   # GitHub has no conditional PATCH: a heartbeat PATCH of the old runner that was already in flight (#593) can land after
   # this write. Read back and write again (at most twice) so a forced takeover is not lost to it.
   if ($id -and $foreign) {
-    for ($i = 0; $i -lt 2; $i++) {
+    for ($i = 0; $i -lt 3 -and $id; $i++) {
       $back = Get-RunnerComment $repo $nr
       if (-not $back.Ok -or ($back.Marker -and $back.Marker.Host -eq $hostId)) { break }
+      if ($i -eq 2) { $id = $null; break }   # still foreign after two rewrites: the takeover is lost
       $target = if ($back.Id) { $back.Id } else { $id }
       $id = Write-RunnerMarker $repo $nr $target $hostId $since
-      if (-not $id) { break }
     }
   }
   $action = if (-not $id) { 'error' } elseif ($foreign) { 'took over' } else { 'start' }
@@ -174,7 +174,8 @@ function Invoke-RunnerRelease([string]$repo, [int]$nr, [string]$ref, [string]$ho
 # `takeover -Force` landed in between, #573) sets $Shared.Foreign, asks the repository loops ($Shared.Checkout) to stop
 # after their PBI and returns $true. Guarantee: a foreign marker seen at any read is never PATCHed over. A takeover that
 # lands between the re-read and the PATCH cannot be seen here (GitHub has no conditional PATCH) and is overwritten by this
-# PATCH; the takeover host closes that window by reading back after its write and rewriting (Enter-ObjectiveRunner).
+# PATCH; the takeover host reads back after its write and rewrites (best effort, at most twice, Enter-ObjectiveRunner): that covers
+# a late PATCH landing before its read-back; the old runner's next beat then sees the foreign marker and stops.
 function Invoke-RunnerBeat([string]$repo, [int]$nr, [string]$hostId, [string]$since, [hashtable]$Shared) {
   $s = Get-RunnerState $repo $nr $hostId
   if ($s.State -eq 'own') { $s = Get-RunnerState $repo $nr $hostId }
