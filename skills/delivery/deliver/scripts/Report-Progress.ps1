@@ -19,7 +19,9 @@
     release.updated       deliver.release.updated: deliver {round, pr, rcUrl, rcVersion, testIssue}
     iteration             deliver.iteration: deliver {n, max, issue} (loop iteration n of max, on the PBI -Issue)
     run.finished          run.finished: outcome (done, max reached -> succeeded; blocked, no progress -> failed; stopped -> cancelled),
-                          reason deliver.<result>, text, deliver {result}
+                          reason deliver.<result>, text, deliver {result}; first it finishes every task still open in the run (#600): a
+                          merging task -> task.finished succeeded, reason deliver.merging, text "auto-merge on, waits for checks", its
+                          pull-request link; any other open task -> cancelled, reason deliver.left-open
   The new core names are accepted as -Type too. A task event for an issue without an open task starts the task first
   (task.started), a later attempt of a finished issue gets the id issue-<nr>.<k>. The run id is AGENT_EVENTS_RUN. Without
   it, -Type run.started creates one (yyyyMMdd-HHmmss-<4 hex>) and prints `AGENT_EVENTS_RUN=<id>`; every other type
@@ -150,9 +152,9 @@ function ConvertTo-Code([string]$c) {
 
 # What the file already says, read under the lock: open task per issue, used task ids, open needs-you attentions, repository.
 function Read-View([string]$text) {
-  $view = @{ Open = @{}; Used = @{}; Attention = [System.Collections.Generic.List[hashtable]]::new(); Repository = $null }
+  $view = @{ Open = @{}; Used = @{}; Attention = [System.Collections.Generic.List[hashtable]]::new(); Repository = $null; Merging = @{} }
   foreach ($line in ($text -split "`n")) {
-    if ($line -notmatch '"type"\s*:\s*"(run\.started|task\.started|task\.finished|attention|attention\.resolved)"') { continue }
+    if ($line -notmatch '"type"\s*:\s*"(run\.started|task\.started|task\.finished|deliver\.merging|attention|attention\.resolved)"') { continue }
     try { $e = $line | ConvertFrom-Json -AsHashtable } catch { continue }
     if ($e -isnot [hashtable]) { continue }
     $task = [string]$e.task
@@ -162,7 +164,13 @@ function Read-View([string]$text) {
         if ($task -match '^issue-(\d+)(\.\d+)?$' -and -not $view.Used.ContainsKey($task)) { $view.Used[$task] = $true; $view.Open[$Matches[1]] = $task }
       }
       'task.finished' {
-        if ($task -match '^issue-(\d+)(\.\d+)?$' -and $view.Open[$Matches[1]] -eq $task) { $view.Open.Remove($Matches[1]) }
+        if ($task -match '^issue-(\d+)(\.\d+)?$' -and $view.Open[$Matches[1]] -eq $task) { $view.Open.Remove($Matches[1]); $view.Merging.Remove($Matches[1]) }
+      }
+      'deliver.merging' {
+        if ($task -match '^issue-(\d+)(\.\d+)?$') {
+          $pu = $null; foreach ($l in @($e.links)) { if ($l -is [hashtable] -and $l.rel -eq 'pull-request' -and $l.url) { $pu = [string]$l.url } }
+          $view.Merging[$Matches[1]] = $pu
+        }
       }
       'attention' {
         if ($e.needsYou -eq $true -and -not $e.task -and $e.deliver -is [hashtable] -and $e.deliver.issue) {
@@ -316,6 +324,17 @@ function New-Events($view, [string]$type, [string]$runId) {
       $list.Add($ev)
     }
     'run.finished' {
+      # no task stays open after run.finished (#600): merging -> succeeded, any other open task -> cancelled
+      foreach ($nr in @($view.Open.Keys | Sort-Object { [int]$_ })) {
+        $tf = & $new 'task.finished' 'neutral'; $tf.task = $view.Open[$nr]
+        if ($view.Merging.ContainsKey($nr)) {
+          $tf.outcome = 'succeeded'; $tf.reason = 'deliver.merging'; $tf.text = 'auto-merge on, waits for checks'; $tf.deliver = [ordered]@{ outcome = 'merging' }
+          if (Test-Url $view.Merging[$nr]) { $tf.links = @([ordered]@{ rel = 'pull-request'; url = $view.Merging[$nr] }) }
+        } else {
+          $tf.outcome = 'cancelled'; $tf.reason = 'deliver.left-open'; $tf.text = 'run ended before the issue finished'; $tf.deliver = [ordered]@{ outcome = 'left-open' }
+        }
+        $list.Add($tf)
+      }
       $res = if ($RunResult) { $RunResult } else { 'done' }
       $ev = & $new 'run.finished' (Get-Tone 'run.finished' -runResult $res)
       $ev.outcome = switch ($res) { { $_ -in 'done', 'max reached' } { 'succeeded' } 'stopped' { 'cancelled' } default { 'failed' } }
