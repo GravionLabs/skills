@@ -18,6 +18,7 @@ An `[Objective]` (label `objective`) is the level above the Epic, an outcome tha
 - `released`: the milestone is closed (`github-milestone close`).
 - `rc` (the normal case): the `release-test` issue of the milestone carries the marker `<!-- release-test-rc -->`.
 - Code dependencies between issues stay native `blocked-by` links, never `Requires`.
+- An invalid `<owner>/<repo>` (not two segments of letters, digits, `.`, `_`, `-`, and neither `.` nor `..`; #574) is not used: `Get-ObjectiveStatus.ps1` reports `Requires: invalid <owner>/<repo> '<ref>' in <source> ignored` on stderr and drops that line; the other `Requires:` lines still count.
 
 ## Runner marker
 
