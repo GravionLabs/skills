@@ -35,13 +35,9 @@ if ($runDir -and (Test-Path -LiteralPath $runDir -PathType Container)) {
     }
   }
 }
-if (-not $running) {
-  [Console]::Error.WriteLine('deliver-loop stop: no running loop in this repository.')
-  exit 1
-}
-
 # An objective runner of this host runs this checkout (running.json of ObjectiveRunner.ps1, pid alive): a stop file
-# would end only the repository loop and the next round would start again. Refuse and point to `release`.
+# would end only the repository loop and the next round would start again. Refuse and point to `release`; this
+# runs before the running-loop check, as between two rounds no repository loop runs.
 if (-not $Cancel) {
   $h = if ($env:HOME) { $env:HOME } else { $env:USERPROFILE }
   $here = (Get-Location).ProviderPath.TrimEnd('/', '\')
@@ -66,6 +62,11 @@ if (-not $Cancel) {
       }
     }
   }
+}
+
+if (-not $running) {
+  [Console]::Error.WriteLine('deliver-loop stop: no running loop in this repository.')
+  exit 1
 }
 
 $id = Split-Path $runDir -Leaf
