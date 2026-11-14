@@ -178,6 +178,8 @@ describe.skipIf(!hasPwsh || process.platform === 'win32')('Report-Progress.ps1',
       ['deliver.iteration', null],
       ['task.started', 'issue-322.2'], // a later attempt of a finished issue
       ['step.finished', 'issue-322.2'],
+      ['task.finished', 'issue-322.2'], // #600: run.finished closes the tasks still open
+      ['task.finished', 'issue-324'],
       ['run.finished', null],
     ]);
     expect(evs[0]).toEqual({
@@ -245,7 +247,8 @@ describe.skipIf(!hasPwsh || process.platform === 'win32')('Report-Progress.ps1',
       testIssue: { number: 400, url: `${base}/issues/400` },
     });
     expect(evs[13].deliver).toEqual({ n: 1, max: 3 });
-    expect(evs[16]).toMatchObject({
+    expect(evs[16]).toMatchObject({ outcome: 'cancelled', reason: 'deliver.left-open' });
+    expect(evs[18]).toMatchObject({
       outcome: 'succeeded',
       reason: 'deliver.max-reached',
       text: 'max reached',
@@ -460,8 +463,12 @@ describe.skipIf(!hasPwsh || process.platform === 'win32')('Report-Progress.ps1',
     for (const [args] of cases) expect((await worker.run(args, { cwd: repo, env })).status).toBe(0);
     const all = events(dir, 'tones');
     expect(all.map((e) => e.seq)).toEqual(all.map((_, i) => i + 1));
-    // the started tasks of the issue.finished calls are not part of the table
-    const evs = all.filter((e) => e.type !== 'task.started');
+    // the started tasks and the closing of the merging task by run.finished are not part of the table
+    const evs = all.filter(
+      (e) =>
+        e.type !== 'task.started' &&
+        !(e.type === 'task.finished' && e.reason === 'deliver.merging'),
+    );
     expect(evs.map((e) => e.tone)).toEqual(cases.map((c) => c[1]));
     expect(evs.map((e) => e.needsYou === true)).toEqual(cases.map((c) => c[2] === true));
   });
@@ -502,5 +509,56 @@ describe.skipIf(!hasPwsh || process.platform === 'win32')('Report-Progress.ps1',
     expect(r.status).toBe(0);
     expect(r.stderr.trim().split('\n')).toHaveLength(1);
     expect(r.stderr).toContain('Report-Progress:');
+  });
+
+  it('run.finished first finishes the open tasks: merging -> succeeded, other -> cancelled; the reader leaves none open (#600)', async () => {
+    const dir = path.join(root, 'ev-open');
+    const env = baseEnv({
+      AGENT_EVENTS_DIR: dir,
+      AGENT_EVENTS_RUN: 'open-run',
+      AGENT_EVENTS_OWNER: '1',
+    });
+    const pr = 'https://github.com/GravionLabs/skills/pull/9';
+    const calls = [
+      ['-Type', 'run.started', '-Source', 'loop'],
+      ['-Type', 'issue.started', '-Issue', '7'],
+      ['-Type', 'issue.finished', '-Issue', '7', '-Outcome', 'merging', '-PrUrl', pr],
+      ['-Type', 'issue.started', '-Issue', '8'],
+      ['-Type', 'issue.started', '-Issue', '9'],
+      ['-Type', 'issue.finished', '-Issue', '9', '-Outcome', 'delivered'],
+      ['-Type', 'run.finished', '-RunResult', 'max reached'],
+    ];
+    for (const a of calls) await worker.run(a, { cwd: repo, env });
+    const evs = events(dir, 'open-run');
+    const fin = evs.findIndex((e) => e.type === 'run.finished');
+    expect(fin).toBe(evs.length - 1);
+    const closing = evs.slice(fin - 2, fin);
+    expect(closing).toMatchObject([
+      {
+        type: 'task.finished',
+        task: 'issue-7',
+        outcome: 'succeeded',
+        reason: 'deliver.merging',
+        text: 'auto-merge on, waits for checks',
+        links: [{ rel: 'pull-request', url: pr }],
+      },
+      { type: 'task.finished', task: 'issue-8', outcome: 'cancelled', reason: 'deliver.left-open' },
+    ]);
+    expect(closing[1].text).toBeTruthy();
+    expect(evs.filter((e) => e.type === 'task.finished' && e.task === 'issue-9')).toHaveLength(1);
+    const file = path.join(dir, 'open-run.jsonl');
+    expect(checkRunFile(fs.readFileSync(file, 'utf8'), { deliver: true })).toEqual([]);
+    const reader = path.resolve(
+      __dirname,
+      '../../../skills/delivery/deliver/scripts/ConvertFrom-ProgressEvents.ps1',
+    );
+    const out = execFileSync(
+      'pwsh',
+      ['-NoProfile', '-File', reader, '-Path', file, '-NoPidCheck'],
+      {
+        encoding: 'utf8',
+      },
+    );
+    expect(JSON.parse(out).tasks ?? []).toHaveLength(0);
   });
 });
