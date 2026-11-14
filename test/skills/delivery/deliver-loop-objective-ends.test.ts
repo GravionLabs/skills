@@ -101,6 +101,21 @@ describe.skipIf(!hasPwsh || process.platform === 'win32')(
       expect(out).toEqual(['max reached', 'ok (0)', 'blocked', 'no progress']);
     });
 
+    it('Get-RepoLoopLabel ignores the result of a run that started before the round (#594)', () => {
+      const co = path.join(dir, 'label-stale');
+      const run = path.join(co, '.agents/deliver-loop/20260101-000000');
+      fs.mkdirSync(run, { recursive: true });
+      fs.writeFileSync(path.join(co, '.agents/deliver-loop/latest.txt'), run);
+      fs.writeFileSync(
+        path.join(run, 'progress.jsonl'),
+        '{"event":"start","time":"2026-01-01T00:00:00.0000000Z"}\n{"event":"result","result":"stopped","code":0}\n',
+      );
+      const out = ps(
+        `Get-RepoLoopLabel 0 '${co}' ([DateTime]::Parse('2026-01-02T00:00:00Z').ToUniversalTime()); Get-RepoLoopLabel 0 '${co}' ([DateTime]::Parse('2025-12-31T00:00:00Z').ToUniversalTime())`,
+      );
+      expect(out).toEqual(['ok (0)', 'stopped']);
+    });
+
     it('Write-NeedsYou prints the acceptance-criteria gate while a repository is open', () => {
       const out = ps(
         `$s = '{"objective":{"repository":"o/telos","number":1,"url":"u"},"repos":[{"state":"waiting"}],"gates":[{"type":"acceptance-criteria","detail":"2 open","url":"https://x/1"},{"type":"mystery","detail":"d"}]}' | ConvertFrom-Json; Write-NeedsYou $s`,

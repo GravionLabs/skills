@@ -314,7 +314,7 @@ function Write-ApiUsage([int]$round, $before, $after) {
 # Result word of a repository loop for the round results line. Exit 0 covers done, max reached and stopped, so it is read
 # from the last `result` record of the progress.jsonl of the newest run in that checkout (.agents/deliver-loop/latest.txt);
 # without a record: `ok (0)`. Other exit codes keep their word.
-function Get-RepoLoopLabel([int]$code, [string]$path) {
+function Get-RepoLoopLabel([int]$code, [string]$path, $since = $null) {
   if ($code -eq 0) {
     $word = $null
     try {
@@ -322,9 +322,20 @@ function Get-RepoLoopLabel([int]$code, [string]$path) {
       if ($latest -and (Test-Path -LiteralPath $latest)) {
         $progress = Join-Path (Get-Content -LiteralPath $latest -Raw).Trim() 'progress.jsonl'
         if (Test-Path -LiteralPath $progress) {
-          foreach ($l in @(Get-Content -LiteralPath $progress)) {
-            $rec = try { $l | ConvertFrom-Json } catch { $null }
-            if ($rec -and $rec.event -eq 'result' -and $rec.result) { $word = [string]$rec.result }
+          $lines = @(Get-Content -LiteralPath $progress)
+          # #594: only a run that started after the round start counts; a stale latest.txt keeps `ok (0)`
+          $fresh = $true
+          if ($since) {
+            $first = try { $lines[0] | ConvertFrom-Json } catch { $null }
+            # ConvertFrom-Json may already return a DateTime for the ISO time
+            $t = if ($first -and $first.time) { if ($first.time -is [DateTime]) { $first.time.ToUniversalTime() } else { [DateTime]::Parse([string]$first.time, [cultureinfo]::InvariantCulture, 'RoundtripKind').ToUniversalTime() } }
+            $fresh = [bool]($t -and $t -ge ([DateTime]$since).ToUniversalTime())
+          }
+          if ($fresh) {
+            foreach ($l in $lines) {
+              $rec = try { $l | ConvertFrom-Json } catch { $null }
+              if ($rec -and $rec.event -eq 'result' -and $rec.result) { $word = [string]$rec.result }
+            }
           }
         }
       }
@@ -519,7 +530,7 @@ function Invoke-ObjectiveLoop {
           }
           # deliver.parallel 1: one repository after the other, its output streamed as it comes
           & pwsh @cli 2>&1 | ForEach-Object { Write-Host "  [$repo] $_" }
-          $results += [pscustomobject]@{ Repo = $repo; Path = $co.Path; Exit = $LASTEXITCODE }
+          $results += [pscustomobject]@{ Repo = $repo; Path = $co.Path; Exit = $LASTEXITCODE; Start = $roundStart }
           Write-Step "[$repo] loop exit $LASTEXITCODE"
           if ($LASTEXITCODE -eq 0) { $lastGreen[$repo] = $roundStart }
         } finally { Pop-Location }
@@ -528,13 +539,14 @@ function Invoke-ObjectiveLoop {
         # deliver.parallel > 1: the repository loops run concurrently (at most $parallel at a time); the round waits for all
         $shared.Fresh = $false
         foreach ($res in @(Invoke-RepoLoopsParallel $jobs $parallel $shared $objRepo $objNr $hostId)) {
+          $res | Add-Member -NotePropertyName Start -NotePropertyValue (@($jobs | Where-Object { $_.Repo -eq $res.Repo })[0].Start) -Force
           $results += $res
           Write-Step "[$($res.Repo)] loop exit $($res.Exit)"
           if ($res.Exit -eq 0) { $lastGreen[$res.Repo] = @($jobs | Where-Object { $_.Repo -eq $res.Repo })[0].Start }
         }
       }
       if ($results.Count) {
-        Write-Step "round ${round} results: $(@($results | ForEach-Object { "$($_.Repo) $(Get-RepoLoopLabel $_.Exit $_.Path)" }) -join ', ')"
+        Write-Step "round ${round} results: $(@($results | ForEach-Object { "$($_.Repo) $(Get-RepoLoopLabel $_.Exit $_.Path $_.Start)" }) -join ', ')"
         Write-ApiUsage $round $apiBefore (Get-ApiUsage)
       }
       if ($result) { break }
