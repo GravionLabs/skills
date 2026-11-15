@@ -169,7 +169,7 @@ foreach ($repo in $repoOrder) {
       }
       if ($blockers.Count) { $reason = 'blocked by ' + ($blockers -join ', ') }
       # the REST read of the claim only for a PBI that would otherwise be ready
-      elseif (@(Get-Prop $i 'assignees').Count -and (Test-FreshClaim $repo ([int]$i.number))) { $reason = 'claimed' }
+      elseif (@(@(Get-Prop $i 'assignees') | Where-Object { $_ }).Count -and (Test-FreshClaim $repo ([int]$i.number))) { $reason = 'claimed' }
     }
     if ($reason) { $ref.reason = $reason; $waitingItems.Add($ref) } else { $ready.Add($ref) }
   }
