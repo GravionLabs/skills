@@ -213,23 +213,57 @@ function Invoke-ContractPause($s, [DateTime]$since, [hashtable]$handled, [switch
 }
 
 # #546: the context file of a downstream repository: the PRs merged since $since in the repositories it `Requires:` (link, title,
-# diff stat), so the fix subagent sees causes in other repos. Returns the file path, or '' when there is nothing to say.
+# diff stat), so the fix subagent sees causes in other repos. Returns @{ Path; Msg }: Path is '' when there is nothing to say.
+# #607: the lines of the written PRs are kept in context.state.json next to the file; when the set of upstream PRs is the same as
+# at the last write, the file is reused and no diff stat is read again (only a PR new since then costs a read).
 function Write-ContextFile($s, $r, [string]$checkout, [DateTime]$since) {
-  $lines = @()
+  $file = Join-Path $checkout '.agents/deliver-loop/context.md'
+  $stateFile = Join-Path $checkout '.agents/deliver-loop/context.state.json'
+  $old = @{}
+  if ((Test-Path -LiteralPath $stateFile -PathType Leaf) -and (Test-Path -LiteralPath $file -PathType Leaf)) {
+    try { $o = Get-Content -LiteralPath $stateFile -Raw | ConvertFrom-Json -AsHashtable; if ($o.lines) { $old = $o.lines } } catch { $old = @{} }
+  }
+  $lines = [ordered]@{}
   foreach ($up in @($r.requires | Where-Object { $_ } | ForEach-Object { [string]$_.repository } | Select-Object -Unique)) {
     $prs = @(Get-MergedPrsSince $up $since)
     foreach ($pr in $prs) {
+      $key = "$up#$($pr.number)"
+      if ($old.ContainsKey($key)) { $lines[$key] = [string]$old[$key]; continue }
       $d = @(Get-ObjectiveRest "repos/$up/pulls/$($pr.number)")[0]
       $stat = if ($d -and $null -ne $d.changed_files) { "$($d.changed_files) files, +$($d.additions) -$($d.deletions)" } else { 'diff stat n/a' }
-      $lines += "- $up#$($pr.number) $($pr.html_url) $([string]$pr.title -replace '[\r\n]+', ' ') ($stat)"
+      $lines[$key] = "- $key $($pr.html_url) $([string]$pr.title -replace '[\r\n]+', ' ') ($stat)"
     }
   }
-  $file = Join-Path $checkout '.agents/deliver-loop/context.md'
   # #578: nothing to say -> no stale file from an earlier round for a hand-run `deliver-loop -Context`
-  if (-not $lines.Count) { Remove-Item -LiteralPath $file -Force -ErrorAction SilentlyContinue; return '' }
+  if (-not $lines.Count) {
+    Remove-Item -LiteralPath $file, $stateFile -Force -ErrorAction SilentlyContinue
+    return [pscustomobject]@{ Path = ''; Msg = '' }
+  }
+  if ($old.Count -eq $lines.Count -and -not @($lines.Keys | Where-Object { -not $old.ContainsKey($_) }).Count) {
+    return [pscustomobject]@{ Path = $file; Msg = "context file reused ($file)" }
+  }
   New-Item -ItemType Directory -Force -Path (Split-Path $file -Parent) | Out-Null
-  Set-Content -LiteralPath $file -Value (@("Upstream PRs merged since $($since.ToString('u')) in the repositories of $($r.repository)'s Requires:") + $lines) -Encoding utf8
-  $file
+  Set-Content -LiteralPath $file -Value (@("Upstream PRs merged since $($since.ToString('u')) in the repositories of $($r.repository)'s Requires:") + @($lines.Values)) -Encoding utf8
+  Set-Content -LiteralPath $stateFile -Value (@{ lines = $lines } | ConvertTo-Json -Depth 4) -Encoding utf8
+  [pscustomobject]@{ Path = $file; Msg = "context file written ($($lines.Count) PRs) ($file)" }
+}
+
+# #607: deliver.parallel > 1: the context files of all starting repositories are generated at the same time, before their loops start.
+# $items: Repo, Status ($s repo record), Path, Since. Returns Repo -> result of Write-ContextFile.
+function Write-ContextFilesParallel($s, $items) {
+  $defs = (@('ConvertTo-UtcTime', 'Get-ObjectiveRest', 'Get-MergedPrsSince', 'Write-ContextFile') |
+    ForEach-Object { "function $_ {`n$((Get-Command $_ -CommandType Function).Definition)`n}" }) -join "`n"
+  $jobs = @{}
+  foreach ($i in $items) {
+    $jobStatus = $i.Status; $jobPath = [string]$i.Path; $jobSince = [DateTime]$i.Since
+    $jobs[$i.Repo] = Start-ThreadJob -ScriptBlock {
+      . ([scriptblock]::Create($using:defs))
+      Write-ContextFile $null $using:jobStatus $using:jobPath $using:jobSince
+    }
+  }
+  $res = @{}
+  foreach ($k in @($jobs.Keys)) { $res[$k] = @(Receive-Job -Job $jobs[$k] -Wait -AutoRemoveJob)[-1] }
+  $res
 }
 
 # Rule 2 (#545): an unmet `Requires: <repo>@<M> rc` whose milestone is finished (no open `pbi` or `bug` but the release-test one, as deliver step 9)
@@ -485,7 +519,7 @@ function Invoke-ObjectiveLoop {
       $round++
       $since = ([DateTime]::UtcNow.AddSeconds(-1))
       $targets = Get-ObjectiveTargets $objRepo $objNr
-      $results = @(); $jobs = @()
+      $results = @(); $jobs = @(); $ctxItems = @()
       foreach ($r in @($s.repos | Where-Object { $_.state -eq 'ready' })) {
         $repo = [string]$r.repository
         $nrs = @($targets[$repo] | Where-Object { $_ })
@@ -522,8 +556,11 @@ function Invoke-ObjectiveLoop {
           # #546: the upstream PRs since the last green run of this repository (first round: the last 7 days)
           $ctxSince = if ($lastGreen.ContainsKey($repo)) { $lastGreen[$repo] } else { $ctxStart }
           $roundStart = [DateTime]::UtcNow
-          $ctx = Write-ContextFile $s $r $co.Path $ctxSince
-          if ($ctx) { $cli += @('-Context', $ctx); Write-Step "[$repo] context file $ctx" }
+          if ($parallel -gt 1) { $ctxItems += [pscustomobject]@{ Repo = $repo; Status = $r; Path = $co.Path; Since = $ctxSince } }
+          else {
+            $ctx = Write-ContextFile $s $r $co.Path $ctxSince
+            if ($ctx.Path) { $cli += @('-Context', $ctx.Path); Write-Step "[$repo] $($ctx.Msg)" }
+          }
           if ($Max -gt 0) { $cli += @('-Max', [string]$Max) }
           if ($Model -and -not ($Harness -eq 'copilot' -and $Model -eq 'auto')) { $cli += @('-Model', $Model) }
           if ($NoColor) { $cli += '-NoColor' }
@@ -541,6 +578,12 @@ function Invoke-ObjectiveLoop {
       if ($jobs.Count -and -not $result) {
         # deliver.parallel > 1: the repository loops run concurrently (at most $parallel at a time); the round waits for all
         $shared.Fresh = $false
+        # #607: the context files of all starting repositories at once, then the loops
+        $ctxRes = Write-ContextFilesParallel $s $ctxItems
+        foreach ($j in $jobs) {
+          $c = $ctxRes[$j.Repo]
+          if ($c -and $c.Path) { $j.Cli += @('-Context', $c.Path); Write-Step "[$($j.Repo)] $($c.Msg)" }
+        }
         foreach ($res in @(Invoke-RepoLoopsParallel $jobs $parallel $shared $objRepo $objNr $hostId)) {
           $res | Add-Member -NotePropertyName Start -NotePropertyValue (@($jobs | Where-Object { $_.Repo -eq $res.Repo })[0].Start) -Force
           $results += $res
