@@ -38,12 +38,15 @@ describe.skipIf(!hasPwsh || process.platform === 'win32')(
       expect(r.status).toBe(0);
     });
 
-    it('an open PBI without a PR still ends as no progress', async () => {
+    it('an open PBI without a PR is set aside (blocked)', async () => {
       const s = setup(root, 'silent-nopr', [10], {}, '() => [[]]');
       fs.writeFileSync(path.join(s.cwd, 'harness.js'), '');
       const r = await run(loop, s, '1');
-      expect(r.stdout).toContain('loop result: no progress');
-      expect(r.status).toBe(1);
+      expect(r.stdout).toContain('#10 set aside: the session ended without an outcome');
+      expect(r.stdout).toContain('set aside #10: the session ended without an outcome (no PR)');
+      expect(r.stdout).not.toContain('no progress:');
+      expect(r.stdout).toContain('loop result: blocked');
+      expect(r.status).toBe(2);
     });
   },
 );

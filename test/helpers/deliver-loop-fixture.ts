@@ -39,7 +39,7 @@ export type Issue = {
 export type Fixture = {
   issues: Record<number, Issue>;
   milestones?: Record<string, number[]>;
-  effect?: 'none' | 'close-first' | 'hold-first';
+  effect?: 'none' | 'close-first' | 'hold-first' | 'hold-then-close'; // hold-then-close: the first iteration holds its PBI (needs-decision), every later one closes its PBI
   stream?: object[];
   stopBefore?: boolean; // gh creates the stop file of the run once the run directory exists (before iteration 1)
   stopDuring?: boolean; // the harness stub creates the stop file of the run during the iteration
@@ -123,6 +123,7 @@ const s = JSON.parse(fs.readFileSync(f, 'utf8'));
 const first = Object.keys(s.issues).map(Number).find((n) => (s.issues[n].state || 'OPEN') === 'OPEN' && !(s.issues[n].labels || []).some((l) => l.startsWith('needs-') || l === 'interactive') && !(s.issues[n].blockers || []).some((b) => b.state === 'open') && ['pbi', 'bug'].some((l) => (s.issues[n].labels || []).includes(l)));
 if (s.effect === 'close-first') s.issues[first].state = 'CLOSED';
 if (s.effect === 'hold-first') s.issues[first].labels.push('needs-decision');
+if (s.effect === 'hold-then-close') { if (s.held) s.issues[first].state = 'CLOSED'; else { s.held = true; s.issues[first].labels.push('needs-decision'); } }
 fs.writeFileSync(f, JSON.stringify(s));`,
     );
     fs.writeFileSync(

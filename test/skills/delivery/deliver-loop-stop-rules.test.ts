@@ -72,32 +72,32 @@ describe.skipIf(!hasPwsh || process.platform === 'win32')('Invoke-DeliverLoop.ps
       'Background tasks still running 10m after the last turn (subagent "Implement PBI #1"); stopping them. Set CLAUDE_CODE_PRINT_BG_WAIT_CEILING_MS=0 to wait indefinitely.';
     const unset = { CLAUDE_CODE_PRINT_BG_WAIT_CEILING_MS: undefined };
 
-    it('names the ceiling when the iteration made no progress and the harness stopped a subagent: no progress, exit 1', async () => {
+    it('names the ceiling when the iteration made no progress and the harness stopped a subagent: set aside, blocked, exit 2', async () => {
       const gh = fx.setup({ issues: { 31: pbi() }, milestones: { M7: [31] }, stderr: line });
       const r = await fx.run(gh, ['-Milestone', 'M7'], {
         ...unset,
         CLAUDE_CODE_PRINT_BG_WAIT_CEILING_MS: '600000',
       });
-      expect(r.status).toBe(1);
+      expect(r.status).toBe(2);
       expect(r.stdout).toContain(
-        'no progress: a subagent was stopped by the wait ceiling (CLAUDE_CODE_PRINT_BG_WAIT_CEILING_MS=600000)',
+        '#31 set aside: a subagent was stopped by the wait ceiling (CLAUDE_CODE_PRINT_BG_WAIT_CEILING_MS=600000)',
       );
-      expect(r.stdout).not.toContain('the open PBIs did not change');
-      expect(r.stdout).toContain('loop result: no progress');
+      expect(r.stdout).toContain('loop result: blocked');
     });
 
     it('reports the default 0 when the loop set the variable itself', async () => {
       const gh = fx.setup({ issues: { 31: pbi() }, milestones: { M7: [31] }, stderr: line });
       const r = await fx.run(gh, ['-Milestone', 'M7'], unset);
-      expect(r.status).toBe(1);
+      expect(r.status).toBe(2);
       expect(r.stdout).toContain('(CLAUDE_CODE_PRINT_BG_WAIT_CEILING_MS=0)');
     });
 
     it('keeps the plain reason without the stderr line', async () => {
       const gh = fx.setup({ issues: { 31: pbi() }, milestones: { M7: [31] } });
       const r = await fx.run(gh, ['-Milestone', 'M7'], unset);
-      expect(r.status).toBe(1);
-      expect(r.stdout).toContain('no progress: the open PBIs did not change');
+      expect(r.status).toBe(2);
+      expect(r.stdout).toContain('#31 set aside: the session ended without an outcome');
+      expect(r.stdout).not.toContain('no progress');
     });
 
     it('does not blame the ceiling when the iteration delivered the PBI', async () => {
