@@ -8,8 +8,29 @@ import type { Harness, LoopHost, RawRecord, SessionRequest, Tone } from '../host
 /** The argv of a session (the same as the PowerShell loop). */
 export function buildArgv(req: Pick<SessionRequest, 'harness' | 'model' | 'prompt'>): string[] {
   return req.harness === 'copilot'
-    ? ['-p', req.prompt, '--model', req.model, '--allow-all-tools', '--allow-all-paths', '--allow-all-urls', '--no-ask-user', '--output-format', 'json']
-    : ['-p', req.prompt, '--model', req.model, '--permission-mode', 'auto', '--output-format', 'stream-json', '--verbose'];
+    ? [
+        '-p',
+        req.prompt,
+        '--model',
+        req.model,
+        '--allow-all-tools',
+        '--allow-all-paths',
+        '--allow-all-urls',
+        '--no-ask-user',
+        '--output-format',
+        'json',
+      ]
+    : [
+        '-p',
+        req.prompt,
+        '--model',
+        req.model,
+        '--permission-mode',
+        'auto',
+        '--output-format',
+        'stream-json',
+        '--verbose',
+      ];
 }
 
 /** The wait ceiling of a harness: the harness stops background tasks after its last turn of `-p` (#461). */
@@ -26,7 +47,10 @@ export function ceilingText(harness: Harness, env: Record<string, string | undef
 }
 
 /** The environment of a session: a copy, the caller's `base` is not changed. */
-export function buildEnv(req: SessionRequest, base: Record<string, string | undefined> = process.env): Record<string, string | undefined> {
+export function buildEnv(
+  req: SessionRequest,
+  base: Record<string, string | undefined> = process.env,
+): Record<string, string | undefined> {
   const env: Record<string, string | undefined> = { ...base, ...req.env };
   // nested: the harness gets the run but not the owner marker (its run.started and run.finished are not written)
   env.AGENT_EVENTS_OWNER = '';
@@ -107,8 +131,17 @@ export class ProcessHost implements LoopHost {
     try {
       if (process.platform === 'darwin') {
         const esc = text.replaceAll('\\', '\\\\').replaceAll('"', '\\"');
-        const sound = tone === 'danger' ? ' sound name "Basso"' : tone === 'warning' ? ' sound name "Ping"' : '';
-        execFile('osascript', ['-e', `display notification "${esc}" with title "deliver loop"${sound}`], () => {});
+        const sound =
+          tone === 'danger'
+            ? ' sound name "Basso"'
+            : tone === 'warning'
+              ? ' sound name "Ping"'
+              : '';
+        execFile(
+          'osascript',
+          ['-e', `display notification "${esc}" with title "deliver loop"${sound}`],
+          () => {},
+        );
       } else if (process.platform === 'win32') {
         const t = text.replaceAll("'", "''");
         const script =
