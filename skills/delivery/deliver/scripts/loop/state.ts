@@ -277,7 +277,7 @@ export async function updateMerging(
         keep.push(nr);
         continue;
       }
-      if (x.state === 'red-change') red.push(nr);
+      if (x.state === 'red-change' || x.state === 'conflict') red.push(nr);
       notes.push(`#${nr} select: leaves merging (${x.state}: ${x.reason ?? ''})`);
       continue;
     }

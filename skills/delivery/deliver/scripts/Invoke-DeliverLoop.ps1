@@ -529,7 +529,7 @@ function Update-Merging {
     $x = $listed["$nr"]
     if ($x) {
       if ($x.state -eq 'waiting') { $keep += $nr; continue }
-      if ($x.state -eq 'red-change') { $red += $nr }
+      if ($x.state -in 'red-change', 'conflict') { $red += $nr }
       Write-Step "#$nr select: leaves merging ($($x.state): $($x.reason))" 'yellow'
       continue
     }

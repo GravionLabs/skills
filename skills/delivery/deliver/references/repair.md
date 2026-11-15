@@ -16,4 +16,6 @@ Output: JSON `{ pr, issue, changed[], foreign, error, command }`; `changed` is e
 | 3    | head repository differs from the base repository (fork): never modified | pause (interactive: ask; unattended: comment, `needs-decision`)                                                                                                                       |
 | 1    | repair failed (`error`, `command`)                                      | `gh issue edit <nr> --add-label needs-decision` and `gh issue comment <nr>` with the reason and the exact `command` (`gh pr edit <n> --base … --title … --body …`), then the next PBI |
 
+After a repair, a PR that conflicts with `release/next` (`mergeable` false or `mergeable_state` `dirty`) is rebased by a fix subagent (SKILL.md step 2, one of the 2 fix rounds, `git push --force-with-lease`), then step 4.
+
 Auto-merge (step 8) is only enabled after a successful repair (exit 0); a retarget drops nothing else, step 8 sets `--auto` as usual.

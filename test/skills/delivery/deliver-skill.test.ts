@@ -736,6 +736,16 @@ describe('config schema deliver key', () => {
       expect(sect('## Report', '## Rules')).toContain('decision, write the ADR with adr');
     });
 
+    it('step 2 rebases an open PR that conflicts with release/next', () => {
+      const s2 = sect('2. **Resume.**', '3. **Implement.**');
+      expect(s2).toContain('`dirty`');
+      expect(s2).toContain('at most 3 times');
+      expect(s2).toContain('git push --force-with-lease');
+      expect(s2).toContain('`#<nr> resume: conflict with release/next → rebase`');
+      expect(s2).toContain('one of the 2 fix rounds');
+      expect(s2).toContain('PBI blocked');
+    });
+
     it('step 4 passes labels and notes, step 6 passes spec_notes', () => {
       const s4 = sect('4. **Review.**', '5. **Fix.**');
       expect(s4).toMatch(/issue labels <labels> and implementer `notes\[\]`/);

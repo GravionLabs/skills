@@ -102,7 +102,7 @@ describe.skipIf(!hasPwsh || process.platform === 'win32')('Get-MergingPrs.ps1 (#
     expect(r.out).toMatchObject([{ issue: 10, state: 'red-change', reason: 'red: test' }]);
   });
 
-  it('red on release/next too, and a merge conflict: red-other', async () => {
+  it('red on release/next too: red-other; a merge conflict: conflict', async () => {
     const bad = { status: 'completed', conclusion: 'failure', name: 'test' };
     const same = await run('red-other', [pr(1, 'feat/10-a', 's1')], { s1: [bad], base: [bad] });
     expect(same.out).toMatchObject([{ issue: 10, state: 'red-other' }]);
@@ -112,7 +112,7 @@ describe.skipIf(!hasPwsh || process.platform === 'win32')('Get-MergingPrs.ps1 (#
       { s1: [ok] },
       { mergeable: false, mergeable_state: 'dirty' },
     );
-    expect(dirty.out).toMatchObject([{ issue: 10, state: 'red-other', reason: 'merge conflict' }]);
+    expect(dirty.out).toMatchObject([{ issue: 10, state: 'conflict', reason: 'merge conflict' }]);
   });
 
   it('ignores PRs without auto-merge and issues outside the set', async () => {

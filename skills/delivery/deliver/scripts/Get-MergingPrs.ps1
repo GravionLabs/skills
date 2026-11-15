@@ -7,7 +7,8 @@
   { issue, pr, url, state, reason }, state:
     waiting      checks still running or all green: auto-merge will merge, nothing to do
     red-change   a check failed that is not red on release/next: fix round (deliver step 5)
-    red-other    a check failed that is red on release/next too, or the PR conflicts: comment, PBI blocked
+    conflict     the PR conflicts with release/next: the PBI is selected first, rebase (deliver step 2)
+    red-other    a check failed that is red on release/next too: comment, PBI blocked
   A merged PR is no longer open and so not listed: its issue is closed.
 .PARAMETER Issues
   Issue numbers of the set; PRs of other issues are ignored.
@@ -55,8 +56,13 @@ foreach ($pr in @(Get-Gh 'repos/{owner}/{repo}/pulls?base=release/next&state=ope
     if ($mine.Count) { $state = 'red-change'; $reason = "red: $($mine -join ', ')" }
     else { $state = 'red-other'; $reason = "red on release/next too: $($failed -join ', ')" }
   } else {
-    $detail = Get-Gh "repos/{owner}/{repo}/pulls/$($pr.number)"
-    if ($detail.mergeable -eq $false -or $detail.mergeable_state -eq 'dirty') { $state = 'red-other'; $reason = 'merge conflict' }
+    # mergeable null: GitHub still computes it, read again (at most 3 reads)
+    for ($i = 0; $i -lt 3; $i++) {
+      $detail = Get-Gh "repos/{owner}/{repo}/pulls/$($pr.number)"
+      if ($null -ne $detail.mergeable) { break }
+      Start-Sleep -Milliseconds 500
+    }
+    if ($detail.mergeable -eq $false -or $detail.mergeable_state -eq 'dirty') { $state = 'conflict'; $reason = 'merge conflict' }
   }
   $result += [pscustomobject]@{ issue = $nr; pr = [int]$pr.number; url = [string]$pr.html_url; state = $state; reason = $reason }
 }
