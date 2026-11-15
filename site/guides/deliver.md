@@ -143,6 +143,18 @@ pwsh .claude/skills/deliver/scripts/Invoke-DeliverLoop.ps1 -Milestone M004 -Max 
 
 It stops when everything is done or `-Max` is reached (exit 0), or when open PBIs remain and none is ready (2). A PBI that ends blocked, paused or without an outcome is set aside for the rest of the run (`#<nr> set aside: <reason>`), the loop goes on with the next ready PBI and lists every set-aside PBI with its reason and PR at the end. Each PBI is selected once per run. Exit 3 means `release/next` is missing on origin: nothing starts, run `github-release cut` first. The stream log is in `.agents/deliver-loop/`.
 
+A failure of the harness or of GitHub does not count against a PBI. A failed `gh` call is retried after 5, 30 and 120 s, and a rate limit waits until its reset (`github: rate limit, waits until <time>`). A session that exits with an error before its first step is started again for the same PBI after 5, then 15 minutes (`harness failed (exit <n>), retry in <m> min`). A session that runs longer than `deliver.sessionTimeoutMinutes` (default 120) is stopped and gets one more session; a second timeout sets the PBI aside (`session timeout`).
+
+| Result      | When                                                                               | Exit |
+| :---------- | :--------------------------------------------------------------------------------- | :--- |
+| done        | no open PBI left                                                                   | 0    |
+| max reached | `-Max` iterations ran                                                              | 0    |
+| stopped     | `deliver-loop stop` or Ctrl+C                                                      | 0    |
+| blocked     | open PBIs remain, none is ready                                                    | 2    |
+| failed      | three harness failures in a row, or a `gh` call that still fails after its retries | 5    |
+
+On `failed` the last line names the cause.
+
 - `-Harness copilot` runs `copilot -p … --unattended --max 1` instead. Without `-Model` it uses `auto` (Copilot picks the model); `-Model` overrides it and is passed as given, so pass a Copilot model such as `gpt-5`, not a Claude name.
 - Console: stdout is colored on a terminal (`-NoColor` or `NO_COLOR` turn it off) and lines are cut to the terminal width (at least 120). The herdr log pane is opt-in with `-LogPane`.
 - Desktop notifications (macOS, Windows) are off with `-NoNotify` or `"deliver": {"notifications": false}` in `.agents/config.json`; inside a poimen terminal (`POIMEN_TERMINAL_ID` set) none is sent.

@@ -45,6 +45,10 @@ export type Fixture = {
   stopDuring?: boolean; // the harness stub creates the stop file of the run during the iteration
   stderr?: string; // the harness stub prints this line to stderr after its stream
   events?: string[][]; // Report-Progress.ps1 arguments the harness stub runs after its stream
+  exits?: number[]; // #672: exit code of harness call 1, 2, ... (default 0); a call with an exit other than 0 applies no effect
+  hang?: number[]; // #672: harness calls (1-based) that hang after their stream until the loop stops them
+  ghFail?: { match: string; times: number; message?: string }[]; // #672: the first `times` gh calls whose path contains `match` fail
+  rateLimitReset?: number; // #672: `gh api rate_limit` reports core exhausted with this reset (epoch seconds)
 };
 
 export const pbi = (extra: Issue = {}): Issue => ({ labels: ['pbi'], ...extra });
@@ -78,10 +82,16 @@ export class DeliverLoopFixture {
     fs.writeFileSync(state, JSON.stringify(full));
     const gh = createFakeGh(
       this.cwd,
-      `(call) => {
+      `(call, ctx) => {
         const fs = require('fs');
         const s = JSON.parse(fs.readFileSync(${JSON.stringify(state)}, 'utf8'));
         const a = call.args;
+        if (a[0] === 'api' && a[1] === 'rate_limit') {
+          return { rest: { resources: { core: { limit: 5000, remaining: s.rateLimitReset ? 0 : 5000, reset: s.rateLimitReset || 0 } } } };
+        }
+        for (const f of s.ghFail || []) {
+          if ((a[1] || '').includes(f.match) && ctx.count('fail-' + f.match) <= f.times) throw new Error(f.message || 'HTTP 502: Bad Gateway');
+        }
         if (s.stopBefore) {
           // the run directory of every run that already wrote run.started (its event file) gets the stop file
           const ev = require('path').join(process.cwd(), 'events');
@@ -108,6 +118,8 @@ export class DeliverLoopFixture {
           return { rest: [nrs.filter((n) => (m[2] === 'all' || (get(n).state || 'OPEN') === (m[2] === 'closed' ? 'CLOSED' : 'OPEN'))).map((number) => ({ number, title: 't', state: 'open', labels: (get(number).labels || []).map((name) => ({ name })), assignees: [] }))] };
         }
         if (a[0] === 'issue') throw new Error('GraphQL read: gh ' + a.join(' '));
+        // #605 Test-PrMerging: no PR into release/next
+        if (/^repos\\/\\{owner\\}\\/\\{repo\\}\\/pulls\\?base=release\\/next/.test(a[1] || '')) return { rest: [] };
         m = /issues\\/(\\d+)\\/sub_issues/.exec(a[1] || '');
         if (m) return { rest: (get(m[1]).children || []).map((number) => ({ number })) };
         m = /issues\\/(\\d+)\\/dependencies\\/blocked_by/.exec(a[1] || '');
@@ -120,6 +132,10 @@ export class DeliverLoopFixture {
       path.join(this.cwd, 'effect.js'),
       `const fs = require('fs'); const f = ${JSON.stringify(state)};
 const s = JSON.parse(fs.readFileSync(f, 'utf8'));
+const call = Number(process.argv[2]);
+if ((s.hang || []).includes(call)) { setTimeout(() => {}, 60000); return; }
+const code = (s.exits || [])[call - 1] || 0;
+if (code) process.exit(code);
 const first = Object.keys(s.issues).map(Number).find((n) => (s.issues[n].state || 'OPEN') === 'OPEN' && !(s.issues[n].labels || []).some((l) => l.startsWith('needs-') || l === 'interactive') && !(s.issues[n].blockers || []).some((b) => b.state === 'open') && ['pbi', 'bug'].some((l) => (s.issues[n].labels || []).includes(l)));
 if (s.effect === 'close-first') s.issues[first].state = 'CLOSED';
 if (s.effect === 'hold-first') s.issues[first].labels.push('needs-decision');
@@ -144,11 +160,11 @@ fs.writeFileSync(f, JSON.stringify(s));`,
       fs.writeFileSync(path.join(gh.bin, name), `#!/bin/sh\n${body}\n`, { mode: 0o755 });
     stub(
       'claude',
-      `echo "$*" >> ${this.cwd}/harness-calls.txt\necho "herdr_env=[$HERDR_ENV]" >> ${this.cwd}/harness-calls.txt\necho "ceiling=[$CLAUDE_CODE_PRINT_BG_WAIT_CEILING_MS] copilot_wait=[$COPILOT_TASK_WAIT_TIMEOUT_SECONDS]" >> ${this.cwd}/harness-calls.txt\ncat ${this.cwd}/stream.jsonl\n${stderrLine}${stopDuring}${events}node ${this.cwd}/effect.js`,
+      `echo "$*" >> ${this.cwd}/harness-calls.txt\necho "herdr_env=[$HERDR_ENV]" >> ${this.cwd}/harness-calls.txt\necho "ceiling=[$CLAUDE_CODE_PRINT_BG_WAIT_CEILING_MS] copilot_wait=[$COPILOT_TASK_WAIT_TIMEOUT_SECONDS]" >> ${this.cwd}/harness-calls.txt\ncat ${this.cwd}/stream.jsonl\n${stderrLine}${stopDuring}${events}node ${this.cwd}/effect.js "$(grep -c '^-p' ${this.cwd}/harness-calls.txt)"`,
     );
     stub(
       'copilot',
-      `echo "$*" >> ${this.cwd}/harness-calls.txt\necho "herdr_env=[$HERDR_ENV]" >> ${this.cwd}/harness-calls.txt\necho "ceiling=[$CLAUDE_CODE_PRINT_BG_WAIT_CEILING_MS] copilot_wait=[$COPILOT_TASK_WAIT_TIMEOUT_SECONDS]" >> ${this.cwd}/harness-calls.txt\ncat ${this.cwd}/stream.jsonl\n${stderrLine}${stopDuring}${events}node ${this.cwd}/effect.js`,
+      `echo "$*" >> ${this.cwd}/harness-calls.txt\necho "herdr_env=[$HERDR_ENV]" >> ${this.cwd}/harness-calls.txt\necho "ceiling=[$CLAUDE_CODE_PRINT_BG_WAIT_CEILING_MS] copilot_wait=[$COPILOT_TASK_WAIT_TIMEOUT_SECONDS]" >> ${this.cwd}/harness-calls.txt\ncat ${this.cwd}/stream.jsonl\n${stderrLine}${stopDuring}${events}node ${this.cwd}/effect.js "$(grep -c '^-p' ${this.cwd}/harness-calls.txt)"`,
     );
     stub('herdr', `echo "$*" >> ${this.cwd}/herdr-calls.txt`);
     stub('osascript', `echo "$*" >> ${this.cwd}/notices.txt`);

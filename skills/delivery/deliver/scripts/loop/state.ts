@@ -27,14 +27,97 @@ async function jsonFrom(cmd: string, args: string[]): Promise<any> {
   let out: string;
   try {
     out = (await run(cmd, args, { maxBuffer: 64 * 1024 * 1024 })).stdout;
-  } catch {
-    throw new Error(`${cmd} ${args.join(' ')} failed`);
+  } catch (e: any) {
+    const stderr = String(e?.stderr ?? '').trim();
+    throw new Error(`${cmd} ${args.join(' ')} failed${stderr ? `: ${stderr}` : ''}`);
   }
   return out.trim() ? JSON.parse(out) : null;
 }
+
+/** #672: waits in seconds before the 1st, 2nd and 3rd retry of a failed gh call. */
+export const GH_RETRY_SECONDS = [5, 30, 120];
+
+/** A rate limit answer of gh (403 or 429): it waits until the reset instead of the fixed retry wait. */
+export function isRateLimit(message: string): boolean {
+  return /rate limit/i.test(message) || /HTTP 429/.test(message);
+}
+
+export type RetryOptions = {
+  waits?: number[];
+  sleep?: (ms: number) => Promise<void>;
+  /** Reset (epoch seconds) of the exhausted limit, null when none is exhausted (`gh api rate_limit`). */
+  rateLimitReset?: () => Promise<number | null>;
+  now?: () => number;
+  onStep?: (line: string) => void;
+};
+
+const pad = (n: number) => String(n).padStart(2, '0');
+const clock = (d: Date) => `${pad(d.getHours())}:${pad(d.getMinutes())}:${pad(d.getSeconds())}`;
+
+/**
+ * #672: the one gh call of the loop. A failure is retried `waits.length` times (5, 30, 120 s); a rate limit answer with a
+ * reset time waits until the reset instead (step line `github: rate limit, waits until <time>`). Still failing: it throws,
+ * and the run ends `failed`.
+ */
+export async function withRetry<T>(
+  what: string,
+  call: () => Promise<T>,
+  opts: RetryOptions = {},
+): Promise<T> {
+  const waits = opts.waits ?? GH_RETRY_SECONDS;
+  const sleep = opts.sleep ?? ((ms: number) => new Promise<void>((r) => setTimeout(r, ms)));
+  const now = opts.now ?? Date.now;
+  const step = opts.onStep ?? ((line: string) => console.log(line));
+  for (let attempt = 0; ; attempt++) {
+    try {
+      return await call();
+    } catch (e: any) {
+      const message = String(e?.message ?? e);
+      if (attempt >= waits.length)
+        throw new Error(`${what} failed after ${waits.length} retries: ${message}`);
+      const reset =
+        isRateLimit(message) && opts.rateLimitReset ? await opts.rateLimitReset() : null;
+      if (reset) {
+        step(`github: rate limit, waits until ${clock(new Date(reset * 1000))}`);
+        const ms = reset * 1000 - now();
+        await sleep(ms > 0 ? ms + 1000 : 0);
+      } else {
+        step(`github: ${what} failed, retry ${attempt + 1}/${waits.length} in ${waits[attempt]} s`);
+        await sleep(waits[attempt] * 1000);
+      }
+    }
+  }
+}
+
+/** Waits from a comma list in an environment variable (tests set 0), else the default. */
+export function waitsFrom(value: string | undefined, fallback: number[]): number[] {
+  const w = (value ?? '')
+    .split(/[,\s]+/)
+    .filter((x) => /^\d+(\.\d+)?$/.test(x))
+    .map(Number);
+  return w.length ? w : fallback;
+}
+
+async function rateLimitReset(): Promise<number | null> {
+  try {
+    const r = await jsonFrom('gh', ['api', 'rate_limit']);
+    const resets = Object.values<any>(r?.resources ?? {})
+      .filter((x) => x && x.remaining === 0 && x.reset)
+      .map((x) => Number(x.reset));
+    return resets.length ? Math.max(...resets) : null;
+  } catch {
+    return null;
+  }
+}
+
+const retrying = (cmd: string, args: string[]) =>
+  withRetry(`${cmd} ${args.join(' ')}`, () => jsonFrom(cmd, args), {
+    waits: waitsFrom(process.env.DELIVER_GH_RETRY_SECONDS, GH_RETRY_SECONDS),
+    rateLimitReset,
+  });
 export const processGh: Gh = {
-  json: (args) => jsonFrom('gh', args),
-  pwshJson: (args) => jsonFrom('pwsh', ['-NoProfile', ...args]),
+  json: (args) => retrying('gh', args),
+  pwshJson: (args) => retrying('pwsh', ['-NoProfile', ...args]),
 };
 
 export type Pbi = { number: number; labels: string[] };

@@ -18,7 +18,11 @@
   Stdout is colored when it is a terminal and neither -NoColor nor NO_COLOR is set; otherwise it is plain.
   Machine-readable progress for a control session (`deliver` `references/control.md`): .agents/deliver-loop/<run>/progress.jsonl,
   one JSON object per line (`start`, `iteration-start`, `iteration-end`, `result`), and .agents/deliver-loop/latest.txt with the path of the newest run directory.
-  Run it from the repository root. Exit code: 0 done, max reached or stopped (stop file), 2 blocked (1 no progress only in -Objective), 3 release/next missing on origin (needs you: github-release cut, nothing started), 64 bad arguments.
+  Run it from the repository root. Exit code: 0 done, max reached or stopped (stop file), 2 blocked (1 no progress only in -Objective), 3 release/next missing on origin (needs you: github-release cut, nothing started), 5 failed (#672: three harness failures in a row or a gh call that still fails after its retries; the last line names the cause), 64 bad arguments.
+  Harness and GitHub failures (#672) do not count against a PBI: a failed gh call is retried after 5, 30 and 120 s
+  (DELIVER_GH_RETRY_SECONDS), a rate limit waits until its reset; a session that exits other than 0 without a step.finished
+  is retried after 5, then 15 minutes (DELIVER_HARNESS_RETRY_MINUTES); a session that runs longer than
+  deliver.sessionTimeoutMinutes (default 120) is stopped with its process tree and gets one more session, a second timeout sets the PBI aside.
   Mode -Objective (ObjectiveLoop.ps1): rounds over the ready repositories of an [Objective] on exactly one runner (runner
   marker with heartbeat, ObjectiveRunner.ps1); exit 0 done or released, 1 no progress, 2 blocked, 3 gated (needs you),
   4 handed over (a foreign live runner). Takeover and release: Set-ObjectiveRunner.ps1 (deliver-loop takeover|release).
@@ -356,10 +360,10 @@ function Get-IssueOutcome([int]$nr, $after) {
   return @{ Outcome = 'skipped'; Reason = 'no progress' }
 }
 
-function Send-IterationOutcome([int]$nr, [int[]]$gone, $after) {
+function Send-IterationOutcome([int]$nr, [int[]]$gone, $after, $override = $null) {
   foreach ($g in $gone) { Send-Event @{ Type = 'issue.finished'; Issue = $g; Outcome = 'delivered'; Pr = [string]$Prs["$g"] } }
   if ($gone -contains $nr) { return }
-  $o = Get-IssueOutcome $nr $after
+  $o = if ($override) { $override } else { Get-IssueOutcome $nr $after }
   Send-Event @{ Type = 'issue.finished'; Issue = $nr; Outcome = $o.Outcome; Reason = $o.Reason; Pr = [string]$Prs["$nr"] }
   # the status block lists it as waiting with the same reason: not sent twice
   if ($o.Outcome -eq 'blocked') { $Reported["$nr"] = @{ Kind = 'blocked'; Reason = $o.Reason } }
@@ -385,11 +389,60 @@ function Write-ProgressLine {
   Write-Step ($parts -join ' · ') 'cyan'
 }
 
+# Waits in seconds from a comma list in an environment variable (tests set 0), else the default.
+function Get-Waits([string]$var, [double[]]$default) {
+  $v = [Environment]::GetEnvironmentVariable($var)
+  $w = if ($v) { @($v -split '[,\s]+' | Where-Object { $_ -match '^\d+(\.\d+)?$' } | ForEach-Object { [double]$_ }) } else { @() }
+  if ($w.Count) { return $w } else { return $default }
+}
+
+# Sleeps $seconds in steps of at most 5 s; a stop file ends the wait early. Ctrl+C interrupts it.
+function Wait-Seconds([double]$seconds) {
+  $until = [DateTime]::UtcNow.AddSeconds($seconds)
+  while ([DateTime]::UtcNow -lt $until -and -not (Test-StopRequested)) {
+    Start-Sleep -Milliseconds ([int][Math]::Max(1, [Math]::Min(5000, ($until - [DateTime]::UtcNow).TotalMilliseconds)))
+  }
+}
+
+# Reset (epoch seconds) of the exhausted rate limit of `gh api rate_limit` (that read costs no quota), null when none is exhausted.
+function Get-RateLimitReset {
+  try {
+    $raw = & gh api rate_limit 2>$null
+    if ($LASTEXITCODE -ne 0 -or -not $raw) { return $null }
+    $r = ($raw -join "`n") | ConvertFrom-Json
+    $resets = @($r.resources.PSObject.Properties.Value | Where-Object { $_ -and $_.remaining -eq 0 -and $_.reset } | ForEach-Object { [long]$_.reset })
+    if ($resets.Count) { return ($resets | Measure-Object -Maximum).Maximum }
+  } catch { Write-Verbose "rate limit not read: $_" }
+  return $null
+}
+
+# #672: the one gh call of the loop (also its pwsh helpers that call gh). A failure is retried 3 times after 5, 30 and 120 s
+# (DELIVER_GH_RETRY_SECONDS); a rate limit answer (403 or 429, "rate limit" on stderr) with a reset time waits until the reset
+# instead. Still failing after the retries: it throws, and the run ends `failed`.
 function Get-Json([string[]]$ghArgs, [switch]$Pwsh) {
-  $out = if ($Pwsh) { & pwsh -NoProfile @ghArgs 2>$null } else { & gh @ghArgs 2>$null }
-  if ($LASTEXITCODE -ne 0) { throw "$(if ($Pwsh) { 'pwsh' } else { 'gh' }) $($ghArgs -join ' ') failed" }
-  if (-not $out) { return $null }
-  return ($out -join "`n") | ConvertFrom-Json
+  $what = "$(if ($Pwsh) { 'pwsh' } else { 'gh' }) $($ghArgs -join ' ')"
+  $waits = Get-Waits 'DELIVER_GH_RETRY_SECONDS' @(5, 30, 120)
+  for ($attempt = 0; ; $attempt++) {
+    $all = if ($Pwsh) { & pwsh -NoProfile @ghArgs 2>&1 } else { & gh @ghArgs 2>&1 }
+    $rc = $LASTEXITCODE
+    $out = @($all | Where-Object { $_ -isnot [System.Management.Automation.ErrorRecord] })
+    if ($rc -eq 0) {
+      if (-not $out) { return $null }
+      return ($out -join "`n") | ConvertFrom-Json
+    }
+    $err = (@($all | Where-Object { $_ -is [System.Management.Automation.ErrorRecord] } | ForEach-Object { "$_" }) -join ' ').Trim()
+    if ($attempt -ge $waits.Count) { throw "$what failed after $($waits.Count) retries$(if ($err) { ": $(Get-Short $err 200)" })" }
+    $reset = if ($err -match 'rate limit' -or $err -match 'HTTP 429') { Get-RateLimitReset } else { $null }
+    if ($reset) {
+      $at = [DateTimeOffset]::FromUnixTimeSeconds($reset).LocalDateTime
+      Write-Step "github: rate limit, waits until $($at.ToString('HH:mm:ss'))" 'yellow'
+      $sec = ($at - (Get-Date)).TotalSeconds
+      Wait-Seconds $(if ($sec -gt 0) { $sec + 1 } else { 0 })
+    } else {
+      Write-Step "github: $(Get-Short $what 80) failed, retry $($attempt + 1)/$($waits.Count) in $($waits[$attempt]) s" 'yellow'
+      Wait-Seconds $waits[$attempt]
+    }
+  }
 }
 
 # $ms: title of the --milestone when the walk started at a Feature or Epic of it; a PBI or Bug below it with no or another milestone
@@ -617,7 +670,7 @@ function Show-NewEvents {
     $pr = @($ev.links | Where-Object { $_ -and $_.rel -eq 'pull-request' } | ForEach-Object { [string]$_.url }) | Select-Object -First 1
     $step = $null; $res = ''; $notice = $null
     switch ($ev.type) {
-      'step.finished' { $step = [string]$ev.step.name; $res = [string]$ev.step.text }
+      'step.finished' { $step = [string]$ev.step.name; $res = [string]$ev.step.text; $script:IterStepFinished = $true }
       'attention' {
         $kind = [string]$ev.deliver.kind
         if ($kind -eq 'needs_you') { continue }
@@ -697,6 +750,63 @@ function Write-ProgressRecord([string]$Name, [hashtable]$Data = @{}) {
   } catch { Write-Verbose "progress event not written: $_" }
 }
 
+# #672: deliver.sessionTimeoutMinutes of .agents/config.json (number > 0, default 120): after it the loop stops the session.
+function Get-SessionTimeoutMinutes {
+  $f = Join-Path (Get-Location) '.agents/config.json'
+  if (-not (Test-Path -LiteralPath $f)) { return 120 }
+  $v = try { (Get-Content -LiteralPath $f -Raw | ConvertFrom-Json -AsHashtable).deliver.sessionTimeoutMinutes } catch { $null }
+  if ($null -eq $v) { return 120 }
+  if ($v -is [bool] -or -not ($v -is [ValueType]) -or [double]$v -le 0) {
+    Write-Step "deliver.sessionTimeoutMinutes '$v' is not a number above 0: 120 is used" 'yellow'
+    return 120
+  }
+  return [double]$v
+}
+
+# Runs one harness session as a child process: stdout lines to $OnLine, stderr lines to $OnError. After $TimeoutSeconds
+# (0: none) the process tree is stopped; Ctrl+C (pipeline stop) stops it too. Returns Exit and TimedOut.
+function Invoke-HarnessProcess([string[]]$cli, [double]$TimeoutSeconds, [scriptblock]$OnLine, [scriptblock]$OnError) {
+  $exe = @(Get-Command $Harness -CommandType Application -ErrorAction Stop)[0].Source
+  $psi = [System.Diagnostics.ProcessStartInfo]::new($exe)
+  foreach ($a in $cli) { $psi.ArgumentList.Add($a) }
+  $psi.UseShellExecute = $false
+  $psi.RedirectStandardOutput = $true; $psi.RedirectStandardError = $true; $psi.RedirectStandardInput = $true
+  $psi.StandardOutputEncoding = [Text.Encoding]::UTF8; $psi.StandardErrorEncoding = [Text.Encoding]::UTF8
+  $psi.WorkingDirectory = (Get-Location).Path
+  $p = [System.Diagnostics.Process]::Start($psi)
+  $timedOut = $false
+  try {
+    $p.StandardInput.Close()
+    $deadline = if ($TimeoutSeconds -gt 0) { [DateTime]::UtcNow.AddSeconds($TimeoutSeconds) } else { [DateTime]::MaxValue }
+    $killedAt = $null
+    $outTask = $p.StandardOutput.ReadLineAsync(); $errTask = $p.StandardError.ReadLineAsync()
+    while ($outTask -or $errTask) {
+      $tasks = [System.Threading.Tasks.Task[]]@(@($outTask, $errTask) | Where-Object { $_ })
+      [void][System.Threading.Tasks.Task]::WaitAny($tasks, 200)
+      if ($errTask -and $errTask.IsCompleted) {
+        $l = $errTask.Result
+        if ($null -eq $l) { $errTask = $null } else { & $OnError $l; $errTask = $p.StandardError.ReadLineAsync() }
+      }
+      if ($outTask -and $outTask.IsCompleted) {
+        $l = $outTask.Result
+        if ($null -eq $l) { $outTask = $null } else { & $OnLine $l; $outTask = $p.StandardOutput.ReadLineAsync() }
+      }
+      if (-not $timedOut -and [DateTime]::UtcNow -ge $deadline) {
+        $timedOut = $true; $killedAt = [DateTime]::UtcNow
+        try { $p.Kill($true) } catch { Write-Verbose "session not stopped: $_" }
+      }
+      # a process that escaped the tree keeps the pipes open: stop reading 5 s after the kill
+      if ($killedAt -and ([DateTime]::UtcNow - $killedAt).TotalSeconds -gt 5) { break }
+    }
+    [void]$p.WaitForExit(5000)
+    $exit = if ($p.HasExited) { $p.ExitCode } else { -1 }
+    return [pscustomobject]@{ Exit = $exit; TimedOut = $timedOut }
+  } finally {
+    if (-not $p.HasExited) { try { $p.Kill($true) } catch { Write-Verbose "session not stopped: $_" } }
+    $p.Dispose()
+  }
+}
+
 function Invoke-Iteration([int]$n, [int]$total, $state) {
   New-Item -ItemType Directory -Force -Path $RunDir | Out-Null
   $jsonl = Join-Path $RunDir "$($state.Ready[0]).jsonl"
@@ -716,6 +826,7 @@ function Invoke-Iteration([int]$n, [int]$total, $state) {
   Send-Event @{ Type = 'iteration'; Iteration = $n; IterationMax = $total; Issue = [int]$state.Ready[0] }
   $nr = [int]$state.Ready[0]
   $script:CurrentPbi = $nr; $script:StopSeen = $false
+  $script:IterStepFinished = $false; $script:IterExit = 0; $script:IterTimedOut = $false
   $LineOutcome.Remove("$nr")
   $started = @{ Type = 'issue.started'; Issue = $nr }
   $base = Get-BaseUrl
@@ -745,19 +856,23 @@ function Invoke-Iteration([int]$n, [int]$total, $state) {
     } else {
       @('-p', $prompt, '--model', $iterModel, '--permission-mode', 'auto', '--output-format', 'stream-json', '--verbose')
     }
-    & $Harness @cli 2>&1 | ForEach-Object {
-      $line = "$_"
-      if ($_ -is [System.Management.Automation.ErrorRecord]) {
-        if ($line -match 'Background tasks still running .* stopping them') { $script:CeilingStop = "$ceilingVar=$([Environment]::GetEnvironmentVariable($ceilingVar))" }
-        Write-Step "stderr $(Get-Short $line)" 'red'; return
-      }
+    $onError = {
+      param([string]$line)
+      if ($line -match 'Background tasks still running .* stopping them') { $script:CeilingStop = "$ceilingVar=$([Environment]::GetEnvironmentVariable($ceilingVar))" }
+      Write-Step "stderr $(Get-Short $line)" 'red'
+    }
+    $onLine = {
+      param([string]$line)
       [IO.File]::AppendAllText($jsonl, $line + "`n")
       if ($Harness -eq 'copilot') { Read-CopilotRecord $line } else { Read-Record $line }
       Show-NewEvents
     }
+    $run = Invoke-HarnessProcess $cli ($SessionTimeoutMinutes * 60) $onLine $onError
     Show-NewEvents
-    $exit = $LASTEXITCODE
-    if ($exit -ne 0) { Write-Step "$Harness exited with $exit" 'red' }
+    $script:IterExit = $run.Exit
+    $script:IterTimedOut = $run.TimedOut
+    if ($run.TimedOut) { Write-Step "#$nr session timeout after $SessionTimeoutMinutes min: process tree stopped" 'red' }
+    elseif ($run.Exit -ne 0) { Write-Step "$Harness exited with $($run.Exit)" 'red' }
   } finally {
     $env:AGENT_EVENTS_OWNER = $savedOwner; $env:DELIVER_LOOP_DIR = $savedLoopDir
     [Environment]::SetEnvironmentVariable($ceilingVar, $savedCeiling)
@@ -770,6 +885,33 @@ $rbCheck = @(($rbJson | ConvertFrom-Json -ErrorAction SilentlyContinue).checks |
 if ($rbCheck.Count -and $rbCheck[0].status -eq 'action needed') {
   Write-Step "release/next is missing on origin: $($rbCheck[0].detail). Run github-release cut, then deliver again; nothing started." 'red'
   exit 3
+}
+
+# #672: a harness or GitHub failure does not count against a PBI. Waits after a harness failure in minutes (DELIVER_HARNESS_RETRY_MINUTES,
+# default 5, 15, 60); the third failure in a row ends the run `failed`. A session timeout gives the PBI one more session.
+$SessionTimeoutMinutes = Get-SessionTimeoutMinutes
+$HarnessWaits = Get-Waits 'DELIVER_HARNESS_RETRY_MINUTES' @(5, 15, 60)
+$MaxHarnessFailures = 3
+$HarnessFailures = 0
+$Timeouts = @{}
+$RetryPbi = 0
+$FailCause = ''
+
+# The end of a run: result line, set-aside PBIs, run.finished, result record, notification; `failed` names its cause last.
+function Complete-Run {
+  $script:code = switch ($result) { 'no progress' { 1 } 'blocked' { 2 } 'failed' { 5 } default { 0 } }
+  $color = if ($result -in 'done', 'max reached') { 'green' } elseif ($result -eq 'failed') { 'red' } else { 'yellow' }
+  $open = if ($state) { $state.Open } else { '?' }
+  Write-Step "loop result: $result ($i iteration(s), $open PBI(s) open)" $color
+  foreach ($k in $SetAside.Keys) { Write-Step "set aside #${k}: $($SetAside[$k]) ($(if ($Prs[$k]) { $Prs[$k] } else { 'no PR' }))" 'yellow' }
+  Stop-Run $result
+  Write-ProgressRecord 'result' @{ result = $result; code = $script:code; iterations = $i; open = $open; cause = $FailCause }
+  Send-Notice "loop result: $result" -Tone $(if ($result -eq 'failed') { 'danger' } else { '' })
+  if ($result -eq 'stopped') {
+    Remove-Item -LiteralPath (Join-Path $RunDir 'stop') -Force -ErrorAction SilentlyContinue
+    Write-Step "resume: $(Get-ResumeCommand $i)" 'yellow'
+  }
+  if ($result -eq 'failed') { Write-Step "failed: $FailCause" 'red' }
 }
 
 $result = $null
@@ -791,56 +933,80 @@ try {
   while (-not $result) {
     if (Test-StopRequested) { $result = 'stopped'; break }
     if ($Merging.Count) { Update-Merging; $state = Get-State }
+    # a harness failure or a first session timeout: the same PBI again
+    if ($RetryPbi -and $state.Ready -contains $RetryPbi) { $state.Ready = @($RetryPbi) + @($state.Ready | Where-Object { $_ -ne $RetryPbi }) }
+    $RetryPbi = 0
     $i++
-    Invoke-Iteration $i $total $state
-    if ($LineOutcome["$([int]$state.Ready[0])"].Outcome -eq 'merging') { $Merging = @($Merging) + [int]$state.Ready[0] }
-    $after = Get-State
     $cur = [int]$state.Ready[0]
+    Invoke-Iteration $i $total $state
+    if ($LineOutcome["$cur"].Outcome -eq 'merging') { $Merging = @($Merging) + $cur }
+    $after = Get-State
     if ($after.OpenNrs -contains $cur -and $Merging -notcontains $cur -and -not (Test-StopRequested) -and (Test-PrMerging $cur)) {
       $LineOutcome["$cur"] = @{ Outcome = 'merging'; Reason = 'PR merges by auto-merge' }
       $Merging = @($Merging) + $cur
       $after = Get-State
     }
+    $leftOpen = $after.OpenNrs -contains $cur -and $Merging -notcontains $cur
+    # #672: exit other than 0 without a step.finished of the iteration (and no timeout): the harness failed, not the PBI
+    $harnessFailed = $leftOpen -and -not $IterTimedOut -and $IterExit -ne 0 -and -not $IterStepFinished
+    $retryTimeout = $leftOpen -and $IterTimedOut -and [int]$Timeouts["$cur"] -lt 1
+    $override = if ($harnessFailed) { @{ Outcome = 'skipped'; Reason = "harness failed (exit $IterExit)" } }
+    elseif ($retryTimeout) { @{ Outcome = 'skipped'; Reason = 'session timeout' } }
+    else { $null }
     # delivered = left the open set; a PBI that is only held (needs-decision) stays open and is paused (#346)
     $gone = @($state.Eligible | Where-Object { $after.Eligible -notcontains $_ -and $after.OpenNrs -notcontains $_ -and $Merging -notcontains $_ })
     $Delivered = @($Delivered) + $gone
-    Send-IterationOutcome ([int]$state.Ready[0]) $gone $after
+    Send-IterationOutcome $cur $gone $after $override
     Read-StatusBlock
     Send-BlockEvents
     Write-ProgressLine
-    Write-ProgressRecord 'iteration-end' @{ n = $i; pbi = [int]$state.Ready[0]; delivered = ($gone -join ','); open = $after.Open }
-    if ($after.OpenNrs -contains $cur -and $Merging -notcontains $cur -and (Test-StopNow)) { $result = 'stopped'; break }
-    # #655: a PBI that is still open and not merging is set aside for the rest of the run; the next iteration takes the next ready one
-    if ($after.OpenNrs -contains $cur -and $Merging -notcontains $cur) {
-      $o = Get-IssueOutcome $cur $after
-      $why = if ($o.Reason -ne 'no progress') { $o.Reason } elseif ($script:CeilingStop) { "a subagent was stopped by the wait ceiling ($script:CeilingStop)" } else { 'the session ended without an outcome' }
-      if ($o.Reason -eq 'no progress') {
-        Write-Step "#$cur no outcome: $why. Last log lines:" 'yellow'
-        foreach ($l in $Recent.ToArray()) { Write-Host "  $l" }
+    Write-ProgressRecord 'iteration-end' @{ n = $i; pbi = $cur; delivered = ($gone -join ','); open = $after.Open; exit = $IterExit; timedOut = $IterTimedOut }
+    if ($leftOpen -and (Test-StopNow)) { $result = 'stopped'; break }
+    if ($harnessFailed) {
+      $HarnessFailures++
+      if ($HarnessFailures -ge $MaxHarnessFailures) {
+        $FailCause = "the harness failed $HarnessFailures times in a row (last: $Harness exit $IterExit on #$cur)"
+        $result = 'failed'; $state = $after; break
       }
-      $SetAside["$cur"] = $why
-      $after.Ready = @($after.Ready | Where-Object { $_ -ne $cur })
-      Write-Step "#$cur set aside: $why" 'yellow'
-      Send-Event @{ Type = 'attention'; Kind = 'set_aside'; Reason = "#$cur $why" }  # no -Issue: the task of the PBI is finished, an issue would start a new one
-      Write-ProgressRecord 'set-aside' @{ pbi = $cur; reason = $why; pr = [string]$Prs["$cur"] }
+      $wait = $HarnessWaits[[Math]::Min($HarnessFailures, $HarnessWaits.Count) - 1]
+      Write-Step "harness failed (exit $IterExit), retry in $wait min" 'yellow'
+      Write-ProgressRecord 'harness-failed' @{ pbi = $cur; exit = $IterExit; failures = $HarnessFailures; retryMinutes = $wait }
+      Wait-Seconds ($wait * 60)
+      # not an iteration of the PBI: -Max counts PBIs with an outcome
+      $i--; $RetryPbi = $cur
+    } else {
+      $HarnessFailures = 0
+      if ($retryTimeout) {
+        $Timeouts["$cur"] = 1
+        Write-Step "#$cur one more session after the timeout" 'yellow'
+        $i--; $RetryPbi = $cur
+      } elseif ($leftOpen) {
+        # #655: a PBI that is still open and not merging is set aside for the rest of the run; the next iteration takes the next ready one
+        $o = Get-IssueOutcome $cur $after
+        $why = if ($IterTimedOut) { 'session timeout' } elseif ($o.Reason -ne 'no progress') { $o.Reason } elseif ($script:CeilingStop) { "a subagent was stopped by the wait ceiling ($script:CeilingStop)" } else { 'the session ended without an outcome' }
+        if ($o.Reason -eq 'no progress' -and -not $IterTimedOut) {
+          Write-Step "#$cur no outcome: $why. Last log lines:" 'yellow'
+          foreach ($l in $Recent.ToArray()) { Write-Host "  $l" }
+        }
+        $SetAside["$cur"] = $why
+        $after.Ready = @($after.Ready | Where-Object { $_ -ne $cur })
+        Write-Step "#$cur set aside: $why" 'yellow'
+        Send-Event @{ Type = 'attention'; Kind = 'set_aside'; Reason = "#$cur $why" }  # no -Issue: the task of the PBI is finished, an issue would start a new one
+        Write-ProgressRecord 'set-aside' @{ pbi = $cur; reason = $why; pr = [string]$Prs["$cur"] }
+      }
     }
     $state = Wait-ForMerge $after
     $result = Get-StopReason $state
     if (-not $result -and $Max -gt 0 -and $i -ge $Max) { $result = 'max reached' }
   }
-  $code = switch ($result) { 'no progress' { 1 } 'blocked' { 2 } default { 0 } }
-  $color = if ($result -in 'done', 'max reached') { 'green' } else { 'yellow' }
-  Write-Step "loop result: $result ($i iteration(s), $($state.Open) PBI(s) open)" $color
-  foreach ($k in $SetAside.Keys) { Write-Step "set aside #${k}: $($SetAside[$k]) ($(if ($Prs[$k]) { $Prs[$k] } else { 'no PR' }))" 'yellow' }
-  Stop-Run $result
-  Write-ProgressRecord 'result' @{ result = $result; code = $code; iterations = $i; open = $state.Open }
-  Send-Notice "loop result: $result"
-  if ($result -eq 'stopped') {
-    Remove-Item -LiteralPath (Join-Path $RunDir 'stop') -Force -ErrorAction SilentlyContinue
-    Write-Step "resume: $(Get-ResumeCommand $i)" 'yellow'
-  }
+  Complete-Run
+} catch {
+  # #672: an error (a gh call that still fails after its retries) ends the run `failed`, named on the last line
+  $FailCause = "$($_.Exception.Message)"
+  $result = 'failed'
+  Complete-Run
 } finally {
-  # error or Ctrl+C: the run ends here, as no progress 
-  Stop-Run 'no progress'
+  # Ctrl+C (no catch runs for a pipeline stop): the run ends here as stopped
+  Stop-Run 'stopped'
 }
 exit $code
