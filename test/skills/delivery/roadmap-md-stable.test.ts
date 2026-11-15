@@ -105,12 +105,16 @@ describe('the committed ROADMAP.md carries the generator markers', () => {
   const text = fs.readFileSync(path.join(root, 'ROADMAP.md'), 'utf8');
   const keys = [...text.matchAll(/<!-- roadmap:begin (.+?) -->/g)].map((m) => m[1]);
 
-  it.each(['intro', 'where', 'later', 'plan 1.6.0'])('has the block %s', (key) => {
+  it.each(['intro', 'where', 'later'])('has the block %s', (key) => {
     expect(keys).toContain(key);
   });
 
+  it('has a plan block per open milestone, whatever its name', () => {
+    expect(keys.filter((k) => k.startsWith('plan ')).length).toBeGreaterThan(0);
+  });
+
   it('has one done block per closed milestone and no hand-written duplicate heading', () => {
-    for (const v of ['1.0.2', '1.1.0', '1.2.0', '1.3.0', '1.4.0', '1.5.0']) {
+    for (const v of ['1.0.2', '1.1.0', '1.2.0', '1.3.0', '1.4.0', '1.5.0', '1.6.0']) {
       expect(keys.filter((k) => k === `done ${v}`)).toHaveLength(1);
       expect(text.match(new RegExp(`^## .*\\b${v.replace(/\./g, '\\.')}\\b`, 'gm'))).toHaveLength(
         1,
