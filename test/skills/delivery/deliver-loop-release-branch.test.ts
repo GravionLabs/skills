@@ -37,7 +37,11 @@ describe.skipIf(!hasPwsh || process.platform === 'win32')(
       git(repo, 'add', '-A');
       git(repo, 'commit', '-q', '-m', 'base');
       git(repo, 'push', '-q', 'origin', 'release/next');
-      gh = createFakeGh(dir, '(call) => ({ rest: [] })');
+      git(repo, 'push', '-q', 'origin', 'HEAD:refs/heads/main');
+      gh = createFakeGh(
+        dir,
+        `(call) => call.args[1] === 'repos/{owner}/{repo}' && call.args.includes('--jq') ? { rest: 'main' } : { rest: [] }`,
+      );
       // a harness stub that records that an agent started
       fs.writeFileSync(path.join(gh.bin, 'claude'), `#!/bin/sh\ntouch ${agentMarker()}\n`, {
         mode: 0o755,
@@ -49,17 +53,43 @@ describe.skipIf(!hasPwsh || process.platform === 'win32')(
       fs.rmSync(dir, { recursive: true, force: true });
     });
 
-    it('exits 3 before any agent starts when origin/release/next is missing', async () => {
+    const dropBranch = () =>
       git(path.join(dir, 'origin.git'), 'update-ref', '-d', 'refs/heads/release/next');
+    const runLoop = () =>
+      worker.run(['-Target', '10'], {
+        cwd: repo,
+        env: { ...gh.env(), HERDR_ENV: '', NO_COLOR: '' },
+      });
+
+    // #671: a refused push keeps the exit 3 of #633
+    it('exits 3 before any agent starts when release/next is missing and the push is refused', async () => {
+      dropBranch();
+      const hook = path.join(dir, 'origin.git', 'hooks', 'pre-receive');
+      fs.mkdirSync(path.dirname(hook), { recursive: true });
+      fs.writeFileSync(hook, '#!/bin/sh\necho "ruleset: no new branches" >&2\nexit 1\n', {
+        mode: 0o755,
+      });
       try {
-        const r = await worker.run(['-Target', '10'], {
-          cwd: repo,
-          env: { ...gh.env(), HERDR_ENV: '', NO_COLOR: '' },
-        });
+        const r = await runLoop();
         expect(r.status).toBe(3);
         expect(r.stdout).toContain('release/next is missing');
+        expect(r.stdout).toContain('ruleset: no new branches');
         expect(r.stdout).toContain('github-release cut');
         expect(fs.existsSync(agentMarker())).toBe(false);
+      } finally {
+        fs.rmSync(hook);
+        git(repo, 'push', '-q', 'origin', 'release/next');
+      }
+    });
+
+    it('creates a missing release/next from the default branch and goes on', async () => {
+      dropBranch();
+      try {
+        const r = await runLoop();
+        expect(r.status).not.toBe(3);
+        expect(r.stdout).toContain('release/next created from main');
+        const origin = path.join(dir, 'origin.git');
+        expect(git(origin, 'rev-parse', 'release/next')).toBe(git(origin, 'rev-parse', 'main'));
       } finally {
         git(repo, 'push', '-q', 'origin', 'release/next');
       }

@@ -119,7 +119,7 @@ function Write-NeedsYou($s, $cutRepos = @()) {
       }
     })
   # #648: a repository loop exited 3 (origin/release/next missing); its state stays ready, so the objective stops here
-  $lines = @(@($cutRepos | ForEach-Object { "github-release cut in ${_}: origin/release/next is missing, then run the loop again" }) + $lines)
+  $lines = @(@($cutRepos | ForEach-Object { "github-release cut in ${_}: origin/release/next is missing and could not be created (push refused), then run the loop again" }) + $lines)
   $hasCriteria = @($s.gates | Where-Object { $_.type -eq 'acceptance-criteria' }).Count
   if (-not $hasCriteria -and -not @($s.repos | Where-Object { $_.state -ne 'done' }).Count) {
     $lines += "check the acceptance criteria of $ref and close the objective: $($s.objective.url)"

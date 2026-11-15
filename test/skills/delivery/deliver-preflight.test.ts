@@ -243,27 +243,17 @@ describe.skipIf(!hasPwsh || process.platform === 'win32')('Test-DeliverPreflight
     expect(fs.existsSync(dir)).toBe(true);
   });
 
-  // #633: release/next deleted after the release PR; the loop must not start and the merge check must not say ok
-  it('reports a missing release/next as action needed with github-release cut, never ok for merge', async () => {
-    const dropRef = () =>
-      git(path.join(root, 'origin.git'), 'update-ref', '-d', 'refs/heads/release/next');
-    dropRef();
+  // #633/#671: the merge check never creates the branch (the release-branch check does, deliver-preflight-release-next.test.ts)
+  it('reports a missing release/next as action needed for merge, never ok', async () => {
+    git(path.join(root, 'origin.git'), 'update-ref', '-d', 'refs/heads/release/next');
     try {
-      const r = await run(...only('release-branch'));
-      expect(r.check('release-branch').status).toBe('action needed');
-      expect(r.check('release-branch').fix).toBe('github-release cut');
-      expect(r.json.actionNeeded).toBe(true);
       const m = await run(...only('merge'));
       expect(m.check('merge').status).toBe('action needed');
       expect(m.check('merge').fix).toBe('github-release cut');
       expect(m.check('merge').mode).toBeNull();
-      const text = await run(...only('release-branch'), '-Text');
-      expect(text.stdout).toContain('github-release cut');
     } finally {
       git(repo, 'push', '-q', 'origin', 'release/next');
     }
-    const back = await run(...only('release-branch'));
-    expect(back.check('release-branch').status).toBe('ok');
     expect((await run(...only('merge'))).check('merge').status).toBe('ok');
   });
 
