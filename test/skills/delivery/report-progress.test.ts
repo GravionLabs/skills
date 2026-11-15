@@ -508,6 +508,7 @@ describe.skipIf(!hasPwsh || process.platform === 'win32')('Report-Progress.ps1',
       [['-Type', 'run.finished', '-RunResult', 'done'], 'success'],
       [['-Type', 'run.finished', '-RunResult', 'no progress'], 'warning'],
       [['-Type', 'run.finished', '-RunResult', 'blocked'], 'danger'],
+      [['-Type', 'run.finished', '-RunResult', 'partial'], 'warning'],
       [['-Type', 'run.finished', '-RunResult', 'max reached'], 'neutral'],
       [['-Type', 'milestone.progress', '-Closed', '1', '-Total', '2'], 'neutral'],
     ];
@@ -522,6 +523,40 @@ describe.skipIf(!hasPwsh || process.platform === 'win32')('Report-Progress.ps1',
     );
     expect(evs.map((e) => e.tone)).toEqual(cases.map((c) => c[1]));
     expect(evs.map((e) => e.needsYou === true)).toEqual(cases.map((c) => c[2] === true));
+  });
+
+  it('a partial run is succeeded with tone warning and says what was left; blocked and no progress stay failed (#603)', async () => {
+    const dir = path.join(root, 'ev-partial');
+    const envFor = (run: string) =>
+      baseEnv({ AGENT_EVENTS_DIR: dir, AGENT_EVENTS_RUN: run, AGENT_EVENTS_OWNER: '1' });
+    const finish = (run: string, result: string) =>
+      worker.run(['-Type', 'run.finished', '-RunResult', result], { cwd: repo, env: envFor(run) });
+    const finished = (run: string) => events(dir, run).find((e) => e.type === 'run.finished');
+
+    // two PBIs delivered, one skipped, then the run ends
+    const env = envFor('partial-run');
+    for (const [issue, outcome] of [
+      ['1', 'delivered'],
+      ['2', 'delivered'],
+      ['3', 'skipped'],
+    ])
+      await worker.run(['-Type', 'issue.finished', '-Issue', issue, '-Outcome', outcome], {
+        cwd: repo,
+        env,
+      });
+    expect((await finish('partial-run', 'partial')).status).toBe(0);
+    expect(finished('partial-run')).toMatchObject({
+      outcome: 'succeeded',
+      tone: 'warning',
+      reason: 'deliver.partial',
+      text: 'partial: 2 delivered, 1 skipped',
+      deliver: { result: 'partial' },
+    });
+
+    expect((await finish('blocked-run', 'blocked')).status).toBe(0);
+    expect(finished('blocked-run')).toMatchObject({ outcome: 'failed', tone: 'danger' });
+    expect((await finish('noprogress-run', 'no progress')).status).toBe(0);
+    expect(finished('noprogress-run')).toMatchObject({ outcome: 'failed', tone: 'warning' });
   });
 
   it('is a no-op without a run for every type but run.started', async () => {

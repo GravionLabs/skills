@@ -28,7 +28,7 @@
     "result": {
       "type": "string",
       "minLength": 1,
-      "description": "running, abandoned or the run.finished result: done, max reached, blocked, no progress, stopped"
+      "description": "running, abandoned or the run.finished result: done, max reached, partial, blocked, no progress, stopped"
     },
     "iteration": {
       "oneOf": [

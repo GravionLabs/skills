@@ -54,6 +54,7 @@ These two rules and the repositories' own loops are the only writes of the mode 
 | blocked     | open PBIs remain, all wait on an open blocker or a label                                    | 2    |
 | no progress | the set did not change after an iteration; prints the last log lines, never retries         | 1    |
 | stopped     | the stop file of the run exists before an iteration                                         | 0    |
+| partial     | part of the set delivered; the progress events write `partial` (succeeded, tone warning)    | n/a  |
 
 ## Objective: rounds over repositories
 

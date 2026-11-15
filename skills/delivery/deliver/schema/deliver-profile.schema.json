@@ -138,7 +138,8 @@
       "allOf": [
         { "if": { "properties": { "deliver": { "properties": { "result": { "const": "done" } }, "required": ["result"] } } }, "then": { "properties": { "tone": { "const": "success" }, "outcome": { "const": "succeeded" } } } },
         { "if": { "properties": { "deliver": { "properties": { "result": { "const": "no progress" } }, "required": ["result"] } } }, "then": { "properties": { "tone": { "const": "warning" } } } },
-        { "if": { "properties": { "deliver": { "properties": { "result": { "const": "blocked" } }, "required": ["result"] } } }, "then": { "properties": { "tone": { "const": "danger" } } } }
+        { "if": { "properties": { "deliver": { "properties": { "result": { "const": "blocked" } }, "required": ["result"] } } }, "then": { "properties": { "tone": { "const": "danger" } } } },
+        { "if": { "properties": { "deliver": { "properties": { "result": { "const": "partial" } }, "required": ["result"] } } }, "then": { "properties": { "tone": { "const": "warning" }, "outcome": { "const": "succeeded" } } } }
       ]
     }
   }
