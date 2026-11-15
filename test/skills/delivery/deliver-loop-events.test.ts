@@ -210,7 +210,7 @@ fs.writeFileSync(f, JSON.stringify(s));`,
         subject: {
           kind: 'github.issue',
           id: 'acme/app#10',
-          title: 'first',
+          title: '#10 first',
           url: `${BASE}/issues/10`,
         },
       });
@@ -251,7 +251,7 @@ fs.writeFileSync(f, JSON.stringify(s));`,
         status: 'running',
         subject: { title: 'M4 Status' },
         progress: { done: 1, total: 4 },
-        tasks: [{ task: 'issue-10', subject: { title: 'first' } }],
+        tasks: [{ task: 'issue-10', subject: { title: '#10 first', url: `${BASE}/issues/10` } }],
         needsYou: true,
         deliver: { result: 'running', iteration: { n: 1, max: 2 } },
       });

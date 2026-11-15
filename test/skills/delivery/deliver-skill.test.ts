@@ -460,7 +460,7 @@ describe('deliver SKILL.md', () => {
 
     it('every progress-line rule names Report-Progress with its type', () => {
       expect(steps).toContain(
-        'Report-Progress.ps1 -Type step.finished -Issue <nr> -Step <step> -Result "<result>" [-Pr <url>]',
+        'Report-Progress.ps1 -Type step.finished -Issue <nr> -Title "<title>" -Step <step> -Result "<result>" [-Pr <url>]',
       );
       expect(steps).toContain('`-Type attention`');
       expect(steps).toContain('-Type issue.finished');
