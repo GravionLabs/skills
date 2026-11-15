@@ -53,6 +53,9 @@
   Deprecated no-op (the pane is off by default); use -LogPane to open it.
 .PARAMETER NoColor
   Colors no stdout (as does a non-empty NO_COLOR); the pane tails the plain log.
+.PARAMETER NoNotify
+  Sends no desktop notification (as does `deliver.notifications: false` in .agents/config.json). Inside a poimen terminal
+  (POIMEN_TERMINAL_ID set) none is sent either: poimen shows the same attention itself.
 #>
 [CmdletBinding()]
 param(
@@ -64,6 +67,7 @@ param(
   [switch]$LogPane,
   [switch]$NoPane,
   [switch]$NoColor,
+  [switch]$NoNotify,
   [string]$Objective = '',
   [string]$Context = '',
   [switch]$DryRun,
@@ -151,7 +155,16 @@ function Write-Step([string]$text, [string]$Color = '', [string]$Tool = '', [int
 }
 
 # Urgency from the tone of the event: danger and warning get a sound on macOS, the rest is silent.
+function Test-NoticesEnabled {
+  if ($NoNotify -or $env:POIMEN_TERMINAL_ID) { return $false }
+  $f = Join-Path (Get-Location) '.agents/config.json'
+  if (-not (Test-Path -LiteralPath $f)) { return $true }
+  $v = try { (Get-Content -LiteralPath $f -Raw | ConvertFrom-Json -AsHashtable).deliver.notifications } catch { $null }
+  return $v -ne $false
+}
+
 function Send-Notice([string]$text, [string]$Tone = '') {
+  if (-not (Test-NoticesEnabled)) { return }
   try {
     if ($IsMacOS) {
       $esc = $text.Replace('\', '\\').Replace('"', '\"')

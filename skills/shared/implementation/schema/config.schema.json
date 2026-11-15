@@ -123,6 +123,11 @@
           "type": "integer",
           "minimum": 1000
         },
+        "notifications": {
+          "description": "false: deliver-loop sends no desktop notification (default true; none is sent inside a poimen terminal, POIMEN_TERMINAL_ID set).",
+          "type": "boolean",
+          "default": true
+        },
         "parallel": {
           "description": "How many repository loops deliver-loop -Objective runs at the same time in one round, one per repository (default 1: one after the other).",
           "type": "integer",
