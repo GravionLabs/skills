@@ -84,8 +84,12 @@ if ($Harness -eq 'copilot' -and -not $Model) { $Model = 'auto' }
 
 # Model per tier (references/roles.md): the tier decides the model of an iteration when -Model is not given.
 $TierModels = @{ fast = 'haiku'; standard = 'sonnet'; strong = 'opus' }
-function Get-PbiTier([int]$nr) {
-  $issue = Get-Json @('api', "repos/{owner}/{repo}/issues/$nr")
+function Read-PbiIssue([int]$nr) {
+  # one REST read of the PBI per iteration, shared by its tier and its task title (#601); null when unreadable
+  try { Get-Json @('api', "repos/{owner}/{repo}/issues/$nr") } catch { Write-Verbose "issue not read: $_"; $null }
+}
+function Get-PbiTier([int]$nr, $issue = $null) {
+  if (-not $issue) { $issue = Read-PbiIssue $nr }
   $body = [string]$issue.body
   $tier = $null; $from = 'default'
   if ($body -match '(?m)^\s*(?:[-*]\s*)?\**Tier:?\**:?\s*(fast|standard|strong)\b') { $tier = $Matches[1]; $from = 'Tier line' }
@@ -668,8 +672,10 @@ function Invoke-Iteration([int]$n, [int]$total, $state) {
   $prompt = "/deliver $([int]$state.Ready[0]) --unattended --max 1"
   if ($Context -and (Test-Path -LiteralPath $Context -PathType Leaf)) { $prompt += " --context `"$((Resolve-Path -LiteralPath $Context).Path)`"" }
   $iterModel = $Model
+  $iterIssue = $null
   if ($Harness -eq 'claude' -and -not $Model) {
-    $t = Get-PbiTier ([int]$state.Ready[0])
+    $iterIssue = Read-PbiIssue ([int]$state.Ready[0])
+    $t = Get-PbiTier ([int]$state.Ready[0]) $iterIssue
     $iterModel = $t.Model
     Write-Step "#$($state.Ready[0]) tier $($t.Tier) ($($t.From)) → model $iterModel"
   }
@@ -683,8 +689,11 @@ function Invoke-Iteration([int]$n, [int]$total, $state) {
   $base = Get-BaseUrl
   if ($base) { $started.Url = "$base/issues/$nr" }
   if ($Block -and $Block.ready.next -and [int]$Block.ready.next.number -eq $nr) { $started.Title = [string]$Block.ready.next.title; $started.Url = [string]$Block.ready.next.url }
-  # no status block (target mode): the title comes from the issue itself (one REST call per PBI)
-  if (-not $started.Title) { try { $iv = (& gh issue view $nr --json title,url 2>$null | Out-String) | ConvertFrom-Json; if ($iv.title) { $started.Title = [string]$iv.title; if ($iv.url) { $started.Url = [string]$iv.url } } } catch { Write-Verbose "issue title not read: $_" } }
+  # no status block (target mode): the title comes from the PBI's REST issue (REST, not gh issue view: no GraphQL read, #127)
+  if (-not $started.Title) {
+    if (-not $iterIssue) { $iterIssue = Read-PbiIssue $nr }
+    if ($iterIssue -and $iterIssue.title) { $started.Title = [string]$iterIssue.title; if ($iterIssue.html_url) { $started.Url = [string]$iterIssue.html_url } }
+  }
   Send-Event $started
   $script:EventOffset = if ($EventFile -and (Test-Path -LiteralPath $EventFile)) { (Get-Item -LiteralPath $EventFile).Length } else { 0 }
   # the harness is nested: AGENT_EVENTS_RUN without the owner marker (its run.started and run.finished are not written)
