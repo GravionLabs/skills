@@ -12,11 +12,13 @@ By default `Format-Changed.ps1 -Language <lang>` runs the built-in commands of `
 
 ## Deliver parallel
 
-`deliver.parallel` (integer ≥ 1, default `1`) is how many repository loops `deliver-loop -Objective` runs at the same time in one round, read from the config of the objective's checkout. With `1` the ready repositories run one after the other; with `n > 1` up to `n` of them start together, one loop per repository, and the round waits for all of them before it reads the state again. Within a repository delivery stays sequential, and each PBI is still claimed by `deliver` (`references/claim.md`). Each round logs its result per repository and its REST and GraphQL usage. See `references/loop.md` of the `deliver` skill.
+`deliver.parallel` (integer ≥ 1, default `3`) is how many repository loops `deliver-loop -Objective` runs at the same time in one round, read from the config of the objective's checkout. With `1` the ready repositories run one after the other; otherwise up to `n` of them start together, one loop per repository, and the round waits for all of them before it reads the state again. Within a repository delivery stays sequential, and each PBI is still claimed by `deliver` (`references/claim.md`). Each round logs its result per repository and its REST and GraphQL usage. See `references/loop.md` of the `deliver` skill.
 
 ```json
-{ "deliver": { "parallel": 2 } }
+{ "deliver": { "parallel": 1 } }
 ```
+
+Trade-off: the loops share one token's REST and GraphQL budget (the `round <n> api: …` line of each round shows the usage), build and test runs of several repositories load the local machine at the same time, and the token costs of the loops add up. Set `1` for tight API limits or a small machine.
 
 ## Release test
 
