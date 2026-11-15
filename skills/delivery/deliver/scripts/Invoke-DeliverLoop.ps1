@@ -5,8 +5,8 @@
   A long unattended run in one session grows its context and dies with it. This loop starts
   `claude -p "/deliver <targets> --unattended --max 1"` (`-Harness claude`, the default) or `copilot -p` (`-Harness copilot`) once per PBI; deliver keeps all state in GitHub, so there is no
   queue file. Progress is read from GitHub before and after each iteration: the open PBIs of the targets without the
-  labels needs-decision / needs-refinement / interactive (deliver skips interactive PBIs unattended). No change stops
-  the loop ("no progress"); nothing open means done (unless a closed PBI of the milestone carries needs-decision, the paused release review: blocked); open PBIs that all wait on an open blocker or a label mean blocked.
+  labels needs-decision / needs-refinement / interactive (deliver skips interactive PBIs unattended). A PBI that ends blocked, paused or without an outcome is set aside for the rest of the run
+  (step line `#<nr> set aside: <reason>`, each PBI is selected once); nothing open means done (unless a closed PBI of the milestone carries needs-decision, the paused release review: blocked); open PBIs of which none is ready (not set aside, no open blocker, no label) mean blocked; the last lines list the set-aside PBIs.
   Observability: every stream record goes to .agents/deliver-loop/<run>/<nr>.jsonl (<nr> is the first PBI that was ready
   at the start of the iteration), a summary line per step to .agents/deliver-loop.log (plain) and stdout, colored on a terminal
   (long text is cut to the terminal width, 120 characters when redirected), desktop notifications for the attention steps (macOS osascript,
@@ -18,7 +18,7 @@
   Stdout is colored when it is a terminal and neither -NoColor nor NO_COLOR is set; otherwise it is plain.
   Machine-readable progress for a control session (`deliver` `references/control.md`): .agents/deliver-loop/<run>/progress.jsonl,
   one JSON object per line (`start`, `iteration-start`, `iteration-end`, `result`), and .agents/deliver-loop/latest.txt with the path of the newest run directory.
-  Run it from the repository root. Exit code: 0 done, max reached or stopped (stop file), 1 no progress, 2 blocked, 3 release/next missing on origin (needs you: github-release cut, nothing started), 64 bad arguments.
+  Run it from the repository root. Exit code: 0 done, max reached or stopped (stop file), 2 blocked (1 no progress only in -Objective), 3 release/next missing on origin (needs you: github-release cut, nothing started), 64 bad arguments.
   Mode -Objective (ObjectiveLoop.ps1): rounds over the ready repositories of an [Objective] on exactly one runner (runner
   marker with heartbeat, ObjectiveRunner.ps1); exit 0 done or released, 1 no progress, 2 blocked, 3 gated (needs you),
   4 handed over (a foreign live runner). Takeover and release: Set-ObjectiveRunner.ps1 (deliver-loop takeover|release).
@@ -413,6 +413,8 @@ function Add-Pbis([int]$nr, [hashtable]$seen, $found, [string]$ms = '', $skipped
 }
 
 # State from GitHub: open PBIs of the targets; eligible = no hold label; ready = eligible and no open blocker.
+# #655: PBIs set aside for the rest of the run (nr -> reason): memory of the run, not GitHub. They stay open and are never ready.
+$SetAside = [ordered]@{}
 function Get-State {
   $seen = @{}
   $found = [System.Collections.Generic.List[object]]::new()
@@ -445,7 +447,8 @@ function Get-State {
       if ($open.Count -and -not @($open | Where-Object { $script:Merging -notcontains [int]$_.number })) { $waitMerge["$($_.Number)"] = [int]$open[0].number }
       -not $open
     })
-  $readyNrs = @($ready | ForEach-Object { [int]$_.Number } | Sort-Object)
+  # #655: a PBI set aside (blocked, paused or without outcome) is not selected again in this run
+  $readyNrs = @($ready | ForEach-Object { [int]$_.Number } | Where-Object { -not $script:SetAside.Contains("$_") } | Sort-Object)
   $readyNrs = @($script:RedFirst | Where-Object { $readyNrs -contains $_ }) + @($readyNrs | Where-Object { $script:RedFirst -notcontains $_ })
   $labelsOf = @{}
   foreach ($f in $found) { $labelsOf[[int]$f.Number] = @($f.Labels) }
@@ -580,7 +583,7 @@ function Get-ResumeCommand([int]$ran) {
   $parts -join ' '
 }
 
-$AttentionText = @{ stopping = 'stop requested'; pr_opened = 'PR opened'; review_fix = 'review fix round'; ci_red = 'CI red'; paused = 'paused'; blocked = 'blocked' }
+$AttentionText = @{ set_aside = 'set aside'; stopping = 'stop requested'; pr_opened = 'PR opened'; review_fix = 'review fix round'; ci_red = 'CI red'; paused = 'paused'; blocked = 'blocked' }
 $EventOffset = 0
 
 # The new events of the run's event file (written by the harness through Report-Progress.ps1 while it runs): one line
@@ -806,13 +809,20 @@ try {
     Send-BlockEvents
     Write-ProgressLine
     Write-ProgressRecord 'iteration-end' @{ n = $i; pbi = [int]$state.Ready[0]; delivered = ($gone -join ','); open = $after.Open }
-    if (($after.Eligible -join ',') -eq ($state.Eligible -join ',') -and (Test-StopNow)) { $result = 'stopped'; break }
-    if (($after.Eligible -join ',') -eq ($state.Eligible -join ',')) {
-      $result = 'no progress'
-      $why = if ($script:CeilingStop) { "a subagent was stopped by the wait ceiling ($script:CeilingStop)" } else { 'the open PBIs did not change' }
-      Write-Step "no progress: $why. Last log lines:" 'yellow'
-      foreach ($l in $Recent.ToArray()) { Write-Host "  $l" }
-      break
+    if ($after.OpenNrs -contains $cur -and $Merging -notcontains $cur -and (Test-StopNow)) { $result = 'stopped'; break }
+    # #655: a PBI that is still open and not merging is set aside for the rest of the run; the next iteration takes the next ready one
+    if ($after.OpenNrs -contains $cur -and $Merging -notcontains $cur) {
+      $o = Get-IssueOutcome $cur $after
+      $why = if ($o.Reason -ne 'no progress') { $o.Reason } elseif ($script:CeilingStop) { "a subagent was stopped by the wait ceiling ($script:CeilingStop)" } else { 'the session ended without an outcome' }
+      if ($o.Reason -eq 'no progress') {
+        Write-Step "#$cur no outcome: $why. Last log lines:" 'yellow'
+        foreach ($l in $Recent.ToArray()) { Write-Host "  $l" }
+      }
+      $SetAside["$cur"] = $why
+      $after.Ready = @($after.Ready | Where-Object { $_ -ne $cur })
+      Write-Step "#$cur set aside: $why" 'yellow'
+      Send-Event @{ Type = 'attention'; Kind = 'set_aside'; Reason = "#$cur $why" }  # no -Issue: the task of the PBI is finished, an issue would start a new one
+      Write-ProgressRecord 'set-aside' @{ pbi = $cur; reason = $why; pr = [string]$Prs["$cur"] }
     }
     $state = Wait-ForMerge $after
     $result = Get-StopReason $state
@@ -821,6 +831,7 @@ try {
   $code = switch ($result) { 'no progress' { 1 } 'blocked' { 2 } default { 0 } }
   $color = if ($result -in 'done', 'max reached') { 'green' } else { 'yellow' }
   Write-Step "loop result: $result ($i iteration(s), $($state.Open) PBI(s) open)" $color
+  foreach ($k in $SetAside.Keys) { Write-Step "set aside #${k}: $($SetAside[$k]) ($(if ($Prs[$k]) { $Prs[$k] } else { 'no PR' }))" 'yellow' }
   Stop-Run $result
   Write-ProgressRecord 'result' @{ result = $result; code = $code; iterations = $i; open = $state.Open }
   Send-Notice "loop result: $result"

@@ -41,7 +41,7 @@
 .PARAMETER Type
   run.started, milestone.progress, issue.started, step.finished, attention, issue.finished, release.updated, iteration or run.finished.
 .PARAMETER Kind
-  attention kind: pr_opened (writes nothing: the PR link is on the step.finished of the pr step), review_fix (resolved by the next review without blocking findings and by task.finished), ci_red, paused, blocked, needs_you, release_test or stopping.
+  attention kind: pr_opened (writes nothing: the PR link is on the step.finished of the pr step), review_fix (resolved by the next review without blocking findings and by task.finished), ci_red, paused, blocked, needs_you, release_test, stopping or set_aside (the loop sets the PBI aside for the rest of the run, #655).
 .PARAMETER Outcome
   issue.finished: delivered, merging (auto-merge on, the PR merges when the checks are green), blocked, paused or skipped.
 .PARAMETER Reason

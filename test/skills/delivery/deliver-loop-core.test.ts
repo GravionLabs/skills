@@ -5,6 +5,8 @@ import {
   evaluateStop,
   exitCodeFor,
   getStopReason,
+  nextReady,
+  shouldSetAside,
 } from '../../../skills/delivery/deliver/scripts/loop/stop.ts';
 import {
   type Gh,
@@ -194,15 +196,30 @@ describe('stop rules', () => {
     expect(getStopReason(st())).toBeNull();
   });
 
-  it('evaluateStop over two states', () => {
-    const before = st();
-    expect(evaluateStop(before, st(), 1, 0)).toBe('no progress');
+  it('evaluateStop has no no-progress result: done, blocked, max reached or continue', () => {
     const after = st({ eligible: [2], ready: [2] });
-    expect(evaluateStop(before, after, 1, 0)).toBeNull();
-    expect(evaluateStop(before, after, 1, 1)).toBe('max reached');
-    expect(evaluateStop(before, after, 1, 5)).toBeNull();
-    expect(evaluateStop(before, st({ open: 0, eligible: [], ready: [] }), 1, 1)).toBe('done');
-    expect(evaluateStop(before, st({ eligible: [2], ready: [] }), 1, 0)).toBe('blocked');
+    expect(evaluateStop(after, 1, 0)).toBeNull();
+    expect(evaluateStop(after, 1, 1)).toBe('max reached');
+    expect(evaluateStop(after, 1, 5)).toBeNull();
+    expect(evaluateStop(st({ open: 0, eligible: [], ready: [] }), 1, 1)).toBe('done');
+    expect(evaluateStop(st({ eligible: [2], ready: [] }), 1, 0)).toBe('blocked');
+  });
+
+  it('#655: a set-aside PBI is never ready; open PBIs without another ready one are blocked, same as the PowerShell loop', () => {
+    const state = st({ open: 3, openNrs: [1, 2, 3], ready: [1, 2, 3] });
+    expect(nextReady(state, [1])).toBe(2);
+    expect(getStopReason(state, [1])).toBeNull();
+    expect(getStopReason(state, [1, 2, 3])).toBe('blocked');
+    expect(evaluateStop(state, 1, 0, [1, 2, 3])).toBe('blocked');
+    expect(nextReady(state, [1, 2, 3])).toBeNull();
+    expect(getStopReason(st({ open: 0, ready: [] }), [1])).toBe('done');
+  });
+
+  it('#655: shouldSetAside is true for an iterated PBI that is still open and not merging', () => {
+    const after = st({ open: 2, openNrs: [1, 2] });
+    expect(shouldSetAside(after, 1)).toBe(true);
+    expect(shouldSetAside(after, 1, [1])).toBe(false);
+    expect(shouldSetAside(after, 9)).toBe(false);
   });
 
   it('exit codes', () => {

@@ -182,6 +182,7 @@ fs.writeFileSync(f, JSON.stringify(s));`,
         'step.finished',
         'task.finished', // #11 blocked, from the GitHub state; the status block lists it with the same reason
         'progress',
+        'attention', // #11 set aside (#655), no task of its own
         'run.finished',
       ]);
       expect(all[0]).toMatchObject({

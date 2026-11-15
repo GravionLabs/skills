@@ -74,7 +74,7 @@ describe.skipIf(!hasPwsh || process.platform === 'win32')('Invoke-DeliverLoop.ps
     ]);
   });
 
-  it('expands a Feature to its open PBIs, passes -Model on, and stops with "no progress" and the last log lines when a PBI stays open', async () => {
+  it('expands a Feature to its open PBIs, passes -Model on, and sets a PBI that stays open aside with the last log lines (blocked, exit 2)', async () => {
     const gh = fx.setup({
       issues: {
         100: { labels: ['feature'], children: [101, 102, 103] },
@@ -88,11 +88,12 @@ describe.skipIf(!hasPwsh || process.platform === 'win32')('Invoke-DeliverLoop.ps
       ],
     });
     const r = await fx.run(gh, ['-Target', '100', '-Model', 'opus']);
-    expect(r.status).toBe(1);
+    expect(r.status).toBe(2);
     expect(fx.harnessCalls()).toEqual([
       '-p /deliver 101 --unattended --max 1 --model opus --permission-mode auto --output-format stream-json --verbose',
+      '-p /deliver 102 --unattended --max 1 --model opus --permission-mode auto --output-format stream-json --verbose',
     ]);
-    expect(r.stdout).toContain('no progress');
+    expect(r.stdout).toContain('#101 set aside: the session ended without an outcome');
     expect(r.stdout).toMatch(/ {2}\d\d:\d\d:\d\d » working on it/);
   });
 });
