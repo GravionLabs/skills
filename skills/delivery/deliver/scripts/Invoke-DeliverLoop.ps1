@@ -18,7 +18,7 @@
   Stdout is colored when it is a terminal and neither -NoColor nor NO_COLOR is set; otherwise it is plain.
   Machine-readable progress for a control session (`deliver` `references/control.md`): .agents/deliver-loop/<run>/progress.jsonl,
   one JSON object per line (`start`, `iteration-start`, `iteration-end`, `result`), and .agents/deliver-loop/latest.txt with the path of the newest run directory.
-  Run it from the repository root. Exit code: 0 done, max reached or stopped (stop file), 1 no progress, 2 blocked, 64 bad arguments.
+  Run it from the repository root. Exit code: 0 done, max reached or stopped (stop file), 1 no progress, 2 blocked, 3 release/next missing on origin (needs you: github-release cut, nothing started), 64 bad arguments.
   Mode -Objective (ObjectiveLoop.ps1): rounds over the ready repositories of an [Objective] on exactly one runner (runner
   marker with heartbeat, ObjectiveRunner.ps1); exit 0 done or released, 1 no progress, 2 blocked, 3 gated (needs you),
   4 handed over (a foreign live runner). Takeover and release: Set-ObjectiveRunner.ps1 (deliver-loop takeover|release).
@@ -746,6 +746,14 @@ function Invoke-Iteration([int]$n, [int]$total, $state) {
     $env:AGENT_EVENTS_OWNER = $savedOwner; $env:DELIVER_LOOP_DIR = $savedLoopDir
     [Environment]::SetEnvironmentVariable($ceilingVar, $savedCeiling)
   }
+}
+
+# release/next missing (deleted after the release PR): no agent starts, no PBI is labeled (Test-DeliverPreflight.ps1 release-branch)
+$rbJson = (& pwsh -NoProfile -File (Join-Path $PSScriptRoot 'Test-DeliverPreflight.ps1') -ProjectRoot (Get-Location).Path -Check release-branch 2>$null) -join "`n"
+$rbCheck = @(($rbJson | ConvertFrom-Json -ErrorAction SilentlyContinue).checks | Where-Object { $_.name -eq 'release-branch' })
+if ($rbCheck.Count -and $rbCheck[0].status -eq 'action needed') {
+  Write-Step "release/next is missing on origin: $($rbCheck[0].detail). Run github-release cut, then deliver again; nothing started." 'red'
+  exit 3
 }
 
 $result = $null

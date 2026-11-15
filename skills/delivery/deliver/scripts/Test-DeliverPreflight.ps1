@@ -13,9 +13,11 @@
   - worktrees: worktrees (not the main or current one) on a PBI branch whose PR is merged or whose branch was deleted
     on origin (pushed once, absent now, no unpushed commits, ls-remote succeeded; one ls-remote for all) are removed with Remove-PbiWorktrees.ps1 (merged PR) or `git worktree remove` (clean, branch gone);
     the others are listed in `left`.
+  - release-branch: `origin/release/next` exists (`git ls-remote`). Missing (deleted after the release PR, until `github-release cut`):
+    `action needed`, fix `github-release cut`; never created here. Origin not reachable: ok, not checked.
   - merge: how step 7/8 of deliver merges (`mode`): `auto` (repository allows auto-merge and `release/next` has required checks),
     `watch` (auto-merge off: `auto-merge off, watching checks`) or `watch-no-required` (no required checks on `release/next`, auto-merge would
-    merge at once: `no required checks on release/next`). Always status ok, a note for the run. Reads two REST endpoints.
+    merge at once: `no required checks on release/next`); `action needed` when release/next is missing. Reads two REST endpoints.
   Output: {actionNeeded, checks[{name, status, detail, fix, missing[], removed[], left[]}]}. Exit 1 only when the
   directory is not a git repository.
 .PARAMETER ProjectRoot
@@ -36,7 +38,7 @@ param(
   [ValidateSet('claude', 'opencode', 'copilot')][string]$Harness = 'claude',
   [switch]$Unattended,
   [switch]$AddAllowlist,
-  [ValidateSet('skills', 'allowlist', 'worktrees', 'merge')][string[]]$Check = @('skills', 'allowlist', 'worktrees', 'merge'),
+  [ValidateSet('skills', 'allowlist', 'worktrees', 'release-branch', 'merge')][string[]]$Check = @('release-branch', 'skills', 'allowlist', 'worktrees', 'merge'),
   [switch]$Text
 )
 $ErrorActionPreference = 'Stop'
@@ -200,8 +202,23 @@ function Test-Worktrees {
   Add-Check 'worktrees' $status "$($removed.Count) removed, $($left.Count) left" @{ removed = $removed; left = $left }
 }
 
+# ---- release-branch ----
+function Get-ReleaseBranchState {
+  $out = & git -C $root ls-remote --heads origin release/next 2>$null
+  if ($LASTEXITCODE -ne 0) { return 'unreachable' }
+  if (@($out | Where-Object { $_ }).Count) { 'present' } else { 'missing' }
+}
+function Test-ReleaseBranch {
+  switch (Get-ReleaseBranchState) {
+    'missing' { Add-Check 'release-branch' 'action needed' 'origin/release/next is missing (deleted after the release PR?)' @{ fix = 'github-release cut' } }
+    'unreachable' { Add-Check 'release-branch' 'ok' 'not checked, origin not reachable' }
+    default { Add-Check 'release-branch' 'ok' 'origin/release/next present' }
+  }
+}
+
 # ---- merge ----
 function Test-MergeMode {
+  if ((Get-ReleaseBranchState) -eq 'missing') { Add-Check 'merge' 'action needed' 'release/next is missing, no merge mode' @{ mode = $null; fix = 'github-release cut' }; return }
   $allowed = try { [bool]((& gh api 'repos/{owner}/{repo}' 2>$null) -join "`n" | ConvertFrom-Json).allow_auto_merge } catch { $false }
   $types = try { @((& gh api 'repos/{owner}/{repo}/rules/branches/release/next' 2>$null) -join "`n" | ConvertFrom-Json | ForEach-Object { $_.type }) } catch { @() }
   if ($types -notcontains 'required_status_checks') { Add-Check 'merge' 'ok' 'no required checks on release/next' @{ mode = 'watch-no-required' }; return }
@@ -209,6 +226,7 @@ function Test-MergeMode {
   Add-Check 'merge' 'ok' 'auto-merge on, no watch' @{ mode = 'auto' }
 }
 
+if ($Check -contains 'release-branch') { Test-ReleaseBranch }
 if ($Check -contains 'skills') { Test-Skills }
 if ($Check -contains 'allowlist') { Test-Allowlist }
 if ($Check -contains 'worktrees') { Test-Worktrees }
