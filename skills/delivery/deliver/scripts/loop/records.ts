@@ -26,7 +26,9 @@ export function short(s: string, n = LINE_WIDTH): string {
 }
 
 /** A `#<nr> <step>: <result>` progress line of deliver, or null. */
-export function parseProgressLine(text: string): { issue: number; step: string; result: string } | null {
+export function parseProgressLine(
+  text: string,
+): { issue: number; step: string; result: string } | null {
   const m = PROGRESS_LINE.exec(text.trim());
   return m ? { issue: Number(m[1]), step: m[2], result: m[3] ?? '' } : null;
 }
@@ -40,7 +42,9 @@ function toolWhat(input: Json | undefined): string {
 
 function textRecords(prefix: string, text: string): SessionRecord[] {
   const progress = parseProgressLine(text);
-  return progress ? [{ kind: 'progress', prefix, ...progress }] : [{ kind: 'text', prefix, text: short(text) }];
+  return progress
+    ? [{ kind: 'progress', prefix, ...progress }]
+    : [{ kind: 'text', prefix, text: short(text) }];
 }
 
 /** One parser per session: it remembers the names of subagents. */
@@ -59,7 +63,11 @@ export class RecordParser {
     if (raw.kind === 'exit') return [{ kind: 'exit', code: raw.code }];
     if (raw.kind === 'stderr') {
       const text = short(raw.text);
-      return [CEILING_STDERR.test(raw.text) ? { kind: 'stderr', text, ceilingStop: this.ceilingStop } : { kind: 'stderr', text }];
+      return [
+        CEILING_STDERR.test(raw.text)
+          ? { kind: 'stderr', text, ceilingStop: this.ceilingStop }
+          : { kind: 'stderr', text },
+      ];
     }
     if (!raw.line.trim()) return [];
     let rec: Json;
@@ -68,7 +76,8 @@ export class RecordParser {
     } catch {
       return [{ kind: 'unparsed', text: short(raw.line) }];
     }
-    if (rec === null || typeof rec !== 'object') return [{ kind: 'unparsed', text: short(raw.line) }];
+    if (rec === null || typeof rec !== 'object')
+      return [{ kind: 'unparsed', text: short(raw.line) }];
     return this.harness === 'copilot' ? this.copilot(rec) : this.claude(rec);
   }
 
@@ -85,12 +94,16 @@ export class RecordParser {
     for (const c of content) {
       if (!c) continue;
       if (rec.type === 'assistant' && c.type === 'tool_use') {
-        if (c.name === 'Agent' || c.name === 'Task') this.agentNames.set(c.id, short(String(c.input?.description ?? ''), 60));
+        if (c.name === 'Agent' || c.name === 'Task')
+          this.agentNames.set(c.id, short(String(c.input?.description ?? ''), 60));
         out.push({ kind: 'tool', prefix, name: c.name, what: toolWhat(c.input) });
       } else if (rec.type === 'assistant' && c.type === 'text') {
         out.push(...textRecords(prefix, String(c.text ?? '')));
       } else if (rec.type === 'user' && c.type === 'tool_result' && c.is_error) {
-        const body = typeof c.content === 'string' ? c.content : (c.content ?? []).map((x: Json) => x.text).join('\n');
+        const body =
+          typeof c.content === 'string'
+            ? c.content
+            : (c.content ?? []).map((x: Json) => x.text).join('\n');
         out.push({ kind: 'tool-error', prefix, text: short(body) });
       }
     }
@@ -102,15 +115,25 @@ export class RecordParser {
     const prefix = this.prefix(d.parentToolCallId);
     switch (rec.type) {
       case 'subagent.started':
-        if (d.toolCallId) this.agentNames.set(d.toolCallId, short(String(d.agentDisplayName ?? d.agentName ?? ''), 60));
+        if (d.toolCallId)
+          this.agentNames.set(
+            d.toolCallId,
+            short(String(d.agentDisplayName ?? d.agentName ?? ''), 60),
+          );
         return [];
       case 'tool.execution_start':
-        return [{ kind: 'tool', prefix, name: String(d.toolName ?? ''), what: toolWhat(d.arguments) }];
+        return [
+          { kind: 'tool', prefix, name: String(d.toolName ?? ''), what: toolWhat(d.arguments) },
+        ];
       case 'assistant.message':
         return d.content ? textRecords(prefix, String(d.content)) : [];
       case 'tool.execution_complete': {
         if (d.success !== false) return [];
-        const body = d.error?.message ? String(d.error.message) : d.result?.content ? String(d.result.content) : 'tool failed';
+        const body = d.error?.message
+          ? String(d.error.message)
+          : d.result?.content
+            ? String(d.result.content)
+            : 'tool failed';
         return [{ kind: 'tool-error', prefix, text: short(body) }];
       }
       default:
@@ -120,7 +143,11 @@ export class RecordParser {
 }
 
 /** Parses the raw output of a host. `ceilingStop` is the `VAR=value` text of a ceiling stop. */
-export async function* parseSession(harness: Harness, raw: AsyncIterable<RawRecord>, ceilingStop = ''): AsyncGenerator<SessionRecord> {
+export async function* parseSession(
+  harness: Harness,
+  raw: AsyncIterable<RawRecord>,
+  ceilingStop = '',
+): AsyncGenerator<SessionRecord> {
   const parser = new RecordParser(harness, ceilingStop);
   for await (const r of raw) yield* parser.parse(r);
 }
