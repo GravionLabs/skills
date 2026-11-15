@@ -1,7 +1,7 @@
 // Stop rules of the loop as pure functions over the states before and after an iteration.
 import type { LoopState } from './state.ts';
 
-export type StopResult = 'done' | 'max reached' | 'blocked';
+export type StopResult = 'done' | 'max reached' | 'blocked' | 'failed';
 
 const EXIT_CODES: Record<string, number> = {
   done: 0,
@@ -9,6 +9,7 @@ const EXIT_CODES: Record<string, number> = {
   stopped: 0,
   'no progress': 1,
   blocked: 2,
+  failed: 5,
 };
 
 export function exitCodeFor(result: string): number {
@@ -52,4 +53,52 @@ export function evaluateStop(
   if (reason) return reason;
   if (max > 0 && iterations >= max) return 'max reached';
   return null;
+}
+
+/** #672: waits in minutes after the 1st, 2nd, ... harness failure in a row; the 3rd failure ends the run `failed`. */
+export const HARNESS_RETRY_MINUTES = [5, 15, 60];
+export const MAX_HARNESS_FAILURES = 3;
+export const DEFAULT_SESSION_TIMEOUT_MINUTES = 120;
+
+export type SessionEnd = { exitCode: number; stepFinished: boolean; timedOut: boolean };
+export type SessionVerdict = 'ok' | 'timeout' | 'harness failure';
+
+/**
+ * #672: how a session ended. Stopped after deliver.sessionTimeoutMinutes: timeout; an exit other than 0 without a
+ * step.finished event of its iteration: harness failure (the PBI is not set aside); else ok (the PBI rules decide).
+ */
+export function classifySession(end: SessionEnd): SessionVerdict {
+  if (end.timedOut) return 'timeout';
+  if (end.exitCode !== 0 && !end.stepFinished) return 'harness failure';
+  return 'ok';
+}
+
+export type HarnessAction =
+  | { action: 'retry'; waitMinutes: number }
+  | { action: 'fail'; cause: string };
+
+/** After the `failuresInRow`-th harness failure in a row: retry the same PBI after a wait, or end the run `failed`. */
+export function harnessFailureAction(
+  failuresInRow: number,
+  exitCode: number,
+  waits: number[] = HARNESS_RETRY_MINUTES,
+): HarnessAction {
+  if (failuresInRow >= MAX_HARNESS_FAILURES) {
+    return {
+      action: 'fail',
+      cause: `the harness failed ${failuresInRow} times in a row (last exit ${exitCode})`,
+    };
+  }
+  return { action: 'retry', waitMinutes: waits[Math.min(failuresInRow, waits.length) - 1] };
+}
+
+/** After a session timeout of a PBI (`timeouts` counted with this one): one more session, the second one sets it aside. */
+export function timeoutAction(timeouts: number): 'retry' | 'set aside' {
+  return timeouts < 2 ? 'retry' : 'set aside';
+}
+
+/** deliver.sessionTimeoutMinutes of .agents/config.json: a number above 0, else the default 120. */
+export function sessionTimeoutMinutes(config: any): number {
+  const v = config?.deliver?.sessionTimeoutMinutes;
+  return typeof v === 'number' && Number.isFinite(v) && v > 0 ? v : DEFAULT_SESSION_TIMEOUT_MINUTES;
 }

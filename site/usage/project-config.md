@@ -10,6 +10,14 @@ By default `Format-Changed.ps1 -Language <lang>` runs the built-in commands of `
 
 `deliver.roles` sets `model` and `effort` per role: the `deliver` skill uses `implement`, `review`, `fix` and `release-review` (the release review before the release PR, default opus/high) for its subagents when the harness takes a model per call; the schema also knows `select`, `plan`, `create`, `gate`, `pr` and `ci`, which the skill does not use; `implement` and `fix` also take `tiers` (`fast`, `standard`, `strong`). Unset keys keep the defaults, see `references/roles.md` of the `deliver` skill.
 
+## Deliver session timeout
+
+`deliver.sessionTimeoutMinutes` (number above 0, default `120`) is how long `deliver-loop` lets one `/deliver` session run. After it the loop stops the session with its process tree and gives the PBI one more session; a second timeout sets the PBI aside with the reason `session timeout`. See `references/loop.md` of the `deliver` skill.
+
+```json
+{ "deliver": { "sessionTimeoutMinutes": 180 } }
+```
+
 ## Deliver parallel
 
 `deliver.parallel` (integer ≥ 1, default `3`) is how many repository loops `deliver-loop -Objective` runs at the same time in one round, read from the config of the objective's checkout. With `1` the ready repositories run one after the other; otherwise up to `n` of them start together, one loop per repository, and the round waits for all of them before it reads the state again. Within a repository delivery stays sequential, and each PBI is still claimed by `deliver` (`references/claim.md`). Each round logs its result per repository and its REST and GraphQL usage. See `references/loop.md` of the `deliver` skill.

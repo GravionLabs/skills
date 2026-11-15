@@ -381,7 +381,7 @@ function Get-RepoLoopLabel([int]$code, [string]$path, $since = $null) {
     } catch { $word = $null }
     if ($word) { return $word } else { return 'ok (0)' }
   }
-  switch ($code) { 1 { 'no progress' } 2 { 'blocked' } 3 { 'release/next missing' } -1 { 'clone failed' } default { "failed ($code)" } }
+  switch ($code) { 1 { 'no progress' } 2 { 'blocked' } 3 { 'release/next missing' } 5 { 'failed' } -1 { 'clone failed' } default { "failed ($code)" } }
 }
 
 # deliver.parallel > 1: runs the prepared repository loops ($jobs: Repo, Path, Cli) as thread jobs, at most $limit at a time,

@@ -18,7 +18,7 @@
                           open until the PR is merged); delivered and skipped resolve the open needs-you attentions of the issue
     release.updated       deliver.release.updated: deliver {round, pr, rcUrl, rcVersion, testIssue}
     iteration             deliver.iteration: deliver {n, max, issue} (loop iteration n of max, on the PBI -Issue)
-    run.finished          run.finished: outcome (done, max reached, partial -> succeeded; blocked, no progress -> failed; stopped -> cancelled),
+    run.finished          run.finished: outcome (done, max reached, partial -> succeeded; blocked, no progress, failed -> failed; stopped -> cancelled),
                           reason deliver.<result>, text (partial: `partial: <n> delivered, <m> skipped`), deliver {result}; first it
                           finishes every task still open in the run (#600): a
                           merging task -> task.finished succeeded, reason deliver.merging, text "auto-merge on, waits for checks", its
@@ -53,9 +53,9 @@
 .PARAMETER Iteration
   iteration: the number of the loop iteration; -IterationMax its maximum.
 .PARAMETER RunResult
-  run.finished result: done, max reached, partial, blocked, no progress, stopped. partial is a run that delivered part of its
+  run.finished result: done, max reached, partial, blocked, no progress, failed (the loop: harness or GitHub failure, #672), stopped. partial is a run that delivered part of its
   set: outcome succeeded, tone warning, reason deliver.partial, text `partial: <n> delivered, <m> skipped` (owner decision
-  2026-11-13). blocked and no progress stay failed.
+  2026-11-13). blocked, no progress and failed stay failed (failed with tone danger).
 .PARAMETER Run
   Run id to write to; the fallback is AGENT_EVENTS_RUN. An interactive session passes the id printed by run.started with
   every later call (Bash calls share no shell state, and an env prefix would not match the permission allowlist). -Run
@@ -115,7 +115,7 @@ function Get-Tone([string]$type, [string]$step, [string]$result, [string]$kind, 
       return 'neutral'
     }
     'run.finished' {
-      switch ($runResult) { 'done' { return 'success' } 'partial' { return 'warning' } 'no progress' { return 'warning' } 'blocked' { return 'danger' } }
+      switch ($runResult) { 'done' { return 'success' } 'partial' { return 'warning' } 'no progress' { return 'warning' } 'blocked' { return 'danger' } 'failed' { return 'danger' } }
       return 'neutral'
     }
     'step.finished' {

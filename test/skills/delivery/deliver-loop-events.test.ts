@@ -275,22 +275,23 @@ fs.writeFileSync(f, JSON.stringify(s));`,
       });
     });
 
-    it('an error after run.started still ends the run with exactly one run.finished', async () => {
+    // #672: the failing read is retried 3 times, then the run ends failed (exit 5)
+    it('an error after run.started still ends the run with exactly one run.finished, failed', async () => {
       const r = await run(setup({ failOpenRead: true }));
-      expect(r.status).not.toBe(0);
+      expect(r.status).toBe(5);
       const all = events(eventFile());
       expect(all[0].type).toBe('run.started');
       expect(all.filter((e) => e.type === 'run.finished')).toHaveLength(1);
       expect(all.at(-1)).toMatchObject({
         type: 'run.finished',
-        deliver: { result: 'no progress' },
+        deliver: { result: 'failed' },
       });
       expect(
         checkRunFile(fs.readFileSync(eventFile(), 'utf8'), { known: true, deliver: true }),
       ).toEqual([]);
       const doc = await project(eventFile(), true);
       valid(doc);
-      expect(doc.deliver.result).toBe('no progress');
+      expect(doc.deliver.result).toBe('failed');
     });
   },
 );

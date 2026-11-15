@@ -128,6 +128,12 @@
           "type": "boolean",
           "default": true
         },
+        "sessionTimeoutMinutes": {
+          "description": "Minutes after which deliver-loop stops a /deliver session with its process tree (default 120); the PBI gets one more session, a second timeout sets it aside with the reason session timeout.",
+          "type": "number",
+          "exclusiveMinimum": 0,
+          "default": 120
+        },
         "parallel": {
           "description": "How many repository loops deliver-loop -Objective runs at the same time in one round, one per repository (default 3; 1: one after the other).",
           "type": "integer",
