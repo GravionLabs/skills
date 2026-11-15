@@ -104,7 +104,7 @@ function Get-ObjectiveStop($s) {
   'blocked'
 }
 
-function Write-NeedsYou($s) {
+function Write-NeedsYou($s, $cutRepos = @()) {
   $ref = "$($s.objective.repository)#$($s.objective.number)"
   $lines = @(foreach ($g in @($s.gates)) {
       switch ($g.type) {
@@ -118,6 +118,8 @@ function Write-NeedsYou($s) {
         default { "$($g.type)$(if ($g.detail) { " $($g.detail)" })$(if ($g.url) { ": $($g.url)" })" }
       }
     })
+  # #648: a repository loop exited 3 (origin/release/next missing); its state stays ready, so the objective stops here
+  $lines = @(@($cutRepos | ForEach-Object { "github-release cut in ${_}: origin/release/next is missing, then run the loop again" }) + $lines)
   $hasCriteria = @($s.gates | Where-Object { $_.type -eq 'acceptance-criteria' }).Count
   if (-not $hasCriteria -and -not @($s.repos | Where-Object { $_.state -ne 'done' }).Count) {
     $lines += "check the acceptance criteria of $ref and close the objective: $($s.objective.url)"
@@ -379,7 +381,7 @@ function Get-RepoLoopLabel([int]$code, [string]$path, $since = $null) {
     } catch { $word = $null }
     if ($word) { return $word } else { return 'ok (0)' }
   }
-  switch ($code) { 1 { 'no progress' } 2 { 'blocked' } -1 { 'clone failed' } default { "failed ($code)" } }
+  switch ($code) { 1 { 'no progress' } 2 { 'blocked' } 3 { 'release/next missing' } -1 { 'clone failed' } default { "failed ($code)" } }
 }
 
 # deliver.parallel > 1: runs the prepared repository loops ($jobs: Repo, Path, Cli) as thread jobs, at most $limit at a time,
@@ -441,7 +443,7 @@ function Invoke-ObjectiveLoop {
   $statusScript = Join-Path $PSScriptRoot 'Get-ObjectiveStatus.ps1'
   $preflight = Join-Path $PSScriptRoot 'Test-DeliverPreflight.ps1'
   $loop = Join-Path $PSScriptRoot 'Invoke-DeliverLoop.ps1'
-  $round = 0; $prev = $null; $result = $null; $s = $null
+  $round = 0; $prev = $null; $result = $null; $s = $null; $cutRepos = @()
   $parallel = Get-DeliverParallel $telos
   if ($parallel -gt 1) { Write-Step "deliver.parallel ${parallel}: up to $parallel repository loops at a time, one per repository" }
   $since = ([DateTime]::UtcNow.AddSeconds(-1)); $handled = @{}; $triggered = @{}
@@ -594,6 +596,9 @@ function Invoke-ObjectiveLoop {
       if ($results.Count) {
         Write-Step "round ${round} results: $(@($results | ForEach-Object { "$($_.Repo) $(Get-RepoLoopLabel $_.Exit $_.Path $_.Start)" }) -join ', ')"
         Write-ApiUsage $round $apiBefore (Get-ApiUsage)
+        # #648: exit 3 = origin/release/next missing in that repository: needs you, not a rerun of the ready repository
+        $cutRepos = @($results | Where-Object { $_.Exit -eq 3 } | ForEach-Object { $_.Repo })
+        if ($cutRepos.Count) { $result = 'gated' }
       }
       if ($result) { break }
       if ($DryRun) { $result = 'dry run'; break }
@@ -607,7 +612,7 @@ function Invoke-ObjectiveLoop {
   if ($s) {
     foreach ($r in @($s.repos)) { Write-Step "$($r.repository): $($r.closed)/$($r.open + $r.closed) $($r.status)" }
   }
-  if ($result -eq 'gated') { Write-NeedsYou $s }
+  if ($result -eq 'gated') { Write-NeedsYou $s $cutRepos }
   $color = if ($result -in 'done', 'dry run', 'released') { 'green' } else { 'yellow' }
   Write-Step "objective result: $result ($round round(s))" $color
   if ($result -ne 'dry run') { Send-Notice "objective $Ref`: $result" }
