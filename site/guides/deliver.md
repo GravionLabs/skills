@@ -141,7 +141,7 @@ Without the shim, call the script by its full path:
 pwsh .claude/skills/deliver/scripts/Invoke-DeliverLoop.ps1 -Milestone M004 -Max 5
 ```
 
-It stops when everything is done or `-Max` is reached (exit 0), when no progress is made (1) or a PBI is blocked (2). The stream log is in `.agents/deliver-loop/`.
+It stops when everything is done or `-Max` is reached (exit 0), when no progress is made (1) or a PBI is blocked (2). Exit 3 means `release/next` is missing on origin: nothing starts, run `github-release cut` first. The stream log is in `.agents/deliver-loop/`.
 
 - `-Harness copilot` runs `copilot -p … --unattended --max 1` instead. Without `-Model` it uses `auto` (Copilot picks the model); `-Model` overrides it and is passed as given, so pass a Copilot model such as `gpt-5`, not a Claude name.
 - Console: stdout is colored on a terminal (`-NoColor` or `NO_COLOR` turn it off) and lines are cut to the terminal width (at least 120). The herdr log pane is opt-in with `-LogPane`.
