@@ -243,9 +243,45 @@ describe.skipIf(!hasPwsh || process.platform === 'win32')('Test-DeliverPreflight
     expect(fs.existsSync(dir)).toBe(true);
   });
 
+  // #633: release/next deleted after the release PR; the loop must not start and the merge check must not say ok
+  it('reports a missing release/next as action needed with github-release cut, never ok for merge', async () => {
+    const dropRef = () =>
+      git(path.join(root, 'origin.git'), 'update-ref', '-d', 'refs/heads/release/next');
+    dropRef();
+    try {
+      const r = await run(...only('release-branch'));
+      expect(r.check('release-branch').status).toBe('action needed');
+      expect(r.check('release-branch').fix).toBe('github-release cut');
+      expect(r.json.actionNeeded).toBe(true);
+      const m = await run(...only('merge'));
+      expect(m.check('merge').status).toBe('action needed');
+      expect(m.check('merge').fix).toBe('github-release cut');
+      expect(m.check('merge').mode).toBeNull();
+      const text = await run(...only('release-branch'), '-Text');
+      expect(text.stdout).toContain('github-release cut');
+    } finally {
+      git(repo, 'push', '-q', 'origin', 'release/next');
+    }
+    const back = await run(...only('release-branch'));
+    expect(back.check('release-branch').status).toBe('ok');
+    expect((await run(...only('merge'))).check('merge').status).toBe('ok');
+  });
+
+  it('does not treat an unreachable origin as a missing release/next', async () => {
+    const real = path.join(root, 'origin.git');
+    git(repo, 'remote', 'set-url', 'origin', path.join(root, 'missing.git'));
+    try {
+      const r = await run(...only('release-branch'));
+      expect(r.check('release-branch').status).toBe('ok');
+      expect(r.check('release-branch').detail).toContain('not checked');
+    } finally {
+      git(repo, 'remote', 'set-url', 'origin', real);
+    }
+  });
+
   it('prints one line per check with -Text and exits 1 outside a repository', async () => {
     const t = await runStub('-Text');
-    expect(t.stdout.trim().split('\n')).toHaveLength(4);
+    expect(t.stdout.trim().split('\n')).toHaveLength(5);
     expect(t.stdout).toMatch(/^preflight skills: /m);
     // own process: a ProjectRoot that is no git repository
     const plain = fs.mkdtempSync(path.join(os.tmpdir(), 'preflight-plain-'));
