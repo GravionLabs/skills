@@ -2,7 +2,7 @@ import * as fs from 'fs';
 import * as path from 'path';
 import { checkEventsDir } from './agent-events';
 import { createFakeGh } from './fake-gh';
-import { PwshWorker } from './pwsh-worker';
+import type { PwshWorker } from './pwsh-worker';
 
 // Fixture of the merging loop tests (#481): a fake gh and claude for Invoke-DeliverLoop.ps1 over milestone M4.
 export const SCRIPTS = path.resolve(__dirname, '../../skills/delivery/deliver/scripts');
@@ -85,4 +85,4 @@ export const started = (cwd: string) => {
     .map((e) => e.deliver.issue);
 };
 export const pr = (sha: string) =>
-  `{ number: 55, html_url: '${PR}', head: { ref: 'feat/10-a', sha: '${sha}' }, auto_merge: { merge_method: 'squash' } }`;
+  `{ number: 55, html_url: '${PR}', state: 'open', head: { ref: 'feat/10-a', sha: '${sha}' }, auto_merge: { merge_method: 'squash' } }`;
