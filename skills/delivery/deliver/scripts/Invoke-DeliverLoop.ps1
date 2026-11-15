@@ -490,6 +490,22 @@ function Wait-ForMerge($state) {
   return $state
 }
 
+# #605: the session ended while its PR merges (auto-merge on) or has just merged, but the issue is closed only by the close-on-merge
+# workflow a moment later. One REST list of the PRs into release/next: a PR of this issue (head <type>/<nr>-<slug>) with auto-merge
+# on or merged counts as `merging`, not as `no progress`; Update-Merging then watches it.
+function Test-PrMerging([int]$nr) {
+  try {
+    foreach ($p in @(Get-Json @('api', 'repos/{owner}/{repo}/pulls?base=release/next&state=all&sort=updated&direction=desc&per_page=50'))) {
+      if (-not $p -or $p.head.ref -notmatch "^[^/]+/$nr-") { continue }
+      if ($p.merged_at -or ($p.state -eq 'open' -and $p.auto_merge)) {
+        if ($p.html_url -and -not $Prs["$nr"]) { $script:Prs["$nr"] = [string]$p.html_url }
+        return $true
+      }
+    }
+  } catch { Write-Verbose "Test-PrMerging #$nr failed: $_" }
+  return $false
+}
+
 function Get-StopReason($state) {
   if ($state.Open -eq 0) { return $(if ($state.Paused) { 'blocked' } else { 'done' }) }
   if ($state.Ready.Count -eq 0) { return 'blocked' }
@@ -755,6 +771,12 @@ try {
     Invoke-Iteration $i $total $state
     if ($LineOutcome["$([int]$state.Ready[0])"].Outcome -eq 'merging') { $Merging = @($Merging) + [int]$state.Ready[0] }
     $after = Get-State
+    $cur = [int]$state.Ready[0]
+    if ($after.OpenNrs -contains $cur -and $Merging -notcontains $cur -and -not (Test-StopRequested) -and (Test-PrMerging $cur)) {
+      $LineOutcome["$cur"] = @{ Outcome = 'merging'; Reason = 'PR merges by auto-merge' }
+      $Merging = @($Merging) + $cur
+      $after = Get-State
+    }
     # delivered = left the open set; a PBI that is only held (needs-decision) stays open and is paused (#346)
     $gone = @($state.Eligible | Where-Object { $after.Eligible -notcontains $_ -and $after.OpenNrs -notcontains $_ -and $Merging -notcontains $_ })
     $Delivered = @($Delivered) + $gone
