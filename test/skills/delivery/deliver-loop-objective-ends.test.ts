@@ -101,14 +101,41 @@ describe.skipIf(!hasPwsh || process.platform === 'win32')(
       expect(out).toEqual(['max reached', 'ok (0)', 'blocked', 'no progress']);
     });
 
-    it('Write-NeedsYou prints the acceptance-criteria gate while a repository is open', () => {
+    it('Get-RepoLoopLabel ignores the result of a run that started before the round (#594)', () => {
+      const co = path.join(dir, 'label-stale');
+      const run = path.join(co, '.agents/deliver-loop/20260101-000000');
+      fs.mkdirSync(run, { recursive: true });
+      fs.writeFileSync(path.join(co, '.agents/deliver-loop/latest.txt'), run);
+      fs.writeFileSync(
+        path.join(run, 'progress.jsonl'),
+        '{"event":"start","time":"2026-01-01T00:00:00.0000000Z"}\n{"event":"result","result":"stopped","code":0}\n',
+      );
+      const out = ps(
+        `Get-RepoLoopLabel 0 '${co}' ([DateTime]::Parse('2026-01-02T00:00:00Z').ToUniversalTime()); Get-RepoLoopLabel 0 '${co}' ([DateTime]::Parse('2025-12-31T00:00:00Z').ToUniversalTime())`,
+      );
+      expect(out).toEqual(['ok (0)', 'stopped']);
+    });
+
+    it('Write-NeedsYou words the acceptance-criteria gate as a status while a repository is open', () => {
       const out = ps(
         `$s = '{"objective":{"repository":"o/telos","number":1,"url":"u"},"repos":[{"state":"waiting"}],"gates":[{"type":"acceptance-criteria","detail":"2 open","url":"https://x/1"},{"type":"mystery","detail":"d"}]}' | ConvertFrom-Json; Write-NeedsYou $s`,
       );
       expect(out).toEqual([
         'needs you:',
-        '  1. check the acceptance criteria of o/telos#1 and close the objective: https://x/1',
+        '  1. acceptance criteria of o/telos#1 not confirmed yet (2 open): https://x/1',
         '  2. mystery d',
+      ]);
+    });
+
+    it('Write-NeedsYou words the acceptance-criteria gate as a status while a repository is open', () => {
+      const out = ps(
+        `$s = '{"objective":{"repository":"o/telos","number":1,"url":"u"},"repos":[{"state":"waiting"}],"gates":[{"type":"acceptance-criteria","detail":"2 open","url":"https://x/1"}]}' | ConvertFrom-Json; Write-NeedsYou $s; $t = '{"objective":{"repository":"o/telos","number":1,"url":"u"},"repos":[{"state":"done"}],"gates":[{"type":"acceptance-criteria","detail":"2 open","url":"https://x/1"}]}' | ConvertFrom-Json; Write-NeedsYou $t`,
+      );
+      expect(out).toEqual([
+        'needs you:',
+        '  1. acceptance criteria of o/telos#1 not confirmed yet (2 open): https://x/1',
+        'needs you:',
+        '  1. check the acceptance criteria of o/telos#1 and close the objective: https://x/1',
       ]);
     });
   },

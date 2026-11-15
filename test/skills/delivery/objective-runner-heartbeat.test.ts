@@ -15,6 +15,8 @@ const GH = `#!/bin/bash
 d="$FAKE_GH_DIR"
 echo "$@" >> "$d/calls.txt"
 if [[ "$*" == *"-X PATCH"* ]]; then
+  # #593: a takeover lands between the beat's second read and its PATCH: the PATCH overwrites it (no conditional PATCH).
+  if [[ -f "$d/late.txt" ]]; then cp "$d/late.txt" "$d/body.txt"; cp "$d/body.txt" "$d/seen.txt"; fi
   for a in "$@"; do [[ "$a" == body=* ]] && printf '%s' "\${a#body=}" > "$d/body.txt"; done
   echo '{"id":7}'; exit 0
 fi
@@ -74,5 +76,34 @@ describe.skipIf(!hasPwsh || process.platform === 'win32')('Invoke-RunnerBeat', (
     expect(r.out).toBe('True|there');
     expect(r.patched).toBe(false);
     expect(r.body).toContain('host=there');
+  });
+
+  it('a takeover between the second read and the PATCH is overwritten; the host rewrite makes the next beat hand over', () => {
+    const d = fs.mkdtempSync(path.join(dir, 'case-'));
+    const now = new Date().toISOString().replace(/\.\d+Z$/, 'Z');
+    fs.writeFileSync(path.join(d, 'body.txt'), marker('here', now));
+    fs.writeFileSync(path.join(d, 'late.txt'), marker('there', now));
+    const r = spawnSync(
+      'pwsh',
+      [
+        '-NoProfile',
+        '-Command',
+        `. '${MODULE}'; $sh = @{ Foreign = $null; Checkout = @() }; $a = Invoke-RunnerBeat 'o/r' 1 'here' '${now}' $sh; ` +
+          `Remove-Item '${path.join(d, 'late.txt')}'; $mid = Get-Content '${path.join(d, 'body.txt')}' -Raw; ` +
+          `[void](Write-RunnerMarker 'o/r' 1 7 'there' '${now}'); $b = Invoke-RunnerBeat 'o/r' 1 'here' '${now}' $sh; ` +
+          `"$a|$($mid -match 'host=here')|$b|$($sh.Foreign)"`,
+      ],
+      {
+        encoding: 'utf8',
+        env: {
+          ...process.env,
+          PATH: `${path.join(dir, 'bin')}:${process.env.PATH}`,
+          FAKE_GH_DIR: d,
+        },
+      },
+    );
+    expect(fs.readFileSync(path.join(d, 'seen.txt'), 'utf8')).toContain('host=there');
+    expect(r.stdout.trim()).toBe('False|True|True|there');
+    expect(fs.readFileSync(path.join(d, 'body.txt'), 'utf8')).toContain('host=there');
   });
 });

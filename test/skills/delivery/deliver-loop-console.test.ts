@@ -260,7 +260,7 @@ fs.writeFileSync(${JSON.stringify(state)}, JSON.stringify({ state: 'closed' }));
         ]);
         await worker.run(['-Target', '401', '-Model', 'sonnet'], {
           cwd,
-          env: { ...gh.env(), HERDR_ENV: '', NO_COLOR: '' },
+          env: { ...gh.env(), HERDR_ENV: '', NO_COLOR: '', POIMEN_TERMINAL_ID: '' },
         });
         const notes = read('notices.txt').trim().split('\n');
         expect(notes).toHaveLength(7);
@@ -276,6 +276,35 @@ fs.writeFileSync(${JSON.stringify(state)}, JSON.stringify({ state: 'closed' }));
         expect(notes[6]).toContain('loop result: done');
       },
     );
+
+    it('sends no notification with POIMEN_TERMINAL_ID, -NoNotify or deliver.notifications false', async () => {
+      const cases: [string[], Record<string, string>, boolean][] = [
+        [[], { POIMEN_TERMINAL_ID: 'abc' }, false],
+        [['-NoNotify'], {}, false],
+        [[], {}, true],
+      ];
+      for (const [args, extra, config] of cases) {
+        const gh = prepare();
+        fs.writeFileSync(
+          path.join(gh.bin, 'osascript'),
+          `#!/bin/sh\necho "$*" >> ${cwd}/notices.txt\n`,
+          { mode: 0o755 },
+        );
+        if (config) {
+          fs.mkdirSync(path.join(cwd, '.agents'), { recursive: true });
+          fs.writeFileSync(
+            path.join(cwd, '.agents/config.json'),
+            '{"deliver":{"notifications":false}}',
+          );
+        }
+        await worker.run(['-Target', '401', '-Model', 'sonnet', ...args], {
+          cwd,
+          env: { ...gh.env(), HERDR_ENV: '', NO_COLOR: '', POIMEN_TERMINAL_ID: '', ...extra },
+        });
+        expect(fs.existsSync(path.join(cwd, 'notices.txt'))).toBe(false);
+        fs.rmSync(path.join(cwd, '.agents'), { recursive: true, force: true });
+      }
+    });
 
     it('writes no step line from assistant text alone, neither color nor notification', async () => {
       const gh = open([], '#401 pr: opened #55\n#401 ci: red\n#401 paused: x');

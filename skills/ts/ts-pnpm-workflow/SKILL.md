@@ -12,7 +12,7 @@ A `package.json` at the project root.
 
 ## Steps
 
-1. **Install** — if `pnpm --version` fails: `corepack enable pnpm`, else `npm install -g pnpm`
+1. **Install** — if `pnpm --version` fails: when `corepack --version` fails too (Node.js 26 and later do not bundle corepack), run `npm install -g corepack`; then `corepack enable pnpm`. Only if corepack is not an option: `npm install -g pnpm`
 2. **Clean npm artifacts** — delete `package-lock.json` and `node_modules/`
 3. **Pin** — set `"packageManager": "pnpm@<version>"` in `package.json` (update if it already exists)
 4. **`.npmrc`** — create it only if the project needs pnpm settings; do not add `shamefully-hoist` unless a dependency breaks without it

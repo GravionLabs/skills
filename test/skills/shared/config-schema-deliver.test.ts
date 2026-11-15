@@ -10,12 +10,12 @@ const schema = JSON.parse(
 );
 const validate = new Ajv2020({ allErrors: true, strict: false }).compile(schema);
 
-// #548: deliver.parallel of .agents/config.json (integer >= 1, default 1).
+// #548: deliver.parallel of .agents/config.json (integer >= 1, default 3).
 describe('config schema: deliver.parallel', () => {
-  it('accepts 1 and 3 and documents the default 1', () => {
+  it('accepts 1 and 3 and documents the default 3', () => {
     expect(validate({ deliver: { parallel: 1 } })).toBe(true);
     expect(validate({ deliver: { parallel: 3 } })).toBe(true);
-    expect(schema.properties.deliver.properties.parallel.default).toBe(1);
+    expect(schema.properties.deliver.properties.parallel.default).toBe(3);
   });
 
   it.each([0, -1, 1.5, '2'])('rejects parallel %j', (parallel) => {

@@ -74,6 +74,10 @@ Found in release review round <round>
 
 Then print `release: <n> blocking → #a, #b`, open no release PR and list the bugs in the report. A later `/deliver --milestone <key>` delivers the bugs and runs step 9 again, so the review sees the fixes.
 
+## Notes as issues
+
+After a clean review the `notes[]` (up to 5) are filed so they are not lost; a note nobody wants is closed or deleted. Write the notes to a temporary JSON file (strings, or objects `{ note, defect, unclear, related }`: `defect` when the note names a defect, `unclear` when the criteria are unclear, `related` the PBI found as for a bug above), then `pwsh scripts/New-ReleaseReviewIssues.ps1 -Notes <file> -Key <key> -Round <round> [-DryRun]` (gh REST). One issue per note, no milestone: `[Bug] fix: <note>` (label `bug`) or `[PBI] feat: <note>` (label `pbi`), `needs-refinement` when unclear, body with `Related: #<PBI>` and the marker `Found in release review <key> (round <n>, note)`. An issue (any state) with that marker and the same title is skipped, so a rerun files nothing twice. Interactive: show the list in at most 6 lines and file without asking; unattended: file without asking. The script prints `{ filed[], existing[], urls[] }`.
+
 ## No blocking finding
 
-Run `github-release` `finish` with `release_review_notes` = the `notes[]` (up to 5, one line each). They reach the release PR body as `## Release review notes` (`github-pull-request` `references/release-mode.md`). An existing release PR is only reported.
+Run `github-release` `finish` with `release_review_notes` = the issue URLs of `urls[]` (filed and existing), one per line with the note. They reach the release PR body as `## Release review notes` (`github-pull-request` `references/release-mode.md`). When the release PR already exists, it is reported and the list is added to it as a comment; the URLs go into the report in both cases.

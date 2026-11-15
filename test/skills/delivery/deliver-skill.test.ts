@@ -23,7 +23,7 @@ describe('deliver SKILL.md', () => {
 
   it('emits the attention kinds the loop notifications depend on (#400)', () => {
     const steps = body.slice(body.indexOf('## Steps'), body.indexOf('1. **Select.**'));
-    for (const kind of ['pr_opened', 'review_fix', 'ci_red', 'paused', 'blocked', 'needs_you']) {
+    for (const kind of ['review_fix', 'ci_red', 'paused', 'blocked', 'needs_you']) {
       expect(steps).toMatch(new RegExp('-Kind[^)]*\\b' + kind + '\\b'));
     }
     expect(steps).toContain('only from these events');
@@ -365,8 +365,8 @@ describe('deliver SKILL.md', () => {
       expect(ref).toContain('Unattended: file them without asking');
     });
 
-    it('passes up to 5 notes to the release PR when nothing blocks', () => {
-      expect(release).toContain('`finish` with `release_review_notes` (the `notes[]`, up to 5)');
+    it('files up to 5 notes as issues and passes their URLs to the release PR when nothing blocks', () => {
+      expect(release).toContain('`finish` with `release_review_notes` (the note issue URLs)');
       expect(ref).toContain('`## Release review notes`');
     });
 
@@ -460,7 +460,7 @@ describe('deliver SKILL.md', () => {
 
     it('every progress-line rule names Report-Progress with its type', () => {
       expect(steps).toContain(
-        'Report-Progress.ps1 -Type step.finished -Issue <nr> -Step <step> -Result "<result>" [-Pr <url>]',
+        'Report-Progress.ps1 -Type step.finished -Issue <nr> -Title "<title>" -Step <step> -Result "<result>" [-Pr <url>]',
       );
       expect(steps).toContain('`-Type attention`');
       expect(steps).toContain('-Type issue.finished');

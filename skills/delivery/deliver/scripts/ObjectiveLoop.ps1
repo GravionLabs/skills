@@ -4,8 +4,8 @@
 .DESCRIPTION
   One round reads Get-ObjectiveStatus.ps1 (REST GET only), starts in every repository with state `ready` the loop
   `Invoke-DeliverLoop.ps1 -Target <open sub-issues of the objective in that repo> [-Max <k>]` in the checkout of that
-  repository (deliver.parallel of .agents/config.json, default 1: one after the other; n > 1: up to n repositories at the
-  same time, one loop per repository, the round waits for all), and reads the state again. Each round logs its results
+  repository (deliver.parallel of .agents/config.json, default 3: up to 3 repositories at the same time; 1: one after the other;
+  n: up to n at the same time, one loop per repository, the round waits for all), and reads the state again. Each round logs its results
   per repository and its REST/GraphQL usage (`gh api rate_limit` before and after). State only from GitHub: an
   aborted round resumes with the same command. Never closes the objective; its only own writes are the two rules between
   rounds (#545): contract-change pauses the downstream children (needs-refinement + comment), a finished milestone with a
@@ -111,7 +111,10 @@ function Write-NeedsYou($s) {
         'release-pr' { "merge the release PR of $($g.repository): $($g.url)" }
         'rc-missing' { "RC test $($g.detail)$(if ($g.url) { ": $($g.url)" })" }
         'not-released' { "release $($g.detail)" }
-        'acceptance-criteria' { "check the acceptance criteria of $ref and close the objective: $($g.url)" }
+        'acceptance-criteria' {
+          if (@($s.repos | Where-Object { $_.state -ne 'done' }).Count) { "acceptance criteria of $ref not confirmed yet ($($g.detail)): $($g.url)" }
+          else { "check the acceptance criteria of $ref and close the objective: $($g.url)" }
+        }
         default { "$($g.type)$(if ($g.detail) { " $($g.detail)" })$(if ($g.url) { ": $($g.url)" })" }
       }
     })
@@ -210,23 +213,57 @@ function Invoke-ContractPause($s, [DateTime]$since, [hashtable]$handled, [switch
 }
 
 # #546: the context file of a downstream repository: the PRs merged since $since in the repositories it `Requires:` (link, title,
-# diff stat), so the fix subagent sees causes in other repos. Returns the file path, or '' when there is nothing to say.
+# diff stat), so the fix subagent sees causes in other repos. Returns @{ Path; Msg }: Path is '' when there is nothing to say.
+# #607: the lines of the written PRs are kept in context.state.json next to the file; when the set of upstream PRs is the same as
+# at the last write, the file is reused and no diff stat is read again (only a PR new since then costs a read).
 function Write-ContextFile($s, $r, [string]$checkout, [DateTime]$since) {
-  $lines = @()
+  $file = Join-Path $checkout '.agents/deliver-loop/context.md'
+  $stateFile = Join-Path $checkout '.agents/deliver-loop/context.state.json'
+  $old = @{}
+  if ((Test-Path -LiteralPath $stateFile -PathType Leaf) -and (Test-Path -LiteralPath $file -PathType Leaf)) {
+    try { $o = Get-Content -LiteralPath $stateFile -Raw | ConvertFrom-Json -AsHashtable; if ($o.lines) { $old = $o.lines } } catch { $old = @{} }
+  }
+  $lines = [ordered]@{}
   foreach ($up in @($r.requires | Where-Object { $_ } | ForEach-Object { [string]$_.repository } | Select-Object -Unique)) {
     $prs = @(Get-MergedPrsSince $up $since)
     foreach ($pr in $prs) {
+      $key = "$up#$($pr.number)"
+      if ($old.ContainsKey($key)) { $lines[$key] = [string]$old[$key]; continue }
       $d = @(Get-ObjectiveRest "repos/$up/pulls/$($pr.number)")[0]
       $stat = if ($d -and $null -ne $d.changed_files) { "$($d.changed_files) files, +$($d.additions) -$($d.deletions)" } else { 'diff stat n/a' }
-      $lines += "- $up#$($pr.number) $($pr.html_url) $([string]$pr.title -replace '[\r\n]+', ' ') ($stat)"
+      $lines[$key] = "- $key $($pr.html_url) $([string]$pr.title -replace '[\r\n]+', ' ') ($stat)"
     }
   }
-  $file = Join-Path $checkout '.agents/deliver-loop/context.md'
   # #578: nothing to say -> no stale file from an earlier round for a hand-run `deliver-loop -Context`
-  if (-not $lines.Count) { Remove-Item -LiteralPath $file -Force -ErrorAction SilentlyContinue; return '' }
+  if (-not $lines.Count) {
+    Remove-Item -LiteralPath $file, $stateFile -Force -ErrorAction SilentlyContinue
+    return [pscustomobject]@{ Path = ''; Msg = '' }
+  }
+  if ($old.Count -eq $lines.Count -and -not @($lines.Keys | Where-Object { -not $old.ContainsKey($_) }).Count) {
+    return [pscustomobject]@{ Path = $file; Msg = "context file reused ($file)" }
+  }
   New-Item -ItemType Directory -Force -Path (Split-Path $file -Parent) | Out-Null
-  Set-Content -LiteralPath $file -Value (@("Upstream PRs merged since $($since.ToString('u')) in the repositories of $($r.repository)'s Requires:") + $lines) -Encoding utf8
-  $file
+  Set-Content -LiteralPath $file -Value (@("Upstream PRs merged since $($since.ToString('u')) in the repositories of $($r.repository)'s Requires:") + @($lines.Values)) -Encoding utf8
+  Set-Content -LiteralPath $stateFile -Value (@{ lines = $lines } | ConvertTo-Json -Depth 4) -Encoding utf8
+  [pscustomobject]@{ Path = $file; Msg = "context file written ($($lines.Count) PRs) ($file)" }
+}
+
+# #607: deliver.parallel > 1: the context files of all starting repositories are generated at the same time, before their loops start.
+# $items: Repo, Status ($s repo record), Path, Since. Returns Repo -> result of Write-ContextFile.
+function Write-ContextFilesParallel($s, $items) {
+  $defs = (@('ConvertTo-UtcTime', 'Get-ObjectiveRest', 'Get-MergedPrsSince', 'Write-ContextFile') |
+    ForEach-Object { "function $_ {`n$((Get-Command $_ -CommandType Function).Definition)`n}" }) -join "`n"
+  $jobs = @{}
+  foreach ($i in $items) {
+    $jobStatus = $i.Status; $jobPath = [string]$i.Path; $jobSince = [DateTime]$i.Since
+    $jobs[$i.Repo] = Start-ThreadJob -ScriptBlock {
+      . ([scriptblock]::Create($using:defs))
+      Write-ContextFile $null $using:jobStatus $using:jobPath $using:jobSince
+    }
+  }
+  $res = @{}
+  foreach ($k in @($jobs.Keys)) { $res[$k] = @(Receive-Job -Job $jobs[$k] -Wait -AutoRemoveJob)[-1] }
+  $res
 }
 
 # Rule 2 (#545): an unmet `Requires: <repo>@<M> rc` whose milestone is finished (no open `pbi` or `bug` but the release-test one, as deliver step 9)
@@ -280,12 +317,12 @@ function Invoke-RcTriggers($s, [string]$objRepo, [string]$telos, [string]$Harnes
   $started
 }
 
-# deliver.parallel of .agents/config.json in $root: how many repository loops a round runs at the same time (default 1).
+# deliver.parallel of .agents/config.json in $root: how many repository loops a round runs at the same time (default 3).
 function Get-DeliverParallel([string]$root) {
   $f = Join-Path $root '.agents/config.json'
-  if (-not (Test-Path -LiteralPath $f -PathType Leaf)) { return 1 }
+  if (-not (Test-Path -LiteralPath $f -PathType Leaf)) { return 3 }
   $v = try { (Get-Content -LiteralPath $f -Raw | ConvertFrom-Json -AsHashtable).deliver.parallel } catch { $null }
-  if ($null -eq $v) { return 1 }
+  if ($null -eq $v) { return 3 }
   if ($v -is [long] -or $v -is [int]) { if ($v -ge 1) { return [int]$v } }
   Write-Step "deliver.parallel must be an integer >= 1, got '$v': 1" 'yellow'
   1
@@ -314,7 +351,7 @@ function Write-ApiUsage([int]$round, $before, $after) {
 # Result word of a repository loop for the round results line. Exit 0 covers done, max reached and stopped, so it is read
 # from the last `result` record of the progress.jsonl of the newest run in that checkout (.agents/deliver-loop/latest.txt);
 # without a record: `ok (0)`. Other exit codes keep their word.
-function Get-RepoLoopLabel([int]$code, [string]$path) {
+function Get-RepoLoopLabel([int]$code, [string]$path, $since = $null) {
   if ($code -eq 0) {
     $word = $null
     try {
@@ -322,9 +359,20 @@ function Get-RepoLoopLabel([int]$code, [string]$path) {
       if ($latest -and (Test-Path -LiteralPath $latest)) {
         $progress = Join-Path (Get-Content -LiteralPath $latest -Raw).Trim() 'progress.jsonl'
         if (Test-Path -LiteralPath $progress) {
-          foreach ($l in @(Get-Content -LiteralPath $progress)) {
-            $rec = try { $l | ConvertFrom-Json } catch { $null }
-            if ($rec -and $rec.event -eq 'result' -and $rec.result) { $word = [string]$rec.result }
+          $lines = @(Get-Content -LiteralPath $progress)
+          # #594: only a run that started after the round start counts; a stale latest.txt keeps `ok (0)`
+          $fresh = $true
+          if ($since) {
+            $first = try { $lines[0] | ConvertFrom-Json } catch { $null }
+            # ConvertFrom-Json may already return a DateTime for the ISO time
+            $t = if ($first -and $first.time) { if ($first.time -is [DateTime]) { $first.time.ToUniversalTime() } else { [DateTime]::Parse([string]$first.time, [cultureinfo]::InvariantCulture, 'RoundtripKind').ToUniversalTime() } }
+            $fresh = [bool]($t -and $t -ge ([DateTime]$since).ToUniversalTime())
+          }
+          if ($fresh) {
+            foreach ($l in $lines) {
+              $rec = try { $l | ConvertFrom-Json } catch { $null }
+              if ($rec -and $rec.event -eq 'result' -and $rec.result) { $word = [string]$rec.result }
+            }
           }
         }
       }
@@ -336,7 +384,7 @@ function Get-RepoLoopLabel([int]$code, [string]$path) {
 
 # deliver.parallel > 1: runs the prepared repository loops ($jobs: Repo, Path, Cli) as thread jobs, at most $limit at a time,
 # streams their output with the [repo] prefix and waits for all. The heartbeat stops every running checkout ($shared.Checkout);
-# running.json lists them for `deliver-loop release`. Returns {Repo, Exit} per repository in the order they ended.
+# running.json lists them for `deliver-loop release`. Returns {Repo, Path, Exit} per repository in the order they ended.
 function Invoke-RepoLoopsParallel($jobs, [int]$limit, [hashtable]$shared, [string]$objRepo, [int]$objNr, [string]$hostId) {
   $queue = [System.Collections.Generic.Queue[object]]::new()
   foreach ($j in $jobs) { $queue.Enqueue($j) }
@@ -471,7 +519,7 @@ function Invoke-ObjectiveLoop {
       $round++
       $since = ([DateTime]::UtcNow.AddSeconds(-1))
       $targets = Get-ObjectiveTargets $objRepo $objNr
-      $results = @(); $jobs = @()
+      $results = @(); $jobs = @(); $ctxItems = @()
       foreach ($r in @($s.repos | Where-Object { $_.state -eq 'ready' })) {
         $repo = [string]$r.repository
         $nrs = @($targets[$repo] | Where-Object { $_ })
@@ -508,8 +556,11 @@ function Invoke-ObjectiveLoop {
           # #546: the upstream PRs since the last green run of this repository (first round: the last 7 days)
           $ctxSince = if ($lastGreen.ContainsKey($repo)) { $lastGreen[$repo] } else { $ctxStart }
           $roundStart = [DateTime]::UtcNow
-          $ctx = Write-ContextFile $s $r $co.Path $ctxSince
-          if ($ctx) { $cli += @('-Context', $ctx); Write-Step "[$repo] context file $ctx" }
+          if ($parallel -gt 1) { $ctxItems += [pscustomobject]@{ Repo = $repo; Status = $r; Path = $co.Path; Since = $ctxSince } }
+          else {
+            $ctx = Write-ContextFile $s $r $co.Path $ctxSince
+            if ($ctx.Path) { $cli += @('-Context', $ctx.Path); Write-Step "[$repo] $($ctx.Msg)" }
+          }
           if ($Max -gt 0) { $cli += @('-Max', [string]$Max) }
           if ($Model -and -not ($Harness -eq 'copilot' -and $Model -eq 'auto')) { $cli += @('-Model', $Model) }
           if ($NoColor) { $cli += '-NoColor' }
@@ -519,7 +570,7 @@ function Invoke-ObjectiveLoop {
           }
           # deliver.parallel 1: one repository after the other, its output streamed as it comes
           & pwsh @cli 2>&1 | ForEach-Object { Write-Host "  [$repo] $_" }
-          $results += [pscustomobject]@{ Repo = $repo; Path = $co.Path; Exit = $LASTEXITCODE }
+          $results += [pscustomobject]@{ Repo = $repo; Path = $co.Path; Exit = $LASTEXITCODE; Start = $roundStart }
           Write-Step "[$repo] loop exit $LASTEXITCODE"
           if ($LASTEXITCODE -eq 0) { $lastGreen[$repo] = $roundStart }
         } finally { Pop-Location }
@@ -527,14 +578,21 @@ function Invoke-ObjectiveLoop {
       if ($jobs.Count -and -not $result) {
         # deliver.parallel > 1: the repository loops run concurrently (at most $parallel at a time); the round waits for all
         $shared.Fresh = $false
+        # #607: the context files of all starting repositories at once, then the loops
+        $ctxRes = Write-ContextFilesParallel $s $ctxItems
+        foreach ($j in $jobs) {
+          $c = $ctxRes[$j.Repo]
+          if ($c -and $c.Path) { $j.Cli += @('-Context', $c.Path); Write-Step "[$($j.Repo)] $($c.Msg)" }
+        }
         foreach ($res in @(Invoke-RepoLoopsParallel $jobs $parallel $shared $objRepo $objNr $hostId)) {
+          $res | Add-Member -NotePropertyName Start -NotePropertyValue (@($jobs | Where-Object { $_.Repo -eq $res.Repo })[0].Start) -Force
           $results += $res
           Write-Step "[$($res.Repo)] loop exit $($res.Exit)"
           if ($res.Exit -eq 0) { $lastGreen[$res.Repo] = @($jobs | Where-Object { $_.Repo -eq $res.Repo })[0].Start }
         }
       }
       if ($results.Count) {
-        Write-Step "round ${round} results: $(@($results | ForEach-Object { "$($_.Repo) $(Get-RepoLoopLabel $_.Exit $_.Path)" }) -join ', ')"
+        Write-Step "round ${round} results: $(@($results | ForEach-Object { "$($_.Repo) $(Get-RepoLoopLabel $_.Exit $_.Path $_.Start)" }) -join ', ')"
         Write-ApiUsage $round $apiBefore (Get-ApiUsage)
       }
       if ($result) { break }

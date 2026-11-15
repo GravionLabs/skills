@@ -84,7 +84,6 @@ describe.skipIf(!hasPwsh || process.platform === 'win32')('Invoke-DeliverLoop.ps
         stream,
         events: [
           step(401, 'pr', 'opened #55', PR),
-          attention(401, 'pr_opened', 'opened #55'),
           step(401, 'review', 'x'.repeat(90), PR),
           step(401, 'ci', 'red', PR),
           attention(401, 'ci_red', 'red'),
@@ -135,7 +134,6 @@ describe.skipIf(!hasPwsh || process.platform === 'win32')('Invoke-DeliverLoop.ps
       if (process.platform === 'darwin') {
         // osascript stub: attention step and loop result
         const notes = fx.read('notices.txt');
-        expect(notes).toContain('#401 PR opened');
         expect(notes).toContain('#401 CI red');
         expect(notes).toContain('loop result: blocked');
       }

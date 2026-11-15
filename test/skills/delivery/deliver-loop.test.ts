@@ -81,7 +81,6 @@ describe.skipIf(!hasPwsh || process.platform === 'win32')('Invoke-DeliverLoop.ps
         stream: [...live, ...events],
         events: [
           step(7, 'pr', 'opened #55', PR),
-          attention(7, 'pr_opened', 'opened #55'),
           step(7, 'ci', 'red', PR),
           attention(7, 'ci_red', 'red'),
         ],
@@ -103,7 +102,6 @@ describe.skipIf(!hasPwsh || process.platform === 'win32')('Invoke-DeliverLoop.ps
       expect(lines).toMatch(/\d\d:\d\d:\d\d ✗ boom/);
       if (process.platform === 'darwin') {
         // osascript stub: notifications exist only on macOS
-        expect(fx.read('notices.txt')).toContain('#7 PR opened');
         expect(fx.read('notices.txt')).toContain('#7 CI red');
       }
       expect(r.stdout).toContain('loop result: done');

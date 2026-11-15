@@ -1,4 +1,5 @@
 import Ajv2020 from 'ajv/dist/2020';
+import { spawnSync } from 'child_process';
 import * as fs from 'fs';
 import * as os from 'os';
 import * as path from 'path';
@@ -37,6 +38,7 @@ type Iss = {
   body?: string;
   title?: string;
   blocked?: number;
+  assignees?: string[];
 };
 const issue = (repo: string, i: Iss) => ({
   number: i.number,
@@ -45,6 +47,7 @@ const issue = (repo: string, i: Iss) => ({
   body: i.body ?? '',
   labels: (i.labels ?? ['pbi']).map((name) => ({ name })),
   repository_url: `https://api.github.com/repos/${repo}`,
+  assignees: (i.assignees ?? []).map((login) => ({ login })),
   issue_dependencies_summary: { blocked_by: i.blocked ?? 0 },
 });
 const feature = (repo: string, number: number, body = '') =>
@@ -248,6 +251,62 @@ describe('Get-ObjectiveStatus.ps1', () => {
       }),
     );
     expect(byRepo(out)['o/b']).toBe('waiting(o/b#21 blocked by o/z#9; o/b#22 needs-decision)');
+  });
+
+  it('only interactive PBIs: waiting(interactive) and a Needs you line; claimed fresh waits, stale is ready (#604)', async () => {
+    const fresh = new Date().toISOString();
+    const old = new Date(Date.now() - 3 * 3600_000).toISOString();
+    const data = chain({
+      'repos/o/a/issues/10/sub_issues': [
+        issue('o/a', { number: 11, labels: ['pbi', 'interactive'] }),
+        issue('o/a', { number: 12, labels: ['pbi', 'interactive'] }),
+      ],
+      'repos/o/b/issues/20/sub_issues': [issue('o/b', { number: 21, assignees: ['me'] })],
+      'repos/o/b/issues/21/events': [{ event: 'assigned', created_at: fresh }],
+      'repos/o/c/issues/30/sub_issues': [issue('o/c', { number: 31, assignees: ['me'] })],
+      'repos/o/c/issues/31/events': [{ event: 'assigned', created_at: old }],
+    });
+    delete (data as any)['repos/o/b/milestones'];
+    data['repos/o/telos/issues/1/sub_issues'] = [
+      feature('o/a', 10),
+      feature('o/b', 20),
+      feature('o/c', 30),
+    ];
+    const { out } = await status(data);
+    expect(byRepo(out)).toEqual({
+      'o/a': 'waiting(o/a#11 interactive; o/a#12 interactive)',
+      'o/b': 'waiting(o/b#21 claimed)',
+      'o/c': 'ready',
+    });
+    const r = await worker.run(['-Objective', 'o/telos#1', '-Text'], {
+      cwd: tmp,
+      env: { ...fake.env(), FAKE_GH: JSON.stringify(data) },
+    });
+    expect(r.stdout).toContain(
+      'interactive PBI to deliver yourself: https://github.com/o/a/issues/11',
+    );
+  });
+
+  it('the loop and the status take their hold rule from one function (#604)', async () => {
+    // both scripts dot-source HoldLabels.ps1 and call Get-HoldReason; no label list of their own
+    for (const f of ['Invoke-DeliverLoop.ps1', 'Get-ObjectiveStatus.ps1']) {
+      const src = fs.readFileSync(path.join(skillDir, 'scripts', f), 'utf8');
+      expect(src).toContain("'HoldLabels.ps1'");
+      expect(src).toContain('Get-HoldReason');
+      expect(src).not.toMatch(/-contains 'interactive'/);
+    }
+    const hold = path.join(skillDir, 'scripts/HoldLabels.ps1');
+    // own process: runs a command, not a script file
+    const r = spawnSync(
+      'pwsh',
+      [
+        '-NoProfile',
+        '-Command',
+        `. '${hold}'; ((@('interactive'), @('pbi'), @('pbi','needs-decision'), @('release-test'), @()) | ForEach-Object { [string](Get-HoldReason @($_)) }) -join '|'`,
+      ],
+      { encoding: 'utf8' },
+    );
+    expect(r.stdout.trim()).toBe('interactive||needs-decision|release test|');
   });
 
   it('everything done: all PBIs closed, release PR gate, no open criteria', async () => {

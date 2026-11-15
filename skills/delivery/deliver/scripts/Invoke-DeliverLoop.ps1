@@ -18,7 +18,7 @@
   Stdout is colored when it is a terminal and neither -NoColor nor NO_COLOR is set; otherwise it is plain.
   Machine-readable progress for a control session (`deliver` `references/control.md`): .agents/deliver-loop/<run>/progress.jsonl,
   one JSON object per line (`start`, `iteration-start`, `iteration-end`, `result`), and .agents/deliver-loop/latest.txt with the path of the newest run directory.
-  Run it from the repository root. Exit code: 0 done, max reached or stopped (stop file), 1 no progress, 2 blocked, 64 bad arguments.
+  Run it from the repository root. Exit code: 0 done, max reached or stopped (stop file), 1 no progress, 2 blocked, 3 release/next missing on origin (needs you: github-release cut, nothing started), 64 bad arguments.
   Mode -Objective (ObjectiveLoop.ps1): rounds over the ready repositories of an [Objective] on exactly one runner (runner
   marker with heartbeat, ObjectiveRunner.ps1); exit 0 done or released, 1 no progress, 2 blocked, 3 gated (needs you),
   4 handed over (a foreign live runner). Takeover and release: Set-ObjectiveRunner.ps1 (deliver-loop takeover|release).
@@ -53,6 +53,9 @@
   Deprecated no-op (the pane is off by default); use -LogPane to open it.
 .PARAMETER NoColor
   Colors no stdout (as does a non-empty NO_COLOR); the pane tails the plain log.
+.PARAMETER NoNotify
+  Sends no desktop notification (as does `deliver.notifications: false` in .agents/config.json). Inside a poimen terminal
+  (POIMEN_TERMINAL_ID set) none is sent either: poimen shows the same attention itself.
 #>
 [CmdletBinding()]
 param(
@@ -64,6 +67,7 @@ param(
   [switch]$LogPane,
   [switch]$NoPane,
   [switch]$NoColor,
+  [switch]$NoNotify,
   [string]$Objective = '',
   [string]$Context = '',
   [switch]$DryRun,
@@ -84,8 +88,12 @@ if ($Harness -eq 'copilot' -and -not $Model) { $Model = 'auto' }
 
 # Model per tier (references/roles.md): the tier decides the model of an iteration when -Model is not given.
 $TierModels = @{ fast = 'haiku'; standard = 'sonnet'; strong = 'opus' }
-function Get-PbiTier([int]$nr) {
-  $issue = Get-Json @('api', "repos/{owner}/{repo}/issues/$nr")
+function Read-PbiIssue([int]$nr) {
+  # one REST read of the PBI per iteration, shared by its tier and its task title (#601); null when unreadable
+  try { Get-Json @('api', "repos/{owner}/{repo}/issues/$nr") } catch { Write-Verbose "issue not read: $_"; $null }
+}
+function Get-PbiTier([int]$nr, $issue = $null) {
+  if (-not $issue) { $issue = Read-PbiIssue $nr }
   $body = [string]$issue.body
   $tier = $null; $from = 'default'
   if ($body -match '(?m)^\s*(?:[-*]\s*)?\**Tier:?\**:?\s*(fast|standard|strong)\b') { $tier = $Matches[1]; $from = 'Tier line' }
@@ -111,7 +119,7 @@ if (-not $Objective -and (($Nrs | Where-Object { $_ -notmatch '^\d+$' }) -or ($N
 }
 $Nrs = @($Nrs | ForEach-Object { [int]$_ })
 
-$Held = @('needs-decision', 'needs-refinement', 'interactive')
+. (Join-Path $PSScriptRoot 'HoldLabels.ps1')
 $LogFile = Join-Path (Get-Location) '.agents/deliver-loop.log'
 $UseColor = -not ($NoColor -or $env:NO_COLOR)
 $Esc = [char]27
@@ -147,7 +155,16 @@ function Write-Step([string]$text, [string]$Color = '', [string]$Tool = '', [int
 }
 
 # Urgency from the tone of the event: danger and warning get a sound on macOS, the rest is silent.
+function Test-NoticesEnabled {
+  if ($NoNotify -or $env:POIMEN_TERMINAL_ID) { return $false }
+  $f = Join-Path (Get-Location) '.agents/config.json'
+  if (-not (Test-Path -LiteralPath $f)) { return $true }
+  $v = try { (Get-Content -LiteralPath $f -Raw | ConvertFrom-Json -AsHashtable).deliver.notifications } catch { $null }
+  return $v -ne $false
+}
+
 function Send-Notice([string]$text, [string]$Tone = '') {
+  if (-not (Test-NoticesEnabled)) { return }
   try {
     if ($IsMacOS) {
       $esc = $text.Replace('\', '\\').Replace('"', '\"')
@@ -419,7 +436,7 @@ function Get-State {
     $closed = Get-Json @('-File', $MilestoneScript, '-Mode', 'issues', '-Name', $Milestone, '-State', 'closed') -Pwsh
     $paused = [bool]@(@($closed.issues) | Where-Object { $_ -and $_.labels -contains 'needs-decision' -and ($_.labels -contains 'pbi' -or $_.labels -contains 'bug') })
   }
-  $eligible = @($found | Where-Object { -not ($_.Labels | Where-Object { $Held -contains $_ }) })
+  $eligible = @($found | Where-Object { -not (Get-HoldReason @($_.Labels)) })
   $waitMerge = @{}
   $ready = @($eligible | Where-Object {
       $blockers = @(Get-Json @('api', "repos/{owner}/{repo}/issues/$($_.Number)/dependencies/blocked_by?per_page=100"))
@@ -484,6 +501,22 @@ function Wait-ForMerge($state) {
     $state = Get-State
   }
   return $state
+}
+
+# #605: the session ended while its PR merges (auto-merge on) or has just merged, but the issue is closed only by the close-on-merge
+# workflow a moment later. One REST list of the PRs into release/next: a PR of this issue (head <type>/<nr>-<slug>) with auto-merge
+# on or merged counts as `merging`, not as `no progress`; Update-Merging then watches it.
+function Test-PrMerging([int]$nr) {
+  try {
+    foreach ($p in @(Get-Json @('api', 'repos/{owner}/{repo}/pulls?base=release/next&state=all&sort=updated&direction=desc&per_page=50'))) {
+      if (-not $p -or $p.head.ref -notmatch "^[^/]+/$nr-") { continue }
+      if ($p.merged_at -or ($p.state -eq 'open' -and $p.auto_merge)) {
+        if ($p.html_url -and -not $Prs["$nr"]) { $script:Prs["$nr"] = [string]$p.html_url }
+        return $true
+      }
+    }
+  } catch { Write-Verbose "Test-PrMerging #$nr failed: $_" }
+  return $false
 }
 
 function Get-StopReason($state) {
@@ -668,8 +701,10 @@ function Invoke-Iteration([int]$n, [int]$total, $state) {
   $prompt = "/deliver $([int]$state.Ready[0]) --unattended --max 1"
   if ($Context -and (Test-Path -LiteralPath $Context -PathType Leaf)) { $prompt += " --context `"$((Resolve-Path -LiteralPath $Context).Path)`"" }
   $iterModel = $Model
+  $iterIssue = $null
   if ($Harness -eq 'claude' -and -not $Model) {
-    $t = Get-PbiTier ([int]$state.Ready[0])
+    $iterIssue = Read-PbiIssue ([int]$state.Ready[0])
+    $t = Get-PbiTier ([int]$state.Ready[0]) $iterIssue
     $iterModel = $t.Model
     Write-Step "#$($state.Ready[0]) tier $($t.Tier) ($($t.From)) → model $iterModel"
   }
@@ -683,6 +718,11 @@ function Invoke-Iteration([int]$n, [int]$total, $state) {
   $base = Get-BaseUrl
   if ($base) { $started.Url = "$base/issues/$nr" }
   if ($Block -and $Block.ready.next -and [int]$Block.ready.next.number -eq $nr) { $started.Title = [string]$Block.ready.next.title; $started.Url = [string]$Block.ready.next.url }
+  # no status block (target mode): the title comes from the PBI's REST issue (REST, not gh issue view: no GraphQL read, #127)
+  if (-not $started.Title) {
+    if (-not $iterIssue) { $iterIssue = Read-PbiIssue $nr }
+    if ($iterIssue -and $iterIssue.title) { $started.Title = [string]$iterIssue.title; if ($iterIssue.html_url) { $started.Url = [string]$iterIssue.html_url } }
+  }
   Send-Event $started
   $script:EventOffset = if ($EventFile -and (Test-Path -LiteralPath $EventFile)) { (Get-Item -LiteralPath $EventFile).Length } else { 0 }
   # the harness is nested: AGENT_EVENTS_RUN without the owner marker (its run.started and run.finished are not written)
@@ -721,6 +761,14 @@ function Invoke-Iteration([int]$n, [int]$total, $state) {
   }
 }
 
+# release/next missing (deleted after the release PR): no agent starts, no PBI is labeled (Test-DeliverPreflight.ps1 release-branch)
+$rbJson = (& pwsh -NoProfile -File (Join-Path $PSScriptRoot 'Test-DeliverPreflight.ps1') -ProjectRoot (Get-Location).Path -Check release-branch 2>$null) -join "`n"
+$rbCheck = @(($rbJson | ConvertFrom-Json -ErrorAction SilentlyContinue).checks | Where-Object { $_.name -eq 'release-branch' })
+if ($rbCheck.Count -and $rbCheck[0].status -eq 'action needed') {
+  Write-Step "release/next is missing on origin: $($rbCheck[0].detail). Run github-release cut, then deliver again; nothing started." 'red'
+  exit 3
+}
+
 $result = $null
 $code = 0
 $i = 0
@@ -744,6 +792,12 @@ try {
     Invoke-Iteration $i $total $state
     if ($LineOutcome["$([int]$state.Ready[0])"].Outcome -eq 'merging') { $Merging = @($Merging) + [int]$state.Ready[0] }
     $after = Get-State
+    $cur = [int]$state.Ready[0]
+    if ($after.OpenNrs -contains $cur -and $Merging -notcontains $cur -and -not (Test-StopRequested) -and (Test-PrMerging $cur)) {
+      $LineOutcome["$cur"] = @{ Outcome = 'merging'; Reason = 'PR merges by auto-merge' }
+      $Merging = @($Merging) + $cur
+      $after = Get-State
+    }
     # delivered = left the open set; a PBI that is only held (needs-decision) stays open and is paused (#346)
     $gone = @($state.Eligible | Where-Object { $after.Eligible -notcontains $_ -and $after.OpenNrs -notcontains $_ -and $Merging -notcontains $_ })
     $Delivered = @($Delivered) + $gone
