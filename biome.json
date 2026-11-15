@@ -9,6 +9,7 @@
     "includes": [
       "test/**",
       "scripts/**",
+      "skills/**/scripts/**/*.ts",
       "site/**",
       "*.json",
       "**/*.md",
