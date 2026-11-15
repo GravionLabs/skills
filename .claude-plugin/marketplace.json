@@ -46,6 +46,7 @@
       "strict": false,
       "skills": [
         "./skills/delivery/deliver",
+        "./skills/delivery/deliver-min",
         "./skills/delivery/grill-me",
         "./skills/delivery/planner",
         "./skills/delivery/retro",
