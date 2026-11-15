@@ -1,4 +1,5 @@
 import Ajv2020 from 'ajv/dist/2020';
+import { spawnSync } from 'child_process';
 import * as fs from 'fs';
 import * as os from 'os';
 import * as path from 'path';
@@ -286,14 +287,26 @@ describe('Get-ObjectiveStatus.ps1', () => {
     );
   });
 
-  it('the loop and the status hold the same labels (#604)', () => {
-    const loop = fs.readFileSync(path.join(skillDir, 'scripts/Invoke-DeliverLoop.ps1'), 'utf8');
-    const held = /\$Held = @\(([^)]*)\)/
-      .exec(loop)![1]
-      .match(/'([^']+)'/g)!
-      .map((x) => x.slice(1, -1));
-    const st = fs.readFileSync(script, 'utf8');
-    for (const l of held) expect(st).toContain(`-contains '${l}'`);
+  it('the loop and the status take their hold rule from one function (#604)', async () => {
+    // both scripts dot-source HoldLabels.ps1 and call Get-HoldReason; no label list of their own
+    for (const f of ['Invoke-DeliverLoop.ps1', 'Get-ObjectiveStatus.ps1']) {
+      const src = fs.readFileSync(path.join(skillDir, 'scripts', f), 'utf8');
+      expect(src).toContain("'HoldLabels.ps1'");
+      expect(src).toContain('Get-HoldReason');
+      expect(src).not.toMatch(/-contains 'interactive'/);
+    }
+    const hold = path.join(skillDir, 'scripts/HoldLabels.ps1');
+    // own process: runs a command, not a script file
+    const r = spawnSync(
+      'pwsh',
+      [
+        '-NoProfile',
+        '-Command',
+        `. '${hold}'; ((@('interactive'), @('pbi'), @('pbi','needs-decision'), @('release-test'), @()) | ForEach-Object { [string](Get-HoldReason @($_)) }) -join '|'`,
+      ],
+      { encoding: 'utf8' },
+    );
+    expect(r.stdout.trim()).toBe('interactive||needs-decision|release test|');
   });
 
   it('everything done: all PBIs closed, release PR gate, no open criteria', async () => {

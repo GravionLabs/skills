@@ -115,7 +115,7 @@ if (-not $Objective -and (($Nrs | Where-Object { $_ -notmatch '^\d+$' }) -or ($N
 }
 $Nrs = @($Nrs | ForEach-Object { [int]$_ })
 
-$Held = @('needs-decision', 'needs-refinement', 'interactive')
+. (Join-Path $PSScriptRoot 'HoldLabels.ps1')
 $LogFile = Join-Path (Get-Location) '.agents/deliver-loop.log'
 $UseColor = -not ($NoColor -or $env:NO_COLOR)
 $Esc = [char]27
@@ -423,7 +423,7 @@ function Get-State {
     $closed = Get-Json @('-File', $MilestoneScript, '-Mode', 'issues', '-Name', $Milestone, '-State', 'closed') -Pwsh
     $paused = [bool]@(@($closed.issues) | Where-Object { $_ -and $_.labels -contains 'needs-decision' -and ($_.labels -contains 'pbi' -or $_.labels -contains 'bug') })
   }
-  $eligible = @($found | Where-Object { -not ($_.Labels | Where-Object { $Held -contains $_ }) })
+  $eligible = @($found | Where-Object { -not (Get-HoldReason @($_.Labels)) })
   $waitMerge = @{}
   $ready = @($eligible | Where-Object {
       $blockers = @(Get-Json @('api', "repos/{owner}/{repo}/issues/$($_.Number)/dependencies/blocked_by?per_page=100"))

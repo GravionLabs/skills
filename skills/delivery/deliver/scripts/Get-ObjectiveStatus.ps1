@@ -58,6 +58,7 @@ function Get-RepoOf($i, [string]$fallback) {
   if ($u) { $u -replace '^.*/repos/', '' } else { $fallback }
 }
 function Get-Labels($i) { @(Get-Prop $i 'labels' | ForEach-Object { if ($_ -is [string]) { $_ } else { [string]$_.name } }) }
+. (Join-Path $PSScriptRoot 'HoldLabels.ps1')
 function Get-Url([string]$repo, [int]$n) { "https://github.com/$repo/issues/$n" }
 # Claim (references/claim.md): any assignee counts; a claim whose assignment is older than an hour is stale (takeable).
 # The branch/PR push time check of the deliver skill is not repeated here.
@@ -159,19 +160,16 @@ foreach ($repo in $repoOrder) {
   foreach ($i in $openItems) {
     $ref = [ordered]@{ repository = $repo; number = [int]$i.number; title = [string]$i.title; url = Get-Url $repo ([int]$i.number) }
     $labels = Get-Labels $i
-    $reason = $null
-    if ($labels -contains 'release-test') { $reason = 'release test' }
-    elseif ($labels -contains 'needs-decision') { $reason = 'needs-decision' }
-    elseif ($labels -contains 'needs-refinement') { $reason = 'needs-refinement' }
-    elseif ($labels -contains 'interactive') { $reason = 'interactive' }
-    elseif (@(Get-Prop $i 'assignees').Count -and (Test-FreshClaim $repo ([int]$i.number))) { $reason = 'claimed' }
-    else {
+    $reason = Get-HoldReason $labels
+    if (-not $reason) {
       $sum = Get-Prop $i 'issue_dependencies_summary'
       $blockers = @()
       if ($null -eq $sum -or [int](Get-Prop $sum 'blocked_by') -gt 0) {
         $blockers = @(Get-Paged "repos/$repo/issues/$($i.number)/dependencies/blocked_by?per_page=100" | Where-Object { $_.state -eq 'open' } | ForEach-Object { "$(Get-RepoOf $_ $repo)#$($_.number)" })
       }
       if ($blockers.Count) { $reason = 'blocked by ' + ($blockers -join ', ') }
+      # the REST read of the claim only for a PBI that would otherwise be ready
+      elseif (@(Get-Prop $i 'assignees').Count -and (Test-FreshClaim $repo ([int]$i.number))) { $reason = 'claimed' }
     }
     if ($reason) { $ref.reason = $reason; $waitingItems.Add($ref) } else { $ready.Add($ref) }
   }
