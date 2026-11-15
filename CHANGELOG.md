@@ -5,6 +5,40 @@ Versioning follows [Semantic Versioning](https://semver.org/).
 
 ---
 
+## [4.4.0] — 2026-11-15
+
+### Bug Fixes
+- Ts-pnpm-workflow provides pnpm through corepack on Node 26 (#609) (#610)
+- Heartbeat takeover race still open between second read and PATCH (#593) (#624)
+- Get-RepoLoopLabel can show the result of an older run (#594) (#625)
+- Deliver-loop stop between rounds does not point to release (#595) (#626)
+- **deliver**: Soften the acceptance-criteria gate wording and fix a stale comment (#597) (#628)
+- **deliver**: Finish open and merging tasks before run.finished (#600) (#630)
+- **deliver**: Informational attentions are not left open (#602) (#632)
+- **deliver**: Issue titles and milestone url in event subjects (#601) (#631)
+- **deliver**: A partial run result is succeeded with a warning tone (#603) (#640)
+- Deliver-loop reports no progress when the PR merges by auto-merge right after the session (#605) (#642)
+- Objective status shows a repository as ready when its loop can only skip interactive or claimed PBIs (#604) (#641)
+- **deliver**: Preflight and loop check that release/next exists (#633) (#645)
+- **deliver**: The loop sends desktop notifications inside a poimen terminal (#634) (#646)
+
+
+### Documentation
+- **deliver**: Document ignored invalid Requires refs and stale context.md removal (#596) (#627)
+- Refresh ROADMAP.md with M015 to M017 and the releases up to v4.3.1 (#638) (#639)
+- **adr**: The deliver loop runs as TypeScript on Node behind a host interface (#612) (#622)
+
+
+### Features
+- **deliver**: File the release-review notes as issues automatically (#598) (#629)
+- **deliver**: Repair an existing PR of the own branch instead of pausing (#608) (#644)
+- **deliver**: Deliver.parallel defaults to 3 across repositories (#599) (#647)
+
+
+### Performance
+- **deliver**: Reuse and parallelize the objective context file (#607) (#643)
+
+
 ## [4.3.1] — 2026-11-13
 
 ### Bug Fixes
@@ -18,6 +52,7 @@ Versioning follows [Semantic Versioning](https://semver.org/).
 
 ### Documentation
 - **implementation**: One wording for the background-persistence rule (#579) (#591)
+- Update CHANGELOG.md for v4.3.1 [skip ci]
 
 
 ### Performance
