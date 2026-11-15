@@ -2,6 +2,7 @@
   "extends": "../tsconfig.json",
   "compilerOptions": {
     "rootDir": "..",
+    "erasableSyntaxOnly": true,
     "noEmit": true,
     "allowImportingTsExtensions": true
   },

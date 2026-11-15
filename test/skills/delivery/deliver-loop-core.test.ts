@@ -144,11 +144,35 @@ describe('entry point', () => {
   });
 });
 
+describe('launcher', () => {
+  it('exits 64 naming the minimum when Node is below 24', () => {
+    const r = spawnSync(process.execPath, [ENTRY.replace(/\.ts$/, '.mjs')], {
+      encoding: 'utf8',
+      env: { ...process.env, DELIVER_LOOP_NODE_VERSION: '20.11.0' },
+    });
+    expect(r.status).toBe(64);
+    expect(r.stderr).toContain('Node.js 24 or newer (found 20.11.0)');
+  });
+
+  it('hands over to the TypeScript entry on a supported Node', () => {
+    const r = spawnSync(
+      process.execPath,
+      [ENTRY.replace(/\.ts$/, '.mjs'), '-Target', '1', '-Harness', 'gpt'],
+      {
+        encoding: 'utf8',
+      },
+    );
+    expect(r.status).toBe(64);
+    expect(r.stderr).toContain('claude, copilot');
+  });
+});
+
 describe('tier', () => {
   it.each([
     ['Tier: fast', 'fast', 'haiku', 'Tier line'],
     ['- **Tier:** strong\nSize: S', 'strong', 'opus', 'Tier line'],
     ['text\nSize: L', 'strong', 'opus', 'size L'],
+    ['size: l', 'strong', 'opus', 'size L'],
     ['Size: S', 'fast', 'haiku', 'size S'],
     ['Size: M', 'standard', 'sonnet', 'size M'],
     ['no marker', 'standard', 'sonnet', 'default'],

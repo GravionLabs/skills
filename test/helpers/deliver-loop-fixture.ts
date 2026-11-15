@@ -54,8 +54,11 @@ export class DeliverLoopFixture {
   cwd = '';
   private seq = 0;
   private worker!: PwshWorker;
+  private readonly script: string;
 
-  constructor(private readonly script: string) {}
+  constructor(script: string) {
+    this.script = script;
+  }
 
   start(): void {
     this.dir = fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(), 'deliver-loop-')));

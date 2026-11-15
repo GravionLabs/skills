@@ -18,10 +18,11 @@ export function getPbiTier(body: string | null | undefined): TierChoice {
     const tier = tierLine[1].toLowerCase() as Tier;
     return { tier, model: TIER_MODELS[tier], from: 'Tier line' };
   }
-  const size = /^[ \t]*(?:[-*][ \t]*)?\**Size:?\**:?[ \t]*([SML])\b/m.exec(text);
+  const size = /^[ \t]*(?:[-*][ \t]*)?\**Size:?\**:?[ \t]*([SML])\b/im.exec(text);
   if (size) {
-    const tier = SIZE_TIERS[size[1]];
-    return { tier, model: TIER_MODELS[tier], from: `size ${size[1]}` };
+    const letter = size[1].toUpperCase();
+    const tier = SIZE_TIERS[letter];
+    return { tier, model: TIER_MODELS[tier], from: `size ${letter}` };
   }
   return { tier: 'standard', model: TIER_MODELS.standard, from: 'default' };
 }
