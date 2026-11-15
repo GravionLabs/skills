@@ -394,6 +394,17 @@ try {
       merged.push(`#${next.id} ${pull?.url}`);
       log(`#${next.id} merged: ${pull?.url}`, 'ok');
       emit('task.finished', { task: `issue-${next.id}`, outcome: 'succeeded', text: 'merged' }, 'success');
+      // the tracker closes the issue a moment after the merge; until then it still blocks its dependents
+      for (let second = 0; second < 120 && !stopped; second += 5) {
+        let closed = false;
+        try {
+          closed = !tracker.items().some((item) => item.id === next.id);
+        } catch {
+          // asked again
+        }
+        if (closed) break;
+        for (let wait = 0; wait < 5 && !stopped; wait++) await sleep(1);
+      }
     } else if (reason === 'stopped') {
       log(`#${next.id} stopped: not merged${pull ? `, ${pull.url}` : ''}`, 'warn');
       emit('task.finished', { task: `issue-${next.id}`, outcome: 'cancelled', text: 'stopped' });
