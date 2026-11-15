@@ -10,6 +10,7 @@
       "test/**",
       "scripts/**",
       "skills/**/scripts/**/*.ts",
+      "skills/**/scripts/**/*.mts",
       "site/**",
       "*.json",
       "**/*.md",

@@ -3,7 +3,14 @@
 // The state is read from the tracker before every issue. The run only remembers what it set aside.
 // Tracker: tracker.mts. Progress events: events.mts. Everything else is in this file.
 import { execFileSync, spawn } from 'node:child_process';
-import { appendFileSync, createWriteStream, existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
+import {
+  appendFileSync,
+  createWriteStream,
+  existsSync,
+  mkdirSync,
+  readFileSync,
+  writeFileSync,
+} from 'node:fs';
 import path from 'node:path';
 import { createInterface } from 'node:readline';
 import { parseArgs } from 'node:util';
@@ -45,7 +52,9 @@ const attempt = (cmd: string, args: string[], cwd?: string): string | undefined 
     return undefined;
   }
 };
-const sleep = (seconds: number) => new Promise((done) => setTimeout(done, seconds * 1000));
+// Tests only: the length of one second of waiting, so a test does not wait for real.
+const TICK_MS = Number(process.env.DELIVER_MIN_TICK_MS ?? 1000);
+const sleep = (seconds: number) => new Promise((done) => setTimeout(done, seconds * TICK_MS));
 /** The message of a failed command: its stderr, else the error itself, first line only. */
 const firstLine = (error: unknown): string =>
   String((error as { stderr?: string }).stderr || (error as Error).message || error)
@@ -53,7 +62,14 @@ const firstLine = (error: unknown): string =>
     .split('\n')[0];
 
 // Output: the terminal gets color when it is a terminal, the log file (tail -f) unless NO_COLOR is set.
-const CODES: Record<Tone, string> = { ok: '32', bad: '31', warn: '33', info: '36', dim: '2', bold: '1' };
+const CODES: Record<Tone, string> = {
+  ok: '32',
+  bad: '31',
+  warn: '33',
+  info: '36',
+  dim: '2',
+  bold: '1',
+};
 const paint = (line: string, tone: Tone | undefined, on: boolean) =>
   on && tone ? `\x1b[${CODES[tone]}m${line}\x1b[0m` : line;
 let logFile = '';
@@ -68,10 +84,12 @@ const fail = (message: string, code: number): never => {
   process.exit(code);
 };
 
-if (!opt.milestone === !opt.issues) fail('give exactly one of --milestone <M…> or --issues <nr,…>', 64);
+if (!opt.milestone === !opt.issues)
+  fail('give exactly one of --milestone <M…> or --issues <nr,…>', 64);
 const whole = (name: 'max' | 'session-minutes' | 'merge-minutes', least: number): number => {
   const value = Number(opt[name]);
-  if (!Number.isInteger(value) || value < least) fail(`--${name} needs a whole number from ${least}`, 64);
+  if (!Number.isInteger(value) || value < least)
+    fail(`--${name} needs a whole number from ${least}`, 64);
   return value;
 };
 const MAX = whole('max', 0);
@@ -116,7 +134,9 @@ const PROTECTED: string[] = config.deliver?.protectedPaths ?? [
 const protectedHits = (files: string[]): string[] =>
   files.filter((file) =>
     PROTECTED.some((entry) =>
-      entry.endsWith('/') ? file.startsWith(entry) : file === entry || path.basename(file) === entry,
+      entry.endsWith('/')
+        ? file.startsWith(entry)
+        : file === entry || path.basename(file) === entry,
     ),
   );
 // The session acts with this token instead of the login of the user (a token limited to this repository).
@@ -131,9 +151,21 @@ const runId = `${new Date().toISOString().replace(/[-:]/g, '').slice(0, 15)}-${p
 const runDir = path.join(commonDir, 'deliver-min', runId);
 let emit: Emit = () => {};
 
+/** One line of the stream-json of Claude Code, as far as the loop reads it. */
+type StreamRecord = {
+  type?: string;
+  num_turns?: number;
+  total_cost_usd?: number;
+  parent_tool_use_id?: string | null;
+  message?: {
+    usage?: Record<string, number | undefined>;
+    content?: { type: string; text?: string; name?: string; input?: Record<string, unknown> }[];
+  };
+};
+
 /** Prints the readable part of one stream record and keeps the numbers of the session. */
 function render(line: string, session: Session): void {
-  let event: any;
+  let event: StreamRecord;
   try {
     event = JSON.parse(line);
   } catch {
@@ -158,7 +190,10 @@ function render(line: string, session: Session): void {
     if (block.type === 'text' && main) {
       for (const text of String(block.text).split('\n')) {
         if (!text.trim()) continue;
-        say(`  ${text.trim().slice(0, 160)}`, text.trim().startsWith('result:') ? 'info' : undefined);
+        say(
+          `  ${text.trim().slice(0, 160)}`,
+          text.trim().startsWith('result:') ? 'info' : undefined,
+        );
       }
     }
     if (block.type === 'tool_use') {
@@ -247,13 +282,18 @@ async function deliver(item: Item): Promise<{ reason?: string; pull?: Pull }> {
   const task = `issue-${item.id}`;
   const worktree = path.join(path.dirname(root), `${path.basename(root)}-wt-${item.id}`);
   run('git', ['fetch', '--quiet', 'origin', BASE], root);
-  if (!existsSync(worktree)) run('git', ['worktree', 'add', '--detach', worktree, `origin/${BASE}`], root);
+  if (!existsSync(worktree))
+    run('git', ['worktree', 'add', '--detach', worktree, `origin/${BASE}`], root);
   const sessions: Session[] = [];
   let pull: Pull | undefined;
   let reason: string | undefined;
   const started = Date.now();
   for (let round = 1; round <= 2; round++) {
-    const session = await startSession(item, worktree, path.join(runDir, `${item.id}-${round}.jsonl`));
+    const session = await startSession(
+      item,
+      worktree,
+      path.join(runDir, `${item.id}-${round}.jsonl`),
+    );
     sessions.push(session);
     reason = undefined;
     pull = tracker.pullOf(item);
@@ -287,7 +327,8 @@ async function deliver(item: Item): Promise<{ reason?: string; pull?: Pull }> {
     reason = await merge(pull);
     if (!reason || reason === 'stopped') break;
     log(`#${item.id} ${reason}${round === 1 ? ', one repair session' : ''}`, 'warn');
-    if (round === 1) emit('step.finished', { task, step: { name: 'repair', text: reason } }, 'warning');
+    if (round === 1)
+      emit('step.finished', { task, step: { name: 'repair', text: reason } }, 'warning');
   }
   if (pull && !reason) {
     // merged: the worktree and the branches can go
@@ -314,7 +355,10 @@ async function deliver(item: Item): Promise<{ reason?: string; pull?: Pull }> {
 }
 
 if (!attempt('git', ['ls-remote', '--exit-code', '--heads', 'origin', BASE], root)) {
-  fail(`${BASE} is missing on origin${BASE === 'release/next' ? ': run github-release cut first' : ''}`, 3);
+  fail(
+    `${BASE} is missing on origin${BASE === 'release/next' ? ': run github-release cut first' : ''}`,
+    3,
+  );
 }
 
 const required = tracker.requiredChecks();
@@ -336,11 +380,11 @@ if (opt['dry-run']) {
   console.log(
     `harness: ${harnessName} (${harness.command({ prompt: '/deliver-min <nr> …', model: opt.model }).join(' ')})`,
   );
-  console.log(
-    `tracker: ${tracker.name}, base: ${BASE}`,
-  );
+  console.log(`tracker: ${tracker.name}, base: ${BASE}`);
   console.log(`required checks: ${required.join(', ') || 'none'}`);
-  console.log(`session token: ${SESSION_TOKEN ? 'DELIVER_MIN_SESSION_TOKEN' : 'none, the session uses your login'}`);
+  console.log(
+    `session token: ${SESSION_TOKEN ? 'DELIVER_MIN_SESSION_TOKEN' : 'none, the session uses your login'}`,
+  );
   console.log(`protected paths: ${PROTECTED.join(' ')}`);
   process.exit(0);
 }
@@ -350,13 +394,18 @@ logFile = path.join(path.dirname(runDir), 'loop.log');
 emit = openEvents(process.env.AGENT_EVENTS_DIR ?? path.join(commonDir, '.agents', 'events'), runId);
 log(`run ${runId} in ${tracker.repo}, results: ${path.join(runDir, 'results.jsonl')}`, 'dim');
 if (!SESSION_TOKEN) {
-  log('the session uses your own login: set DELIVER_MIN_SESSION_TOKEN to a token limited to this repository', 'warn');
+  log(
+    'the session uses your own login: set DELIVER_MIN_SESSION_TOKEN to a token limited to this repository',
+    'warn',
+  );
 }
 emit('run.started', {
   profiles: [],
   host: {
     'jsonl-file.pid': String(process.pid),
-    ...(process.env.POIMEN_TERMINAL_ID ? { 'poimen.terminal': process.env.POIMEN_TERMINAL_ID } : {}),
+    ...(process.env.POIMEN_TERMINAL_ID
+      ? { 'poimen.terminal': process.env.POIMEN_TERMINAL_ID }
+      : {}),
   },
   agent: { harness: harnessName, model: MODEL },
   subject: tracker.subject(),
@@ -373,7 +422,9 @@ process.on('SIGINT', () => {
 try {
   for (let count = 0; !stopped && (MAX === 0 || count < MAX); count++) {
     // an issue closes a moment after its merge: do not pick it again
-    const open = tracker.items().filter((item) => !merged.some((line) => line.startsWith(`#${item.id} `)));
+    const open = tracker
+      .items()
+      .filter((item) => !merged.some((line) => line.startsWith(`#${item.id} `)));
     if (count === 0) {
       total = open.length;
       emit('progress', { done: 0, total, label: 'PBIs' });
@@ -393,7 +444,11 @@ try {
     if (!reason) {
       merged.push(`#${next.id} ${pull?.url}`);
       log(`#${next.id} merged: ${pull?.url}`, 'ok');
-      emit('task.finished', { task: `issue-${next.id}`, outcome: 'succeeded', text: 'merged' }, 'success');
+      emit(
+        'task.finished',
+        { task: `issue-${next.id}`, outcome: 'succeeded', text: 'merged' },
+        'success',
+      );
       // the tracker closes the issue a moment after the merge; until then it still blocks its dependents
       for (let second = 0; second < 120 && !stopped; second += 5) {
         let closed = false;
@@ -411,7 +466,11 @@ try {
     } else {
       aside.set(next.id, `${reason}${pull ? `, ${pull.url}` : ''}`);
       log(`#${next.id} set aside: ${reason}`, 'bad');
-      emit('task.finished', { task: `issue-${next.id}`, outcome: 'skipped', text: reason }, 'warning');
+      emit(
+        'task.finished',
+        { task: `issue-${next.id}`, outcome: 'skipped', text: reason },
+        'warning',
+      );
       // after the task: an attention of a finished task would close with it
       emit(
         'attention',
@@ -434,7 +493,10 @@ try {
 }
 
 say('');
-say(`merged (${merged.length}):${merged.map((line) => `\n  ${line}`).join('')}`, merged.length ? 'ok' : undefined);
+say(
+  `merged (${merged.length}):${merged.map((line) => `\n  ${line}`).join('')}`,
+  merged.length ? 'ok' : undefined,
+);
 say(
   `set aside (${aside.size}):${[...aside].map(([nr, why]) => `\n  #${nr} ${why}`).join('')}`,
   aside.size ? 'bad' : undefined,

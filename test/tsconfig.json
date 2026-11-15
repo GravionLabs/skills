@@ -6,5 +6,10 @@
     "noEmit": true,
     "allowImportingTsExtensions": true
   },
-  "include": ["./**/*.ts", "../skills/**/scripts/**/*.ts"]
+  "include": [
+    "./**/*.ts",
+    "../skills/**/scripts/**/*.ts",
+    "./**/*.mts",
+    "../skills/**/scripts/**/*.mts"
+  ]
 }

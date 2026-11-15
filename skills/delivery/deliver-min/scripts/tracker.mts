@@ -3,6 +3,9 @@
 // reads the gate of the merge and merges. A tracker is the file tracker/<name>.mts, chosen by
 // `deliver.tracker` in .agents/config.json (default `github`), and exports `create(context)`.
 
+import path from 'node:path';
+import { pathToFileURL } from 'node:url';
+
 /** What a reader of the run sees: a milestone, an issue, a repository. */
 export type Subject = { kind: string; id: string; title: string; url?: string };
 
@@ -67,6 +70,11 @@ export interface Tracker {
 
 export async function loadTracker(name: string, context: TrackerContext): Promise<Tracker> {
   if (!/^[a-z][a-z0-9-]*$/.test(name)) throw new Error(`invalid tracker name: ${name}`);
-  const module = await import(new URL(`./tracker/${name}.mts`, import.meta.url).href);
+  // Tests only: a directory from the environment of the user that holds the tracker file.
+  const dir = process.env.DELIVER_MIN_TRACKER_DIR;
+  const file = dir
+    ? pathToFileURL(path.join(dir, `${name}.mts`))
+    : new URL(`./tracker/${name}.mts`, import.meta.url);
+  const module = await import(file.href);
   return module.create(context);
 }

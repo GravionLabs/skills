@@ -37,7 +37,8 @@ export function checkVerdict(
 ): { state: 'red'; detail: string } | { state: 'pending' | 'green' } {
   const gating = required.length > 0 ? checks.filter((c) => required.includes(c.name)) : checks;
   const red = gating.filter((c) => c.bucket === 'fail');
-  if (red.length > 0) return { state: 'red', detail: [...new Set(red.map((c) => c.name))].join(', ') };
+  if (red.length > 0)
+    return { state: 'red', detail: [...new Set(red.map((c) => c.name))].join(', ') };
   const passed = (c: Check) => c.bucket === 'pass' || c.bucket === 'skipping';
   const missing = required.some((name) => !gating.some((c) => c.name === name));
   return { state: missing || !gating.every(passed) ? 'pending' : 'green' };
@@ -52,8 +53,8 @@ export function create({ cwd, base, selection, trustAuthors }: TrackerContext): 
       // the default of 1 MB is too small for the lists of a large repository
       maxBuffer: 256 * 1024 * 1024,
     }).trim();
-  const api = <T>(route: string): T => JSON.parse(gh('api', route));
-  const list = <T>(route: string): T[] =>
+  const api = <T,>(route: string): T => JSON.parse(gh('api', route));
+  const list = <T,>(route: string): T[] =>
     (JSON.parse(gh('api', route, '--paginate', '--slurp')) as T[][]).flat();
   const repo = gh('repo', 'view', '--json', 'nameWithOwner', '-q', '.nameWithOwner');
 
@@ -100,9 +101,9 @@ export function create({ cwd, base, selection, trustAuthors }: TrackerContext): 
     if (requiredCache) return requiredCache;
     const names: string[] = [];
     try {
-      const rules = api<{ type: string; parameters?: { required_status_checks?: { context: string }[] } }[]>(
-        `repos/${repo}/rules/branches/${base}`,
-      );
+      const rules = api<
+        { type: string; parameters?: { required_status_checks?: { context: string }[] } }[]
+      >(`repos/${repo}/rules/branches/${base}`);
       for (const rule of rules) {
         if (rule.type !== 'required_status_checks') continue;
         names.push(...(rule.parameters?.required_status_checks ?? []).map((c) => c.context));
@@ -147,7 +148,9 @@ export function create({ cwd, base, selection, trustAuthors }: TrackerContext): 
       }
       const number = milestone().number;
       return list<Issue>(`repos/${repo}/issues?milestone=${number}&state=open&per_page=100`)
-        .filter((i) => !i.pull_request && i.labels.some((l) => l.name === 'pbi' || l.name === 'bug'))
+        .filter(
+          (i) => !i.pull_request && i.labels.some((l) => l.name === 'pbi' || l.name === 'bug'),
+        )
         .sort((a, b) => a.number - b.number)
         .map(toItem);
     },
@@ -176,14 +179,26 @@ export function create({ cwd, base, selection, trustAuthors }: TrackerContext): 
     },
 
     needsDecision(item: Item): boolean {
-      return api<Issue>(`repos/${repo}/issues/${item.id}`).labels.some((l) => l.name === 'needs-decision');
+      return api<Issue>(`repos/${repo}/issues/${item.id}`).labels.some(
+        (l) => l.name === 'needs-decision',
+      );
     },
 
     pullOf(item: Item): Pull | undefined {
-      const found = list<PullRecord>(`repos/${repo}/pulls?state=open&base=${base}&per_page=100`).find(
-        (p) => p.head.repo?.full_name === repo && new RegExp(`^[a-z]+/${item.id}-`).test(p.head.ref),
+      const found = list<PullRecord>(
+        `repos/${repo}/pulls?state=open&base=${base}&per_page=100`,
+      ).find(
+        (p) =>
+          p.head.repo?.full_name === repo && new RegExp(`^[a-z]+/${item.id}-`).test(p.head.ref),
       );
-      return found && { id: found.number, title: found.title, url: found.html_url, branch: found.head.ref };
+      return (
+        found && {
+          id: found.number,
+          title: found.title,
+          url: found.html_url,
+          branch: found.head.ref,
+        }
+      );
     },
 
     gate(pull: Pull): Gate {
@@ -192,13 +207,18 @@ export function create({ cwd, base, selection, trustAuthors }: TrackerContext): 
       );
       if (view.state === 'MERGED') return { state: 'merged' };
       if (view.state === 'CLOSED') return { state: 'closed' };
-      if (view.mergeable === 'CONFLICTING') return { state: 'conflict', detail: `conflict with ${base}` };
+      if (view.mergeable === 'CONFLICTING')
+        return { state: 'conflict', detail: `conflict with ${base}` };
       const checks = checksOf(pull.id);
       const verdict = checkVerdict(required(), checks);
       if (verdict.state === 'red') return verdict;
       // mergeable is UNKNOWN while GitHub computes it
       const ready = verdict.state === 'green' && view.mergeable === 'MERGEABLE';
-      return { state: ready ? 'ready' : 'pending', reported: checks.length > 0, head: view.headRefOid };
+      return {
+        state: ready ? 'ready' : 'pending',
+        reported: checks.length > 0,
+        head: view.headRefOid,
+      };
     },
 
     merge(pull: Pull, head: string): void {

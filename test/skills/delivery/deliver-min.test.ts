@@ -1,0 +1,367 @@
+// deliver-min: the loop (deliver-loop.mts) against a fake tracker and a fake harness in a real git repository, and
+// the check verdict of the GitHub tracker. The loop is started as its own process, as a user starts it.
+import { execFileSync, spawn } from 'node:child_process';
+import {
+  existsSync,
+  mkdirSync,
+  mkdtempSync,
+  readdirSync,
+  readFileSync,
+  rmSync,
+  writeFileSync,
+} from 'node:fs';
+import { tmpdir } from 'node:os';
+import path from 'node:path';
+import { checkVerdict } from '../../../skills/delivery/deliver-min/scripts/tracker/github.mts';
+
+const skill = path.resolve(__dirname, '../../../skills/delivery/deliver-min');
+const loopScript = path.join(skill, 'scripts/deliver-loop.mts');
+const helpers = path.resolve(__dirname, 'deliver-min');
+
+type Scenario = {
+  items: { id: number; title: string; blockedBy?: number[] }[];
+  gates?: unknown[];
+  files?: string[];
+  required?: string[];
+  exits?: number[];
+  noPull?: boolean;
+};
+type Outcome = {
+  status: number | null;
+  stdout: string;
+  stderr: string;
+  merges: { pull: number; head: string }[];
+  sessions: {
+    id: number;
+    prompt: string;
+    ghToken: string | null;
+    hasSessionTokenVariable: boolean;
+  }[];
+  results: { issue: number; outcome: string; reason?: string }[];
+  events: { type: string; outcome?: string; reason?: string; needsYou?: boolean }[];
+  log: string;
+};
+
+let root: string;
+let repo: string;
+let count = 0;
+
+const git = (cwd: string, ...args: string[]) =>
+  execFileSync('git', ['-c', 'user.name=test', '-c', 'user.email=test@example.test', ...args], {
+    cwd,
+    encoding: 'utf8',
+    stdio: ['ignore', 'pipe', 'pipe'],
+  });
+const lines = <T>(file: string): T[] =>
+  existsSync(file)
+    ? readFileSync(file, 'utf8')
+        .split('\n')
+        .filter(Boolean)
+        .map((line) => JSON.parse(line))
+    : [];
+
+/** Runs the loop for one scenario. `whenStdout` is called with the output so far (the stop case sends a signal). */
+function loop(
+  scenario: Scenario,
+  options: {
+    args?: string[];
+    env?: Record<string, string>;
+    whenStdout?: (out: string, stop: () => void) => void;
+  } = {},
+): Promise<Outcome> {
+  count += 1;
+  const dir = path.join(root, `case-${count}`);
+  mkdirSync(dir);
+  writeFileSync(path.join(dir, 'scenario.json'), JSON.stringify(scenario));
+  const env: NodeJS.ProcessEnv = {
+    ...process.env,
+    NO_COLOR: '1',
+    FAKE_DIR: dir,
+    AGENT_EVENTS_DIR: path.join(dir, 'events'),
+    DELIVER_MIN_TRACKER_DIR: path.join(helpers, 'tracker'),
+    DELIVER_MIN_HARNESS: JSON.stringify(['node', path.join(helpers, 'fake-harness.mjs'), dir]),
+    DELIVER_MIN_TICK_MS: '1',
+    GH_TOKEN: 'login-token',
+    ...options.env,
+  };
+  if (!options.env?.['DELIVER_MIN_SESSION_TOKEN']) delete env['DELIVER_MIN_SESSION_TOKEN'];
+  const issues = scenario.items.map((item) => item.id).join(',');
+  return new Promise((done) => {
+    const child = spawn(
+      'node',
+      [loopScript, '--tracker', 'fake', '--issues', issues, ...(options.args ?? [])],
+      { cwd: repo, env, stdio: ['ignore', 'pipe', 'pipe'] },
+    );
+    let stdout = '';
+    let stderr = '';
+    let signalled = false;
+    child.stdout.on('data', (chunk) => {
+      stdout += chunk;
+      options.whenStdout?.(stdout, () => {
+        if (!signalled) child.kill('SIGINT');
+        signalled = true;
+      });
+    });
+    child.stderr.on('data', (chunk) => {
+      stderr += chunk;
+    });
+    child.on('close', (status) => {
+      const results = /results: (\S+)/.exec(stdout)?.[1];
+      const events = path.join(dir, 'events');
+      done({
+        status,
+        stdout,
+        stderr,
+        merges: lines<{ call: string; pull: number; head: string }>(
+          path.join(dir, 'calls.jsonl'),
+        ).filter((call) => call.call === 'merge'),
+        sessions: lines(path.join(dir, 'sessions.jsonl')),
+        results: results ? lines(results) : [],
+        events: existsSync(events) ? lines(path.join(events, readdirSync(events)[0] ?? '')) : [],
+        log: results
+          ? readFileSync(path.join(path.dirname(path.dirname(results)), 'loop.log'), 'utf8')
+          : '',
+      });
+    });
+  });
+}
+
+const READY = { state: 'ready', reported: true, head: 'abc123' };
+const RED = { state: 'red', detail: 'ci' };
+
+beforeAll(() => {
+  root = mkdtempSync(path.join(tmpdir(), 'deliver-min-'));
+  const origin = path.join(root, 'origin.git');
+  repo = path.join(root, 'repo');
+  execFileSync('git', ['init', '--quiet', '--bare', origin]);
+  execFileSync('git', ['init', '--quiet', '--initial-branch', 'main', repo]);
+  writeFileSync(path.join(repo, 'README.md'), 'fixture\n');
+  git(repo, 'add', 'README.md');
+  git(repo, 'commit', '--quiet', '-m', 'chore: fixture');
+  git(repo, 'remote', 'add', 'origin', origin);
+  git(repo, 'push', '--quiet', 'origin', 'main:release/next');
+});
+
+afterAll(() => {
+  rmSync(root, { recursive: true, force: true });
+});
+
+describe('deliver-min loop', () => {
+  it('merges an issue and then the issue it blocked', async () => {
+    const out = await loop({
+      items: [
+        { id: 12, title: '[PBI] feat: second', blockedBy: [11] },
+        { id: 11, title: '[PBI] feat: first' },
+      ],
+    });
+    expect(out.status).toBe(0);
+    expect(out.merges).toEqual([
+      { call: 'merge', pull: 111, head: 'abc123' },
+      { call: 'merge', pull: 112, head: 'abc123' },
+    ]);
+    expect(out.results.map((r) => [r.issue, r.outcome])).toEqual([
+      [11, 'merged'],
+      [12, 'merged'],
+    ]);
+    expect(out.sessions[0]?.prompt).toMatch(
+      /^\/deliver-min 11 --base release\/next --issue-file \S+11\.issue\.md$/,
+    );
+    expect(out.events.map((e) => e.type)).toEqual([
+      'run.started',
+      'progress',
+      'task.started',
+      'step.finished',
+      'task.finished',
+      'progress',
+      'task.started',
+      'step.finished',
+      'task.finished',
+      'progress',
+      'run.finished',
+    ]);
+    expect(out.events.at(-1)?.outcome).toBe('succeeded');
+    // merged: the worktree of the issue is gone
+    expect(existsSync(path.join(root, 'repo-wt-11'))).toBe(false);
+  });
+
+  it('does not merge the open pull request of a failed session', async () => {
+    const out = await loop({ items: [{ id: 21, title: '[PBI] feat: fails' }], exits: [3] });
+    expect(out.status).toBe(2);
+    expect(out.merges).toEqual([]);
+    expect(out.results[0]).toMatchObject({ outcome: 'aside', reason: 'session failed (exit 3)' });
+    expect(out.events.find((e) => e.type === 'attention')).toMatchObject({
+      reason: 'set-aside',
+      needsYou: true,
+    });
+    // not merged: the worktree may hold work that is not pushed
+    expect(existsSync(path.join(root, 'repo-wt-21'))).toBe(true);
+  });
+
+  it('starts one repair session for a red check and merges when it is green', async () => {
+    const out = await loop({
+      items: [{ id: 31, title: '[PBI] feat: red once' }],
+      gates: [RED, READY],
+    });
+    expect(out.status).toBe(0);
+    expect(out.sessions).toHaveLength(2);
+    expect(out.merges).toHaveLength(1);
+  });
+
+  it('sets an issue aside when the check is red after the repair session', async () => {
+    const out = await loop({ items: [{ id: 41, title: '[PBI] feat: red twice' }], gates: [RED] });
+    expect(out.status).toBe(2);
+    expect(out.sessions).toHaveLength(2);
+    expect(out.merges).toEqual([]);
+    expect(out.results[0]).toMatchObject({ outcome: 'aside', reason: 'red: ci' });
+  });
+
+  it('does not merge after a stop request during the check wait', async () => {
+    const out = await loop(
+      {
+        items: [{ id: 51, title: '[PBI] feat: stopped' }],
+        gates: [{ state: 'pending', reported: true }],
+      },
+      { whenStdout: (stdout, stop) => stdout.includes('waits for checks') && stop() },
+    );
+    expect(out.status).toBe(130);
+    expect(out.merges).toEqual([]);
+    expect(out.results[0]).toMatchObject({ outcome: 'stopped' });
+    expect(out.events.at(-1)).toMatchObject({ type: 'run.finished', outcome: 'cancelled' });
+  });
+
+  it('sets a pull request aside that changes a protected path', async () => {
+    const out = await loop({
+      items: [{ id: 61, title: '[PBI] ci: workflow' }],
+      files: ['src/a.ts', '.github/workflows/ci.yml', 'packages/x/package.json'],
+    });
+    expect(out.status).toBe(2);
+    expect(out.sessions).toHaveLength(1);
+    expect(out.merges).toEqual([]);
+    expect(out.results[0]?.reason).toBe(
+      'changes protected paths (.github/workflows/ci.yml, packages/x/package.json), merge it yourself',
+    );
+  });
+
+  it('refuses a base branch without required checks unless the flag allows it', async () => {
+    const scenario = { items: [{ id: 71, title: '[PBI] feat: unguarded' }], required: [] };
+    const refused = await loop(scenario);
+    expect(refused.status).toBe(3);
+    expect(refused.stderr).toContain('release/next requires no checks in fake/repo');
+    expect(refused.sessions).toEqual([]);
+    const allowed = await loop(scenario, { args: ['--allow-no-required-checks'] });
+    expect(allowed.status).toBe(0);
+    expect(allowed.merges).toHaveLength(1);
+  });
+
+  it('tolerates a failing tracker call during the check wait', async () => {
+    const out = await loop({
+      items: [{ id: 81, title: '[PBI] feat: flaky' }],
+      gates: ['throw', READY],
+    });
+    expect(out.status).toBe(0);
+    expect(out.sessions).toHaveLength(1);
+    expect(out.merges).toHaveLength(1);
+  });
+
+  it('sets an issue aside when the session ends without a pull request', async () => {
+    const out = await loop({ items: [{ id: 91, title: '[PBI] feat: nothing' }], noPull: true });
+    expect(out.status).toBe(2);
+    expect(out.results[0]?.reason).toBe('session ended without a pull request');
+  });
+
+  it('gives the session the session token as GH_TOKEN and not the variable itself', async () => {
+    const withToken = await loop(
+      { items: [{ id: 101, title: '[PBI] feat: token' }] },
+      { env: { DELIVER_MIN_SESSION_TOKEN: 'session-token-value' } },
+    );
+    expect(withToken.sessions[0]).toMatchObject({
+      ghToken: 'session-token-value',
+      hasSessionTokenVariable: false,
+    });
+    expect(withToken.log).not.toContain('session-token-value');
+    const without = await loop({ items: [{ id: 102, title: '[PBI] feat: login' }] });
+    expect(without.sessions[0]).toMatchObject({
+      ghToken: 'login-token',
+      hasSessionTokenVariable: false,
+    });
+    expect(without.log).toContain('the session uses your own login');
+  });
+
+  it('prints the order and starts nothing with --dry-run', async () => {
+    const out = await loop(
+      {
+        items: [
+          { id: 111, title: '[PBI] feat: a' },
+          { id: 112, title: '[PBI] feat: b', blockedBy: [111] },
+        ],
+      },
+      { args: ['--dry-run'] },
+    );
+    expect(out.status).toBe(0);
+    expect(out.stdout).toContain('#111 ready: [PBI] feat: a');
+    expect(out.stdout).toContain('#112 blocked by #111: [PBI] feat: b');
+    expect(out.stdout).toContain('required checks: ci');
+    expect(out.sessions).toEqual([]);
+  });
+
+  it.each([
+    ['no selection', []],
+    ['both selections', ['--milestone', 'M001']],
+    ['--max that is no number', ['--max', 'abc']],
+    ['an unknown harness', ['--harness', 'nope']],
+  ])('ends with a usage error for %s', (_name, args) => {
+    const base = args.length === 0 ? [] : ['--issues', '1'];
+    let status = 0;
+    try {
+      execFileSync('node', [loopScript, ...base, ...args], { cwd: repo, stdio: 'pipe' });
+    } catch (error) {
+      status = (error as { status: number }).status;
+    }
+    expect(status).toBe(64);
+  });
+});
+
+describe('checkVerdict of the GitHub tracker', () => {
+  const pass = (name: string) => ({ name, bucket: 'pass' });
+  it.each([
+    ['every required check passed', ['ci', 'pr'], [pass('ci'), pass('pr')], 'green'],
+    ['a required check has not reported', ['ci', 'pr'], [pass('pr')], 'pending'],
+    ['a required check still runs', ['ci'], [{ name: 'ci', bucket: 'pending' }], 'pending'],
+    ['no check has reported', ['ci'], [], 'pending'],
+    ['a required check was skipped', ['ci'], [{ name: 'ci', bucket: 'skipping' }], 'green'],
+    [
+      'a check that is not required failed',
+      ['ci'],
+      [pass('ci'), { name: 'codeql', bucket: 'fail' }],
+      'green',
+    ],
+    [
+      'a check that is not required still runs',
+      ['ci'],
+      [pass('ci'), { name: 'codeql', bucket: 'pending' }],
+      'green',
+    ],
+    ['a required check was cancelled', ['ci'], [{ name: 'ci', bucket: 'cancel' }], 'pending'],
+    [
+      'without required checks every reported check counts',
+      [],
+      [pass('a'), { name: 'b', bucket: 'pending' }],
+      'pending',
+    ],
+    ['without required checks all passed', [], [pass('a'), pass('b')], 'green'],
+  ])('%s', (_name, required, checks, state) => {
+    expect(checkVerdict(required, checks).state).toBe(state);
+  });
+
+  it('names each failed required check once', () => {
+    const fail = { name: 'ci', bucket: 'fail' };
+    expect(checkVerdict(['ci', 'pr'], [fail, fail, pass('pr')])).toEqual({
+      state: 'red',
+      detail: 'ci',
+    });
+    expect(checkVerdict([], [{ name: 'lint', bucket: 'fail' }])).toEqual({
+      state: 'red',
+      detail: 'lint',
+    });
+  });
+});
