@@ -40,7 +40,7 @@
 .PARAMETER Type
   run.started, milestone.progress, issue.started, step.finished, attention, issue.finished, release.updated, iteration or run.finished.
 .PARAMETER Kind
-  attention kind: pr_opened, review_fix, ci_red, paused, blocked, needs_you, release_test or stopping.
+  attention kind: pr_opened (writes nothing: the PR link is on the step.finished of the pr step), review_fix (resolved by the next review without blocking findings and by task.finished), ci_red, paused, blocked, needs_you, release_test or stopping.
 .PARAMETER Outcome
   issue.finished: delivered, merging (auto-merge on, the PR merges when the checks are green), blocked, paused or skipped.
 .PARAMETER Reason
@@ -102,7 +102,6 @@ function Get-Tone([string]$type, [string]$step, [string]$result, [string]$kind, 
   switch ($type) {
     'attention' {
       switch ($kind) {
-        'pr_opened' { return 'success' }
         { $_ -in 'review_fix', 'paused', 'needs_you', 'release_test' } { return 'warning' }
         { $_ -in 'ci_red', 'blocked' } { return 'danger' }
       }
@@ -175,6 +174,8 @@ function Read-View([string]$text) {
       'attention' {
         if ($e.needsYou -eq $true -and -not $e.task -and $e.deliver -is [hashtable] -and $e.deliver.issue) {
           $view.Attention.Add(@{ Id = [string]$e.id; Issue = [int]$e.deliver.issue })
+        } elseif ($e.deliver -is [hashtable] -and $e.deliver.kind -eq 'review_fix' -and $e.deliver.issue) {
+          $view.Attention.Add(@{ Id = [string]$e.id; Issue = [int]$e.deliver.issue; Fix = $true })
         }
       }
       'attention.resolved' {
@@ -213,6 +214,12 @@ function New-Events($view, [string]$type, [string]$runId) {
   $prLinks = { $u = if ($Pr) { $Pr } else { $PrUrl }; if (Test-Url $u) { , @([ordered]@{ rel = 'pull-request'; url = $u }) } else { $null } }
   $resolveNeeds = {
     foreach ($a in @($view.Attention | Where-Object { $_.Issue -eq $Issue })) {
+      $r = & $new 'attention.resolved' 'neutral'; $r.id = $a.Id; $list.Add($r); [void]$view.Attention.Remove($a)
+    }
+  }
+  # review_fix attentions of the issue: resolved by a review without blocking findings and by task.finished
+  $resolveFix = {
+    foreach ($a in @($view.Attention | Where-Object { $_.Issue -eq $Issue -and $_.Fix })) {
       $r = & $new 'attention.resolved' 'neutral'; $r.id = $a.Id; $list.Add($r); [void]$view.Attention.Remove($a)
     }
   }
@@ -263,9 +270,12 @@ function New-Events($view, [string]$type, [string]$runId) {
       $ev.step = $s
       $l = & $prLinks; if ($l) { $ev.links = $l }
       $list.Add($ev)
+      if ($Issue -and $Step -eq 'review' -and $Result -notmatch 'fix' -and $Result -notmatch '[1-9]\d*\s+blocking') { & $resolveFix }
     }
     'attention' {
       if (-not $Kind) { throw 'attention needs -Kind' }
+      # informational (#602): the PR link sits on the step.finished of the pr step, so no attention is written
+      if ($Kind -eq 'pr_opened') { break }
       $needs = $Kind -in 'needs_you', 'release_test'
       $task = if ($Issue -and -not $needs) { & $taskOf } else { $null }
       $ev = & $new 'attention' (Get-Tone 'attention' -kind $Kind)
@@ -302,7 +312,7 @@ function New-Events($view, [string]$type, [string]$runId) {
       $l = & $prLinks; if ($l) { $ev.links = $l }
       $ev.deliver = [ordered]@{ outcome = $o }
       $list.Add($ev)
-      if ($o -in 'delivered', 'skipped') { & $resolveNeeds }
+      if ($o -in 'delivered', 'skipped') { & $resolveNeeds } else { & $resolveFix }
     }
     'deliver.release.updated' {
       $ev = & $new 'deliver.release.updated' 'neutral'

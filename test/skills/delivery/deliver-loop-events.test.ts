@@ -83,7 +83,6 @@ const report = (nr, step, result, pr) => require('child_process').execFileSync('
 if (n === 1) {
   require('child_process').execFileSync('pwsh', ['-NoProfile', '-File', ${JSON.stringify(REPORT_PROGRESS)}, '-Type', 'run.started', '-Source', 'session']);
   report(10, 'pr', 'opened #55', '${BASE}/pull/55');
-  require('child_process').execFileSync('pwsh', ['-NoProfile', '-File', ${JSON.stringify(REPORT_PROGRESS)}, '-Type', 'attention', '-Issue', '10', '-Kind', 'pr_opened', '-Reason', 'opened #55', '-Pr', '${BASE}/pull/55']);
   s.issues[10].state = 'closed';
 } else {
   report(11, 'review', 'clean', '');
@@ -176,7 +175,6 @@ fs.writeFileSync(f, JSON.stringify(s));`,
         'deliver.iteration',
         'task.started',
         'step.finished', // the nested run.started of the harness is not written
-        'attention', // pr_opened
         'task.finished', // #10 delivered
         'progress',
         'deliver.iteration',
