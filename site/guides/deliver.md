@@ -4,7 +4,7 @@
 
 ::: tip Prerequisites
 - `gh auth status` works and you can push to the repository.
-- The branch `release/next` exists (`github-release` `cut` creates it).
+- The branch `release/next` exists (`github-release` `cut` creates it; `deliver` creates a missing one from the default branch itself).
 - A GitHub ruleset on `release/next` with required checks and no bypass. It is the hard gate: a red check blocks the merge whatever the session does. `/deliver` warns at the start when there is none.
 - Unattended runs need `git`, `gh` and your verify commands on the harness allowlist (`references/permissions.md` of the `deliver` skill).
 - The [release guide](release.md) covers the branch, the milestone and the ruleset.
@@ -125,7 +125,7 @@ Tell the session what you see while testing (a defect, a UI wish, an idea) and i
 
 ## Preflight
 
-Before the first PBI `deliver` checks the repository and prints one line per check (ok, fixed or action needed): the stack skills of `detect-techstack` are installed in the project and not older than the global ones (missing: `skills-manage`, after one question; unattended the run continues with the global skills), `git`, `gh`, `pwsh <skill-dir>/scripts/*` and the verify commands of `AGENTS.md` are on the allowlist (missing lines are listed, interactive offers to add them), and worktrees of merged or deleted PBI branches are removed (others are listed). `--no-preflight` skips it. Details: `references/preflight.md` of the `deliver` skill.
+Before the first PBI `deliver` checks the repository and prints one line per check (ok, fixed or action needed): the stack skills of `detect-techstack` are installed in the project and not older than the global ones (missing: `skills-manage`, after one question; unattended the run continues with the global skills), `git`, `gh`, `pwsh <skill-dir>/scripts/*` and the verify commands of `AGENTS.md` are on the allowlist (missing lines are listed, interactive offers to add them), and worktrees of merged or deleted PBI branches are removed (others are listed). A missing `origin/release/next` is created from the default branch (`release/next created from main`) and the run goes on; the check lists as notes that it has no required checks and no `release-branch.yml` workflow, and creates neither. Only a refused push (rights, ruleset) ends the run with exit 3. `--no-preflight` skips it. Details: `references/preflight.md` of the `deliver` skill.
 
 ## A release in fresh sessions
 

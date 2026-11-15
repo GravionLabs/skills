@@ -18,7 +18,7 @@
   Stdout is colored when it is a terminal and neither -NoColor nor NO_COLOR is set; otherwise it is plain.
   Machine-readable progress for a control session (`deliver` `references/control.md`): .agents/deliver-loop/<run>/progress.jsonl,
   one JSON object per line (`start`, `iteration-start`, `iteration-end`, `result`), and .agents/deliver-loop/latest.txt with the path of the newest run directory.
-  Run it from the repository root. Exit code: 0 done, max reached or stopped (stop file), 2 blocked (1 no progress only in -Objective), 3 release/next missing on origin (needs you: github-release cut, nothing started), 5 failed (#672: three harness failures in a row or a gh call that still fails after its retries; the last line names the cause), 64 bad arguments.
+  Run it from the repository root. Exit code: 0 done, max reached or stopped (stop file), 2 blocked (1 no progress only in -Objective), 3 release/next missing on origin and not creatable (#671: it is created from the default branch; the push was refused; needs you: github-release cut, nothing started), 5 failed (#672: three harness failures in a row or a gh call that still fails after its retries; the last line names the cause), 64 bad arguments.
   Harness and GitHub failures (#672) do not count against a PBI: a failed gh call is retried after 5, 30 and 120 s
   (DELIVER_GH_RETRY_SECONDS), a rate limit waits until its reset; a session that exits other than 0 without a step.finished
   is retried after 5, then 15 minutes (DELIVER_HARNESS_RETRY_MINUTES); a session that runs longer than
@@ -882,8 +882,13 @@ function Invoke-Iteration([int]$n, [int]$total, $state) {
 # release/next missing (deleted after the release PR): no agent starts, no PBI is labeled (Test-DeliverPreflight.ps1 release-branch)
 $rbJson = (& pwsh -NoProfile -File (Join-Path $PSScriptRoot 'Test-DeliverPreflight.ps1') -ProjectRoot (Get-Location).Path -Check release-branch 2>$null) -join "`n"
 $rbCheck = @(($rbJson | ConvertFrom-Json -ErrorAction SilentlyContinue).checks | Where-Object { $_.name -eq 'release-branch' })
+if ($rbCheck.Count -and $rbCheck[0].status -eq 'fixed') {
+  Write-Step $rbCheck[0].detail
+  foreach ($n in @($rbCheck[0].notes)) { if ($n) { Write-Step "note: $n" } }
+}
 if ($rbCheck.Count -and $rbCheck[0].status -eq 'action needed') {
-  Write-Step "release/next is missing on origin: $($rbCheck[0].detail). Run github-release cut, then deliver again; nothing started." 'red'
+  # #671: the preflight creates a missing release/next; only a refused push ends the run
+  Write-Step "release/next is missing on origin and could not be created: $($rbCheck[0].detail). Run github-release cut, then deliver again; nothing started." 'red'
   exit 3
 }
 

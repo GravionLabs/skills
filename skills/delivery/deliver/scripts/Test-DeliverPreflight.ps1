@@ -13,8 +13,9 @@
   - worktrees: worktrees (not the main or current one) on a PBI branch whose PR is merged or whose branch was deleted
     on origin (pushed once, absent now, no unpushed commits, ls-remote succeeded; one ls-remote for all) are removed with Remove-PbiWorktrees.ps1 (merged PR) or `git worktree remove` (clean, branch gone);
     the others are listed in `left`.
-  - release-branch: `origin/release/next` exists (`git ls-remote`). Missing (deleted after the release PR, until `github-release cut`):
-    `action needed`, fix `github-release cut`; never created here. Origin not reachable: ok, not checked.
+  - release-branch: `origin/release/next` exists (`git ls-remote`). Missing (deleted after the release PR): created from the default
+    branch by `New-ReleaseNext.ps1` of `github-release` (`fixed`, `notes[]` for no required checks and no `release-branch.yml` workflow;
+    neither is created). Push refused: `action needed` with the git error, fix `github-release cut`. Origin not reachable: ok, not checked.
   - merge: how step 7/8 of deliver merges (`mode`): `auto` (repository allows auto-merge and `release/next` has required checks),
     `watch` (auto-merge off: `auto-merge off, watching checks`) or `watch-no-required` (no required checks on `release/next`, auto-merge would
     merge at once: `no required checks on release/next`); `action needed` when release/next is missing. Reads two REST endpoints.
@@ -209,11 +210,22 @@ function Get-ReleaseBranchState {
   if (@($out | Where-Object { $_ }).Count) { 'present' } else { 'missing' }
 }
 function Test-ReleaseBranch {
-  switch (Get-ReleaseBranchState) {
-    'missing' { Add-Check 'release-branch' 'action needed' 'origin/release/next is missing (deleted after the release PR?)' @{ fix = 'github-release cut' } }
-    'unreachable' { Add-Check 'release-branch' 'ok' 'not checked, origin not reachable' }
-    default { Add-Check 'release-branch' 'ok' 'origin/release/next present' }
-  }
+  $state = Get-ReleaseBranchState
+  if ($state -eq 'unreachable') { Add-Check 'release-branch' 'ok' 'not checked, origin not reachable'; return }
+  if ($state -eq 'present') { Add-Check 'release-branch' 'ok' 'origin/release/next present'; return }
+  # #671: missing → created from the default branch by the one owner, github-release
+  $creator = @((Join-Path $here '../../../github/github-release/scripts/New-ReleaseNext.ps1'), (Join-Path $here '../../github-release/scripts/New-ReleaseNext.ps1')) |
+    Where-Object { Test-Path -LiteralPath $_ } | Select-Object -First 1
+  if (-not $creator) { Add-Check 'release-branch' 'action needed' 'origin/release/next is missing and github-release is not installed' @{ fix = 'github-release cut' }; return }
+  $r = (& pwsh -NoProfile -File $creator -ProjectRoot $root 2>$null) -join "`n" | ConvertFrom-Json
+  if ($r.status -ne 'created') { Add-Check 'release-branch' 'action needed' "origin/release/next is missing: $($r.detail)" @{ fix = 'github-release cut' }; return }
+  $notes = @()
+  $types = try { @((& gh api 'repos/{owner}/{repo}/rules/branches/release/next' 2>$null) -join "`n" | ConvertFrom-Json | ForEach-Object { $_.type }) } catch { @() }
+  if ($types -notcontains 'required_status_checks') { $notes += 'no required checks on release/next (not created here)' }
+  $wf = Join-Path $root '.github/workflows'
+  $hasWf = (Test-Path -LiteralPath $wf) -and [bool](Select-String -Path (Join-Path $wf '*.yml') -SimpleMatch @('ci/.github/workflows/release-branch.yml', './.github/workflows/release-branch.yml') -List -ErrorAction SilentlyContinue)
+  if (-not $hasWf) { $notes += 'no .github/workflows/release-branch.yml: issues are not closed by the merge (not created here)' }
+  Add-Check 'release-branch' 'fixed' $r.detail @{ notes = $notes }
 }
 
 # ---- merge ----
@@ -232,7 +244,7 @@ if ($Check -contains 'allowlist') { Test-Allowlist }
 if ($Check -contains 'worktrees') { Test-Worktrees }
 if ($Check -contains 'merge') { Test-MergeMode }
 if ($Text) {
-  foreach ($c in $checks) { "preflight $($c.name): $($c.status) - $($c.detail)$(if ($c.fix) { " ($($c.fix))" })" }
+  foreach ($c in $checks) { "preflight $($c.name): $($c.status) - $($c.detail)$(if ($c.fix) { " ($($c.fix))" })$(foreach ($n in @($c.notes)) { if ($n) { "; note: $n" } })" }
 } else {
   [ordered]@{ actionNeeded = [bool]@($checks | Where-Object { $_.status -eq 'action needed' }).Count; checks = $checks } | ConvertTo-Json -Depth 6
 }
