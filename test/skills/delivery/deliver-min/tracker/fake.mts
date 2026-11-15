@@ -16,7 +16,12 @@ type Scenario = {
   /** One entry per gate() call, the last one repeats. `throw` is a failing tracker call. */
   gates?: (Gate | 'throw')[];
   files?: string[];
+  /** The changed files from the second read on: a push after the session ended. */
+  filesLater?: string[];
   required?: string[];
+  needsDecision?: boolean;
+  /** Every gate() call blocks this long, as a slow call of a real tracker does. */
+  gateBlockMs?: number;
 };
 
 export function create(): Tracker {
@@ -26,6 +31,7 @@ export function create(): Tracker {
     appendFileSync(path.join(dir, 'calls.jsonl'), `${JSON.stringify(call)}\n`);
   const merged = new Set<number>();
   let gateCalls = 0;
+  let fileReads = 0;
   const itemOf = (pull: Pull) => pull.id - 100;
 
   return {
@@ -54,7 +60,7 @@ export function create(): Tracker {
       );
       return open.length > 0 ? `blocked by ${open.map((id) => `#${id}`).join(', ')}` : undefined;
     },
-    needsDecision: () => false,
+    needsDecision: () => scenario.needsDecision ?? false,
     pullOf(item: Item): Pull | undefined {
       if (!existsSync(path.join(dir, `pr-${item.id}`))) return undefined;
       const id = 100 + item.id;
@@ -67,6 +73,9 @@ export function create(): Tracker {
     },
     gate(pull: Pull): Gate {
       if (merged.has(itemOf(pull))) return { state: 'merged' };
+      if (scenario.gateBlockMs) {
+        Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, scenario.gateBlockMs);
+      }
       const gates = scenario.gates ?? [{ state: 'ready', reported: true, head: 'abc123' }];
       const gate = gates[Math.min(gateCalls, gates.length - 1)];
       gateCalls += 1;
@@ -79,7 +88,11 @@ export function create(): Tracker {
     },
     dropBranch: (pull: Pull) => record({ call: 'dropBranch', pull: pull.id }),
     requiredChecks: () => scenario.required ?? ['ci'],
-    changedFiles: () => scenario.files ?? ['src/a.ts'],
+    changedFiles(): string[] {
+      fileReads += 1;
+      const files = fileReads > 1 ? (scenario.filesLater ?? scenario.files) : scenario.files;
+      return files ?? ['src/a.ts'];
+    },
     sessionEnv: (token: string) => ({ GH_TOKEN: token }),
   };
 }

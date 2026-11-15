@@ -82,17 +82,18 @@ export function create({ cwd, base, selection, trustAuthors }: TrackerContext): 
   };
 
   const checksOf = (id: number): Check[] => {
-    let out: string;
     try {
-      out = gh('pr', 'checks', String(id), '--repo', repo, '--json', 'name,bucket');
+      return JSON.parse(gh('pr', 'checks', String(id), '--repo', repo, '--json', 'name,bucket'));
     } catch (error) {
+      const { stdout, stderr } = error as { stdout?: string; stderr?: string };
       // gh exits non-zero for pending or failed checks and still prints the list
-      out = String((error as { stdout?: string }).stdout ?? '');
-    }
-    try {
-      return JSON.parse(out);
-    } catch {
-      return [];
+      try {
+        return JSON.parse(String(stdout));
+      } catch {
+        if (/no checks reported/i.test(String(stderr))) return [];
+        // a failed call is not "no checks": without required checks an empty list would count as green
+        throw error;
+      }
     }
   };
 

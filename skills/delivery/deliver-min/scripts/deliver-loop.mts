@@ -9,6 +9,7 @@ import {
   existsSync,
   mkdirSync,
   readFileSync,
+  realpathSync,
   writeFileSync,
 } from 'node:fs';
 import path from 'node:path';
@@ -118,6 +119,24 @@ const MODEL = opt.model ?? harness.defaultModel;
 const HARNESS_OVERRIDE: string[] | undefined = process.env.DELIVER_MIN_HARNESS
   ? JSON.parse(process.env.DELIVER_MIN_HARNESS)
   : undefined;
+// Neither test hook may point into the repository: a merged pull request would then decide what the next run executes.
+// Compared as real paths: git names the repository by its real path, a temp directory is often a symlink.
+const real = (file: string): string => {
+  const full = path.resolve(file);
+  try {
+    return realpathSync(full);
+  } catch {
+    const parent = path.dirname(full);
+    return parent === full ? full : path.join(real(parent), path.basename(full));
+  }
+};
+const inside = (file: string) => !path.relative(real(root), real(file)).startsWith('..');
+if (HARNESS_OVERRIDE?.some((part) => path.isAbsolute(part) && inside(part))) {
+  fail('DELIVER_MIN_HARNESS must not name a file inside the repository', 64);
+}
+if (process.env.DELIVER_MIN_TRACKER_DIR && inside(process.env.DELIVER_MIN_TRACKER_DIR)) {
+  fail('DELIVER_MIN_TRACKER_DIR must not be inside the repository', 64);
+}
 // A pull request that changes one of these is never merged by the loop: a person looks at it first.
 // `dir/` is a directory at the root, anything else a file name anywhere. deliver.protectedPaths replaces the list.
 const PROTECTED: string[] = config.deliver?.protectedPaths ?? [
@@ -131,14 +150,31 @@ const PROTECTED: string[] = config.deliver?.protectedPaths ?? [
   'go.mod',
   'Directory.Packages.props',
 ];
+// Without regard to case (a checkout on macOS or Windows writes `.Claude/` into `.claude/`), and a file named
+// like a protected directory counts too (a symlink `.claude`).
 const protectedHits = (files: string[]): string[] =>
-  files.filter((file) =>
-    PROTECTED.some((entry) =>
-      entry.endsWith('/')
-        ? file.startsWith(entry)
-        : file === entry || path.basename(file) === entry,
-    ),
-  );
+  files.filter((file) => {
+    const name = file.toLowerCase();
+    return PROTECTED.some((entry) => {
+      const guarded = entry.toLowerCase();
+      return guarded.endsWith('/')
+        ? name.startsWith(guarded) || name === guarded.slice(0, -1)
+        : name === guarded || path.posix.basename(name) === guarded;
+    });
+  });
+/** Why the loop does not merge the pull request as it is now, else nothing. A person decides then, no repair session. */
+const HANDS_OFF = ', merge it yourself';
+function guard(pull: Pull): string | undefined {
+  let hits: string[];
+  try {
+    hits = protectedHits(tracker.changedFiles(pull));
+  } catch (error) {
+    // unknown is not safe: a person looks
+    return `could not read the changed files (${firstLine(error)})${HANDS_OFF}`;
+  }
+  if (hits.length === 0) return undefined;
+  return `changes protected paths (${hits.slice(0, 3).join(', ')}${hits.length > 3 ? ', …' : ''})${HANDS_OFF}`;
+}
 // The session acts with this token instead of the login of the user (a token limited to this repository).
 const SESSION_TOKEN = process.env.DELIVER_MIN_SESSION_TOKEN;
 const tracker = await loadTracker(opt.tracker ?? config.deliver?.tracker ?? 'github', {
@@ -172,6 +208,7 @@ function render(line: string, session: Session): void {
     say(`  ${line}`);
     return;
   }
+  if (!event || typeof event !== 'object') return;
   if (event.type === 'result') {
     session.turns = event.num_turns ?? 0;
     session.costUsd = event.total_cost_usd ?? 0;
@@ -246,6 +283,8 @@ function startSession(item: Item, cwd: string, file: string): Promise<Session> {
   });
 }
 
+const CLOSED = 'pull request closed';
+
 /** Waits for the gate and merges. Returns nothing when merged, else the reason. */
 async function merge(pull: Pull): Promise<string | undefined> {
   const start = Date.now();
@@ -260,11 +299,18 @@ async function merge(pull: Pull): Promise<string | undefined> {
       gate = { state: 'pending', reported: false };
     }
     if (gate.state === 'merged') return undefined;
-    if (gate.state === 'closed') return 'pull request closed';
+    if (gate.state === 'closed') return CLOSED;
     if (gate.state === 'conflict') return gate.detail;
     if (gate.state === 'red') return `red: ${gate.detail}`;
     // checks register a moment after the pull request opens: nothing reported is not green yet
     if (gate.state === 'ready' && (gate.reported || Date.now() - start > 90_000)) {
+      // the tracker calls block: a stop request that came in meanwhile is only seen after a turn of the event loop
+      await new Promise((turn) => setTimeout(turn, 0));
+      if (stopped) break;
+      // the files of the commit that is merged, not of the one the session left: a later push is checked too.
+      // The merge names gate.head, so a push after this read is refused by the tracker.
+      const handsOff = guard(pull);
+      if (handsOff) return handsOff;
       try {
         tracker.merge(pull, gate.head);
         return undefined;
@@ -300,22 +346,12 @@ async function deliver(item: Item): Promise<{ reason?: string; pull?: Pull }> {
     // a stopped or failed session never leads to a merge, also when a pull request is open
     if (stopped) reason = 'stopped';
     else if (session.exit !== 0) reason = `session failed (exit ${session.exit})`;
-    else if (!pull && tracker.needsDecision(item)) reason = 'needs-decision';
+    // the session asked a question: a pull request of an earlier run is not its answer
+    else if (tracker.needsDecision(item)) reason = 'needs-decision';
     else if (!pull) reason = 'session ended without a pull request';
     if (reason || !pull) break;
-    let hits: string[];
-    try {
-      hits = protectedHits(tracker.changedFiles(pull));
-    } catch (error) {
-      // unknown is not safe: a person looks
-      reason = `could not read the changed files (${firstLine(error)}), merge it yourself`;
-      break;
-    }
-    if (hits.length > 0) {
-      // no repair session: a person decides about these files
-      reason = `changes protected paths (${hits.slice(0, 3).join(', ')}${hits.length > 3 ? ', …' : ''}), merge it yourself`;
-      break;
-    }
+    reason = guard(pull);
+    if (reason) break;
     if (round === 1) {
       emit('step.finished', {
         task,
@@ -325,7 +361,8 @@ async function deliver(item: Item): Promise<{ reason?: string; pull?: Pull }> {
     }
     log(`#${item.id} pr: ${pull.url}, waits for checks`, 'info');
     reason = await merge(pull);
-    if (!reason || reason === 'stopped') break;
+    // a person closed it or has to look at it: no repair session
+    if (!reason || reason === 'stopped' || reason === CLOSED || reason.endsWith(HANDS_OFF)) break;
     log(`#${item.id} ${reason}${round === 1 ? ', one repair session' : ''}`, 'warn');
     if (round === 1)
       emit('step.finished', { task, step: { name: 'repair', text: reason } }, 'warning');
@@ -440,7 +477,10 @@ try {
     if (!next) break;
     log(`#${next.id} start: ${next.title} (${open.length} open)`, 'info');
     emit('task.started', { task: `issue-${next.id}`, subject: tracker.itemSubject(next) });
-    const { reason, pull } = await deliver(next);
+    // a failing tracker or git call sets the issue aside, it does not end the run
+    const { reason, pull } = await deliver(next).catch(
+      (error): { reason?: string; pull?: Pull } => ({ reason: `error: ${firstLine(error)}` }),
+    );
     if (!reason) {
       merged.push(`#${next.id} ${pull?.url}`);
       log(`#${next.id} merged: ${pull?.url}`, 'ok');

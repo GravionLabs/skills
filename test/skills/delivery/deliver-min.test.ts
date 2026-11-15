@@ -22,7 +22,10 @@ type Scenario = {
   items: { id: number; title: string; blockedBy?: number[] }[];
   gates?: unknown[];
   files?: string[];
+  filesLater?: string[];
   required?: string[];
+  needsDecision?: boolean;
+  gateBlockMs?: number;
   exits?: number[];
   noPull?: boolean;
 };
@@ -146,7 +149,8 @@ afterAll(() => {
   rmSync(root, { recursive: true, force: true });
 });
 
-describe('deliver-min loop', () => {
+// The stop case sends SIGINT, which Windows cannot deliver to a process; the loop on Windows is #689.
+describe.skipIf(process.platform === 'win32')('deliver-min loop', () => {
   it('merges an issue and then the issue it blocked', async () => {
     const out = await loop({
       items: [
@@ -229,6 +233,85 @@ describe('deliver-min loop', () => {
     expect(out.events.at(-1)).toMatchObject({ type: 'run.finished', outcome: 'cancelled' });
   });
 
+  it('does not merge when the stop request arrives during a tracker call that then reports ready', async () => {
+    const out = await loop(
+      { items: [{ id: 52, title: '[PBI] feat: stopped late' }], gateBlockMs: 1500 },
+      { whenStdout: (stdout, stop) => stdout.includes('waits for checks') && stop() },
+    );
+    expect(out.status).toBe(130);
+    expect(out.merges).toEqual([]);
+    expect(out.results[0]).toMatchObject({ outcome: 'stopped' });
+  });
+
+  it('does not merge a pull request that got a protected path after the session ended', async () => {
+    const out = await loop({
+      items: [{ id: 62, title: '[PBI] feat: pushed later' }],
+      filesLater: ['src/a.ts', '.github/workflows/x.yml'],
+    });
+    expect(out.status).toBe(2);
+    expect(out.sessions).toHaveLength(1);
+    expect(out.merges).toEqual([]);
+    expect(out.results[0]?.reason).toBe(
+      'changes protected paths (.github/workflows/x.yml), merge it yourself',
+    );
+  });
+
+  it.each([
+    ['another case', '.Claude/settings.json'],
+    ['a file named like a protected directory', '.agents'],
+    ['a manifest in another case', 'sub/Package.json'],
+  ])('treats %s as a protected path', async (_name, file) => {
+    count += 1;
+    const out = await loop({
+      items: [{ id: 600 + count, title: '[PBI] feat: path' }],
+      files: [file],
+    });
+    expect(out.status).toBe(2);
+    expect(out.merges).toEqual([]);
+  });
+
+  it('does not merge an older pull request when the session asked for a decision', async () => {
+    const out = await loop({
+      items: [{ id: 63, title: '[PBI] feat: question' }],
+      needsDecision: true,
+    });
+    expect(out.status).toBe(2);
+    expect(out.merges).toEqual([]);
+    expect(out.results[0]).toMatchObject({ outcome: 'aside', reason: 'needs-decision' });
+  });
+
+  it('starts no repair session when a person closed the pull request', async () => {
+    const out = await loop({
+      items: [{ id: 64, title: '[PBI] feat: closed' }],
+      gates: [{ state: 'closed' }],
+    });
+    expect(out.status).toBe(2);
+    expect(out.sessions).toHaveLength(1);
+    expect(out.results[0]?.reason).toBe('pull request closed');
+  });
+
+  it('refuses a test hook that points into the repository', () => {
+    const refusal = (env: Record<string, string>): string => {
+      try {
+        execFileSync('node', [loopScript, '--issues', '1'], {
+          cwd: repo,
+          env: { ...process.env, ...env },
+          stdio: 'pipe',
+        });
+        return 'not refused';
+      } catch (error) {
+        const { status, stderr } = error as { status: number; stderr: Buffer };
+        return `${status} ${String(stderr).trim()}`;
+      }
+    };
+    expect(refusal({ DELIVER_MIN_TRACKER_DIR: path.join(repo, 'tools') })).toBe(
+      '64 DELIVER_MIN_TRACKER_DIR must not be inside the repository',
+    );
+    expect(
+      refusal({ DELIVER_MIN_HARNESS: JSON.stringify(['node', path.join(repo, 'x.mjs')]) }),
+    ).toBe('64 DELIVER_MIN_HARNESS must not name a file inside the repository');
+  });
+
   it('sets a pull request aside that changes a protected path', async () => {
     const out = await loop({
       items: [{ id: 61, title: '[PBI] ci: workflow' }],
@@ -284,7 +367,9 @@ describe('deliver-min loop', () => {
       ghToken: 'login-token',
       hasSessionTokenVariable: false,
     });
-    expect(without.log).toContain('the session uses your own login');
+    // stdout, not the log: every case of this file appends to the one log of the fixture repository
+    expect(without.stdout).toContain('the session uses your own login');
+    expect(withToken.stdout).not.toContain('the session uses your own login');
   });
 
   it('prints the order and starts nothing with --dry-run', async () => {
