@@ -2,7 +2,7 @@ import { spawnSync } from 'child_process';
 import * as fs from 'fs';
 import * as os from 'os';
 import * as path from 'path';
-import { createFakeGh, GhCall } from '../../helpers/fake-gh';
+import { createFakeGh, type GhCall } from '../../helpers/fake-gh';
 import { PwshWorker } from '../../helpers/pwsh-worker';
 
 const SCRIPT = path.resolve(
