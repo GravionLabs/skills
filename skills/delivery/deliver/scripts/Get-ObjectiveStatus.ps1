@@ -10,7 +10,7 @@
   carries the marker `<!-- release-test-rc -->` (body or comment), a closed milestone counts as met too. A Requires line of the
   objective applies to every repository except the required one; a line of a child applies to the child's repository.
   Per repository: done (it has items, none open), waiting(requires <owner/repo>@<M> <kind>) for an unmet Requires, ready (at
-  least one open PBI or Bug without an open blocker, not needs-decision, needs-refinement or release-test), else waiting(<reason>).
+  least one open PBI or Bug without an open blocker, not needs-decision, needs-refinement, interactive, release-test or freshly claimed by an assignee), else waiting(<reason>).
   Gates: release-pr (open release PR release/next into the default branch), rc-missing and not-released (unmet Requires, on the
   required repository), acceptance-criteria (unchecked boxes under `## Acceptance Criteria` of the objective).
   JSON per schema/objective-status.schema.json. -Text prints the status block of at most 12 lines instead: the objective, one
@@ -59,6 +59,14 @@ function Get-RepoOf($i, [string]$fallback) {
 }
 function Get-Labels($i) { @(Get-Prop $i 'labels' | ForEach-Object { if ($_ -is [string]) { $_ } else { [string]$_.name } }) }
 function Get-Url([string]$repo, [int]$n) { "https://github.com/$repo/issues/$n" }
+# Claim (references/claim.md): any assignee counts; a claim whose assignment is older than an hour is stale (takeable).
+# The branch/PR push time check of the deliver skill is not repeated here.
+function Test-FreshClaim([string]$repo, [int]$n) {
+  $ev = @(Get-Paged "repos/$repo/issues/$n/events?per_page=100" | Where-Object { $_.event -eq 'assigned' })
+  if (-not $ev.Count) { return $true }
+  $last = ($ev | ForEach-Object { [datetime]$_.created_at } | Sort-Object | Select-Object -Last 1)
+  return ([datetime]::UtcNow - $last.ToUniversalTime()).TotalMinutes -lt 60
+}
 function Test-Leaf($i) {
   $l = Get-Labels $i
   ($l -contains 'pbi') -or ($l -contains 'bug') -or ([string]$i.title -match '^\[(PBI|Bug|Task)\]')
@@ -155,6 +163,8 @@ foreach ($repo in $repoOrder) {
     if ($labels -contains 'release-test') { $reason = 'release test' }
     elseif ($labels -contains 'needs-decision') { $reason = 'needs-decision' }
     elseif ($labels -contains 'needs-refinement') { $reason = 'needs-refinement' }
+    elseif ($labels -contains 'interactive') { $reason = 'interactive' }
+    elseif (@(Get-Prop $i 'assignees').Count -and (Test-FreshClaim $repo ([int]$i.number))) { $reason = 'claimed' }
     else {
       $sum = Get-Prop $i 'issue_dependencies_summary'
       $blockers = @()
@@ -212,6 +222,7 @@ if ($Text) {
     if ($g.type -eq 'release-pr') { $needs.Add("merge the release PR of $($g.repository): $($g.url) $($g.title)") }
     elseif ($g.type -eq 'rc-missing') { $needs.Add("RC test $($g.detail)" + $(if ($g.url) { ": $($g.url) $($g.title)" } else { '' })) }
   }
+  foreach ($rp in $repos) { foreach ($w in @($rp.waiting | Where-Object { $_.reason -eq 'interactive' })) { $needs.Add("interactive PBI to deliver yourself: $($w.url) $($w.title)") } }
   if ($allDone -and [string]$obj.state -eq 'open') { $needs.Add("Acceptance Criteria von $objRef prüfen und Objective schließen: $objUrl $([string]$obj.title)") }
   $nextRepo = $repos | Where-Object { $_.state -eq 'ready' } | Select-Object -First 1
   $shownNeeds = [math]::Min($needs.Count, 3)
