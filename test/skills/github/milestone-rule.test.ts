@@ -31,10 +31,6 @@ describe('milestone rule (#327)', () => {
     expect(read('skills/delivery/roadmap/references/proposal.md')).toMatch(/an Epic never/);
   });
 
-  it('deliver step 1 reports items outside the milestone', () => {
-    expect(read('skills/delivery/deliver/SKILL.md')).toContain('select: outside M<nnn>, skipped');
-  });
-
   it('setting a milestone: only github-milestone assign, no skill file edits it with gh issue edit', () => {
     const ref = read('skills/github/github-issue/references/milestones.md');
     const section = ref.split(/^## /m).find((x) => x.startsWith('Setting a milestone\n')) ?? '';
@@ -81,9 +77,6 @@ describe('objective level (#535)', () => {
     const ref = read('skills/github/github-issue/references/objectives.md');
     expect(ref).toContain('Requires: <owner>/<repo>@<milestone> released|rc');
     expect(ref).toContain('<!-- release-test-rc -->');
-    expect(ref).toContain(
-      '<!-- objective-runner: host=<machine|cloud-id> since=<iso> heartbeat=<iso> -->',
-    );
     expect(read('skills/github/github-issue/references/milestones.md')).toMatch(
       /\| Objective\s+\| Never/,
     );

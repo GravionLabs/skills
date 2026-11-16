@@ -1,6 +1,6 @@
 # ADR 0005: The deliver loop runs as TypeScript on Node behind a host interface
 
-- Status: Proposed
+- Status: Superseded by [#693](https://github.com/GravionLabs/skills/issues/693): the old `deliver` skill, its PowerShell loop and the Objective mode were removed (branch `archive/deliver-v1` keeps them)
 - Date: 2026-11-14
 - Issues: #612, #611
 - Builds on: [ADR 0001](0001-agent-progress-events.md), [ADR 0002](0002-displays-read-the-progress-events.md), [ADR 0004](0004-objectives-coordinate-milestones-across-repositories.md)

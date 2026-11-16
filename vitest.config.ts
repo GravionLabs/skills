@@ -18,8 +18,7 @@ export default defineConfig({
     hookTimeout: 30000,
     // #56: a pwsh cache directory per worker slot; parallel files sharing ~/.cache/powershell crash pwsh at startup
     globalSetup: ['test/helpers/pwsh-cache-global.ts'],
-    // #672: no deliver-loop retry wait sleeps in a test (loop-waits.ts)
-    setupFiles: ['test/helpers/pwsh-cache.ts', 'test/helpers/loop-waits.ts'],
+    setupFiles: ['test/helpers/pwsh-cache.ts'],
     // github-actions turns failures into annotations, readable without the log download.
     // CI shards set VITEST_JUNIT_OUTPUT per shard so the junit files do not collide.
     reporters: [

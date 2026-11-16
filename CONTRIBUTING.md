@@ -11,7 +11,7 @@ What does not belong here:
 
 - Generic best practices the model already knows (tool basics, language tutorials, flag tables).
 - Secrets, internal URLs, project-specific identifiers.
-- Agents, hooks, prompts or a pipeline of its own. Workflows are skills; delivery is the `deliver` skill.
+- Agents, hooks, prompts or a pipeline of its own. Workflows are skills; delivery is the `deliver-min` skill.
 
 ## Setup
 
@@ -42,7 +42,7 @@ The repo uses pnpm (`pnpm-lock.yaml`) only.
 
 ## Dogfooding: project skills
 
-Project skills take precedence over global ones. Without them, a `deliver` run in this repository loads the global copy (`~/.claude/skills/deliver`) instead of `skills/delivery/deliver/`. Link the repository skills as project skills before `deliver` runs here:
+Project skills take precedence over global ones. Without them, a `deliver-min` run in this repository loads the global copy (`~/.claude/skills/deliver-min`) instead of `skills/delivery/deliver-min/`. Link the repository skills as project skills before `deliver` runs here:
 
 ```powershell
 pwsh scripts/Link-Skills.ps1           # links skills/<group>/<name> to .claude/skills/<name> and .agents/skills/<name>
