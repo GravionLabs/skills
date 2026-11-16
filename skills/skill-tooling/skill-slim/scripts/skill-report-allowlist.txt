@@ -17,3 +17,5 @@ skills-manage: dotnet-pinvoke
 skills-manage: ng-ag-grid-developer
 # project-url is the input of the reusable issues.yml of GravionLabs/ci, not a skill
 github-project: project-url
+# deliver-loop is the launcher command that Install-LoopShim.ps1 writes, not a skill
+skills-manage: deliver-loop

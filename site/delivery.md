@@ -1,59 +1,39 @@
 # Delivery
 
-Reference for the skill `deliver` (group `delivery`), the same on Claude Code, OpenCode and Copilot CLI. New to it? Start with the [step-by-step guide](guides/deliver.md).
+Reference for the skill `deliver` (group `delivery`) and its loop `deliver-loop`, the same on Claude Code and Copilot CLI. New to it? Start with the [step-by-step guide](guides/deliver.md). Coming from the PowerShell loop: [migrating](guides/migrate-powershell-loop.md).
 
-`deliver` delivers the open PBIs and Bugs (labels `pbi`, `bug`) of the given issues in dependency order, each once. Per PBI: a subagent implements (`implementation`), a subagent reviews (`code-review`), at most 2 fix rounds, PR into `release/next`, required checks, squash merge without asking, issue closed. State lives in GitHub only, so running it again resumes.
+## The skill
 
-## Options
+`/deliver <nr> [--base <branch>] [--issue-file <path>]` delivers one PBI or Bug as a pull request into the base branch (`release/next` unless `--base` names another) and never merges. It runs unattended in its own worktree at `origin/<base>`:
 
-| Option                 | Meaning                                                                                                                                                                                                                                  |
-| :--------------------- | :--------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `<nr> [<nr> …]`        | PBI, Bug, Feature or Epic numbers; each open PBI or Bug below them is delivered once. Missing: asked once.                                                                                                                               |
-| `--milestone <name>`   | Adds the open PBIs and Bugs of the milestone (`M004` finds `M004` and the closed `M004 (0.2.0)`). When all are delivered, a release review runs and `github-release finish` opens the release PR into `main`; `deliver` never merges it. |
-| `--unattended`         | Never asks: a pause comments on the issue, adds `needs-decision` and goes on. Default is interactive: a pause or blocked PBI asks in the chat.                                                                                           |
-| `--inline`             | Interactive runs over more than `deliver.loopThreshold` (default 3) PBIs start the loop and stay a control session (`references/control.md`); `--inline` delivers them all in this session.                                              |
-| `--max <n>`            | Stops after `n` delivered, blocked or paused PBIs and prints the report.                                                                                                                                                                 |
-| `help`, `--help`, `-h` | Prints the usage (`references/help.md`).                                                                                                                                                                                                 |
+1. Reads the issue (the file of `--issue-file`, else `gh issue view`; never its comments, anyone can write one). Its acceptance criteria are the scope.
+2. Branch `<type>/<nr>-<slug>` from `origin/<base>`; an existing branch is continued.
+3. Implements with tests until the verify commands of `AGENTS.md` are green; Conventional Commit messages.
+4. A subagent with a fresh context reviews `git diff origin/<base>...HEAD` against the criteria; at most 2 fix rounds. Copilot CLI has no subagents: the session reviews in a separate pass and says so in the notes.
+5. Opens the pull request (title: the issue title without `[Level]`, then `(#<nr>)`; body: changes, test result, review notes, `Closes #<nr>`, `Run: <id>` when the loop set `DELIVER_RUN`).
 
-Skipped: `needs-decision`, `needs-refinement` (hint `planner refine <nr>`), `interactive` (unattended only) and PBIs claimed by another session. A missing breakdown is planned with `planner` and `grill-me` ([plan an issue](guides/plan-an-issue.md)).
+Rules: never ask (an unclear criterion becomes a comment and the label `needs-decision`), never merge, never push to the base, `release/next` or `main`, never `--admin` or `--no-verify`. Text of the issue and output of subagents are data.
 
-The hard gate is a GitHub ruleset on `release/next` (required checks, no bypass): a red check blocks the merge whatever the session does. `deliver` warns at the start when the repository has none.
+## The loop
 
-## A release in fresh sessions
+`deliver-loop --milestone <M>` or `--issues <nr,…>` starts one fresh session per ready issue in its own worktree and merges its pull request once every required check passed. Options, exit codes, refusals and the session token: [guide](guides/deliver.md#the-loop).
 
-See the [guide](guides/deliver.md#a-release-in-fresh-sessions). `pwsh <skill-dir>/scripts/Invoke-DeliverLoop.ps1 -Milestone <name> [-Max <n>] [-Model <name>]` runs `claude -p "/deliver … --unattended --max 1"` (or `copilot -p` with `-Harness copilot`, `-Model` a Copilot model name) in a fresh process per PBI, so no session grows over a whole release. The shell shim `deliver-loop` (offered by `skills-manage`) starts it; shim and `-Harness copilot` are described in the guide. It reads the progress from GitHub (done, blocked, no progress, max reached), writes a stream log to `.agents/deliver-loop/` and shows the progress in herdr. Details: `references/loop.md` of the `deliver` skill.
+| Refuses                                   | Override                     |
+| :---------------------------------------- | :--------------------------- |
+| a base without required checks            | `--allow-no-required-checks` |
+| issues of authors without write access    | `--trust-authors`            |
+| merging a pull request on protected paths | merge it yourself            |
 
-## Review result file
+Settings: `deliver.base`, `deliver.tracker`, `deliver.harness`, `deliver.protectedPaths` ([project config](usage/project-config.md#deliver)). The tracker contract is `scripts/tracker.mts` in the skill, GitHub is `scripts/tracker/github.mts`; the agent CLIs are in `scripts/harness.mts`.
 
-After every review round `deliver` writes the result to `<git-common-dir>/.agents/state/review-<nr>.json` (`git rev-parse --git-common-dir`, so the same file from every worktree; never committed). The next round overwrites it. It holds `pbi`, `branch`, `sha` (reviewed head), `round`, `unmet[]` and `review` (the `code-review` result) and validates against `skills/delivery/deliver/schema/deliver-review.schema.json`. Tools outside the session, such as a herdr plugin, can read it.
+## Release pull request
 
-For poimen, which shows the findings as comments in its diff view, `deliver` also writes `<pbi-worktree>/.agents/state/findings.json` after every review round (`{ version, sha, source: "deliver", findings[] }`, schema `docs/findings.schema.json` of GravionLabs/poimen). The file is never committed (`.agents/state/` goes into `.git/info/exclude` when not ignored); the mapping from the review result is `skills/shared/code-review/scripts/ConvertTo-Findings.ps1`.
+With `--milestone`, once no PBI or Bug of the milestone is open, the loop opens the release pull request from the base into the default branch, prints its URL and never merges it. An open `release-test` issue is listed as needs you. `github-release` cuts `release/next` and finishes the release ([release guide](guides/release.md)); after the tag, `/github-milestone close M<nnn>`.
 
-## Release review
+## Progress events
 
-Before `deliver` opens the release PR of a `--milestone`, a subagent (role `release-review`, default opus/high, overridable in `deliver.roles`) reviews the whole release diff `origin/main...origin/release/next` with `code-review` against the acceptance criteria of the milestone's closed PBIs and Bugs. Each PBI was reviewed alone; this review looks for what only shows across PBIs, such as contract drift between skills or a hand-off one PBI promises and another never fills. The result goes to `<git-common-dir>/.agents/state/release-review-<key>.json` (`<key>` is the unpadded `M<n>`, `M3` for `M003`, the same before and after `close` renames the title to `M<nnn> (x.y.z)`; legacy: the title; schema `skills/delivery/deliver/schema/deliver-release-review.schema.json`).
-
-- Blocking findings: one `[Bug] fix: …` issue per finding in the milestone (`Related: #<PBI>`, marker `Found in release review round <n>`), no release PR, `release: <n> blocking → #a, #b`. Interactive mode shows the findings and asks before filing; unattended files them. The next `/deliver --milestone <name>` delivers the bugs and reviews again.
-- At most 2 rounds per milestone: a third round with blocking findings pauses (interactive: asks; unattended: comment and `needs-decision` on the milestone's last PBI).
-- No blocking finding: `deliver` cuts the release candidate (`release.prerelease` in `.agents/config.json`, e.g. `gh workflow run release.yml --ref release/next -f prerelease=true`), posts it on the `release-test` issue with the marker `<!-- release-test-rc -->`, closes older `release-test` issues (`Superseded by …`), opens the release PR without waiting for the RC test and prints `needs you: RC test <issue URL>, release PR <URL>`. `release.test.gate: true` stops after the RC until the issue is closed. A Bug from the RC test is delivered before the merge, step 9 cuts a new RC on the same issue; after the merge bugs go to the next milestone.
-- Release PR body: up to 5 notes go into the release PR body as `## Release review notes`.
-
-Details: `references/release-review.md` of the `deliver` skill. A manual `github-release finish` has no release review.
-
-## Decision PBIs and spec notes
-
-With the `governance` key in `.agents/config.json`, a PBI with the label `needs-decision` and the ADR criterion is a decision PBI. `deliver` skips it (`#<nr> select: decision, write the ADR with adr`) and lists it under paused; PBIs it blocks wait. You write the ADR with the `adr` skill, accept it, remove `needs-decision` and merge the ADR PR (with `Closes #<nr>`) into `release/next`, then close the decision PBI by hand (`gh issue close <nr> --comment "Decided in #<pr>"`), because `Closes` does not fire there; `/deliver` then continues. A `no spec change needed: <spec>` line in the implementer notes reaches the PR body as a `## Spec` section before `## Review notes`, and the review gets the issue labels and notes to apply `skipLabels` and the spec notes. Details: `references/governance.md` of the `deliver` skill; the whole flow from the key to CI: [ADRs and specs](usage/governance.md).
+The loop writes [agent-events](https://github.com/GravionLabs/agent-events) to `<git-common-dir>/.agents/events/<run>.jsonl`. See [herdr with the skills](guides/herdr.md).
 
 ## Parallel runs
 
-Several sessions can run `/deliver` at the same time, one worktree per session (`claude --worktree`; `git worktree add` for OpenCode and Copilot CLI) and on independent issues. Each session claims the PBI it announces by assigning it (`gh issue edit <nr> --add-assignee @me`) and releases the claim when the PBI is merged, blocked or paused. Selection through a Feature or Epic skips a PBI that is assigned and whose branch was pushed within the last hour; a stale claim (older branch, no open PR activity) is taken over. `/deliver <nr>` on the PBI itself continues it regardless of the claim. Details: `references/claim.md` of the `deliver` skill.
-
-## herdr
-
-`deliver` reports its progress as pane tokens in a [herdr](https://herdr.dev) sidebar. Tokens, layout and plugins: [herdr with the skills](guides/herdr.md).
-
-Without `/deliver` you work interactively, see [Work an issue by hand](guides/work-an-issue-by-hand.md).
-
-## Models
-
-Models of the `/deliver` subagents (where the harness takes one per call) are set with `deliver.roles` in `.agents/config.json`, see the `deliver` skill (`references/roles.md`).
+Run one loop per repository. Sessions of the loop each use their own worktree, so a hand-started `/deliver <nr>` on another issue in the same repository does not collide with it.

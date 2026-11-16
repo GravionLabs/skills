@@ -1,6 +1,6 @@
 # Troubleshooting
 
-Common failure cases of the skills, each with symptom, cause and fix. The state of a `/deliver` run lives in GitHub, so after a fix `/deliver <nr>` picks up where it stopped ([resume](../guides/deliver.md#resume-after-a-stop)).
+Common failure cases of the skills, each with symptom, cause and fix. The state of a `/deliver` run lives in GitHub, so after a fix `/deliver <nr>` picks up where it stopped ([resume](../guides/deliver.md#resume-and-feedback)).
 
 ## deliver pauses with needs-decision
 
@@ -36,7 +36,7 @@ Common failure cases of the skills, each with symptom, cause and fix. The state 
 
 - **Symptom:** a long run slows down, the context fills, quality drops.
 - **Cause:** one session over a whole release collects every PBI.
-- **Fix:** limit the run with `--max <n>`, or use a fresh process per PBI: `Invoke-DeliverLoop.ps1` ([deliver in fresh sessions](../guides/deliver.md#a-release-in-fresh-sessions)). A [status line](../usage/statusline.md) shows the fill level.
+- **Fix:** limit the run with `--max <n>`, or use a fresh session per PBI: `deliver-loop` ([the loop](../guides/deliver.md#the-loop)). A [status line](../usage/statusline.md) shows the fill level.
 
 ## A red check blocks the merge
 
