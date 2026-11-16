@@ -154,7 +154,7 @@
       }
     },
     "deliver": {
-      "description": "Settings of deliver-min.",
+      "description": "Settings of deliver. Other keys of the old loop (roles, loopThreshold, parallel, sessionTimeoutMinutes) are ignored with a warning.",
       "type": "object",
       "additionalProperties": false,
       "properties": {

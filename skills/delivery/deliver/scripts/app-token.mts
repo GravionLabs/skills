@@ -4,6 +4,7 @@
 import { execSync } from 'node:child_process';
 import { createSign } from 'node:crypto';
 import { readFileSync } from 'node:fs';
+import { adoptLegacyEnv } from './legacy.mts';
 
 /** Contents, pull requests and issues. No `workflows`, no `administration`. */
 export const APP_PERMISSIONS = { contents: 'write', pull_requests: 'write', issues: 'write' };
@@ -12,14 +13,16 @@ export type AppSettings = { appId: string; keyFile?: string; keyCommand?: string
 export type AppToken = { token: string; expiresAt: number };
 
 /** The app settings of the environment, else nothing. A half-set configuration is an error. */
-export function appSettings(env: NodeJS.ProcessEnv = process.env): AppSettings | undefined {
-  const appId = env.DELIVER_MIN_APP_ID;
-  const keyFile = env.DELIVER_MIN_APP_KEY_FILE;
-  const keyCommand = env.DELIVER_MIN_APP_KEY_COMMAND;
+export function appSettings(source: NodeJS.ProcessEnv = process.env): AppSettings | undefined {
+  const env = { ...source };
+  adoptLegacyEnv(env);
+  const appId = env.DELIVER_APP_ID;
+  const keyFile = env.DELIVER_APP_KEY_FILE;
+  const keyCommand = env.DELIVER_APP_KEY_COMMAND;
   if (!appId && !keyFile && !keyCommand) return undefined;
-  if (!appId) throw new Error('DELIVER_MIN_APP_ID is missing');
+  if (!appId) throw new Error('DELIVER_APP_ID is missing');
   if (!keyFile === !keyCommand)
-    throw new Error('set exactly one of DELIVER_MIN_APP_KEY_FILE or DELIVER_MIN_APP_KEY_COMMAND');
+    throw new Error('set exactly one of DELIVER_APP_KEY_FILE or DELIVER_APP_KEY_COMMAND');
   return { appId, keyFile, keyCommand };
 }
 
@@ -50,7 +53,7 @@ function readKey(settings: AppSettings): string {
 export async function mintToken(
   settings: AppSettings,
   repo: string,
-  apiUrl = process.env.DELIVER_MIN_APP_API_URL ?? 'https://api.github.com',
+  apiUrl = process.env.DELIVER_APP_API_URL ?? 'https://api.github.com',
 ): Promise<AppToken> {
   let jwt: string;
   try {

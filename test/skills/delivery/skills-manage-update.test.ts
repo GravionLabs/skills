@@ -26,7 +26,7 @@ describe.skipIf(!hasPwsh || process.platform === 'win32')('Install-Skills.ps1 -U
     const { delivery: _removed, ...withoutDelivery } = JSON.parse(withRoadmap);
     fs.writeFileSync(path.join(tmp, 'no-delivery-groups.json'), JSON.stringify(withoutDelivery));
     const home = path.join(tmp, 'home');
-    for (const s of ['deliver-min', 'github-issue']) {
+    for (const s of ['deliver', 'github-issue']) {
       fs.mkdirSync(path.join(home, '.claude', 'skills', s), { recursive: true });
       fs.writeFileSync(path.join(home, '.claude', 'skills', s, 'SKILL.md'), '');
     }

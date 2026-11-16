@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-// deliver-min loop: a fresh agent session per issue, merge its pull request, then the next issue.
+// deliver loop: a fresh agent session per issue, merge its pull request, then the next issue.
 // The state is read from the tracker before every issue. The run only remembers what it set aside.
 // Tracker: tracker.mts. Progress events: events.mts. Everything else is in this file.
 import { execFileSync } from 'node:child_process';
@@ -18,8 +18,12 @@ import { parseArgs } from 'node:util';
 import { appSettings, tokenSource as makeSource } from './app-token.mts';
 import { type Emit, openEvents } from './events.mts';
 import { HARNESSES } from './harness.mts';
+import { adoptLegacyEnv, unknownConfigKeys } from './legacy.mts';
 import { killTree, launch, promptPath } from './process.mts';
 import { type Gate, type Item, type Pull, loadTracker } from './tracker.mts';
+
+// before anything reads the environment; the warnings are printed once the log exists
+const legacyWarnings = adoptLegacyEnv();
 
 const { values: opt } = parseArgs({
   options: {
@@ -56,7 +60,7 @@ const attempt = (cmd: string, args: string[], cwd?: string): string | undefined 
   }
 };
 // Tests only: the length of one second of waiting, so a test does not wait for real.
-const TICK_MS = Number(process.env.DELIVER_MIN_TICK_MS ?? 1000);
+const TICK_MS = Number(process.env.DELIVER_TICK_MS ?? 1000);
 const sleep = (seconds: number) => new Promise((done) => setTimeout(done, seconds * TICK_MS));
 /** The message of a failed command: its stderr, else the error itself, first line only. */
 const firstLine = (error: unknown): string =>
@@ -115,6 +119,9 @@ try {
 } catch {
   // no project config
 }
+for (const warning of legacyWarnings) log(warning, 'warn');
+const configWarning = unknownConfigKeys(config.deliver);
+if (configWarning) log(configWarning, 'warn');
 const BASE: string = opt.base ?? config.deliver?.base ?? 'release/next';
 // The harness is a name (harness.mts builds the command). A command from the project config would let
 // a change in the repository decide what the loop runs.
@@ -124,8 +131,8 @@ const harness =
   fail(`unknown harness "${harnessName}": one of ${Object.keys(HARNESSES).join(', ')}`, 64);
 const MODEL = opt.model ?? harness.defaultModel;
 // Tests only: a command from the environment of the user (JSON array, the prompt is appended).
-const HARNESS_OVERRIDE: string[] | undefined = process.env.DELIVER_MIN_HARNESS
-  ? JSON.parse(process.env.DELIVER_MIN_HARNESS)
+const HARNESS_OVERRIDE: string[] | undefined = process.env.DELIVER_HARNESS
+  ? JSON.parse(process.env.DELIVER_HARNESS)
   : undefined;
 // Neither test hook may point into the repository: a merged pull request would then decide what the next run executes.
 // Compared as real paths: git names the repository by its real path, a temp directory is often a symlink.
@@ -145,10 +152,10 @@ const inside = (file: string) => {
   return !path.isAbsolute(rel) && rel !== '..' && !rel.startsWith(`..${path.sep}`);
 };
 if (HARNESS_OVERRIDE?.some((part) => path.isAbsolute(part) && inside(part))) {
-  fail('DELIVER_MIN_HARNESS must not name a file inside the repository', 64);
+  fail('DELIVER_HARNESS must not name a file inside the repository', 64);
 }
-if (process.env.DELIVER_MIN_TRACKER_DIR && inside(process.env.DELIVER_MIN_TRACKER_DIR)) {
-  fail('DELIVER_MIN_TRACKER_DIR must not be inside the repository', 64);
+if (process.env.DELIVER_TRACKER_DIR && inside(process.env.DELIVER_TRACKER_DIR)) {
+  fail('DELIVER_TRACKER_DIR must not be inside the repository', 64);
 }
 // A pull request that changes one of these is never merged by the loop: a person looks at it first.
 // `dir/` is a directory at the root, anything else a file name anywhere. deliver.protectedPaths replaces the list.
@@ -189,15 +196,15 @@ function guard(pull: Pull): string | undefined {
   return `changes protected paths (${hits.slice(0, 3).join(', ')}${hits.length > 3 ? ', …' : ''})${HANDS_OFF}`;
 }
 // The session acts with a token instead of the login of the user: an installation token of the GitHub App
-// (DELIVER_MIN_APP_ID and a key file or command), else DELIVER_MIN_SESSION_TOKEN (a token limited to this repository).
+// (DELIVER_APP_ID and a key file or command), else DELIVER_SESSION_TOKEN (a token limited to this repository).
 let app: ReturnType<typeof appSettings>;
 try {
   app = appSettings();
 } catch (error) {
   fail(`github app: ${(error as Error).message}`, 64);
 }
-const FIXED_TOKEN = app ? undefined : process.env.DELIVER_MIN_SESSION_TOKEN;
-const TOKEN_SOURCE = app ? 'GitHub App' : FIXED_TOKEN ? 'DELIVER_MIN_SESSION_TOKEN' : undefined;
+const FIXED_TOKEN = app ? undefined : process.env.DELIVER_SESSION_TOKEN;
+const TOKEN_SOURCE = app ? 'GitHub App' : FIXED_TOKEN ? 'DELIVER_SESSION_TOKEN' : undefined;
 const tracker = await loadTracker(opt.tracker ?? config.deliver?.tracker ?? 'github', {
   cwd: root,
   base: BASE,
@@ -206,7 +213,7 @@ const tracker = await loadTracker(opt.tracker ?? config.deliver?.tracker ?? 'git
 }).catch((error) => fail(`tracker: ${firstLine(error)}`, 64));
 const tokenSource = app ? makeSource(app, tracker.repo, SESSION_MINUTES * 60_000) : undefined;
 const runId = `${new Date().toISOString().replace(/[-:]/g, '').slice(0, 15)}-${process.pid}`;
-const runDir = path.join(commonDir, 'deliver-min', runId);
+const runDir = path.join(commonDir, 'deliver', runId);
 let emit: Emit = () => {};
 
 /** One line of the stream-json of Claude Code, as far as the loop reads it. */
@@ -267,7 +274,7 @@ async function startSession(item: Item, cwd: string, file: string): Promise<Sess
   // the session works from this text, not from what the tracker shows when it runs
   const issueFile = path.join(runDir, `${item.id}.issue.md`);
   writeFileSync(issueFile, `# ${item.title}\n\n${item.url}\n\n${item.body}\n`);
-  const prompt = `/deliver-min ${item.id} --base ${BASE} --issue-file ${promptPath(issueFile)}`;
+  const prompt = `/deliver ${item.id} --base ${BASE} --issue-file ${promptPath(issueFile)}`;
   const argv = HARNESS_OVERRIDE
     ? [...HARNESS_OVERRIDE, prompt]
     : harness.command({ prompt, model: opt.model });
@@ -279,16 +286,16 @@ async function startSession(item: Item, cwd: string, file: string): Promise<Sess
     // -p stops subagents 10 minutes after the last turn unless the ceiling is off
     CLAUDE_CODE_PRINT_BG_WAIT_CEILING_MS: '0',
     ...process.env,
-    DELIVER_MIN_RUN: runId,
+    DELIVER_RUN: runId,
     ...(token ? tracker.sessionEnv(token) : {}),
   };
   // the session gets the token, never the way to mint one
   for (const name of [
-    'DELIVER_MIN_SESSION_TOKEN',
-    'DELIVER_MIN_APP_ID',
-    'DELIVER_MIN_APP_KEY_FILE',
-    'DELIVER_MIN_APP_KEY_COMMAND',
-    'DELIVER_MIN_APP_API_URL',
+    'DELIVER_SESSION_TOKEN',
+    'DELIVER_APP_ID',
+    'DELIVER_APP_KEY_FILE',
+    'DELIVER_APP_KEY_COMMAND',
+    'DELIVER_APP_API_URL',
   ])
     delete env[name];
   const session: Session = { exit: null, turns: 0, costUsd: 0, peakContext: 0 };
@@ -466,7 +473,7 @@ if (opt['dry-run']) {
     fail(`tracker: ${firstLine(error)}`, 64);
   }
   console.log(
-    `harness: ${harnessName} (${harness.command({ prompt: '/deliver-min <nr> …', model: opt.model }).join(' ')})`,
+    `harness: ${harnessName} (${harness.command({ prompt: '/deliver <nr> …', model: opt.model }).join(' ')})`,
   );
   console.log(`tracker: ${tracker.name}, base: ${BASE}`);
   console.log(`required checks: ${required.join(', ') || 'none'}`);
@@ -481,7 +488,7 @@ emit = openEvents(process.env.AGENT_EVENTS_DIR ?? path.join(commonDir, '.agents'
 log(`run ${runId} in ${tracker.repo}, results: ${path.join(runDir, 'results.jsonl')}`, 'dim');
 if (!TOKEN_SOURCE) {
   log(
-    'the session uses your own login: set DELIVER_MIN_APP_ID with DELIVER_MIN_APP_KEY_FILE or DELIVER_MIN_APP_KEY_COMMAND (GitHub App), or DELIVER_MIN_SESSION_TOKEN',
+    'the session uses your own login: set DELIVER_APP_ID with DELIVER_APP_KEY_FILE or DELIVER_APP_KEY_COMMAND (GitHub App), or DELIVER_SESSION_TOKEN',
     'warn',
   );
 }

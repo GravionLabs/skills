@@ -4,7 +4,7 @@
     Links the skills of this repository as project skills, so Claude Code and other clients load them instead of global copies.
 .DESCRIPTION
     Links every skills/<group>/<name> to .claude/skills/<name> and .agents/skills/<name> (both gitignored). Project skills take
-    precedence over global ones (~/.claude/skills), so a deliver-min run in this repository uses skills/delivery/deliver-min/.
+    precedence over global ones (~/.claude/skills), so a deliver run in this repository uses skills/delivery/deliver/.
     An existing link is replaced; a real directory or file of the same name is left alone and reported.
     Symlinks on macOS/Linux, directory junctions on Windows (no admin rights needed).
 .PARAMETER Root

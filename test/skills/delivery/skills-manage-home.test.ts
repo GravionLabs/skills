@@ -21,7 +21,7 @@ describe.skipIf(!hasPwsh)('Install-Skills.ps1 home directory', () => {
     profile = path.join(tmp, 'profile');
     fakeHome = path.join(tmp, 'y');
     // the base groups' marker skills exist only below the profile
-    for (const m of ['detect-techstack', 'github-issue', 'deliver-min']) {
+    for (const m of ['detect-techstack', 'github-issue', 'deliver']) {
       fs.mkdirSync(path.join(profile, '.claude', 'skills', m), { recursive: true });
       fs.writeFileSync(path.join(profile, '.claude', 'skills', m, 'SKILL.md'), '');
     }

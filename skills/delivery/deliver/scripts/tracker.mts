@@ -1,4 +1,4 @@
-// The contract between the deliver-min loop and an issue tracker. The loop knows nothing else about
+// The contract between the deliver loop and an issue tracker. The loop knows nothing else about
 // GitHub, Azure DevOps or any other system: it asks for the next work item, finds its pull request,
 // reads the gate of the merge and merges. A tracker is the file tracker/<name>.mts, chosen by
 // `deliver.tracker` in .agents/config.json (default `github`), and exports `create(context)`.
@@ -77,7 +77,7 @@ export interface Tracker {
 export async function loadTracker(name: string, context: TrackerContext): Promise<Tracker> {
   if (!/^[a-z][a-z0-9-]*$/.test(name)) throw new Error(`invalid tracker name: ${name}`);
   // Tests only: a directory from the environment of the user that holds the tracker file.
-  const dir = process.env.DELIVER_MIN_TRACKER_DIR;
+  const dir = process.env.DELIVER_TRACKER_DIR;
   const file = dir
     ? pathToFileURL(path.join(dir, `${name}.mts`))
     : new URL(`./tracker/${name}.mts`, import.meta.url);

@@ -1,4 +1,4 @@
-// deliver-min: the loop (deliver-loop.mts) against a fake tracker and a fake harness in a real git repository, and
+// deliver: the loop (deliver-loop.mts) against a fake tracker and a fake harness in a real git repository, and
 // the check verdict of the GitHub tracker. The loop is started as its own process, as a user starts it.
 import { execFileSync, spawn } from 'node:child_process';
 import { generateKeyPairSync, createVerify } from 'node:crypto';
@@ -18,19 +18,19 @@ import {
   APP_PERMISSIONS,
   appSettings,
   tokenSource,
-} from '../../../skills/delivery/deliver-min/scripts/app-token.mts';
+} from '../../../skills/delivery/deliver/scripts/app-token.mts';
 import {
   cmdLine,
   launchCommand,
   promptPath,
   resolveWindows,
-} from '../../../skills/delivery/deliver-min/scripts/process.mts';
-import { HARNESSES } from '../../../skills/delivery/deliver-min/scripts/harness.mts';
-import { checkVerdict } from '../../../skills/delivery/deliver-min/scripts/tracker/github.mts';
+} from '../../../skills/delivery/deliver/scripts/process.mts';
+import { HARNESSES } from '../../../skills/delivery/deliver/scripts/harness.mts';
+import { checkVerdict } from '../../../skills/delivery/deliver/scripts/tracker/github.mts';
 
-const skill = path.resolve(__dirname, '../../../skills/delivery/deliver-min');
+const skill = path.resolve(__dirname, '../../../skills/delivery/deliver');
 const loopScript = path.join(skill, 'scripts/deliver-loop.mts');
-const helpers = path.resolve(__dirname, 'deliver-min');
+const helpers = path.resolve(__dirname, 'deliver');
 
 type Scenario = {
   items: { id: number; title: string; blockedBy?: number[] }[];
@@ -100,13 +100,15 @@ function loop(
     NO_COLOR: '1',
     FAKE_DIR: dir,
     AGENT_EVENTS_DIR: path.join(dir, 'events'),
-    DELIVER_MIN_TRACKER_DIR: path.join(helpers, 'tracker'),
-    DELIVER_MIN_HARNESS: JSON.stringify(['node', path.join(helpers, 'fake-harness.mjs'), dir]),
-    DELIVER_MIN_TICK_MS: '1',
+    DELIVER_TRACKER_DIR: path.join(helpers, 'tracker'),
+    DELIVER_HARNESS: JSON.stringify(['node', path.join(helpers, 'fake-harness.mjs'), dir]),
+    DELIVER_TICK_MS: '1',
     GH_TOKEN: 'login-token',
     ...options.env,
   };
-  if (!options.env?.['DELIVER_MIN_SESSION_TOKEN']) delete env['DELIVER_MIN_SESSION_TOKEN'];
+  if (!options.env?.['DELIVER_SESSION_TOKEN']) delete env['DELIVER_SESSION_TOKEN'];
+  // the user's own (old or new) variables must not leak into the loop under test
+  delete env['DELIVER_MIN_SESSION_TOKEN'];
   const issues = scenario.items.map((item) => item.id).join(',');
   return new Promise((done) => {
     const child = spawn(
@@ -167,7 +169,7 @@ const READY = { state: 'ready', reported: true, head: 'abc123' };
 const RED = { state: 'red', detail: 'ci' };
 
 beforeAll(() => {
-  root = mkdtempSync(path.join(tmpdir(), 'deliver-min-'));
+  root = mkdtempSync(path.join(tmpdir(), 'deliver-'));
   const origin = path.join(root, 'origin.git');
   repo = path.join(root, 'repo');
   execFileSync('git', ['init', '--quiet', '--bare', origin]);
@@ -183,7 +185,7 @@ afterAll(() => {
   rmSync(root, { recursive: true, force: true });
 });
 
-describe('deliver-min loop', () => {
+describe('deliver loop', () => {
   it('merges an issue and then the issue it blocked', async () => {
     const out = await loop({
       items: [
@@ -201,7 +203,7 @@ describe('deliver-min loop', () => {
       [12, 'merged'],
     ]);
     expect(out.sessions[0]?.prompt).toMatch(
-      /^\/deliver-min 11 --base release\/next --issue-file \S+11\.issue\.md$/,
+      /^\/deliver 11 --base release\/next --issue-file \S+11\.issue\.md$/,
     );
     expect(out.events.map((e) => e.type)).toEqual([
       'run.started',
@@ -360,12 +362,12 @@ describe('deliver-min loop', () => {
         return `${status} ${String(stderr).trim()}`;
       }
     };
-    expect(refusal({ DELIVER_MIN_TRACKER_DIR: path.join(repo, 'tools') })).toBe(
-      '64 DELIVER_MIN_TRACKER_DIR must not be inside the repository',
+    expect(refusal({ DELIVER_TRACKER_DIR: path.join(repo, 'tools') })).toBe(
+      '64 DELIVER_TRACKER_DIR must not be inside the repository',
     );
-    expect(
-      refusal({ DELIVER_MIN_HARNESS: JSON.stringify(['node', path.join(repo, 'x.mjs')]) }),
-    ).toBe('64 DELIVER_MIN_HARNESS must not name a file inside the repository');
+    expect(refusal({ DELIVER_HARNESS: JSON.stringify(['node', path.join(repo, 'x.mjs')]) })).toBe(
+      '64 DELIVER_HARNESS must not name a file inside the repository',
+    );
   });
 
   it('sets a pull request aside that changes a protected path', async () => {
@@ -408,15 +410,12 @@ describe('deliver-min loop', () => {
   });
 
   it('builds the copilot command with plain output and no questions', () => {
-    const argv = HARNESSES.copilot.command({ prompt: '/deliver-min 1' });
-    expect(argv.slice(0, 3)).toEqual(['copilot', '-p', '/deliver-min 1']);
+    const argv = HARNESSES.copilot.command({ prompt: '/deliver 1' });
+    expect(argv.slice(0, 3)).toEqual(['copilot', '-p', '/deliver 1']);
     expect(argv).toEqual(expect.arrayContaining(['--no-ask-user', '--no-color']));
     expect(HARNESSES.copilot.claudeStream).toBe(false);
     expect(
-      readFileSync(
-        path.resolve(__dirname, '../../../skills/delivery/deliver-min/SKILL.md'),
-        'utf8',
-      ),
+      readFileSync(path.resolve(__dirname, '../../../skills/delivery/deliver/SKILL.md'), 'utf8'),
     ).toMatch(/without subagents/);
   });
 
@@ -429,7 +428,7 @@ describe('deliver-min loop', () => {
   it('gives the session the session token as GH_TOKEN and not the variable itself', async () => {
     const withToken = await loop(
       { items: [{ id: 101, title: '[PBI] feat: token' }] },
-      { env: { DELIVER_MIN_SESSION_TOKEN: 'session-token-value' } },
+      { env: { DELIVER_SESSION_TOKEN: 'session-token-value' } },
     );
     expect(withToken.sessions[0]).toMatchObject({
       ghToken: 'session-token-value',
@@ -513,9 +512,9 @@ describe('deliver-min loop', () => {
         { items: [{ id: 201, title: '[PBI] feat: app' }] },
         {
           env: {
-            DELIVER_MIN_APP_ID: '4242',
-            DELIVER_MIN_APP_KEY_FILE: keyFile(),
-            DELIVER_MIN_APP_API_URL: apiUrl,
+            DELIVER_APP_ID: '4242',
+            DELIVER_APP_KEY_FILE: keyFile(),
+            DELIVER_APP_API_URL: apiUrl,
           },
         },
       );
@@ -545,9 +544,9 @@ describe('deliver-min loop', () => {
         { items: [{ id: 211, title: '[PBI] feat: key command' }] },
         {
           env: {
-            DELIVER_MIN_APP_ID: '4242',
-            DELIVER_MIN_APP_KEY_COMMAND: command,
-            DELIVER_MIN_APP_API_URL: apiUrl,
+            DELIVER_APP_ID: '4242',
+            DELIVER_APP_KEY_COMMAND: command,
+            DELIVER_APP_API_URL: apiUrl,
           },
         },
       );
@@ -573,9 +572,9 @@ describe('deliver-min loop', () => {
         { items: [{ id: 221, title: '[PBI] feat: bad key' }] },
         {
           env: {
-            DELIVER_MIN_APP_ID: '4242',
-            DELIVER_MIN_APP_KEY_FILE: path.join(root, 'missing.pem'),
-            DELIVER_MIN_APP_API_URL: apiUrl,
+            DELIVER_APP_ID: '4242',
+            DELIVER_APP_KEY_FILE: path.join(root, 'missing.pem'),
+            DELIVER_APP_API_URL: apiUrl,
           },
         },
       );
@@ -587,21 +586,21 @@ describe('deliver-min loop', () => {
     it('refuses half-set app settings', async () => {
       const out = await loop(
         { items: [{ id: 231, title: '[PBI] feat: half' }] },
-        { env: { DELIVER_MIN_APP_KEY_FILE: keyFile() } },
+        { env: { DELIVER_APP_KEY_FILE: keyFile() } },
       );
       expect(out.status).toBe(64);
-      expect(out.stderr).toContain('DELIVER_MIN_APP_ID is missing');
+      expect(out.stderr).toContain('DELIVER_APP_ID is missing');
     });
 
-    it('prefers the app over DELIVER_MIN_SESSION_TOKEN and reports the source in --dry-run', async () => {
+    it('prefers the app over DELIVER_SESSION_TOKEN and reports the source in --dry-run', async () => {
       const out = await loop(
         { items: [{ id: 241, title: '[PBI] feat: dry' }] },
         {
           args: ['--dry-run'],
           env: {
-            DELIVER_MIN_APP_ID: '4242',
-            DELIVER_MIN_APP_KEY_FILE: keyFile(),
-            DELIVER_MIN_SESSION_TOKEN: 'ignored',
+            DELIVER_APP_ID: '4242',
+            DELIVER_APP_KEY_FILE: keyFile(),
+            DELIVER_SESSION_TOKEN: 'ignored',
           },
         },
       );
@@ -611,8 +610,8 @@ describe('deliver-min loop', () => {
 
     it('renews a token when less than the session timeout is left, not before', async () => {
       const settings = appSettings({
-        DELIVER_MIN_APP_ID: '4242',
-        DELIVER_MIN_APP_KEY_FILE: keyFile(),
+        DELIVER_APP_ID: '4242',
+        DELIVER_APP_KEY_FILE: keyFile(),
       });
       expect(settings).toBeDefined();
       let n = 0;
@@ -670,7 +669,7 @@ describe('deliver-min loop', () => {
       expect(out.releasePulls).toBe(1);
       expect(out.stdout).toContain('release pull request: https://example.test/pull/900');
       expect(out.stdout).toMatch(/needs you \(1\):\n {2}#39 /);
-      expect(out.sessions.map((s) => s.prompt).join('\n')).not.toContain('/deliver-min 39');
+      expect(out.sessions.map((s) => s.prompt).join('\n')).not.toContain('/deliver 39');
       expect(out.events.find((e) => e.type === 'attention')).toMatchObject({
         reason: 'release-test',
         needsYou: true,
@@ -812,7 +811,7 @@ describe('starting the harness on Windows', () => {
   });
 });
 
-describe('deliver-min SKILL.md branch update rule', () => {
+describe('deliver SKILL.md branch update rule', () => {
   const text = readFileSync(path.join(skill, 'SKILL.md'), 'utf8');
   it('tells the session to merge the base, never rebase or force-push', () => {
     expect(text).toContain('git merge origin/<base>');

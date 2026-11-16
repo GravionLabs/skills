@@ -33,5 +33,5 @@ none
 
 - `github-milestone`, which creates and closes the milestones
 - `planner`, which creates the Epics, Features and PBIs that are assigned
-- `deliver-min`, which delivers a milestone
+- `deliver`, which delivers a milestone
 - `grill-me`, which asks the open decisions
