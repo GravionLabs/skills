@@ -23,6 +23,8 @@ Input: `/deliver-min <nr> [--base <branch>] [--issue-file <path>]`. `<base>` is 
 
 An open pull request for the issue already exists: read its checks and its merge state, fix what is wrong (a check that is red because of this change, a conflict with `<base>`), push and end.
 
+To bring `<base>` into your branch (a conflict, or a branch that is only behind), always run `git merge origin/<base>` and push with a plain `git push`. Never rebase and never force-push: a rebase rewrites history and the push is denied.
+
 ## Rules
 
 - Never ask. An unclear acceptance criterion, or work the issue does not describe: comment on the issue with the question, add the label `needs-decision`, and end without a pull request. Never build extra work silently.
@@ -37,7 +39,7 @@ An open pull request for the issue already exists: read its checks and its merge
 
 Settings, all optional, in `.agents/config.json` under `deliver` (the flag of the same name wins): `base` (the base branch, default `release/next`), `tracker` (`scripts/tracker/<name>.mts`, default `github`; the contract is `scripts/tracker.mts`), `harness` (the name of the agent CLI, `claude` (default) or `copilot`; the loop builds the command itself in `scripts/harness.mts`, a repository cannot set it), `protectedPaths` (a pull request that changes one of them is not merged by the loop; default: `.github/`, `.claude/`, the directory of the project config and the package manifests).
 
-The loop refuses a base branch without required checks (`--allow-no-required-checks`), delivers only issues whose author has write access (`--trust-authors`), and merges only when every required check has reported and passed. `DELIVER_MIN_SESSION_TOKEN` in the environment makes the session act with that token (limited to the repository, without workflow permission) instead of your login.
+The loop refuses a base branch without required checks (`--allow-no-required-checks`), delivers only issues whose author has write access (`--trust-authors`), and merges only when every required check has reported and passed. The session acts with a token instead of your login. Preferred: the GitHub App `gravionlabs-ci`. `DELIVER_MIN_APP_ID` plus the private key from a file (`DELIVER_MIN_APP_KEY_FILE`) or a command that prints it (`DELIVER_MIN_APP_KEY_COMMAND`, for example `op read …`) make the loop mint an installation token for the repository of the run (contents, pull requests and issues write, no workflows, no administration); it is renewed before a session starts when less than `--session-minutes` of it is left (a token lives one hour: keep `--session-minutes` below 60 with an app), and a failed mint sets the issue aside, it never falls back to your login. The key is never logged, written to events or the run folder, nor passed to the session. Without app settings `DELIVER_MIN_SESSION_TOKEN` (a fine-grained token limited to the repository) works as before; with neither the loop says that the session runs with your login. The merge always uses your login.
 
 The loop prints colored progress and writes it to `<git-common-dir>/deliver-min/loop.log` (`tail -f`; `NO_COLOR` turns color off). It also writes agent-events (`<git-common-dir>/.agents/events/<run>.jsonl`) that displays read: run, one task per issue with its pull request, progress, and an attention for an issue set aside. The session reports nothing.
 

@@ -15,6 +15,7 @@ import {
 import path from 'node:path';
 import { createInterface } from 'node:readline';
 import { parseArgs } from 'node:util';
+import { appSettings, tokenSource as makeSource } from './app-token.mts';
 import { type Emit, openEvents } from './events.mts';
 import { HARNESSES } from './harness.mts';
 import { killTree, launch, promptPath } from './process.mts';
@@ -187,14 +188,23 @@ function guard(pull: Pull): string | undefined {
   if (hits.length === 0) return undefined;
   return `changes protected paths (${hits.slice(0, 3).join(', ')}${hits.length > 3 ? ', …' : ''})${HANDS_OFF}`;
 }
-// The session acts with this token instead of the login of the user (a token limited to this repository).
-const SESSION_TOKEN = process.env.DELIVER_MIN_SESSION_TOKEN;
+// The session acts with a token instead of the login of the user: an installation token of the GitHub App
+// (DELIVER_MIN_APP_ID and a key file or command), else DELIVER_MIN_SESSION_TOKEN (a token limited to this repository).
+let app: ReturnType<typeof appSettings>;
+try {
+  app = appSettings();
+} catch (error) {
+  fail(`github app: ${(error as Error).message}`, 64);
+}
+const FIXED_TOKEN = app ? undefined : process.env.DELIVER_MIN_SESSION_TOKEN;
+const TOKEN_SOURCE = app ? 'GitHub App' : FIXED_TOKEN ? 'DELIVER_MIN_SESSION_TOKEN' : undefined;
 const tracker = await loadTracker(opt.tracker ?? config.deliver?.tracker ?? 'github', {
   cwd: root,
   base: BASE,
   selection: { milestone: opt.milestone, issues: opt.issues?.split(',').map((nr) => nr.trim()) },
   trustAuthors: opt['trust-authors'],
 }).catch((error) => fail(`tracker: ${firstLine(error)}`, 64));
+const tokenSource = app ? makeSource(app, tracker.repo, SESSION_MINUTES * 60_000) : undefined;
 const runId = `${new Date().toISOString().replace(/[-:]/g, '').slice(0, 15)}-${process.pid}`;
 const runDir = path.join(commonDir, 'deliver-min', runId);
 let emit: Emit = () => {};
@@ -253,7 +263,7 @@ function render(line: string, session: Session): void {
   }
 }
 
-function startSession(item: Item, cwd: string, file: string): Promise<Session> {
+async function startSession(item: Item, cwd: string, file: string): Promise<Session> {
   // the session works from this text, not from what the tracker shows when it runs
   const issueFile = path.join(runDir, `${item.id}.issue.md`);
   writeFileSync(issueFile, `# ${item.title}\n\n${item.url}\n\n${item.body}\n`);
@@ -261,14 +271,26 @@ function startSession(item: Item, cwd: string, file: string): Promise<Session> {
   const argv = HARNESS_OVERRIDE
     ? [...HARNESS_OVERRIDE, prompt]
     : harness.command({ prompt, model: opt.model });
+  // an app token is renewed when less than the session timeout is left; the merge keeps the login of the user
+  const sessionToken = tokenSource ? await tokenSource.current() : undefined;
+  if (sessionToken?.renewed) log('app token minted for this session', 'dim');
+  const token = sessionToken?.token ?? FIXED_TOKEN;
   const env: NodeJS.ProcessEnv = {
     // -p stops subagents 10 minutes after the last turn unless the ceiling is off
     CLAUDE_CODE_PRINT_BG_WAIT_CEILING_MS: '0',
     ...process.env,
     DELIVER_MIN_RUN: runId,
-    ...(SESSION_TOKEN ? tracker.sessionEnv(SESSION_TOKEN) : {}),
+    ...(token ? tracker.sessionEnv(token) : {}),
   };
-  delete env.DELIVER_MIN_SESSION_TOKEN;
+  // the session gets the token, never the way to mint one
+  for (const name of [
+    'DELIVER_MIN_SESSION_TOKEN',
+    'DELIVER_MIN_APP_ID',
+    'DELIVER_MIN_APP_KEY_FILE',
+    'DELIVER_MIN_APP_KEY_COMMAND',
+    'DELIVER_MIN_APP_API_URL',
+  ])
+    delete env[name];
   const session: Session = { exit: null, turns: 0, costUsd: 0, peakContext: 0 };
   const out = createWriteStream(file);
   return new Promise((done) => {
@@ -448,9 +470,7 @@ if (opt['dry-run']) {
   );
   console.log(`tracker: ${tracker.name}, base: ${BASE}`);
   console.log(`required checks: ${required.join(', ') || 'none'}`);
-  console.log(
-    `session token: ${SESSION_TOKEN ? 'DELIVER_MIN_SESSION_TOKEN' : 'none, the session uses your login'}`,
-  );
+  console.log(`session token: ${TOKEN_SOURCE ?? 'none, the session uses your login'}`);
   console.log(`protected paths: ${PROTECTED.join(' ')}`);
   process.exit(0);
 }
@@ -459,9 +479,9 @@ mkdirSync(runDir, { recursive: true });
 logFile = path.join(path.dirname(runDir), 'loop.log');
 emit = openEvents(process.env.AGENT_EVENTS_DIR ?? path.join(commonDir, '.agents', 'events'), runId);
 log(`run ${runId} in ${tracker.repo}, results: ${path.join(runDir, 'results.jsonl')}`, 'dim');
-if (!SESSION_TOKEN) {
+if (!TOKEN_SOURCE) {
   log(
-    'the session uses your own login: set DELIVER_MIN_SESSION_TOKEN to a token limited to this repository',
+    'the session uses your own login: set DELIVER_MIN_APP_ID with DELIVER_MIN_APP_KEY_FILE or DELIVER_MIN_APP_KEY_COMMAND (GitHub App), or DELIVER_MIN_SESSION_TOKEN',
     'warn',
   );
 }

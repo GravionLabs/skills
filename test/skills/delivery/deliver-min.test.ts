@@ -1,6 +1,8 @@
 // deliver-min: the loop (deliver-loop.mts) against a fake tracker and a fake harness in a real git repository, and
 // the check verdict of the GitHub tracker. The loop is started as its own process, as a user starts it.
 import { execFileSync, spawn } from 'node:child_process';
+import { generateKeyPairSync, createVerify } from 'node:crypto';
+import { type Server, createServer } from 'node:http';
 import {
   existsSync,
   mkdirSync,
@@ -12,6 +14,11 @@ import {
 } from 'node:fs';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
+import {
+  APP_PERMISSIONS,
+  appSettings,
+  tokenSource,
+} from '../../../skills/delivery/deliver-min/scripts/app-token.mts';
 import {
   cmdLine,
   launchCommand,
@@ -439,6 +446,187 @@ describe('deliver-min loop', () => {
     expect(withToken.stdout).not.toContain('the session uses your own login');
   });
 
+  describe('GitHub App session token', () => {
+    const { privateKey, publicKey } = generateKeyPairSync('rsa', {
+      modulusLength: 2048,
+      privateKeyEncoding: { type: 'pkcs8', format: 'pem' },
+      publicKeyEncoding: { type: 'spki', format: 'pem' },
+    });
+    let server: Server;
+    let apiUrl = '';
+    let requests: { method: string; url: string; body: unknown; jwtValid: boolean }[] = [];
+    let minted = 0;
+    let lifetimeMs = 3_600_000;
+
+    beforeAll(async () => {
+      server = createServer((req, res) => {
+        let raw = '';
+        req.on('data', (chunk) => {
+          raw += chunk;
+        });
+        req.on('end', () => {
+          const [head, claims, signature] = (req.headers.authorization ?? '').slice(7).split('.');
+          const jwtValid =
+            createVerify('RSA-SHA256')
+              .update(`${head}.${claims}`)
+              .verify(publicKey, Buffer.from(signature ?? '', 'base64url')) &&
+            JSON.parse(Buffer.from(claims, 'base64url').toString()).iss === '4242';
+          requests.push({
+            method: req.method ?? '',
+            url: req.url ?? '',
+            body: raw ? JSON.parse(raw) : undefined,
+            jwtValid,
+          });
+          res.setHeader('Content-Type', 'application/json');
+          if (req.method === 'GET') res.end(JSON.stringify({ id: 77 }));
+          else {
+            minted += 1;
+            res.end(
+              JSON.stringify({
+                token: `app-token-${minted}`,
+                expires_at: new Date(Date.now() + lifetimeMs).toISOString(),
+              }),
+            );
+          }
+        });
+      });
+      await new Promise<void>((ready) => server.listen(0, '127.0.0.1', ready));
+      apiUrl = `http://127.0.0.1:${(server.address() as { port: number }).port}`;
+    });
+    afterAll(() => {
+      server.close();
+    });
+    beforeEach(() => {
+      requests = [];
+      minted = 0;
+      lifetimeMs = 3_600_000;
+    });
+
+    const keyFile = () => {
+      const file = path.join(root, 'app-key.pem');
+      writeFileSync(file, privateKey);
+      return file;
+    };
+
+    it('mints a repository-limited token without workflow or administration permission and hands it to the session', async () => {
+      const out = await loop(
+        { items: [{ id: 201, title: '[PBI] feat: app' }] },
+        {
+          env: {
+            DELIVER_MIN_APP_ID: '4242',
+            DELIVER_MIN_APP_KEY_FILE: keyFile(),
+            DELIVER_MIN_APP_API_URL: apiUrl,
+          },
+        },
+      );
+      expect(out.status).toBe(0);
+      expect(out.sessions[0]).toMatchObject({
+        ghToken: 'app-token-1',
+        hasSessionTokenVariable: false,
+      });
+      expect(requests.map((r) => `${r.method} ${r.url}`)).toEqual([
+        expect.stringMatching(/^GET \/repos\/.+\/installation$/),
+        'POST /app/installations/77/access_tokens',
+      ]);
+      expect(requests.every((r) => r.jwtValid)).toBe(true);
+      const body = requests[1]?.body as { repositories: string[]; permissions: object };
+      expect(body.permissions).toEqual(APP_PERMISSIONS);
+      expect(Object.keys(body.permissions)).not.toContain('workflows');
+      expect(Object.keys(body.permissions)).not.toContain('administration');
+      expect(body.repositories).toHaveLength(1);
+      // the merge is the tracker's call in the loop process, which has no token of its own
+      expect(out.merges).toHaveLength(1);
+      expect(out.stdout).not.toContain('the session uses your own login');
+    });
+
+    it('reads the key from a command and never writes the key or the token to the log, events or run folder', async () => {
+      const command = `node -e "process.stdout.write(require('fs').readFileSync(process.argv[1],'utf8'))" "${keyFile()}"`;
+      const out = await loop(
+        { items: [{ id: 211, title: '[PBI] feat: key command' }] },
+        {
+          env: {
+            DELIVER_MIN_APP_ID: '4242',
+            DELIVER_MIN_APP_KEY_COMMAND: command,
+            DELIVER_MIN_APP_API_URL: apiUrl,
+          },
+        },
+      );
+      expect(out.status).toBe(0);
+      const body = privateKey.split('\n')[1] ?? '';
+      expect(body.length).toBeGreaterThan(20);
+      const results = /results: (\S+)/.exec(out.stdout)?.[1] ?? '';
+      const runDir = path.dirname(results);
+      const text = [
+        out.log,
+        out.stdout,
+        out.stderr,
+        JSON.stringify(out.events),
+        ...readdirSync(runDir).map((name) => readFileSync(path.join(runDir, name), 'utf8')),
+      ].join('\n');
+      expect(text).not.toContain(body);
+      expect(text).not.toContain('PRIVATE KEY');
+      expect(text).not.toContain('app-token-');
+    });
+
+    it('sets the issue aside, without using the login, when the token cannot be minted', async () => {
+      const out = await loop(
+        { items: [{ id: 221, title: '[PBI] feat: bad key' }] },
+        {
+          env: {
+            DELIVER_MIN_APP_ID: '4242',
+            DELIVER_MIN_APP_KEY_FILE: path.join(root, 'missing.pem'),
+            DELIVER_MIN_APP_API_URL: apiUrl,
+          },
+        },
+      );
+      expect(out.sessions).toHaveLength(0);
+      expect(out.status).toBe(2);
+      expect(out.stdout).toMatch(/#221 set aside: error: cannot sign with the app key file/);
+    });
+
+    it('refuses half-set app settings', async () => {
+      const out = await loop(
+        { items: [{ id: 231, title: '[PBI] feat: half' }] },
+        { env: { DELIVER_MIN_APP_KEY_FILE: keyFile() } },
+      );
+      expect(out.status).toBe(64);
+      expect(out.stderr).toContain('DELIVER_MIN_APP_ID is missing');
+    });
+
+    it('prefers the app over DELIVER_MIN_SESSION_TOKEN and reports the source in --dry-run', async () => {
+      const out = await loop(
+        { items: [{ id: 241, title: '[PBI] feat: dry' }] },
+        {
+          args: ['--dry-run'],
+          env: {
+            DELIVER_MIN_APP_ID: '4242',
+            DELIVER_MIN_APP_KEY_FILE: keyFile(),
+            DELIVER_MIN_SESSION_TOKEN: 'ignored',
+          },
+        },
+      );
+      expect(out.stdout).toContain('session token: GitHub App');
+      expect(requests).toHaveLength(0);
+    });
+
+    it('renews a token when less than the session timeout is left, not before', async () => {
+      const settings = appSettings({
+        DELIVER_MIN_APP_ID: '4242',
+        DELIVER_MIN_APP_KEY_FILE: keyFile(),
+      });
+      expect(settings).toBeDefined();
+      let n = 0;
+      const source = tokenSource(settings!, 'o/r', 90 * 60_000, async () => ({
+        token: `t${++n}`,
+        expiresAt: Date.now() + 120 * 60_000,
+      }));
+      const now = Date.now();
+      expect(await source.current(now)).toEqual({ token: 't1', renewed: true });
+      expect(await source.current(now + 10 * 60_000)).toEqual({ token: 't1', renewed: false });
+      expect(await source.current(now + 40 * 60_000)).toEqual({ token: 't2', renewed: true });
+    });
+  });
+
   it('prints the order and starts nothing with --dry-run', async () => {
     const out = await loop(
       {
@@ -621,5 +809,13 @@ describe('starting the harness on Windows', () => {
   it('writes the issue file path with forward slashes, quoted when it holds a space', () => {
     expect(promptPath('C:\\work\\run\\11.issue.md')).toBe('C:/work/run/11.issue.md');
     expect(promptPath('C:\\Users\\Jane Doe\\11.issue.md')).toBe('"C:/Users/Jane Doe/11.issue.md"');
+  });
+});
+
+describe('deliver-min SKILL.md branch update rule', () => {
+  const text = readFileSync(path.join(skill, 'SKILL.md'), 'utf8');
+  it('tells the session to merge the base, never rebase or force-push', () => {
+    expect(text).toContain('git merge origin/<base>');
+    expect(text).toMatch(/Never rebase and never force-push/);
   });
 });
