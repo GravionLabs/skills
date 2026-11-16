@@ -137,7 +137,11 @@ const real = (file: string): string => {
     return parent === full ? full : path.join(real(parent), path.basename(full));
   }
 };
-const inside = (file: string) => !path.relative(real(root), real(file)).startsWith('..');
+// Another drive (Windows) gives an absolute relative path: outside as well.
+const inside = (file: string) => {
+  const rel = path.relative(real(root), real(file));
+  return !path.isAbsolute(rel) && rel !== '..' && !rel.startsWith(`..${path.sep}`);
+};
 if (HARNESS_OVERRIDE?.some((part) => path.isAbsolute(part) && inside(part))) {
   fail('DELIVER_MIN_HARNESS must not name a file inside the repository', 64);
 }
