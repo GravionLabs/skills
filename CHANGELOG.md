@@ -5,6 +5,42 @@ Versioning follows [Semantic Versioning](https://semver.org/).
 
 ---
 
+## [5.0.0] — 2026-11-16
+
+### Bug Fixes
+- Check formatting is red on release/next (biome, 3 errors) (#668) (#676)
+- **deliver**: Exit 3 for a missing release/next in the docs and in objective mode (#648) (#664)
+- **deliver**: A merged issue unblocks its dependents and an incomplete run does not end as succeeded (#688) (#697)
+- **deliver**: A session always merges the base branch, never rebases (#701) (#703)
+- **test**: Cap vitest workers at 4 so loop cases do not time out locally (#679) (#708)
+
+
+### Documentation
+- **deliver**: Merge row of the preflight table names the missing release/next (#649) (#665)
+- **deliver**: Site, shim and installer describe the new loop (#695) (#711)
+
+
+### Features
+- **deliver**: Loop core in TypeScript with arguments, GitHub state and stop rules (#613) (#653)
+- **deliver**: LoopHost interface, process host and session record parsers (#614) (#662)
+- **deliver**: The loop sets a blocked or paused PBI aside and goes on (#655) (#677)
+- **deliver**: A harness or GitHub failure does not count against a PBI (#672) (#678)
+- **deliver**: The loop creates a missing release/next itself (#671) (#684)
+- **deliver**: Deliver-min, the minimal skill with its loop, the GitHub tracker and tests (#687) (#696)
+- **deliver**: The loop ends a finished milestone with the release pull request (#690) (#698)
+- **deliver**: The loop runs on Windows (#689) (#699)
+- **deliver**: The loop mints the session token from the GitHub App (#692) (#702)
+- **deliver**: The Copilot harness delivers an issue (#691) (#700)
+- **deliver**: Deliver-loop checks the set and prints a run plan before it starts (#673) (#704)
+- **deliver**: Deliver-loop refine collects the open questions of a set before a run (#675) (#706)
+
+
+### Refactoring
+- **deliver**: Remove the desktop notifications of the loop (#705) (#707)
+- ⚠️ **Breaking**: **deliver**: Remove the old deliver skill, the PowerShell loop and the Objective mode (#693) (#709)
+- **deliver**: Deliver-min becomes deliver (#694) (#710)
+
+
 ## [4.4.0] — 2026-11-15
 
 ### Bug Fixes
@@ -27,6 +63,7 @@ Versioning follows [Semantic Versioning](https://semver.org/).
 - **deliver**: Document ignored invalid Requires refs and stale context.md removal (#596) (#627)
 - Refresh ROADMAP.md with M015 to M017 and the releases up to v4.3.1 (#638) (#639)
 - **adr**: The deliver loop runs as TypeScript on Node behind a host interface (#612) (#622)
+- Update CHANGELOG.md for v4.4.0 [skip ci]
 
 
 ### Features
