@@ -18,15 +18,7 @@ An `[Objective]` (label `objective`) is the level above the Epic, an outcome tha
 - `released`: the milestone is closed (`github-milestone close`).
 - `rc` (the normal case): the `release-test` issue of the milestone carries the marker `<!-- release-test-rc -->`.
 - Code dependencies between issues stay native `blocked-by` links, never `Requires`.
-- An invalid `<owner>/<repo>` (not two segments of letters, digits, `.`, `_`, `-`, and neither `.` nor `..`; #574) is not used: `Get-ObjectiveStatus.ps1` reports `Requires: invalid <owner>/<repo> '<ref>' in <source> ignored` on stderr and drops that line; the other `Requires:` lines still count.
-
-## Runner marker
-
-One comment per Objective, replaced in place, never a second one:
-
-`<!-- objective-runner: host=<machine|cloud-id> since=<iso> heartbeat=<iso> -->`
-
-`host` is the machine or cloud id that runs the Objective, `since` the start, `heartbeat` the last sign of life (ISO 8601, UTC). A heartbeat older than 30 minutes is dead. `deliver-loop -Objective` sets the marker, refreshes the heartbeat every 10 minutes and hands over with `deliver-loop takeover <objective> [-Force]` or `deliver-loop release <objective>` (`deliver` `references/loop.md`, Objective).
+- An invalid `<owner>/<repo>` (not two segments of letters, digits, `.`, `_`, `-`, and neither `.` nor `..`; #574) is not used: the line is dropped, the other `Requires:` lines still count.
 
 ## Closing
 

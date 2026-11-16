@@ -100,13 +100,13 @@ describe('the home page', () => {
     // VitePress keeps the first renderer it creates: every test passes the full markdown options.
     const md = await createMarkdownRenderer(resolve(repoRoot, 'site'), config.markdown, '/');
     const html = md.render(
-      '[o](site/overview.md) [f](site/usage/statusline.md#x) [a](AGENTS.md) [p](skills/delivery/deliver) [w](https://agentskills.io) [d](docs/adr/0001-agent-progress-events.md)',
+      '[o](site/overview.md) [f](site/usage/statusline.md#x) [a](AGENTS.md) [p](skills/delivery/planner) [w](https://agentskills.io) [d](docs/adr/0001-agent-progress-events.md)',
       { relativePath: 'index.md', path: resolve(repoRoot, 'site/index.md'), cleanUrls: true },
     );
     expect(html).toContain('href="./overview"');
     expect(html).toContain('href="./usage/statusline#x"');
     expect(html).toContain(`href="${GH}/blob/main/AGENTS.md"`);
-    expect(html).toContain(`href="${GH}/tree/main/skills/delivery/deliver"`);
+    expect(html).toContain(`href="${GH}/tree/main/skills/delivery/planner"`);
     expect(html).toContain('href="https://agentskills.io"');
     expect(html).toContain(`href="${GH}/blob/main/docs/adr/0001-agent-progress-events.md"`);
   });

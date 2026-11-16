@@ -1,6 +1,6 @@
 # ADR 0001: Agent progress events replace status.json
 
-- Status: Accepted; the terminal sink of the emitter superseded in part by [ADR 0002](0002-displays-read-the-progress-events.md); the location of the schema and the fixtures superseded in part by [ADR 0003](0003-the-progress-event-format-lives-in-agent-events.md)
+- Status: Superseded by [#693](https://github.com/GravionLabs/skills/issues/693): the old `deliver` skill, its PowerShell loop and the Objective mode were removed (branch `archive/deliver-v1` keeps them) (was: Accepted; the terminal sink of the emitter superseded in part by [ADR 0002](0002-displays-read-the-progress-events.md); the location of the schema and the fixtures superseded in part by [ADR 0003](0003-the-progress-event-format-lives-in-agent-events.md))
 - Date: 2026-11-07
 - Issues: #368, #329, #331, #332
 - Builds on: the terminal backend adapter of #331 (`scripts/TerminalBackend.ps1`)

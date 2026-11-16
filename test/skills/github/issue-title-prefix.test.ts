@@ -61,12 +61,5 @@ describe('github-issue level-prefixed titles', () => {
       '`[PBI] feat(adapters): read the subagents of Claude Code workflows` → `feat(adapters): read the subagents of Claude Code workflows (#436)`',
     );
     expect(step).not.toContain('60 chars');
-    const deliver = readFileSync(
-      path.resolve(__dirname, '../../../skills/delivery/deliver/SKILL.md'),
-      'utf-8',
-    );
-    expect(deliver).toContain(
-      'its title is the issue title without the level prefix, `(#<nr>)` appended',
-    );
   });
 });

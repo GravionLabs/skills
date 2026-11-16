@@ -29,10 +29,7 @@ describe('.claude/settings.json', () => {
     'Bash(pnpm run format:*)',
     'Bash(pnpm run lint:ps)',
     'Bash(pnpm run check)',
-    'Bash(pwsh .claude/skills/deliver/scripts/Report-Progress.ps1:*)',
     'Bash(poimen-server report:*)',
-    'Bash(pwsh ~/.claude/skills/deliver/scripts/Remove-PbiWorktrees.ps1:*)',
-    'Bash(pwsh .claude/skills/deliver/scripts/Remove-PbiWorktrees.ps1:*)',
     'Edit',
     'Write',
   ])('allows %s', (entry) => {
@@ -47,6 +44,10 @@ describe('.claude/settings.json', () => {
         'Bash(gh pr merge --admin:*)',
       ]),
     );
+  });
+
+  it('carries no allowlist entry of the removed deliver skill (#693)', () => {
+    expect(settings.permissions.allow.filter((e) => /skills\/deliver\//.test(e))).toEqual([]);
   });
 
   it('has no Bash wildcard', () => {

@@ -108,7 +108,6 @@ describe.skipIf(!hasPwsh)('ConvertTo-Findings.ps1', () => {
 describe('findings docs', () => {
   it('deliver, contract and delivery doc name the mapping', () => {
     const rd = (p: string) => fs.readFileSync(path.join(root, p), 'utf8');
-    expect(rd('skills/delivery/deliver/SKILL.md')).toContain('ConvertTo-Findings.ps1');
     expect(rd('skills/shared/code-review/references/reviewer-contract.md')).toContain('findings');
     expect(rd('site/delivery.md')).toContain('.agents/state/findings.json');
     expect(rd('site/delivery.md')).toContain('poimen');

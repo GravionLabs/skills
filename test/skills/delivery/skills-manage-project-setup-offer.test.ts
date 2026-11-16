@@ -12,7 +12,7 @@ const installer = read('scripts/Install-Skills.ps1');
 
 describe('skills-manage offers project-setup after an install', () => {
   it('SKILL.md asks after a project install only and delegates', () => {
-    const step = skill.split('\n').find((l) => l.startsWith('6.')) ?? '';
+    const step = skill.split('\n').find((l) => l.startsWith('5.')) ?? '';
     expect(step).toContain('not `-g`');
     expect(step).toContain('ask');
     expect(step).toContain('`/project-setup`');

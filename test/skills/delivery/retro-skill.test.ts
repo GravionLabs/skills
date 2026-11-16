@@ -22,8 +22,8 @@ describe('retro SKILL.md', () => {
     expect(text).toMatch(/same file and title in two or more PRs/);
   });
 
-  it('takes escalation lines from the deliver report', () => {
-    expect(text).toMatch(/Escalation lines[^\n]*final report of `deliver`/);
+  it('takes escalation lines from the deliver-min report', () => {
+    expect(text).toMatch(/Escalation lines[^\n]*final report of `deliver-min`/);
     expect(text).toContain('"no run report"');
   });
 

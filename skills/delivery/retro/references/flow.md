@@ -6,9 +6,9 @@ Load this for step 8 of `retro`. The diagram shows which agent was called in whi
 
 1. An `agentlens` timeline of subagent calls (role, start, end), if the installed version has one (check `agentlens --help`).
 2. Otherwise the `Agent`/`Task` tool calls of the session transcript: role from the call's description (`implement #<nr>`, `review`, `fix`, `release-review`), order from the timestamps of the calls.
-3. Neither available: write `flow not measured` instead of a diagram. Do not reconstruct the order from the `deliver` procedure.
+3. Neither available: write `flow not measured` instead of a diagram. Do not reconstruct the order from the `deliver-min` procedure.
 
-Results on the arrows come from `gh` and the `deliver` report: blocking findings of the review, checks green or red, merged, paused (`needs-decision`).
+Results on the arrows come from `gh` and the `deliver-min` report: blocking findings of the review, checks green or red, merged, paused (`needs-decision`).
 
 ## Procedure
 

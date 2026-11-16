@@ -10,7 +10,6 @@ Interview the user until no open question is left. Adapted from the `grilling` s
 One of:
 
 - an issue number: read it (`gh issue view <nr>`), derive the open decisions from its body and comments;
-- a refine list `.agents/deliver-loop/refine/<timestamp>.json` of `deliver-loop refine` (per entry `number`, `url`, `status`, `questions`): take the entries with open questions, every question with its issue; the answers go under `## Decisions` of that issue, and when it has no open question left, remove `needs-refinement`;
 - a plan's `questions[]` (format: `planner` `references/questions.md`);
 - a free description of what is undecided.
 

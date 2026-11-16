@@ -1,6 +1,6 @@
 # ADR 0004: Objectives coordinate milestones across repositories
 
-- Status: Proposed
+- Status: Superseded by [#693](https://github.com/GravionLabs/skills/issues/693): the old `deliver` skill, its PowerShell loop and the Objective mode were removed (branch `archive/deliver-v1` keeps them)
 - Date: 2026-11-11
 - Issues: #533, #531
 

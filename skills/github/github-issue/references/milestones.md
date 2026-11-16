@@ -1,6 +1,6 @@
 # Milestones and the issue levels
 
-A milestone is a release and holds the work items that are delivered. The rule is written here once; `planner`, `roadmap`, `deliver` and `github-milestone` follow and check it. Its title is `M<nnn>` (three digits, `M001` to `M999`; the lookup accepts `M11` for `M011`), see `github-milestone`.
+A milestone is a release and holds the work items that are delivered. The rule is written here once; `planner`, `roadmap`, `deliver-min` and `github-milestone` follow and check it. Its title is `M<nnn>` (three digits, `M001` to `M999`; the lookup accepts `M11` for `M011`), see `github-milestone`.
 
 | Level     | Milestone                                                          |
 | :-------- | :----------------------------------------------------------------- |
@@ -10,7 +10,7 @@ A milestone is a release and holds the work items that are delivered. The rule i
 | Epic      | Never.                                                             |
 | Objective | Never (it spans repos and releases).                               |
 
-Why: `deliver --milestone` takes the open PBIs and Bugs of the milestone plus the work items below the Features in it. A Feature in the milestone with PBIs outside of it pulls those in, and they then do not count in the milestone progress. `deliver` therefore skips such an item (`#<nr> select: outside M<nnn>, skipped`); `/deliver <feature>` without `--milestone` delivers all its PBIs as before.
+Why: `deliver-min --milestone` takes the open PBIs and Bugs of the milestone plus the work items below the Features in it. A Feature in the milestone with PBIs outside of it pulls those in, and they then do not count in the milestone progress. `deliver-min` therefore skips such an item (`#<nr> select: outside M<nnn>, skipped`); `/deliver <feature>` without `--milestone` delivers all its PBIs as before.
 
 ## Setting a milestone
 
@@ -18,7 +18,7 @@ Only `github-milestone assign M<nnn>|none #<nr> …` sets or clears the mileston
 
 ## Release test
 
-One `release-test` per milestone (label `pbi` + `release-test`, usually `interactive`): the manual platform test on the release candidate. Rule: one `release-test` per milestone, always last, never a gate unless `release.test.gate` is true (then the RC test blocks the release; see `release-review.md`, `project-config.md`). `deliver` never selects it as work: step 9 cuts the RC once no other `pbi`/`bug` of the milestone is open and posts it on the release-test issue, which stays open for the human (`select: release test, left for step 9`; with open items before, `release test, waits for <n> open items`); `interactive` stays on it.
+One `release-test` per milestone (label `pbi` + `release-test`, usually `interactive`): the manual platform test on the release candidate. Rule: one `release-test` per milestone, always last, never a gate unless `release.test.gate` is true (then the RC test blocks the release; see `release-review.md`, `project-config.md`). `deliver-min` never selects it as work: step 9 cuts the RC once no other `pbi`/`bug` of the milestone is open and posts it on the release-test issue, which stays open for the human (`select: release test, left for step 9`; with open items before, `release test, waits for <n> open items`); `interactive` stays on it.
 
 RC of a desktop app (Tauri): every RC and beta build has its own identifier `<identifier>.rc`, product name `<Name> RC`, its own runtime, config and data paths and no auto-update, so it installs side by side with the stable build. The release test installs that RC next to the stable app and never runs on a `tauri dev` build; update checks run on the stable app only.
 
