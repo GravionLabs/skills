@@ -30,7 +30,6 @@ if ($Action -notin 'takeover', 'release' -or $Objective -notmatch '^([^/\s#]+/[^
 }
 $repo = $Matches[1]; $nr = [int]$Matches[2]
 function Write-Step([string]$text, [string]$Color = '') { [void]$Color; Write-Output $text }
-function Send-Notice([string]$text) { [void]$text }
 . (Join-Path $PSScriptRoot 'ObjectiveLoop.ps1')
 $hostId = Get-RunnerHostId
 

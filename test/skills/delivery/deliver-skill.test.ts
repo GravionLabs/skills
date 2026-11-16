@@ -21,7 +21,7 @@ describe('deliver SKILL.md', () => {
     expect(text).toContain("opencode/autoinvoke: 'false'");
   });
 
-  it('emits the attention kinds the loop notifications depend on (#400)', () => {
+  it('emits the attention kinds the loop and the displays depend on (#400)', () => {
     const steps = body.slice(body.indexOf('## Steps'), body.indexOf('1. **Select.**'));
     for (const kind of ['review_fix', 'ci_red', 'paused', 'blocked', 'needs_you']) {
       expect(steps).toMatch(new RegExp('-Kind[^)]*\\b' + kind + '\\b'));

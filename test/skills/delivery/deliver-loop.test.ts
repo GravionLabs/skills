@@ -74,7 +74,7 @@ describe.skipIf(!hasPwsh || process.platform === 'win32')('Invoke-DeliverLoop.ps
       { type: 'session.idle', data: {} },
     ];
 
-    it('starts copilot -p per PBI with the default model auto (#220) and non-interactive permissions, logs steps and notices; stop rules and exit code as for claude', async () => {
+    it('starts copilot -p per PBI with the default model auto (#220) and non-interactive permissions, logs steps; stop rules and exit code as for claude', async () => {
       const gh = fx.setup({
         issues: { 7: pbi() },
         effect: 'close-first',
@@ -100,10 +100,6 @@ describe.skipIf(!hasPwsh || process.platform === 'win32')('Invoke-DeliverLoop.ps
       expect(lines).toMatch(/\d\d:\d\d:\d\d bash ls -la/);
       expect(lines).toMatch(/\d\d:\d\d:\d\d \[subagent\] view src\/a\.ts/);
       expect(lines).toMatch(/\d\d:\d\d:\d\d ✗ boom/);
-      if (process.platform === 'darwin') {
-        // osascript stub: notifications exist only on macOS
-        expect(fx.read('notices.txt')).toContain('#7 CI red');
-      }
       expect(r.stdout).toContain('loop result: done');
       expect(fs.existsSync(path.join(fx.cwd, '.agents/deliver-loop.ansi.log'))).toBe(false);
     });

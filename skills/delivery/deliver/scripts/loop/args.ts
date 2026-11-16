@@ -12,7 +12,6 @@ export type LoopArgs = {
   objective: string;
   logPane: boolean;
   noColor: boolean;
-  noNotify: boolean;
   noPreflight: boolean;
   dryRun: boolean;
 };
@@ -86,7 +85,6 @@ export function parseArgs(argv: string[]): ParseResult {
       objective,
       logPane: on.has('logpane'),
       noColor: on.has('nocolor'),
-      noNotify: on.has('nonotify'),
       noPreflight,
       dryRun,
     },

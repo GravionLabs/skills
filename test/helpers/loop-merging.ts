@@ -56,7 +56,7 @@ if (n === 1) {
   fs.writeFileSync(path.join(gh.bin, 'claude'), `#!/bin/sh\nnode ${cwd}/harness.js\n`, {
     mode: 0o755,
   });
-  for (const b of ['herdr', 'osascript'])
+  for (const b of ['herdr'])
     fs.writeFileSync(path.join(gh.bin, b), '#!/bin/sh\ntrue\n', { mode: 0o755 });
   return { cwd, gh };
 };

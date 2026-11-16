@@ -225,7 +225,5 @@ describe('test host', () => {
     ]);
     const out = await collect(host.runSession(anyReq));
     expect(out.at(-1)).toEqual({ kind: 'exit', code: 0 });
-    host.notice('hi', 'info');
-    expect(host.notices).toEqual([{ text: 'hi', tone: 'info' }]);
   });
 });
