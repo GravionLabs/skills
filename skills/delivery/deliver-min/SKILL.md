@@ -23,6 +23,8 @@ Input: `/deliver-min <nr> [--base <branch>] [--issue-file <path>]`. `<base>` is 
 
 An open pull request for the issue already exists: read its checks and its merge state, fix what is wrong (a check that is red because of this change, a conflict with `<base>`), push and end.
 
+To bring `<base>` into your branch (a conflict, or a branch that is only behind), always run `git merge origin/<base>` and push with a plain `git push`. Never rebase and never force-push: a rebase rewrites history and the push is denied.
+
 ## Rules
 
 - Never ask. An unclear acceptance criterion, or work the issue does not describe: comment on the issue with the question, add the label `needs-decision`, and end without a pull request. Never build extra work silently.

@@ -791,3 +791,11 @@ describe('starting the harness on Windows', () => {
     expect(promptPath('C:\\Users\\Jane Doe\\11.issue.md')).toBe('"C:/Users/Jane Doe/11.issue.md"');
   });
 });
+
+describe('deliver-min SKILL.md branch update rule', () => {
+  const text = readFileSync(path.join(skill, 'SKILL.md'), 'utf8');
+  it('tells the session to merge the base, never rebase or force-push', () => {
+    expect(text).toContain('git merge origin/<base>');
+    expect(text).toMatch(/Never rebase and never force-push/);
+  });
+});
