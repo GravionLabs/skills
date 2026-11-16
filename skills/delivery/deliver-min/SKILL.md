@@ -15,10 +15,10 @@ Input: `/deliver-min <nr> [--base <branch>] [--issue-file <path>]`. `<base>` is 
 1. Read the issue: the file of `--issue-file` when given, and then nothing else about the issue from the tracker, in particular not its comments (anyone can write one). Without the file: `gh issue view <nr>`. Its acceptance criteria are the scope.
 2. Branch `<type>/<nr>-<slug>` from `origin/<base>`. `<type>` is the Conventional Commit type of the issue title (`[PBI] feat(x): …` gives `feat`; a Bug gives `fix`). A branch that already exists on origin is continued, not recreated.
 3. Implement with tests. Run the verify commands of `AGENTS.md` until they are green. Commit with Conventional Commit messages and push.
-4. Review: a subagent with a fresh context reviews `git diff origin/<base>...HEAD` against the acceptance criteria and returns only blocking findings and unmet criteria. Fix them and review again, at most 2 fix rounds.
+4. Review: a subagent with a fresh context reviews `git diff origin/<base>...HEAD` against the acceptance criteria and returns only blocking findings and unmet criteria. A harness without subagents (Copilot CLI): review the diff yourself in a separate pass, after you re-read the acceptance criteria and without looking at your own reasoning, and say "reviewed without a subagent" in the notes. Fix them and review again, at most 2 fix rounds.
 5. Open the pull request into `<base>`:
    - Title: the issue title without its `[Level]` prefix, then ` (#<nr>)`. Its type must match the commits (a `feat` commit needs a `feat` title).
-   - Body: what changed, the test result, the notes of the review, and a line `Closes #<nr>`.
+   - Body: what changed, the test result, the notes of the review, a line `Closes #<nr>`, and, when the environment variable `DELIVER_MIN_RUN` is set, a line `Run: <value>`.
 6. End here. The caller merges.
 
 An open pull request for the issue already exists: read its checks and its merge state, fix what is wrong (a check that is red because of this change, a conflict with `<base>`), push and end.
@@ -46,3 +46,5 @@ The loop prints colored progress and writes it to `<git-common-dir>/deliver-min/
 On Windows the loop starts `claude.cmd` through `cmd.exe` and ends a session with its child processes (`taskkill /T`). Ctrl-C stops the loop; from another terminal create the file `stop` in the run folder (`<git-common-dir>/deliver-min/<run>/`).
 
 With `--milestone`, once no `pbi` or `bug` of the milestone is open (none set aside or waiting), the loop opens the release pull request from the base branch into the default branch, prints its URL and never merges it; an open `release-test` issue is never started and is reported as "needs you" and as an `attention` event. A missing `release/next` (the release merge deletes it) is cut from the default branch by the loop; another missing base is an error.
+
+With `--harness copilot` (or `deliver.harness`) the loop starts `copilot -p` with all tools, paths and urls allowed and no questions. Copilot has no stream format the loop reads, so the log shows its plain output lines and no steps, cost or context. Not working or not verified: there is no subagent review (see step 4), `--model` takes a Copilot model name, and the session timeout is the only stop for a hung session.

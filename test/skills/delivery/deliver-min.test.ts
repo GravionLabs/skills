@@ -25,6 +25,7 @@ import {
   promptPath,
   resolveWindows,
 } from '../../../skills/delivery/deliver-min/scripts/process.mts';
+import { HARNESSES } from '../../../skills/delivery/deliver-min/scripts/harness.mts';
 import { checkVerdict } from '../../../skills/delivery/deliver-min/scripts/tracker/github.mts';
 
 const skill = path.resolve(__dirname, '../../../skills/delivery/deliver-min');
@@ -53,6 +54,7 @@ type Outcome = {
   sessions: {
     id: number;
     prompt: string;
+    run: string | null;
     ghToken: string | null;
     hasSessionTokenVariable: boolean;
   }[];
@@ -398,6 +400,24 @@ describe('deliver-min loop', () => {
     expect(out.status).toBe(0);
     expect(out.sessions).toHaveLength(1);
     expect(out.merges).toHaveLength(1);
+  });
+
+  it('names the run to the session, so the pull request body can carry it', async () => {
+    const out = await loop({ items: [{ id: 103, title: '[PBI] feat: run' }] });
+    expect(out.sessions[0]?.run).toMatch(/^\d{8}T\d{6}-\d+$/);
+  });
+
+  it('builds the copilot command with plain output and no questions', () => {
+    const argv = HARNESSES.copilot.command({ prompt: '/deliver-min 1' });
+    expect(argv.slice(0, 3)).toEqual(['copilot', '-p', '/deliver-min 1']);
+    expect(argv).toEqual(expect.arrayContaining(['--no-ask-user', '--no-color']));
+    expect(HARNESSES.copilot.claudeStream).toBe(false);
+    expect(
+      readFileSync(
+        path.resolve(__dirname, '../../../skills/delivery/deliver-min/SKILL.md'),
+        'utf8',
+      ),
+    ).toMatch(/without subagents/);
   });
 
   it('sets an issue aside when the session ends without a pull request', async () => {

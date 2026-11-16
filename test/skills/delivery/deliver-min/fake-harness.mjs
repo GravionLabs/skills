@@ -15,6 +15,7 @@ appendFileSync(
     id: Number(id),
     prompt,
     cwd: process.cwd(),
+    run: process.env.DELIVER_MIN_RUN ?? null,
     ghToken: process.env.GH_TOKEN ?? null,
     hasSessionTokenVariable: 'DELIVER_MIN_SESSION_TOKEN' in process.env,
   })}\n`,
