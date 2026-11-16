@@ -12,6 +12,7 @@ Planning only: no source edits. The planning steps below ask nothing (open decis
 - **Non-interactive** (a workflow subagent, e.g. `deliver` phase 1): no questions, no issue creation; return the plan with `questions[]` as data, the caller decides.
 - **Interactive** (a user session): plan, grill, approve, create (see `## Interactive`).
 - **`refine <nr>`**: see `## Refine`.
+- **`refine --check <nr…> --result <file>`**: read-only readiness check, see `## Check`.
 
 ## Interactive
 
@@ -33,6 +34,10 @@ Planning only: no source edits. The planning steps below ask nothing (open decis
 - Missing `Tier:` line (PBI or Bug, `references/ready.md`): add `Tier: <tier> — <reason>` to the body, the tier from the table of `references/plan-schema.md` (size S fast, M standard, L strong, else standard). Each change is listed in the report with its item and tier; an existing line is never changed. `refine M<nnn>` does this for every open PBI and Bug of the milestone and reports the items it changed (`references/ready.md`).
 - Milestone: the PBIs created in step 4 get the milestone the user names, else the one of the Feature; none known → ask once. Set it with `github-milestone assign M<nnn> #<nr> …`, not by hand; never set a milestone on an Epic, and a Feature only when all its PBIs are in it (`github-issue` `references/milestones.md`).
 - Labels: ready → remove `needs-refinement`; open decision left → add `needs-decision` and post the question as a comment. Create the label (`gh label create`) when the repository lacks it.
+
+## Check
+
+`refine --check <nr…> --result <file>` (started by `deliver-loop refine`, one session for the whole set): read-only. For every PBI or Bug run the Refine reading and the PBI list of `references/ready.md`; ask nothing, change no body, label or comment, add no `Tier:` line, create no issue. Write `<file>` as `{"items":[{"number":<nr>,"ready":true|false,"questions":["…"]}]}`, one item per number, `questions` empty when ready, one decision per question (facts the code answers are looked up). Large set: one subagent per PBI, the session merges the answers. The caller sets the labels and comments.
 
 ## Depth (exploration budget)
 

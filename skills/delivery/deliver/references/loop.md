@@ -7,6 +7,15 @@ pwsh <skill-dir>/scripts/Invoke-DeliverLoop.ps1 -Target 860,870 -Model opus
 
 Or with the shell command `deliver-loop` (`skills-manage` offers it after the `delivery` group): `deliver-loop -Milestone M004 -Max 5`. It resolves the installed script (project, `~/.claude/skills`, `~/.agents/skills`), passes all arguments through and exits 1 with a message when none is installed. In herdr (`HERDR_ENV=1`) it starts the loop in its own workspace `<repo> · deliver` (tab `deliver-loop`, `scripts/Start-LoopWorkspace.ps1`), because the herdr sidebar shows one state per workspace by the selected tab; outside herdr it runs in the current terminal.
 
+## Refine the set before a run (#675)
+
+```powershell
+deliver-loop refine -Milestone M004
+deliver-loop refine -Target 12,15 [-Model <m>] [-Harness copilot] [-DryRun]
+```
+
+`scripts/Invoke-RefineSet.ps1` resolves the open PBIs and Bugs of the set (a Feature or Epic target gives its open PBIs and Bugs) and starts **one** session of the harness for the whole set (`claude -p "/planner refine --check <nr…> --result <file>"`, Copilot analog; default model sonnet, Copilot `auto`; the session may use a subagent per PBI). `planner refine --check` is the read-only readiness check of `planner refine` (`planner` skill, `references/ready.md`): it asks nothing and writes only the result file. The script then applies it: a PBI with open questions gets `needs-refinement` and one comment with the questions, a ready PBI is not changed. It prints one list, per PBI `ready` or its questions with the issue URL, and writes it to `.agents/deliver-loop/refine/<timestamp>.json`; `/grill-me .agents/deliver-loop/refine/<timestamp>.json` puts the questions to you in one go and writes the answers under `## Decisions` of each issue. It is a command of its own, `deliver-loop` does not run it by itself. Exit 0 list printed, 1 no usable result (nothing changed), 2 empty set, 64 bad arguments. The run plan (`## Run plan`) then lists a PBI still on `needs-refinement` as not delivered.
+
 ## Model per PBI (tier)
 
 Without `-Model`, each iteration takes the model of the picked PBI's tier (`references/roles.md`): `Tier:` line of the body (`fast` haiku, `standard` sonnet, `strong` opus), else its size (S fast, M standard, L strong), else standard (sonnet). The loop logs it before the iteration, e.g. `#51 tier fast (Tier line) → model haiku`, and records the model in `progress.jsonl` (`iteration-start`). One REST read of the PBI body per iteration. `-Model <name>` passes that model for every PBI instead. With `-Harness copilot` the default stays `auto`.

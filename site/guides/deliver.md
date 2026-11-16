@@ -135,6 +135,8 @@ One session over a whole release grows large. `Invoke-DeliverLoop.ps1` starts a 
 deliver-loop -Milestone M004 -Max 5
 ```
 
+To collect the open questions of the whole set before the run, use `deliver-loop refine -Milestone M004` (or `-Target 12,15`): one model session runs the readiness check of `planner refine` for every open PBI and Bug, labels each PBI with open questions `needs-refinement`, comments the questions on it and prints one list (`ready`, or the questions, with the issue URL). Answer the list in one go with `/grill-me .agents/deliver-loop/refine/<timestamp>.json`; the answers go under `## Decisions` of each issue. A ready PBI is not changed.
+
 Without the shim, call the script by its full path:
 
 ```powershell
