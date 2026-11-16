@@ -18,6 +18,12 @@ function deliver-loop {
     try { & pwsh -NoProfile -File (Join-Path $dir 'scripts/Request-LoopStop.ps1') @stopArgs } finally { Pop-Location }
     return
   }
+  if ($args.Count -gt 0 -and "$($args[0])" -eq 'refine') {
+    $refineArgs = @($args | Select-Object -Skip 1 | ForEach-Object { if ($_ -is [array]) { $_ -join ',' } else { "$_" } })
+    Push-Location -LiteralPath $root
+    try { & pwsh -NoProfile -File (Join-Path $dir 'scripts/Invoke-RefineSet.ps1') @refineArgs } finally { Pop-Location }
+    return
+  }
   if ($args.Count -gt 0 -and "$($args[0])" -in 'takeover', 'release') {
     $runnerArgs = @($args | ForEach-Object { "$_" })
     Push-Location -LiteralPath $root

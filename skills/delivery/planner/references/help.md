@@ -9,6 +9,7 @@ Plans an issue one level down with blockers and sizes, grills the open decisions
 /planner <owner/repo#nr>
 /planner <free description>
 /planner refine <nr>
+/planner refine --check <nr…> --result <file>
 /planner help
 ```
 

@@ -17,6 +17,11 @@ deliver-loop() {
     (cd "$root" && pwsh -NoProfile -File "$dir/scripts/Request-LoopStop.ps1" "${stopargs[@]}")
     return $?
   fi
+  if [ "${1:-}" = refine ]; then
+    shift
+    (cd "$root" && pwsh -NoProfile -File "$dir/scripts/Invoke-RefineSet.ps1" "$@")
+    return $?
+  fi
   if [ "${1:-}" = takeover ] || [ "${1:-}" = release ]; then
     (cd "$root" && pwsh -NoProfile -File "$dir/scripts/Set-ObjectiveRunner.ps1" "$@")
     return $?
