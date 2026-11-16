@@ -131,7 +131,8 @@ const HARNESS_OVERRIDE: string[] | undefined = process.env.DELIVER_MIN_HARNESS
 const real = (file: string): string => {
   const full = path.resolve(file);
   try {
-    return realpathSync(full);
+    // native: only it expands Windows short names (RUNNER~1)
+    return realpathSync.native(full);
   } catch {
     const parent = path.dirname(full);
     return parent === full ? full : path.join(real(parent), path.basename(full));
