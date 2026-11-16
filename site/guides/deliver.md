@@ -1,160 +1,122 @@
 # Deliver issues with /deliver
 
-`/deliver` takes open PBIs and Bugs and carries each one to a merged PR in `release/next`, one subagent per step. This guide walks through the common runs. Review file, release review, decision PBIs, parallel runs and roles are in the [delivery reference](../delivery.md).
+`/deliver <nr>` takes one open PBI or Bug and delivers it as a pull request into the base branch (`release/next`). The `deliver-loop` runs it for a whole milestone or a list of issues: a fresh agent session per issue, each in its own worktree, and it merges the pull request once every required check passed. The reference is in [delivery](../delivery.md); coming from the PowerShell loop: [migrating](migrate-powershell-loop.md).
 
 ::: tip Prerequisites
 - `gh auth status` works and you can push to the repository.
-- The branch `release/next` exists (`github-release` `cut` creates it).
-- A GitHub ruleset on `release/next` with required checks and no bypass. It is the hard gate: a red check blocks the merge whatever the session does. `/deliver` warns at the start when there is none.
-- Unattended runs need `git`, `gh` and your verify commands on the harness allowlist (`references/permissions.md` of the `deliver` skill).
-- The [release guide](release.md) covers the branch, the milestone and the ruleset.
+- Node 24 or newer: the loop is TypeScript that Node runs directly (type stripping, no build); an older Node fails on the `.mts` file.
+- A GitHub ruleset on the base branch with required checks. The loop refuses a base without them.
+- The agent CLI of the harness (`claude`, or `copilot`) is installed and signed in.
+- `git`, `gh` and the verify commands of your `AGENTS.md` are allowed for the agent, otherwise an unattended session stops at a prompt.
   :::
+
+## One issue
+
+```text
+/deliver 42
+/deliver 42 --base main
+```
+
+The session reads the issue, branches `<type>/<nr>-<slug>` from `origin/<base>`, implements with tests, runs the verify commands of `AGENTS.md`, has a subagent review the diff against the acceptance criteria (at most 2 fix rounds), opens the pull request with `Closes #42` and ends. It never merges. Its last line is `result: pr <url>`, `result: needs-decision` or `result: blocked <reason>`. An unclear criterion is never guessed: the session comments on the issue, adds `needs-decision` and ends without a pull request.
+
+An existing branch is continued, and an open pull request is repaired (red check, conflict with the base) instead of recreated.
 
 ## The loop
 
 ```mermaid
 flowchart TD
-  S[select next PBI] --> I[implement]
-  I --> R[review]
-  R -->|blocking, fix round 1..2| F[fix]
-  F --> R
-  R -->|clean| PR[PR into release/next]
-  PR --> C[required checks]
-  C -->|red by this change| F
+  S[next ready issue] --> W[worktree at origin/base]
+  W --> A[fresh agent session: /deliver nr]
+  A -->|pull request| C[wait for required checks]
   C -->|green| M[squash merge]
-  M --> X[close issue]
-  X -->|more PBIs| S
-  X -->|--milestone, none left| RR[release review]
-  RR -->|no blocking| RP[release PR into main, a person merges]
-  RR -->|blocking| B[Bug issues, run again]
+  C -->|red| A
+  M -->|more issues| S
+  M -->|milestone done| R[release pull request into main, a person merges]
 ```
-
-Fix rounds are at most 2 per PBI, shared by review and CI; a third is a pause. The merge never asks when the review is clean and the checks are green.
-
-## Deliver one PBI
-
-```text
-/deliver 42
-```
-
-`deliver` prints one line per step and ends with a report (shortened). Each line is also reported as a progress event through `Report-Progress.ps1`, whatever the terminal: herdr and poimen show it in their sidebar, other terminals ignore it.
-
-```text
-#42 select: next, claimed
-#42 implement: done, 3 commits, tests green
-#42 review: 1 blocking -> fix 1/2
-#42 review: clean
-#42 pr: #57
-#42 ci: green
-#42 merge: squashed, issue closed
-#42 cleanup: 2 removed
-
-delivered: #42 https://github.com/acme/app/pull/57
-blocked:   -
-paused:    -
-```
-
-A blocked PBI (a red check unrelated to the change, for example) is listed with its reason and open PR; a paused one with its question. Interactive runs ask you right away: retry, skip or give an instruction.
-
-## Status of a milestone
-
-With `--milestone`, `deliver` prints a status block of at most 10 lines after each PBI and in the report: progress, delivered in this run, ready, waiting, what needs you (decisions, `interactive`, manual tests, the release PR to merge), release state and the next milestone, every issue as a full URL with its title. `/deliver status --milestone M004` prints it without delivering; `pwsh scripts/Get-DeliverStatus.ps1 -Milestone M004 [-Text]` gives the same as JSON or text.
-
-## Deliver a Feature or several issues
-
-```text
-/deliver 7
-/deliver 9 11 14
-```
-
-A Feature or Epic expands to its open PBIs and Bugs. They are ordered by their blocked-by links and each is delivered once. Issues with a blocking label are skipped (labels: [issue model](../concepts/issue-model.md#labels); hint `planner refine <nr>`). A Feature without PBIs is planned in the same session with `planner` and `grill-me` ([plan an issue](plan-an-issue.md)).
-
-## Deliver a milestone
-
-```text
-/deliver --milestone M004
-```
-
-Name the milestone `M<nnn>`: `M004` finds the open `M004` and, after `/github-milestone close M004` renamed it, `M004 (0.2.0)`, so the same command and the same release-review state work before and after the rename. A legacy title such as `1.3.0` works as before; to move a repository to `M<nnn>` see [Migrate legacy milestones](release.md#migrate-legacy-milestones), the old `release-review-<title>.json` files stay as history.
-
-Delivers every open PBI and Bug of the milestone. A PBI or Bug that you reach only through a Feature or Epic of the milestone, and that has no or another milestone, is reported (`#42 select: outside M004, skipped`) and not delivered: set its milestone, or move it into `M004`. `/deliver <feature>` without `--milestone` still delivers all the PBIs of the Feature. The rule is explained in the [issue model](../concepts/issue-model.md#milestones). When none is left, `deliver` runs a release review of the whole release diff. Without blocking findings it cuts the release candidate, posts it on the `release-test` issue and opens the release PR into `main` without waiting for the RC test (`release.test.gate: true` in `.agents/config.json` waits for it) and stops: you review and merge that one. With blocking findings it files one Bug per finding in the milestone; run the command again to deliver them. With the release PR `deliver` ends with the hint to run `/github-milestone close M004` once that PR is merged and tagged.
-
-## Interactive or unattended
-
-By default an unclear criterion, extra scope or a blocker asks you in the chat. With `--unattended` (`claude -p`, `opencode run`, `copilot -p`) nothing is asked: `deliver` comments on the issue, adds `needs-decision` and continues with the next independent PBI.
-
-```text
-/deliver 7 --unattended
-```
-
-Example of a pause, the comment on #43:
-
-```text
-deliver paused: criterion 2 ("export in the usual format") does not say which format.
-Options: CSV or JSON. Answer here and remove the label needs-decision.
-```
-
-To continue: answer in the issue, remove the label (`gh issue edit 43 --remove-label needs-decision`) and run `/deliver 43` again. The report lists the paused PBI under `paused` with the question.
-
-## Resume after a stop
-
-State lives in GitHub only (issue, branch, PR, checks). After a crash, a closed terminal or a pause, run the same command again: an existing branch is continued, an existing PR skips straight to the checks, closed issues are not selected. `/deliver <nr>` on a single PBI continues it even when another session claimed it.
-
-## Limit a run with --max
-
-```text
-/deliver --milestone M004 --max 3
-```
-
-`--max <n>` stops after `n` delivered, blocked or paused PBIs and prints the report. Run it again for the next batch.
-
-## A milestone as a control session
-
-An interactive `/deliver --milestone M004` (or a Feature or Epic with more than three PBIs, `deliver.loopThreshold` in `.agents/config.json`) does not deliver the PBIs in your session. It starts the loop below in the background (in herdr in its own workspace), prints the progress and the status block between PBIs, and stays small:
-
-- a `needs-decision` PBI is shown to you; after your answer the label is removed and the loop continues
-- `interactive` PBIs are delivered by this session, because they cannot run unattended
-- the release review and release PR run once in this session after the loop ends `done`
-- past `deliver.controlContextTokens` (default 200000) it prints the status block and the resume command and stops; run `/deliver --milestone M004` again
-
-`/deliver --milestone M004 --inline` keeps the old behavior: this session delivers every PBI itself. Details: `references/control.md` of the `deliver` skill.
-
-## Feedback during a run
-
-Tell the session what you see while testing (a defect, a UI wish, an idea) and it drafts an issue per finding instead of changing code: `[Bug]` with repro or `[PBI]` with acceptance criteria, `Tier:` and `Size:`, shown in at most 6 lines. After your confirmation it is created in the current milestone (or the one you name) with `github-issue`; screenshots are referenced in the body. Small, clear items are ready and the same run picks them up; unclear ones get `needs-refinement` (`planner refine <nr>`). "Fix it now" delivers a PBI through the normal steps. Details: `references/feedback.md` of the `deliver` skill.
-
-## Preflight
-
-Before the first PBI `deliver` checks the repository and prints one line per check (ok, fixed or action needed): the stack skills of `detect-techstack` are installed in the project and not older than the global ones (missing: `skills-manage`, after one question; unattended the run continues with the global skills), `git`, `gh`, `pwsh <skill-dir>/scripts/*` and the verify commands of `AGENTS.md` are on the allowlist (missing lines are listed, interactive offers to add them), and worktrees of merged or deleted PBI branches are removed (others are listed). `--no-preflight` skips it. Details: `references/preflight.md` of the `deliver` skill.
-
-## A release in fresh sessions
-
-One session over a whole release grows large. `Invoke-DeliverLoop.ps1` starts a fresh `claude -p "/deliver … --unattended --max 1"` per PBI and reads the progress from GitHub. `skills-manage` offers the `deliver-loop` shim (`Install-LoopShim.ps1`), so you start it from any shell:
 
 ```powershell
-deliver-loop -Milestone M004 -Max 5
+deliver-loop --milestone M004
+deliver-loop --issues 12,15 --max 3
+deliver-loop --milestone M004 --dry-run
 ```
 
-Without the shim, call the script by its full path:
+Install the `deliver-loop` command with `skills-manage` ([launcher](#the-deliver-loop-command)). Without it: `node <skill-dir>/scripts/deliver-loop.mts --milestone M004`.
+
+The loop reads the state from the tracker before every issue and remembers only what it set aside, so it can be stopped and started again. It orders the issues by their blocked-by links, skips those with `needs-decision`, `needs-refinement` or an open blocker, and merges one pull request before the next issue starts. `--dry-run` prints the order, the required checks and the session token source and starts nothing.
+
+Name the milestone `M<nnn>` (`M004`): the lookup finds the open `M004` and, after `/github-milestone close M004` renamed it, `M004 (0.2.0)`. A legacy title such as `1.3.0` works as before; to move a repository to `M<nnn>` see [Migrate legacy milestones](release.md#migrate-legacy-milestones).
+
+With `--milestone`, once no PBI or Bug of the milestone is open (none set aside or waiting), the loop opens the release pull request from the base into the default branch and prints its URL. It never merges it. An open `release-test` issue is never started: it is listed as needs you. A missing `release/next` (the release merge deletes it) is cut from the default branch.
+
+## Options
+
+| Option                       | Meaning                                                                           |
+| :--------------------------- | :-------------------------------------------------------------------------------- |
+| `--milestone <M>`            | The open work items of a milestone. Exactly one of `--milestone` and `--issues`.  |
+| `--issues <nr,…>`            | These issues.                                                                     |
+| `--base <branch>`            | Base branch. Default `deliver.base`, else `release/next`.                         |
+| `--harness <name>`           | `claude` (default) or `copilot`. `--model <name>` passes a model of that harness. |
+| `--max <n>`                  | Stops after `n` issues.                                                           |
+| `--session-minutes <n>`      | Longest session. Default 90.                                                      |
+| `--merge-minutes <n>`        | How long it waits for checks after a pull request. Default 30.                    |
+| `--dry-run`                  | Print the plan, start nothing.                                                    |
+| `--allow-no-required-checks` | Deliver into a base without required checks.                                      |
+| `--trust-authors`            | Also deliver issues of authors without write access.                              |
+
+Exit codes: 0 everything done or `--max` reached, 2 open issues remain and none is ready, 3 the base is missing or has no required checks, 64 wrong arguments or settings, 130 stopped with Ctrl+C. Colored progress goes to the terminal (`NO_COLOR` turns it off) and to `<git-common-dir>/deliver/loop.log`; to stop from another terminal create the file `stop` in the run folder `<git-common-dir>/deliver/<run>/`.
+
+## Settings
+
+Optional, under `deliver` in `.agents/config.json` ([project config](../usage/project-config.md#deliver)); the flag of the same name wins.
+
+| Key              | Default                                                      |
+| :--------------- | :----------------------------------------------------------- |
+| `base`           | `release/next`                                               |
+| `tracker`        | `github` (`scripts/tracker/<name>.mts`)                      |
+| `harness`        | `claude`; a name only, a repository cannot set a command     |
+| `protectedPaths` | `.github/`, `.agents/`, `.claude/` and the package manifests |
+
+Other keys (`roles`, `loopThreshold`, `parallel`, `sessionTimeoutMinutes`) are ignored with one warning line. `DELIVER_MIN_<X>` variables are read as `DELIVER_<X>` for one more release, with a warning.
+
+## What the loop refuses
+
+- **A base without required checks.** Nothing would guard the merge. Add a ruleset with required checks, or pass `--allow-no-required-checks`. Exit 3.
+- **Issues of authors without write access.** Anyone can open an issue, and its text becomes the task of an agent. Such an issue is listed as waiting (`author has no write access`); `--trust-authors` delivers it.
+- **Pull requests that change protected paths.** The loop does not merge a pull request that touches `.github/`, `.agents/`, `.claude/` or a package manifest (a workflow or an agent setting would let a change run with more rights). It says why and leaves the merge to you. `deliver.protectedPaths` replaces the list.
+- **A merge before the checks have reported.** The loop merges only when every required check has reported and passed, with your own login.
+
+## The session token
+
+The agent session runs with a token of its own instead of your login, so it can push its branch and open the pull request but nothing more.
+
+- **GitHub App (preferred).** Set `DELIVER_APP_ID` and the private key as a file (`DELIVER_APP_KEY_FILE`) or as a command that prints it (`DELIVER_APP_KEY_COMMAND`, for example `op read …`). The loop mints an installation token for the repository of the run (contents, pull requests and issues write; no workflows, no administration) and renews it before a session starts when less than `--session-minutes` of it is left. A token lives one hour, so keep `--session-minutes` below 60 with an app. A failed mint sets the issue aside; the loop never falls back to your login.
+- **`DELIVER_SESSION_TOKEN`.** A fine-grained token limited to the repository.
+- **Neither.** The loop says that the session uses your login.
+
+The key is never logged, written to events or the run folder, or passed to the session.
+
+## The deliver-loop command
+
+`skills-manage` writes a launcher file instead of a shell function:
 
 ```powershell
-pwsh .claude/skills/deliver/scripts/Invoke-DeliverLoop.ps1 -Milestone M004 -Max 5
+pwsh <skill-dir>/scripts/Install-LoopShim.ps1 -DryRun
+pwsh <skill-dir>/scripts/Install-LoopShim.ps1
 ```
 
-It stops when everything is done or `-Max` is reached (exit 0), when no progress is made (1) or a PBI is blocked (2). The stream log is in `.agents/deliver-loop/`.
+- macOS and Linux: `~/.local/bin/deliver-loop` (executable).
+- Windows: `%USERPROFILE%\.local\bin\deliver-loop.cmd` and `deliver-loop.ps1`. PowerShell runs the `.ps1`, so Ctrl+C does not ask "Terminate batch job".
 
-- `-Harness copilot` runs `copilot -p … --unattended --max 1` instead. Without `-Model` it uses `auto` (Copilot picks the model); `-Model` overrides it and is passed as given, so pass a Copilot model such as `gpt-5`, not a Claude name.
-- Console: stdout is colored on a terminal (`-NoColor` or `NO_COLOR` turn it off) and lines are cut to the terminal width (at least 120). The herdr log pane is opt-in with `-LogPane`.
-- Desktop notifications (macOS, Windows) are off with `-NoNotify` or `"deliver": {"notifications": false}` in `.agents/config.json`; inside a poimen terminal (`POIMEN_TERMINAL_ID` set) none is sent.
-- `-Objective <owner>/<repo>#<nr>` runs an `[Objective]` in rounds over its ready repositories, on exactly one runner: a marker comment on the objective with a heartbeat every 10 minutes. A foreign live marker ends the run `handed over` (exit 4); `deliver-loop takeover <objective>` takes a marker whose heartbeat is older than 30 minutes (`-Force` also a live one), `deliver-loop release <objective>` ends the round, pushes the branches, posts a status comment and releases the marker.
-- In herdr the shim opens its own workspace and reports the loop as an agent: [herdr with the skills](herdr.md#the-loop-in-herdr).
+The launcher finds the installed `deliver` skill (project first, then your home) and runs `node <skill-dir>/scripts/deliver-loop.mts` with the arguments it gets, from the repository root. The installer removes the old `# >>> deliver-loop >>>` block from `~/.zshrc`, `~/.bashrc` and the PowerShell profiles, because a function of the same name hides the file. It reports when `.local/bin` is not in `PATH` and says how to add it; it never changes `PATH`. A second run changes nothing.
 
-Details: `references/loop.md` of the `deliver` skill.
+## Resume and feedback
+
+State lives in GitHub (issue, branch, pull request, checks). After a crash, a closed terminal or a stop, run the same command again: closed issues are not selected, an existing pull request goes straight to its checks. A session that ends `needs-decision` or `blocked` is set aside for the rest of the run and listed at the end with its reason. Answer in the issue, remove the label (`gh issue edit 43 --remove-label needs-decision`) and run again.
+
+## Progress events
+
+The loop writes [agent-events](https://github.com/GravionLabs/agent-events) to `<git-common-dir>/.agents/events/<run>.jsonl`: the run, one task per issue with its pull request, progress, and an attention for an issue set aside. The session reports nothing itself. Displays such as [herdr](herdr.md) read the file.
 
 ## Troubleshooting
 
-Pause, skipped PBI, missing ruleset or red check: see [troubleshooting](../reference/troubleshooting.md).
-
-## Next
-
-[Delivery reference](../delivery.md): review file, release review, decision PBIs, parallel runs, herdr and roles. After a run, learn from it with `retro` and lessons: [learn from runs](learn-from-runs.md). Options: `/deliver help`. In herdr: [herdr with the skills](herdr.md).
+Set-aside issue, missing ruleset or red check: [troubleshooting](../reference/troubleshooting.md).

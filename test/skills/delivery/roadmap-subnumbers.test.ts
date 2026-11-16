@@ -61,39 +61,3 @@ describe('Set-IssueMilestones.ps1 sub-numbers', () => {
     }
   });
 });
-
-describe('deliver-release-review.schema.json key', () => {
-  const schema = JSON.parse(
-    fs.readFileSync(
-      path.join(root, 'skills/delivery/deliver/schema/deliver-release-review.schema.json'),
-      'utf8',
-    ),
-  );
-  const review = JSON.parse(
-    fs.readFileSync(path.join(root, 'skills/shared/code-review/schema/review.schema.json'), 'utf8'),
-  );
-  const ajv = new Ajv({ allErrors: true });
-  ajv.addSchema({
-    ...review,
-    $id: 'https://example.test/skills/shared/code-review/schema/review.schema.json',
-  });
-  const validate = ajv.compile({
-    ...schema,
-    $id: 'https://example.test/skills/delivery/deliver/schema/x.json',
-  });
-  const doc = (milestone: string) => ({
-    milestone,
-    sha: 'b18a36c',
-    round: 1,
-    review: { blocking: [], notes: [] },
-    bugs: [],
-  });
-
-  it.each(['M1', 'M1.1', 'M1.2.3', '1.0.0'])('accepts the key %s', (key) => {
-    expect(validate(doc(key))).toBe(true);
-  });
-
-  it.each(['M1 Topic', 'M1.1 Topic', ''])('rejects the key "%s"', (key) => {
-    expect(validate(doc(key))).toBe(false);
-  });
-});

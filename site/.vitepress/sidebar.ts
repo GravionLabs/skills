@@ -25,6 +25,7 @@ export const sidebar: SidebarGroup[] = [
     items: [
       { text: 'Plan an issue', link: '/guides/plan-an-issue' },
       { text: 'Deliver issues', link: '/guides/deliver' },
+      { text: 'Migrating from the PowerShell loop', link: '/guides/migrate-powershell-loop' },
       { text: 'Plan the roadmap', link: '/guides/roadmap' },
       { text: 'Release a milestone', link: '/guides/release' },
       { text: 'Work an issue by hand', link: '/guides/work-an-issue-by-hand' },

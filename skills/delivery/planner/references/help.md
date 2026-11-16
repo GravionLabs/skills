@@ -9,6 +9,7 @@ Plans an issue one level down with blockers and sizes, grills the open decisions
 /planner <owner/repo#nr>
 /planner <free description>
 /planner refine <nr>
+/planner refine --check <nr…> --result <file>
 /planner help
 ```
 
@@ -25,7 +26,7 @@ Plans an issue one level down with blockers and sizes, grills the open decisions
 - Depth, named in the request: `quick` (~5 key files), `standard` (default), `deep` (call sites, tests, docs of every affected area)
 - Interactive session: plan, grill the open decisions round by round (`grill-me`), then you approve granularity, blockers and which items to create (also with zero questions); nothing is created before; the answers go under `## Decisions` of the created issues
 - A split of an L-sized PBI is created only after your approval
-- Non-interactive (a workflow subagent such as `deliver`): no questions, no issues; the plan with `questions[]` is returned as data
+- Non-interactive (a workflow subagent): no questions, no issues; the plan with `questions[]` is returned as data
 - `help` (also `--help`, `-h`): print this file
 
 ## Examples

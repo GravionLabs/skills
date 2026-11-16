@@ -6,19 +6,20 @@
 
 By default `Format-Changed.ps1 -Language <lang>` runs the built-in commands of `ts`, `ng`, `py`, `dotnet`, `rust` and `go` (named in the `## Format` section of each `<lang>-implementation` skill). The `format` key replaces these commands per language, for example to use JetBrains tools.
 
-## Deliver roles
+## Deliver
 
-`deliver.roles` sets `model` and `effort` per role: the `deliver` skill uses `implement`, `review`, `fix` and `release-review` (the release review before the release PR, default opus/high) for its subagents when the harness takes a model per call; the schema also knows `select`, `plan`, `create`, `gate`, `pr` and `ci`, which the skill does not use; `implement` and `fix` also take `tiers` (`fast`, `standard`, `strong`). Unset keys keep the defaults, see `references/roles.md` of the `deliver` skill.
+The `deliver` loop reads four keys of `deliver`, all optional; the command-line flag of the same name wins. See [deliver issues](../guides/deliver.md#settings).
 
-## Deliver parallel
-
-`deliver.parallel` (integer ≥ 1, default `3`) is how many repository loops `deliver-loop -Objective` runs at the same time in one round, read from the config of the objective's checkout. With `1` the ready repositories run one after the other; otherwise up to `n` of them start together, one loop per repository, and the round waits for all of them before it reads the state again. Within a repository delivery stays sequential, and each PBI is still claimed by `deliver` (`references/claim.md`). Each round logs its result per repository and its REST and GraphQL usage. See `references/loop.md` of the `deliver` skill.
+- `base`: the base branch of the pull requests, default `release/next`.
+- `tracker`: the tracker, `scripts/tracker/<name>.mts` in the `deliver` skill, default `github`.
+- `harness`: the agent CLI, `claude` (default) or `copilot`. A name only: a command from the repository would let a change decide what the loop runs.
+- `protectedPaths`: a pull request that changes one of these paths is not merged by the loop. `dir/` is a directory at the root, anything else a file name anywhere. Default: `.github/`, `.agents/`, `.claude/`, `package.json`, `pnpm-workspace.yaml`, `Cargo.toml`, `pyproject.toml`, `go.mod`, `Directory.Packages.props`. The list replaces the default.
 
 ```json
-{ "deliver": { "parallel": 1 } }
+{ "deliver": { "base": "main", "protectedPaths": [".github/", ".agents/", "package.json"] } }
 ```
 
-Trade-off: the loops share one token's REST and GraphQL budget (the `round <n> api: …` line of each round shows the usage), build and test runs of several repositories load the local machine at the same time, and the token costs of the loops add up. Set `1` for tight API limits or a small machine.
+Other keys of `deliver` (`roles`, `loopThreshold`, `parallel`, `sessionTimeoutMinutes`) are ignored with one warning line; the session length is the flag `--session-minutes`. Coming from the PowerShell loop: [migrating](../guides/migrate-powershell-loop.md).
 
 ## Release test
 
@@ -86,7 +87,7 @@ For a desktop app (Tauri) the template says to install the RC next to the stable
 }
 ```
 
-- `deliver`: `{ "roles": { "review": { "model": "opus", "effort": "high" } } }`, see above.
+- `deliver`: `{ "base": "main" }`, see above.
 - `format`: `false` skips every format and check call (`skipped: disabled`, exit 0), or a map keyed by language (`ts`, `ng`, `py`, `dotnet`, ...), as passed with `-Language` by the language skill. No `format` key keeps the defaults.
 - `extensions`: files to keep (optional; absent needs `-Extensions` on the call).
 - `format` (entry): command for the format step; `check`: command for the read-only check (what CI or the caller runs). Each is a string or an array run in order; the first non-zero exit stops. `{files}` is replaced by the changed files, repo-relative, one argument each; inside a token (`--include={files}`) the files are joined by `;`.

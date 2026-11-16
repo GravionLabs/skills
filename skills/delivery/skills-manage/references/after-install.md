@@ -31,20 +31,9 @@ A skill installed both globally (`-g`) and in the project may resolve to the glo
 
 ## Delivery
 
-Delivery runs through the `deliver` skill (`/deliver <nr>`, harness-neutral), not through a separate runner.
+`/skills-manage delivery` also offers the `deliver-loop` command: `pwsh scripts/Install-LoopShim.ps1` writes a launcher (`~/.local/bin/deliver-loop`, on Windows `deliver-loop.cmd` and `deliver-loop.ps1` in `%USERPROFILE%\.local\bin`), removes the old `# >>> deliver-loop >>>` function from the shell profiles, and reports when `.local/bin` is not in `PATH` (it never changes `PATH`). The loop needs Node 24 or newer: it runs `.mts` files with Node's built-in type stripping, there is no build step.
 
-Before the first `/deliver <nr> --unattended`, propose the shell allowlist of the harness and let the user confirm it (never write it unasked): `.claude/settings.json` (`permissions.allow`) for Claude Code, `opencode.json` (`permission.bash`) for OpenCode, `--allow-tool 'shell(…)'` flags for Copilot CLI. The entries are `git`, `gh`, `pwsh` for the cleanup script and `Report-Progress.ps1` of `deliver` and the verify commands of the repository's `AGENTS.md` (build, test, format, lint): read them from its `## Commands` section and name them. The templates per harness are in `permissions.md` in the references of the `deliver` skill; without them an unattended run stops at the first prompt. The per-project settings the skills read live in `.agents/config.json`.
-
-## deliver-loop shell command
-
-`scripts/Install-LoopShim.ps1` (offered after the `delivery` group, asks first) adds the function `deliver-loop` to `~/.zshrc`, `~/.bashrc` or the PowerShell profile, between `# >>> deliver-loop >>>` markers (a second run changes nothing, an outdated block is replaced). It finds the installed script in `.claude/skills/deliver`, `.agents/skills/deliver` (project), `~/.claude/skills/deliver`, `~/.agents/skills/deliver` and passes all arguments through; no copy, so `npx skills update` keeps it current. Nothing found: message and exit 1.
-
-```powershell
-deliver-loop -Milestone 1.3.0 -Max 5
-deliver-loop -Target 12,14 -Harness copilot -Model gpt-5
-```
-
-In herdr (`HERDR_ENV=1`) it starts the loop in its own workspace `<repo> · deliver` (tab `deliver-loop`); elsewhere in the current terminal.
+Delivery runs through the `deliver` skill (`/deliver <nr>`, or `node scripts/deliver-loop.mts --milestone <M>` for a set), harness-neutral. Settings live under `deliver` in `.agents/config.json`; the session needs `git`, `gh` and the verify commands of the repository's `AGENTS.md` (build, test, format, lint), read from its `## Commands` section.
 
 ## project-setup offer
 

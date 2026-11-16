@@ -77,11 +77,12 @@ Renamed when moving from GravionLabs/apm-hub:
 
 Renamed since:
 
-| Old name               | New name        | Note                                                                          |
-| :--------------------- | :-------------- | :---------------------------------------------------------------------------- |
-| `ng-ag-grid-developer` | `ng-ag-grid`    | same skill; `npx skills remove ng-ag-grid-developer`, then `add` `ng-ag-grid` |
-| `skills-install`       | `skills-manage` | removed in v3.0.0; `npx skills remove skills-install`                         |
-| `skill-manage`         | `skills-manage` | removed in v3.0.0; `npx skills remove skill-manage`                           |
+| Old name               | New name        | Note                                                                                                                                                                             |
+| :--------------------- | :-------------- | :------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `ng-ag-grid-developer` | `ng-ag-grid`    | same skill; `npx skills remove ng-ag-grid-developer`, then `add` `ng-ag-grid`                                                                                                    |
+| `skills-install`       | `skills-manage` | removed in v3.0.0; `npx skills remove skills-install`                                                                                                                            |
+| `skill-manage`         | `skills-manage` | removed in v3.0.0; `npx skills remove skill-manage`                                                                                                                              |
+| `deliver-min`          | `deliver`       | takes the name of the removed old skill; `npx skills remove deliver-min`, then `add` `deliver`; `DELIVER_MIN_*` variables are read as `DELIVER_*` for one release with a warning |
 
 ## Issues
 

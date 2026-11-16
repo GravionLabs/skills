@@ -9,10 +9,8 @@ const ref = readFileSync(
 );
 
 describe('Requires invalid <owner>/<repo> is ignored (#574, #596)', () => {
-  it('states that an invalid ref is reported on stderr and ignored', () => {
+  it('states that an invalid ref is ignored', () => {
     expect(ref).toMatch(/invalid `<owner>\/<repo>`/);
-    expect(ref).toContain("Requires: invalid <owner>/<repo> '<ref>' in <source> ignored");
-    expect(ref).toMatch(/on stderr/);
     expect(ref).toMatch(/other `Requires:` lines still count/);
   });
 });

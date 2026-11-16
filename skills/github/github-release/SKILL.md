@@ -29,7 +29,7 @@ The script is read-only and prints JSON: `default`, `branch`, `state`, `openPrs`
 
 ## cut
 
-1. `action: create`: create `release/next` from the default branch and push it with upstream.
+1. `action: create`: create `release/next` from the default branch and push it with upstream. Without a checkout to switch: `pwsh scripts/New-ReleaseNext.ps1` pushes the default branch to `refs/heads/release/next` (JSON `status`: created, present, refused, unreachable); `deliver` calls it when the branch is missing.
 2. `action: fast-forward`: move `release/next` to the default branch without deleting it (#528): `git push origin origin/<default>:refs/heads/release/next` (the release merge commit makes it a fast-forward; no force push, no `+semver` commit), then `git fetch origin` and `git checkout -B release/next origin/release/next`. Open PRs into `release/next` keep their base. The push to `release/**` triggers `release-branch.yml` as before.
 3. Each `staleLines` entry was released and is never reused. Report it with `git push origin --delete release/<x.y>`; the owner runs it (the guardrail blocks it in a session). Continue with the cut.
 4. `releaseWorkflow` false: tell the user the repo does not close issues at merge into `release/*` and offer to copy `templates/release-branch.yml` to `.github/workflows/release-branch.yml` (never silently, one PR per repo, `references/closing.md`).

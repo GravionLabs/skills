@@ -3,23 +3,19 @@
 
 # ng-template is the Angular element, not a skill
 ng-implementation: ng-template
-# deliver-log is the label of the herdr log pane of Invoke-DeliverLoop.ps1, not a skill
-deliver: deliver-log
 # docs/adr is the default ADR directory of the target repository, not a file of the skill
 adr: docs/adr
 # adr-missing is a review rule id of references/governance.md, not a skill
 code-review: adr-missing
 # references/help.md is the file a documented skill ships (help convention), not a file of skill-write
 skill-write: references/help.md
-# deliver-loop is the shell command that wraps Invoke-DeliverLoop.ps1, not a skill
-deliver: deliver-loop
 # skill-tooling is a group name, not a skill
 skills-manage: skill-tooling
 # dotnet-pinvoke is a skill of the external dotnet/skills pack that skills-manage adds
 skills-manage: dotnet-pinvoke
-# deliver-loop is the shell command of the deliver skill, not a skill
-skills-manage: deliver-loop
 # ng-ag-grid-developer is the former name of ng-ag-grid, named in the rename section of references/after-install.md, not a skill
 skills-manage: ng-ag-grid-developer
 # project-url is the input of the reusable issues.yml of GravionLabs/ci, not a skill
 github-project: project-url
+# deliver-loop is the launcher command that Install-LoopShim.ps1 writes, not a skill
+skills-manage: deliver-loop

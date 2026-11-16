@@ -10,15 +10,28 @@ const schema = JSON.parse(
 );
 const validate = new Ajv2020({ allErrors: true, strict: false }).compile(schema);
 
-// #548: deliver.parallel of .agents/config.json (integer >= 1, default 3).
-describe('config schema: deliver.parallel', () => {
-  it('accepts 1 and 3 and documents the default 3', () => {
-    expect(validate({ deliver: { parallel: 1 } })).toBe(true);
-    expect(validate({ deliver: { parallel: 3 } })).toBe(true);
-    expect(schema.properties.deliver.properties.parallel.default).toBe(3);
+// The deliver key of .agents/config.json holds the settings of deliver.
+describe('config schema: deliver', () => {
+  it('accepts base, tracker, harness and protectedPaths', () => {
+    expect(
+      validate({
+        deliver: {
+          base: 'main',
+          tracker: 'github',
+          harness: 'copilot',
+          protectedPaths: ['.github/'],
+        },
+      }),
+    ).toBe(true);
   });
 
-  it.each([0, -1, 1.5, '2'])('rejects parallel %j', (parallel) => {
-    expect(validate({ deliver: { parallel } })).toBe(false);
+  it.each([
+    { harness: 'codex' },
+    { base: '' },
+    { protectedPaths: 'x' },
+    { parallel: 3 },
+    { roles: {} },
+  ])('rejects %j', (deliver) => {
+    expect(validate({ deliver })).toBe(false);
   });
 });
