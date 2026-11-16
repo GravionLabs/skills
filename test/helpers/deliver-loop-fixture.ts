@@ -34,7 +34,7 @@ export type Issue = {
   milestone?: string;
   labels?: string[];
   children?: number[];
-  blockers?: { number: number; state: string }[];
+  blockers?: { number: number; state: string; repository_url?: string }[];
 };
 export type Fixture = {
   issues: Record<number, Issue>;
@@ -51,6 +51,9 @@ export type Fixture = {
   rateLimitReset?: number; // #672: `gh api rate_limit` reports core exhausted with this reset (epoch seconds)
 };
 
+// #673: a PBI or Bug passes the plan checks of the loop with this body (acceptance criteria, a reproduction)
+export const OK_BODY =
+  '## Acceptance Criteria\n\n- [ ] it works\n\n## Steps to reproduce\n\n1. run it\n';
 export const pbi = (extra: Issue = {}): Issue => ({ labels: ['pbi'], ...extra });
 
 export class DeliverLoopFixture {
@@ -106,7 +109,7 @@ export class DeliverLoopFixture {
         let m = /^repos\\/\\{owner\\}\\/\\{repo\\}\\/issues\\/(\\d+)$/.exec(a[1] || '');
         if (a[0] === 'api' && m) {
           const i = get(m[1]);
-          return { rest: { number: Number(m[1]), body: i.body || '', state: (i.state || 'OPEN').toLowerCase(), labels: (i.labels || []).map((name) => ({ name })), milestone: i.milestone ? { title: i.milestone } : null } };
+          return { rest: { number: Number(m[1]), body: i.body ?? ${JSON.stringify(OK_BODY)}, state: (i.state || 'OPEN').toLowerCase(), labels: (i.labels || []).map((name) => ({ name })), milestone: i.milestone ? { title: i.milestone } : null } };
         }
         // #127: the milestone is read over REST (Get-Milestones.ps1 -Mode issues), never with gh issue list
         if (/\\/milestones\\?/.test(a[1] || '')) {
@@ -136,7 +139,7 @@ const call = Number(process.argv[2]);
 if ((s.hang || []).includes(call)) { setTimeout(() => {}, 60000); return; }
 const code = (s.exits || [])[call - 1] || 0;
 if (code) process.exit(code);
-const first = Object.keys(s.issues).map(Number).find((n) => (s.issues[n].state || 'OPEN') === 'OPEN' && !(s.issues[n].labels || []).some((l) => l.startsWith('needs-') || l === 'interactive') && !(s.issues[n].blockers || []).some((b) => b.state === 'open') && ['pbi', 'bug'].some((l) => (s.issues[n].labels || []).includes(l)));
+const first = Object.keys(s.issues).map(Number).find((n) => (s.issues[n].state || 'OPEN') === 'OPEN' && !(s.issues[n].labels || []).some((l) => l.startsWith('needs-') || l === 'interactive') && !(s.issues[n].blockers || []).some((b) => (s.issues[b.number] ? (s.issues[b.number].state || 'OPEN') === 'OPEN' : b.state === 'open')) && ['pbi', 'bug'].some((l) => (s.issues[n].labels || []).includes(l)));
 if (s.effect === 'close-first') s.issues[first].state = 'CLOSED';
 if (s.effect === 'hold-first') s.issues[first].labels.push('needs-decision');
 if (s.effect === 'hold-then-close') { if (s.held) s.issues[first].state = 'CLOSED'; else { s.held = true; s.issues[first].labels.push('needs-decision'); } }

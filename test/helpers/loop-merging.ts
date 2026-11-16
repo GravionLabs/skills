@@ -25,7 +25,7 @@ export const setup = (
         const fs = require('fs'); const a = call.args[1] || '';
         const flag = (f) => fs.existsSync(${JSON.stringify(cwd)} + '/' + f);
         const mark = (f) => fs.writeFileSync(${JSON.stringify(cwd)} + '/' + f, '');
-        const row = (n) => ({ number: n, title: 'work ' + n, state: 'open', closed_at: null, body: '', labels: [{ name: 'pbi' }], assignees: [], issue_dependencies_summary: { blocked_by: 0 } });
+        const row = (n) => ({ number: n, title: 'work ' + n, state: 'open', closed_at: null, body: '## Acceptance Criteria\\n- [ ] x', labels: [{ name: 'pbi' }], assignees: [], issue_dependencies_summary: { blocked_by: 0 } });
         const open = ${JSON.stringify(issues)}.filter((n) => !(n === 10 && flag('closed10')));
         const blocked = ${JSON.stringify(blocked)};
         if (/\\/milestones\\?/.test(a)) return { rest: [[{ number: 4, title: 'M4 Merge', state: 'open', html_url: 'https://github.com/acme/app/milestone/4' }]] };

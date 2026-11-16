@@ -33,7 +33,7 @@ pwsh scripts/Invoke-DeliverLoop.ps1 -Milestone M004 -Harness copilot -Model gpt-
 
 - `-Target <nr…>`: issue numbers, as `<nr>` above
 - `-Milestone <name>`: as `--milestone` (`M<nnn>`, before and after the rename)
-- `-Max <n>`: stop after `n` iterations
+- `-Max <n>`: stop after `n` iterations. `-DryRun`: print the run plan (PBIs in delivery order, then those it will not deliver with their reason; `references/loop.md`) and exit 0, nothing starts
 - `-Model <name>`: overrides the model for every PBI (default: per PBI by tier, fast haiku, standard sonnet, strong opus; copilot: `auto`)
 - Shell command `deliver-loop` (offered by `skills-manage`) runs the installed script from any directory of the repository, always in the git toplevel (so logs and state live in the repository root; outside a git repository it keeps the current directory), with the same flags, e.g. `deliver-loop -Milestone M004 -Max 5`. In herdr it opens the workspace `<repo> · deliver` (tab `deliver-loop`).
 - `deliver-loop stop [--now] [--cancel]` asks the running loop to stop after the current PBI (`--now`: after the current step) or withdraws the request (`Request-LoopStop.ps1`, `references/loop.md` "Stop a run"). Also `-LogPane` (opens the herdr log pane; off by default, `-NoPane` is a deprecated no-op) and `-NoColor` (plain stdout). Stdout is colored on a terminal. Exit 0 done, max reached or stopped, 1 no progress, 2 blocked, 64 bad arguments.

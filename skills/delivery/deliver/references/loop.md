@@ -34,6 +34,20 @@ Permissions on a live `-p` run: `--allow-all-tools` alone denies file access out
 - Interactive `/deliver --milestone` (or a Feature or Epic with more PBIs): the session starts the loop and stays a thin control session (`references/control.md`). It prints the progress and the status block between PBIs, brings `needs-decision` PBIs to you, delivers `interactive` PBIs itself and runs the release step once after the loop ends `done`. When its own context passes `deliver.controlContextTokens` (default 200000) it prints the status block and the resume command and stops.
 - The loop alone (`deliver-loop`): a whole release or a Feature overnight, unattended. Each PBI starts with an empty context, a dead session (crash, rate limit) is retried and a hanging one is stopped after `deliver.sessionTimeoutMinutes` (Stop rules), and `deliver` keeps all state in GitHub, so there is no queue file.
 
+## Run plan (#673)
+
+In target and milestone mode the loop checks the whole set once before the first session and prints the plan: `run plan: <n> to deliver, <k> not delivered`, the PBIs in delivery order with their tier (`1. #12 tier standard`), then each open PBI it will not deliver (`not delivered: #<nr> <reason>`). REST only, no model, nothing is written to an issue. Checks per open PBI and Bug, in this order, the first failing one is the reason:
+
+- a hold label: `needs-decision`, `needs-refinement`, `interactive`
+- no `## Acceptance Criteria` section with at least one list item
+- a Bug without a reproduction (a heading or bold line containing `repro`)
+- with `-Milestone`, a PBI of another milestone (`outside M<n> (milestone: …)`)
+- an open blocker outside the set, named with its repository (`open blocker o/other#9`)
+- a cycle in the blocked-by links (`cycle in blocked-by: #14 ↔ #15`, all members are left out)
+- a blocker in the set that is itself not deliverable (`blocker #5 is not deliverable (…)`)
+
+A PBI that fails a check is set aside from the start (never started); the last lines of the run list it as `set aside #<nr>: <reason> (no PR)`. No deliverable PBI: the plan is printed and the run ends `blocked` (exit 2) without a session. `-DryRun` (target and milestone mode) prints the plan and exits 0 before anything starts (`release/next` is not created either). The blocked-by links are read once for the plan; later iterations read only the issue states (a blocker of the set is open while it is in the open set or merging).
+
 ## Stop rules
 
 Checked from GitHub (not from the output) before and after each iteration, on the open PBIs of the targets without `needs-decision` / `needs-refinement` / `interactive` (unattended, `deliver` skips `interactive` PBIs; they count as held):

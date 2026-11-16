@@ -38,7 +38,7 @@ describe.skipIf(!hasPwsh || process.platform === 'win32')('Invoke-DeliverLoop.ps
         10: {
           labels: ['bug'],
           blockers: [{ number: 5, state: 'closed' }],
-          body: '## Summary\n\nTier: fast — one-line fix\n', // #325: the model of the tier (haiku)
+          body: '## Summary\n\nTier: fast — one-line fix\n\n## Acceptance Criteria\n- [ ] x\n\n## Reproduction\n1. run it\n', // #325: the model of the tier (haiku)
         },
       },
       milestones: { 'M4 (0.2.0)': [10] }, // a closed milestone renamed 'M<n> (x.y.z)' is still found by M4

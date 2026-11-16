@@ -68,7 +68,8 @@ describe.skipIf(!hasPwsh || process.platform === 'win32')(
     it('without config.json (default 3) both ready repos run at the same time, the round waits for both and reports each; one ends blocked', async () => {
       const c = setupObjective(worker, path.join(dir, `case-${++seq}`), {
         ...twoReady(),
-        sleepMs: 500,
+        // the run plan reads the set first, so the loops start a second apart
+        sleepMs: 3000,
       });
       const r = await c.run(['-NoPreflight']);
       expect(r.stdout).toContain(

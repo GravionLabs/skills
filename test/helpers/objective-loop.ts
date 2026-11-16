@@ -86,7 +86,7 @@ const handler = (stateFile: string) => `(call, ctx) => {
   const issue = (key) => {
     const i = s.issues[key]; if (!i) throw new Error('404 ' + key);
     const [repo, nr] = key.split('#');
-    return { number: Number(nr), title: i.title || 'T' + nr, state: i.state || 'open', body: i.body || '',
+    return { number: Number(nr), title: i.title || 'T' + nr, state: i.state || 'open', body: i.body ?? '## Acceptance Criteria\\n- [ ] x',
       labels: (i.labels || ['pbi']).map((name) => ({ name })), repository_url: 'https://api.github.com/repos/' + repo,
       issue_dependencies_summary: { blocked_by: (i.blockers || []).length } };
   };

@@ -51,7 +51,7 @@ describe.skipIf(!hasPwsh || process.platform === 'win32')(
         const fs = require('fs');
         const s = JSON.parse(fs.readFileSync(${JSON.stringify(state)}, 'utf8'));
         const a = call.args[1] || '';
-        const row = (n) => ({ number: Number(n), title: s.issues[n].title, state: s.issues[n].state, closed_at: null, body: '',
+        const row = (n) => ({ number: Number(n), title: s.issues[n].title, state: s.issues[n].state, closed_at: null, body: '## Acceptance Criteria\\n- [ ] x',
           labels: (s.issues[n].labels || ['pbi']).map((name) => ({ name })), assignees: [], issue_dependencies_summary: { blocked_by: s.issues[n].blocker ? 1 : 0 } });
         if (/\\/milestones\\?/.test(a)) return { rest: [[{ number: 4, title: 'M4 Status', state: 'open', html_url: '${BASE}/milestone/4' }]] };
         let m = /issues\\?milestone=4&state=(open|closed|all)/.exec(a);
@@ -59,7 +59,7 @@ describe.skipIf(!hasPwsh || process.platform === 'win32')(
         m = /issues\\/(\\d+)\\/dependencies\\/blocked_by/.exec(a);
         if (m) { const b = s.issues[m[1]].blocker; return { rest: [b ? [{ number: b, state: 'open', repository_url: 'x' }] : []] }; }
         m = /^repos\\/\\{owner\\}\\/\\{repo\\}\\/issues\\/(\\d+)$/.exec(a);
-        if (m) return { rest: { number: Number(m[1]), body: '', state: s.issues[m[1]].state, labels: (s.issues[m[1]].labels || ['pbi']).map((name) => ({ name })), milestone: { title: 'M4 Status' } } };
+        if (m) return { rest: { number: Number(m[1]), body: '## Acceptance Criteria\\n- [ ] x', state: s.issues[m[1]].state, labels: (s.issues[m[1]].labels || ['pbi']).map((name) => ({ name })), milestone: { title: 'M4 Status' } } };
         throw new Error('unexpected gh ' + call.args.join(' '));
       }`,
       );

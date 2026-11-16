@@ -116,7 +116,7 @@ describe.skipIf(!hasPwsh || process.platform === 'win32')(
     // the message goes to [Console]::Error, which the in-process worker does not capture: status only
     it.each([
       [['-Objective', 'o/telos#1', '-Target', '5']],
-      [['-Target', '5', '-DryRun']],
+      [['-Target', '5', '-NoPreflight']],
       [['-Objective', 'telos-1']],
     ])('bad arguments %j exit 64', async (args) => {
       const r = await worker.run(args, { cwd: dir });
