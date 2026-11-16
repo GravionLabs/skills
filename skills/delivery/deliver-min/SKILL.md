@@ -41,4 +41,6 @@ The loop refuses a base branch without required checks (`--allow-no-required-che
 
 The loop prints colored progress and writes it to `<git-common-dir>/deliver-min/loop.log` (`tail -f`; `NO_COLOR` turns color off). It also writes agent-events (`<git-common-dir>/.agents/events/<run>.jsonl`) that displays read: run, one task per issue with its pull request, progress, and an attention for an issue set aside. The session reports nothing.
 
+On Windows the loop starts `claude.cmd` through `cmd.exe` and ends a session with its child processes (`taskkill /T`). Ctrl-C stops the loop; from another terminal create the file `stop` in the run folder (`<git-common-dir>/deliver-min/<run>/`).
+
 With `--milestone`, once no `pbi` or `bug` of the milestone is open (none set aside or waiting), the loop opens the release pull request from the base branch into the default branch, prints its URL and never merges it; an open `release-test` issue is never started and is reported as "needs you" and as an `attention` event. A missing `release/next` (the release merge deletes it) is cut from the default branch by the loop; another missing base is an error.

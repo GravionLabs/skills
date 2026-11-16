@@ -12,6 +12,12 @@ import {
 } from 'node:fs';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
+import {
+  cmdLine,
+  launchCommand,
+  promptPath,
+  resolveWindows,
+} from '../../../skills/delivery/deliver-min/scripts/process.mts';
 import { checkVerdict } from '../../../skills/delivery/deliver-min/scripts/tracker/github.mts';
 
 const skill = path.resolve(__dirname, '../../../skills/delivery/deliver-min');
@@ -111,7 +117,13 @@ function loop(
     child.stdout.on('data', (chunk) => {
       stdout += chunk;
       options.whenStdout?.(stdout, () => {
-        if (!signalled) child.kill('SIGINT');
+        if (!signalled) {
+          // Windows cannot deliver SIGINT to a process: the loop also stops on a file `stop` in its run folder
+          const results = /results: (\S+)/.exec(stdout)?.[1];
+          if (process.platform === 'win32' && results)
+            writeFileSync(path.join(path.dirname(results), 'stop'), '');
+          else child.kill('SIGINT');
+        }
         signalled = true;
       });
     });
@@ -162,8 +174,7 @@ afterAll(() => {
   rmSync(root, { recursive: true, force: true });
 });
 
-// The stop case sends SIGINT, which Windows cannot deliver to a process; the loop on Windows is #689.
-describe.skipIf(process.platform === 'win32')('deliver-min loop', () => {
+describe('deliver-min loop', () => {
   it('merges an issue and then the issue it blocked', async () => {
     const out = await loop({
       items: [
@@ -555,5 +566,40 @@ describe('checkVerdict of the GitHub tracker', () => {
       state: 'red',
       detail: 'lint',
     });
+  });
+});
+
+describe('starting the harness on Windows', () => {
+  const dirs = 'C:\\Tools;C:\\npm';
+  const has =
+    (...files: string[]) =>
+    (file: string) =>
+      files.includes(file);
+
+  it('finds the .cmd shim through PATHEXT', () => {
+    expect(resolveWindows('claude', dirs, '.COM;.EXE;.CMD', has('C:\\npm\\claude.CMD'))).toBe(
+      'C:\\npm\\claude.CMD',
+    );
+    expect(resolveWindows('claude', dirs, '.EXE', has())).toBeUndefined();
+  });
+
+  it('runs a shim through cmd.exe with every argument quoted', () => {
+    const env = { PATH: dirs, PATHEXT: '.EXE;.CMD', ComSpec: 'C:\\Windows\\cmd.exe' };
+    expect(cmdLine(['C:\\npm\\claude.CMD', '-p', 'a "b" & c'])).toBe(
+      '""C:\\npm\\claude.CMD" "-p" "a ""b"" & c""',
+    );
+    expect(() => cmdLine(['x', '%PATH%'])).toThrow(/not usable/);
+    // the shim is not on this machine: the plain name is passed on, no cmd.exe
+    expect(launchCommand(['claude', '-p'], 'win32', env)).toEqual({
+      file: 'claude',
+      args: ['-p'],
+      verbatim: false,
+    });
+    expect(launchCommand(['claude', '-p'], 'linux', env).file).toBe('claude');
+  });
+
+  it('writes the issue file path with forward slashes, quoted when it holds a space', () => {
+    expect(promptPath('C:\\work\\run\\11.issue.md')).toBe('C:/work/run/11.issue.md');
+    expect(promptPath('C:\\Users\\Jane Doe\\11.issue.md')).toBe('"C:/Users/Jane Doe/11.issue.md"');
   });
 });

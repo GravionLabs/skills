@@ -2,7 +2,7 @@
 // deliver-min loop: a fresh agent session per issue, merge its pull request, then the next issue.
 // The state is read from the tracker before every issue. The run only remembers what it set aside.
 // Tracker: tracker.mts. Progress events: events.mts. Everything else is in this file.
-import { execFileSync, spawn } from 'node:child_process';
+import { execFileSync } from 'node:child_process';
 import {
   appendFileSync,
   createWriteStream,
@@ -17,6 +17,7 @@ import { createInterface } from 'node:readline';
 import { parseArgs } from 'node:util';
 import { type Emit, openEvents } from './events.mts';
 import { HARNESSES } from './harness.mts';
+import { killTree, launch, promptPath } from './process.mts';
 import { type Gate, type Item, type Pull, loadTracker } from './tracker.mts';
 
 const { values: opt } = parseArgs({
@@ -97,6 +98,12 @@ const MAX = whole('max', 0);
 const SESSION_MINUTES = whole('session-minutes', 1);
 const MERGE_MINUTES = whole('merge-minutes', 1);
 let stopped = false;
+let stopSession: (() => void) | undefined;
+// a stop request: Ctrl-C, or on Windows (no signal reaches the loop from another terminal) a file `stop` in the run folder
+const requestStop = () => {
+  stopped = true;
+  stopSession?.();
+};
 const root = run('git', ['rev-parse', '--show-toplevel']);
 const commonDir = path.resolve(root, run('git', ['rev-parse', '--git-common-dir'], root));
 let config: {
@@ -124,13 +131,18 @@ const HARNESS_OVERRIDE: string[] | undefined = process.env.DELIVER_MIN_HARNESS
 const real = (file: string): string => {
   const full = path.resolve(file);
   try {
-    return realpathSync(full);
+    // native: only it expands Windows short names (RUNNER~1)
+    return realpathSync.native(full);
   } catch {
     const parent = path.dirname(full);
     return parent === full ? full : path.join(real(parent), path.basename(full));
   }
 };
-const inside = (file: string) => !path.relative(real(root), real(file)).startsWith('..');
+// Another drive (Windows) gives an absolute relative path: outside as well.
+const inside = (file: string) => {
+  const rel = path.relative(real(root), real(file));
+  return !path.isAbsolute(rel) && rel !== '..' && !rel.startsWith(`..${path.sep}`);
+};
 if (HARNESS_OVERRIDE?.some((part) => path.isAbsolute(part) && inside(part))) {
   fail('DELIVER_MIN_HARNESS must not name a file inside the repository', 64);
 }
@@ -245,7 +257,7 @@ function startSession(item: Item, cwd: string, file: string): Promise<Session> {
   // the session works from this text, not from what the tracker shows when it runs
   const issueFile = path.join(runDir, `${item.id}.issue.md`);
   writeFileSync(issueFile, `# ${item.title}\n\n${item.url}\n\n${item.body}\n`);
-  const prompt = `/deliver-min ${item.id} --base ${BASE} --issue-file ${issueFile}`;
+  const prompt = `/deliver-min ${item.id} --base ${BASE} --issue-file ${promptPath(issueFile)}`;
   const argv = HARNESS_OVERRIDE
     ? [...HARNESS_OVERRIDE, prompt]
     : harness.command({ prompt, model: opt.model });
@@ -259,15 +271,15 @@ function startSession(item: Item, cwd: string, file: string): Promise<Session> {
   const session: Session = { exit: null, turns: 0, costUsd: 0, peakContext: 0 };
   const out = createWriteStream(file);
   return new Promise((done) => {
-    const child = spawn(argv[0], argv.slice(1), {
+    const child = launch(argv, {
       cwd,
       stdio: ['ignore', 'pipe', 'inherit'],
       env,
     });
-    const timer = setTimeout(() => child.kill(), SESSION_MINUTES * 60_000);
-    const stop = () => child.kill();
-    process.once('SIGINT', stop);
-    createInterface({ input: child.stdout }).on('line', (line) => {
+    const timer = setTimeout(() => killTree(child), SESSION_MINUTES * 60_000);
+    const stop = () => killTree(child);
+    stopSession = stop;
+    createInterface({ input: child.stdout! }).on('line', (line) => {
       out.write(`${line}\n`);
       if (harness.claudeStream) render(line, session);
       else say(`  ${line}`);
@@ -275,7 +287,7 @@ function startSession(item: Item, cwd: string, file: string): Promise<Session> {
     child.on('error', (error) => log(`#${item.id} session: ${error.message}`, 'bad'));
     child.on('close', (code) => {
       clearTimeout(timer);
-      process.removeListener('SIGINT', stop);
+      if (stopSession === stop) stopSession = undefined;
       out.end();
       session.exit = code;
       done(session);
@@ -464,9 +476,11 @@ const aside = new Map<number, string>();
 const merged: string[] = [];
 let waiting: string[] = [];
 let total = 0;
-process.on('SIGINT', () => {
-  stopped = true;
-});
+process.on('SIGINT', requestStop);
+process.on('SIGBREAK', requestStop);
+setInterval(() => {
+  if (!stopped && existsSync(path.join(runDir, 'stop'))) requestStop();
+}, 500).unref();
 
 try {
   for (let count = 0; !stopped && (MAX === 0 || count < MAX); count++) {
