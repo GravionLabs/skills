@@ -28,6 +28,7 @@ type Scenario = {
   gateBlockMs?: number;
   exits?: number[];
   noPull?: boolean;
+  closeAfterCalls?: number;
 };
 type Outcome = {
   status: number | null;
@@ -188,6 +189,22 @@ describe.skipIf(process.platform === 'win32')('deliver-min loop', () => {
     expect(existsSync(path.join(root, 'repo-wt-11'))).toBe(false);
   });
 
+  it('waits until a merged issue is closed so the issue it blocked is delivered in the same run', async () => {
+    const out = await loop({
+      items: [
+        { id: 72, title: '[PBI] feat: second', blockedBy: [71] },
+        { id: 71, title: '[PBI] feat: first' },
+      ],
+      closeAfterCalls: 4,
+    });
+    expect(out.status).toBe(0);
+    expect(out.results.map((r) => [r.issue, r.outcome])).toEqual([
+      [71, 'merged'],
+      [72, 'merged'],
+    ]);
+    expect(out.events.at(-1)?.outcome).toBe('succeeded');
+  });
+
   it('does not merge the open pull request of a failed session', async () => {
     const out = await loop({ items: [{ id: 21, title: '[PBI] feat: fails' }], exits: [3] });
     expect(out.status).toBe(2);
@@ -196,6 +213,13 @@ describe.skipIf(process.platform === 'win32')('deliver-min loop', () => {
     expect(out.events.find((e) => e.type === 'attention')).toMatchObject({
       reason: 'set-aside',
       needsYou: true,
+    });
+    // an incomplete run does not end as succeeded; the text names the counts
+    expect(out.events.at(-1)).toMatchObject({
+      type: 'run.finished',
+      outcome: 'failed',
+      reason: 'incomplete',
+      text: 'merged 0, set aside 1, waiting 0',
     });
     // not merged: the worktree may hold work that is not pushed
     expect(existsSync(path.join(root, 'repo-wt-21'))).toBe(true);

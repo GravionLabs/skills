@@ -22,6 +22,8 @@ type Scenario = {
   needsDecision?: boolean;
   /** Every gate() call blocks this long, as a slow call of a real tracker does. */
   gateBlockMs?: number;
+  /** A merged item stays listed (and keeps blocking) for this many items() calls, as a tracker that closes late. */
+  closeAfterCalls?: number;
 };
 
 export function create(): Tracker {
@@ -30,6 +32,8 @@ export function create(): Tracker {
   const record = (call: Record<string, unknown>) =>
     appendFileSync(path.join(dir, 'calls.jsonl'), `${JSON.stringify(call)}\n`);
   const merged = new Set<number>();
+  const closed = new Set<number>();
+  const listedCalls = new Map<number, number>();
   let gateCalls = 0;
   let fileReads = 0;
   const itemOf = (pull: Pull) => pull.id - 100;
@@ -38,16 +42,22 @@ export function create(): Tracker {
     name: 'fake',
     repo: 'fake/repo',
     subject: (): Subject => ({ kind: 'fake.repository', id: 'fake/repo', title: 'fake/repo' }),
-    items: (): Item[] =>
-      scenario.items
-        .filter((item) => !merged.has(item.id))
+    items: (): Item[] => {
+      for (const id of merged) {
+        const calls = (listedCalls.get(id) ?? 0) + 1;
+        listedCalls.set(id, calls);
+        if (calls > (scenario.closeAfterCalls ?? 0)) closed.add(id);
+      }
+      return scenario.items
+        .filter((item) => !closed.has(item.id))
         .map((item) => ({
           id: item.id,
           title: item.title,
           url: `https://example.test/issues/${item.id}`,
           labels: ['pbi'],
           body: 'body of the issue',
-        })),
+        }));
+    },
     itemSubject: (item: Item): Subject => ({
       kind: 'fake.issue',
       id: `fake/repo#${item.id}`,
@@ -56,7 +66,7 @@ export function create(): Tracker {
     }),
     waitReason(item: Item): string | undefined {
       const open = (scenario.items.find((i) => i.id === item.id)?.blockedBy ?? []).filter(
-        (id) => !merged.has(id),
+        (id) => !closed.has(id),
       );
       return open.length > 0 ? `blocked by ${open.map((id) => `#${id}`).join(', ')}` : undefined;
     },
