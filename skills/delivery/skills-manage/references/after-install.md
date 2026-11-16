@@ -31,6 +31,8 @@ A skill installed both globally (`-g`) and in the project may resolve to the glo
 
 ## Delivery
 
+`/skills-manage delivery` also offers the `deliver-loop` command: `pwsh scripts/Install-LoopShim.ps1` writes a launcher (`~/.local/bin/deliver-loop`, on Windows `deliver-loop.cmd` and `deliver-loop.ps1` in `%USERPROFILE%\.local\bin`), removes the old `# >>> deliver-loop >>>` function from the shell profiles, and reports when `.local/bin` is not in `PATH` (it never changes `PATH`). The loop needs Node 24 or newer: it runs `.mts` files with Node's built-in type stripping, there is no build step.
+
 Delivery runs through the `deliver` skill (`/deliver <nr>`, or `node scripts/deliver-loop.mts --milestone <M>` for a set), harness-neutral. Settings live under `deliver` in `.agents/config.json`; the session needs `git`, `gh` and the verify commands of the repository's `AGENTS.md` (build, test, format, lint), read from its `## Commands` section.
 
 ## project-setup offer

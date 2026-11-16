@@ -47,11 +47,11 @@ To put a milestone between two open ones, use a sub-number: `/github-milestone c
 /deliver --milestone M003
 ```
 
-Every open PBI and Bug of the milestone is delivered into `release/next` ([deliver guide](deliver.md#deliver-a-milestone)). For long milestones use fresh sessions per PBI ([loop](deliver.md#a-release-in-fresh-sessions)).
+Every open PBI and Bug of the milestone is delivered into `release/next` (`deliver-loop --milestone M003`, [deliver guide](deliver.md#the-loop)): a fresh session per PBI, each pull request merged once its required checks passed.
 
-## 4. Release review
+## 4. Release pull request
 
-When nothing is left, `deliver` reviews the whole diff `origin/main...origin/release/next` against the criteria of the closed issues. Blocking findings become Bug issues in the milestone and no release PR is opened: run `/deliver --milestone M003` again. Without blocking findings, up to five notes go into the release PR. Details: [delivery reference](../delivery.md#release-review).
+When nothing is left, the loop opens the release pull request from `release/next` into `main` and prints its URL; it never merges it. Review the whole diff `origin/main...origin/release/next` there (`code-review` can do it). Details: [delivery reference](../delivery.md#release-pull-request).
 
 ## 5. Finish: release PR and changelog
 

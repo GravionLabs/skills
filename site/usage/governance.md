@@ -39,5 +39,5 @@ Had the gateway change touched only internals, the implementer would note `no sp
 ## Details
 
 - [Project config](project-config.md#governance): the `governance` fields and an example
-- [Delivery](../delivery.md#decision-pbis-and-spec-notes): decision PBIs and spec notes in `deliver`
+- [Delivery](../delivery.md): decision PBIs and spec notes in `deliver`
 - Skill references: `adr` `references/when.md`, `planner` `references/governance.md`, `implementation` `references/specs.md`, `code-review` `references/governance.md`, `deliver` `references/governance.md`
