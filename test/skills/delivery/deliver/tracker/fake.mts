@@ -1,6 +1,6 @@
-// A tracker for the tests of the deliver-min loop: the scenario comes from $FAKE_DIR/scenario.json, the
+// A tracker for the tests of the deliver loop: the scenario comes from $FAKE_DIR/scenario.json, the
 // pull request of an item exists once the fake harness wrote $FAKE_DIR/pr-<id>, and every merge is
-// appended to $FAKE_DIR/calls.jsonl. The loop loads it through DELIVER_MIN_TRACKER_DIR.
+// appended to $FAKE_DIR/calls.jsonl. The loop loads it through DELIVER_TRACKER_DIR.
 import { appendFileSync, existsSync, readFileSync } from 'node:fs';
 import path from 'node:path';
 import type {
@@ -9,7 +9,7 @@ import type {
   Pull,
   Subject,
   Tracker,
-} from '../../../../../skills/delivery/deliver-min/scripts/tracker.mts';
+} from '../../../../../skills/delivery/deliver/scripts/tracker.mts';
 
 type Scenario = {
   items: { id: number; title: string; blockedBy?: number[] }[];

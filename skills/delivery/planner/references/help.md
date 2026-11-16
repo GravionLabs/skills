@@ -46,5 +46,5 @@ Plans an issue one level down with blockers and sizes, grills the open decisions
 
 ## See also
 
-- `grill-me`, `github-issue`, `deliver-min`
+- `grill-me`, `github-issue`, `deliver`
 - `site/usage/governance.md`

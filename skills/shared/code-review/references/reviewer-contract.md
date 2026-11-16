@@ -1,6 +1,6 @@
 # Reviewer contract
 
-How `code-review` behaves as the reviewer role when a runner (such as `deliver-min`) or a caller starts it. Interactive use is the same review; only the output differs.
+How `code-review` behaves as the reviewer role when a runner (such as `deliver`) or a caller starts it. Interactive use is the same review; only the output differs.
 
 ## Input
 

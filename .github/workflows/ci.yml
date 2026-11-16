@@ -118,9 +118,9 @@ jobs:
           path: test-results/
           if-no-files-found: ignore
 
-  # The loop of deliver-min runs on Windows too (#689): its tests on windows-latest. Not a required check.
+  # The loop of deliver runs on Windows too (#689): its tests on windows-latest. Not a required check.
   test-windows:
-    name: Test deliver-min (windows)
+    name: Test deliver (windows)
     runs-on: windows-latest
     permissions:
       contents: read
@@ -147,7 +147,7 @@ jobs:
         run: pnpm install --frozen-lockfile
 
       - name: Test
-        run: pnpm exec vitest run test/skills/delivery/deliver-min.test.ts
+        run: pnpm exec vitest run test/skills/delivery/deliver.test.ts
 
   # Aggregate check "Test": green only when both shards succeeded. The github-actions reporter annotates failures.
   test:

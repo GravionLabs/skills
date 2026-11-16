@@ -2,7 +2,7 @@
 .SYNOPSIS
   Maps a `review.schema.json` result to the findings format of poimen (`findings.json`, schema `findings.schema.json` in the docs of GravionLabs/poimen).
 .DESCRIPTION
-  Single place of the mapping for `code-review` (form `findings`, stdout) and `deliver-min` (file). `blocking[]` becomes severity `blocking`
+  Single place of the mapping for `code-review` (form `findings`, stdout) and `deliver` (file). `blocking[]` becomes severity `blocking`
   with `file`, `line`, `title`, `why` (and `rule`); `notes[]` (strings) become severity `note` without location (title and why are the note);
   `unmet[]` (strings) become severity `blocking` without location. Prints the JSON, or with -Worktree writes
   `<Worktree>/.agents/state/findings.json` and makes sure `.agents/state/` is ignored (appended to `<git-common-dir>/info/exclude` when not).

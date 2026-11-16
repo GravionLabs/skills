@@ -10,7 +10,7 @@ const schema = JSON.parse(
 );
 const validate = new Ajv2020({ allErrors: true, strict: false }).compile(schema);
 
-// The deliver key of .agents/config.json holds the settings of deliver-min.
+// The deliver key of .agents/config.json holds the settings of deliver.
 describe('config schema: deliver', () => {
   it('accepts base, tracker, harness and protectedPaths', () => {
     expect(

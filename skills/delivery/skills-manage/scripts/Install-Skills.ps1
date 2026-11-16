@@ -211,7 +211,7 @@ if ($Groups) {
     }
   }
   # Base groups: proposed when their marker skill is missing from the user's skill directories
-  $marker = [ordered]@{ shared = 'detect-techstack'; github = 'github-issue'; delivery = 'deliver-min' }
+  $marker = [ordered]@{ shared = 'detect-techstack'; github = 'github-issue'; delivery = 'deliver' }
   foreach ($k in $marker.Keys) {
     if (-not (Test-Installed $marker[$k] $userHome $homeDirs)) { Add-Group $k }
   }

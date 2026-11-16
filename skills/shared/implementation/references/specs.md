@@ -13,7 +13,7 @@ Not a spec change: refactorings, tests, internal renames.
 ## Rules
 
 - When a changed file matches a `specMap` glob and the change is a spec change, update the spec file in the same commit as the code.
-- A glob matches but the spec needs no change: add `no spec change needed: <spec file> — <reason>` to `notes[]` of the implementer result (exact wording; CI looks for it and `deliver-min` passes it on).
+- A glob matches but the spec needs no change: add `no spec change needed: <spec file> — <reason>` to `notes[]` of the implementer result (exact wording; CI looks for it and `deliver` passes it on).
 - `specMode` does not change what implementation does; it only decides warn or fail in CI and `code-review`.
 
 ## New service

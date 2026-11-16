@@ -31,7 +31,7 @@ A skill installed both globally (`-g`) and in the project may resolve to the glo
 
 ## Delivery
 
-Delivery runs through the `deliver-min` skill (`/deliver-min <nr>`, or `node scripts/deliver-loop.mts --milestone <M>` for a set), harness-neutral. Settings live under `deliver` in `.agents/config.json`; the session needs `git`, `gh` and the verify commands of the repository's `AGENTS.md` (build, test, format, lint), read from its `## Commands` section.
+Delivery runs through the `deliver` skill (`/deliver <nr>`, or `node scripts/deliver-loop.mts --milestone <M>` for a set), harness-neutral. Settings live under `deliver` in `.agents/config.json`; the session needs `git`, `gh` and the verify commands of the repository's `AGENTS.md` (build, test, format, lint), read from its `## Commands` section.
 
 ## project-setup offer
 

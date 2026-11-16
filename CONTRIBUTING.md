@@ -11,7 +11,7 @@ What does not belong here:
 
 - Generic best practices the model already knows (tool basics, language tutorials, flag tables).
 - Secrets, internal URLs, project-specific identifiers.
-- Agents, hooks, prompts or a pipeline of its own. Workflows are skills; delivery is the `deliver-min` skill.
+- Agents, hooks, prompts or a pipeline of its own. Workflows are skills; delivery is the `deliver` skill.
 
 ## Setup
 
@@ -42,7 +42,7 @@ The repo uses pnpm (`pnpm-lock.yaml`) only.
 
 ## Dogfooding: project skills
 
-Project skills take precedence over global ones. Without them, a `deliver-min` run in this repository loads the global copy (`~/.claude/skills/deliver-min`) instead of `skills/delivery/deliver-min/`. Link the repository skills as project skills before `deliver` runs here:
+Project skills take precedence over global ones. Without them, a `deliver` run in this repository loads the global copy (`~/.claude/skills/deliver`) instead of `skills/delivery/deliver/`. Link the repository skills as project skills before `deliver` runs here:
 
 ```powershell
 pwsh scripts/Link-Skills.ps1           # links skills/<group>/<name> to .claude/skills/<name> and .agents/skills/<name>
@@ -77,11 +77,12 @@ Renamed when moving from GravionLabs/apm-hub:
 
 Renamed since:
 
-| Old name               | New name        | Note                                                                          |
-| :--------------------- | :-------------- | :---------------------------------------------------------------------------- |
-| `ng-ag-grid-developer` | `ng-ag-grid`    | same skill; `npx skills remove ng-ag-grid-developer`, then `add` `ng-ag-grid` |
-| `skills-install`       | `skills-manage` | removed in v3.0.0; `npx skills remove skills-install`                         |
-| `skill-manage`         | `skills-manage` | removed in v3.0.0; `npx skills remove skill-manage`                           |
+| Old name               | New name        | Note                                                                                                                                                                             |
+| :--------------------- | :-------------- | :------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `ng-ag-grid-developer` | `ng-ag-grid`    | same skill; `npx skills remove ng-ag-grid-developer`, then `add` `ng-ag-grid`                                                                                                    |
+| `skills-install`       | `skills-manage` | removed in v3.0.0; `npx skills remove skills-install`                                                                                                                            |
+| `skill-manage`         | `skills-manage` | removed in v3.0.0; `npx skills remove skill-manage`                                                                                                                              |
+| `deliver-min`          | `deliver`       | takes the name of the removed old skill; `npx skills remove deliver-min`, then `add` `deliver`; `DELIVER_MIN_*` variables are read as `DELIVER_*` for one release with a warning |
 
 ## Issues
 

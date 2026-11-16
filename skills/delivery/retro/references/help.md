@@ -41,6 +41,6 @@ none
 
 ## See also
 
-- `deliver-min`, whose run report supplies the escalation lines
+- `deliver`, whose run report supplies the escalation lines
 - `github-issue`, which creates approved PBIs
 - `lessons`, the contract of lesson drafts
