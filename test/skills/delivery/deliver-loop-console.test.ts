@@ -36,7 +36,7 @@ describe.skipIf(!hasPwsh || process.platform === 'win32')('Invoke-DeliverLoop.ps
       cwd,
       `(call) => {
         if (/^repos\\/\\{owner\\}\\/\\{repo\\}\\/issues\\/401$/.test(call.args[1] || '')) {
-          return { rest: { number: 401, state: 'closed', labels: [{ name: 'pbi' }] } };
+          return { rest: { number: 401, state: 'closed', labels: [{ name: 'pbi' }], body: '## Acceptance Criteria\\n- [ ] x' } };
         }
         throw new Error('unexpected gh ' + call.args.join(' '));
       }`,
@@ -179,7 +179,7 @@ esac
         `(call) => {
           if (/^repos\\/\\{owner\\}\\/\\{repo\\}\\/issues\\/401$/.test(call.args[1] || '')) {
             const s = JSON.parse(require('fs').readFileSync(${JSON.stringify(state)}, 'utf8'));
-            return { rest: { number: 401, state: s.state, labels: [{ name: 'pbi' }] } };
+            return { rest: { number: 401, state: s.state, labels: [{ name: 'pbi' }], body: '## Acceptance Criteria\\n- [ ] x' } };
           }
           if (/sub_issues|blocked_by/.test(call.args[1] || '')) return { rest: [] };
           throw new Error('unexpected gh ' + call.args.join(' '));
