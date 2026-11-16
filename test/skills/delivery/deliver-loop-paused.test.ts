@@ -35,10 +35,11 @@ describe.skipIf(!hasPwsh || process.platform === 'win32')(
         const fs = require('fs');
         const s = JSON.parse(fs.readFileSync(${JSON.stringify(state)}, 'utf8'));
         const a = call.args[1] || '';
-        const row = { number: 10, title: 'the work', state: 'open', closed_at: null, body: '', labels: s.labels.map((name) => ({ name })), assignees: [], issue_dependencies_summary: { blocked_by: 0 } };
+        const row = { number: 10, title: 'the work', state: 'open', closed_at: null, body: '## Acceptance Criteria\\n- [ ] x', labels: s.labels.map((name) => ({ name })), assignees: [], issue_dependencies_summary: { blocked_by: 0 } };
         if (/\\/milestones\\?/.test(a)) return { rest: [[{ number: 4, title: 'M4 Status', state: 'open', html_url: 'https://github.com/acme/app/milestone/4' }]] };
         if (/issues\\?milestone=4&state=(open|all)/.test(a)) return { rest: [[row]] };
         if (/issues\\?milestone=4&state=closed/.test(a)) return { rest: [[]] };
+        if (/^repos\\/\\{owner\\}\\/\\{repo\\}\\/issues\\/10$/.test(a)) return { rest: row };
         if (/dependencies\\/blocked_by/.test(a)) return { rest: [[]] };
         throw new Error('unexpected gh ' + call.args.join(' '));
       }`,

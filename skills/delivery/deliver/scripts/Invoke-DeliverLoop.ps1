@@ -18,6 +18,9 @@
   Stdout is colored when it is a terminal and neither -NoColor nor NO_COLOR is set; otherwise it is plain.
   Machine-readable progress for a control session (`deliver` `references/control.md`): .agents/deliver-loop/<run>/progress.jsonl,
   one JSON object per line (`start`, `iteration-start`, `iteration-end`, `result`), and .agents/deliver-loop/latest.txt with the path of the newest run directory.
+  Run plan (#673): before the first iteration the loop checks the whole set (REST only) and prints the PBIs in delivery order with their tier,
+  then the open PBIs it will not deliver with their reason (hold label, no acceptance criteria, Bug without reproduction, open blocker outside the set,
+  blocker not deliverable, cycle, other milestone). Those are never started and listed again at the end; the blocked-by links are read once.
   Run it from the repository root. Exit code: 0 done, max reached or stopped (stop file), 2 blocked (1 no progress only in -Objective), 3 release/next missing on origin and not creatable (#671: it is created from the default branch; the push was refused; needs you: github-release cut, nothing started), 5 failed (#672: three harness failures in a row or a gh call that still fails after its retries; the last line names the cause), 64 bad arguments.
   Harness and GitHub failures (#672) do not count against a PBI: a failed gh call is retried after 5, 30 and 120 s
   (DELIVER_GH_RETRY_SECONDS), a rate limit waits until its reset; a session that exits other than 0 without a step.finished
@@ -42,6 +45,7 @@
   File with context for the fix subagent (e.g. upstream PRs of other repositories): passed on as `--context <file>` to `/deliver`
   when the file exists (missing: the prompt is unchanged). With -Objective the loop writes it per downstream repository.
 .PARAMETER DryRun
+  Target and milestone mode (#673): check the set, print the run plan and exit 0; nothing starts (the release branch is not created either).
   With -Objective: print which repositories would be started with which targets, and start (and clone) nothing.
 .PARAMETER NoPreflight
   With -Objective: skip Test-DeliverPreflight.ps1 in each repository before its loop.
@@ -92,7 +96,9 @@ if ($Harness -eq 'copilot' -and -not $Model) { $Model = 'auto' }
 
 # Model per tier (references/roles.md): the tier decides the model of an iteration when -Model is not given.
 $TierModels = @{ fast = 'haiku'; standard = 'sonnet'; strong = 'opus' }
+$PlanIssues = @{}   # #673: the issues the plan read; the first read of an iteration takes its issue from here (no second read)
 function Read-PbiIssue([int]$nr) {
+  if ($PlanIssues.ContainsKey("$nr")) { $cached = $PlanIssues["$nr"]; $PlanIssues.Remove("$nr"); return $cached }
   # one REST read of the PBI per iteration, shared by its tier and its task title (#601); null when unreadable
   try { Get-Json @('api', "repos/{owner}/{repo}/issues/$nr") } catch { Write-Verbose "issue not read: $_"; $null }
 }
@@ -113,8 +119,8 @@ if ($Objective -and ($Nrs.Count -or $Milestone)) {
   [Console]::Error.WriteLine('-Objective is not combined with -Target or -Milestone.')
   exit 64
 }
-if (($DryRun -or $NoPreflight) -and -not $Objective) {
-  [Console]::Error.WriteLine('-DryRun and -NoPreflight need -Objective.')
+if ($NoPreflight -and -not $Objective) {
+  [Console]::Error.WriteLine('-NoPreflight needs -Objective.')
   exit 64
 }
 if (-not $Objective -and (($Nrs | Where-Object { $_ -notmatch '^\d+$' }) -or ($Nrs.Count -eq 0 -and -not $Milestone))) {
@@ -456,7 +462,7 @@ function Add-Pbis([int]$nr, [hashtable]$seen, $found, [string]$ms = '', $skipped
   if ($labels -contains 'pbi' -or $labels -contains 'bug') {
     if ($issue.state -eq 'open') {
       if ($ms -and $issue.milestone.title -ne $ms) { $skipped.Add([pscustomobject]@{ Number = $nr; Milestone = $(if ($issue.milestone) { $issue.milestone.title } else { 'none' }) }) }
-      else { $found.Add([pscustomobject]@{ Number = $nr; Labels = $labels }) }
+      else { $found.Add([pscustomobject]@{ Number = $nr; Labels = $labels; InMs = [bool]$ms }) }
     }
     return
   }
@@ -465,24 +471,48 @@ function Add-Pbis([int]$nr, [hashtable]$seen, $found, [string]$ms = '', $skipped
   }
 }
 
-# State from GitHub: open PBIs of the targets; eligible = no hold label; ready = eligible and no open blocker.
-# #655: PBIs set aside for the rest of the run (nr -> reason): memory of the run, not GitHub. They stay open and are never ready.
-$SetAside = [ordered]@{}
-function Get-State {
+# #673: the open PBIs and Bugs of the targets and the milestone. Returns Found (Number, Labels, InMs: listed by the milestone),
+# Skipped (outside the milestone) and the milestone title. The milestone is read first so that a target that is also in it counts as in it.
+function Find-Pbis {
   $seen = @{}
   $found = [System.Collections.Generic.List[object]]::new()
   $skipped = [System.Collections.Generic.List[object]]::new()
-  foreach ($nr in $Nrs) { Add-Pbis $nr $seen $found }
+  $title = ''
   if ($Milestone) {
     # one REST call lists the milestone (Get-Milestones.ps1 -Mode issues); PBIs and Bugs need no read of their own (#127)
     $list = Get-Json @('-File', $MilestoneScript, '-Mode', 'issues', '-Name', $Milestone, '-State', 'open') -Pwsh
+    $title = [string]$list.milestone.title
     foreach ($item in @($list.issues)) {
       if (-not $item) { continue }
       if ($item.labels -contains 'pbi' -or $item.labels -contains 'bug') {
-        if (-not $seen.ContainsKey([int]$item.number)) { $seen[[int]$item.number] = $true; $found.Add([pscustomobject]@{ Number = [int]$item.number; Labels = @($item.labels) }) }
-      } else { Add-Pbis ([int]$item.number) $seen $found ([string]$list.milestone.title) $skipped }
+        if (-not $seen.ContainsKey([int]$item.number)) { $seen[[int]$item.number] = $true; $found.Add([pscustomobject]@{ Number = [int]$item.number; Labels = @($item.labels); InMs = $true }) }
+      } else { Add-Pbis ([int]$item.number) $seen $found $title $skipped }
     }
   }
+  foreach ($nr in $Nrs) { Add-Pbis $nr $seen $found }
+  [pscustomobject]@{ Found = $found; Skipped = $skipped; Title = $title }
+}
+
+# #673: blocked-by links of the run, read once by New-RunPlan: PBI number -> open blockers (Number, Repo). Later iterations read no links.
+$BlockerCache = @{}
+function Get-RepoOf($issue) { if ($issue.repository_url) { ([string]$issue.repository_url -replace '^.*/repos/', '') } else { '' } }
+function Get-OpenBlockers([int]$nr, [string]$repo) {
+  $blockers = @(Get-Json @('api', "repos/{owner}/{repo}/issues/$nr/dependencies/blocked_by?per_page=100"))
+  @($blockers | Where-Object { $_ -and $_.state -eq 'open' } | ForEach-Object {
+      $r = Get-RepoOf $_
+      [pscustomobject]@{ Number = [int]$_.number; Repo = $(if ($r -and $r -ne $repo) { $r } else { '' }) }
+    })
+}
+
+# State from GitHub: open PBIs of the targets; eligible = no hold label; ready = eligible and no open blocker.
+# #655: PBIs set aside for the rest of the run (nr -> reason): memory of the run, not GitHub. They stay open and are never ready.
+$SetAside = [ordered]@{}
+$Prefound = $null   # the PBIs the plan found: the first state read of the run uses them
+function Get-State {
+  $f0 = if ($script:Prefound) { $script:Prefound } else { Find-Pbis }
+  $script:Prefound = $null
+  $found = $f0.Found
+  $skipped = $f0.Skipped
   # release-test (the RC test of the milestone, always last and manual): not part of the stop-rule set, so it neither keeps the loop from done nor makes it blocked
   $found = [System.Collections.Generic.List[object]]::new(@($found | Where-Object { $_.Labels -notcontains 'release-test' -and $script:Merging -notcontains [int]$_.Number }))
   # release-review pause (references/release-review.md): nothing open, but a closed PBI or Bug of the milestone carries needs-decision
@@ -493,11 +523,14 @@ function Get-State {
   }
   $eligible = @($found | Where-Object { -not (Get-HoldReason @($_.Labels)) })
   $waitMerge = @{}
+  $inSet = @($found | ForEach-Object { [int]$_.Number })
   $ready = @($eligible | Where-Object {
-      $blockers = @(Get-Json @('api', "repos/{owner}/{repo}/issues/$($_.Number)/dependencies/blocked_by?per_page=100"))
-      $open = @($blockers | Where-Object { $_ -and $_.state -eq 'open' })
+      $nr = [int]$_.Number
+      if (-not $script:BlockerCache.ContainsKey("$nr")) { $script:BlockerCache["$nr"] = @(Get-OpenBlockers $nr '') }
+      # #673: the links were read at the start; a blocker of this repository is open while it is in the open set or merging
+      $open = @($script:BlockerCache["$nr"] | Where-Object { $_.Repo -or $inSet -contains $_.Number -or $script:Merging -contains $_.Number })
       # every open blocker waits for its merge (outcome merging): the PBI waits too, it is not blocked
-      if ($open.Count -and -not @($open | Where-Object { $script:Merging -notcontains [int]$_.number })) { $waitMerge["$($_.Number)"] = [int]$open[0].number }
+      if ($open.Count -and -not @($open | Where-Object { $script:Merging -notcontains $_.Number })) { $waitMerge["$nr"] = $open[0].Number }
       -not $open
     })
   # #655: a PBI set aside (blocked, paused or without outcome) is not selected again in this run
@@ -515,6 +548,88 @@ function Get-State {
     Eligible = @($eligible | ForEach-Object { $_.Number } | Sort-Object)
     Ready    = @($readyNrs)
   }
+}
+
+# #673: the check of the whole set before the first session, REST only, no model. Returns Deliver (the PBIs in delivery order: Number,
+# Tier) and Left (the open PBIs it will not deliver: Number, Reason). Reads each PBI and its blocked-by links once (BlockerCache).
+function Test-PbiBody($issue, [string[]]$labels) {
+  $body = [string]$issue.body
+  $ac = [regex]::Match($body, '(?ims)^[ \t]*#{1,6}[ \t]*Acceptance Criteria[ \t]*$(.*?)(?=^[ \t]*#{1,6}[ \t]|\z)')
+  if (-not ($ac.Success -and $ac.Groups[1].Value -match '(?m)^\s*(?:[-*+]|\d+[.)])\s+\S')) { return 'no acceptance criteria' }
+  if ($labels -contains 'bug' -and $body -notmatch '(?im)^[ \t]*(?:#{1,6}[ \t]*|\*\*)[^\n]*repro') { return 'bug without a reproduction' }
+  return $null
+}
+
+function New-RunPlan {
+  $f0 = Find-Pbis
+  $script:Prefound = $f0
+  $items = [ordered]@{}
+  foreach ($f in @($f0.Found | Where-Object { $_.Labels -notcontains 'release-test' } | Sort-Object { [int]$_.Number })) { $items["$($f.Number)"] = $f }
+  $why = [ordered]@{}   # nr -> reason of the first check that failed
+  $info = @{}
+  foreach ($k in $items.Keys) {
+    $f = $items[$k]; $nr = [int]$f.Number
+    $issue = Read-PbiIssue $nr
+    if (-not $issue) { $why[$k] = 'issue not readable'; continue }
+    $script:PlanIssues[$k] = $issue
+    $repo = Get-RepoOf $issue
+    $links = @(Get-OpenBlockers $nr $repo)
+    $script:BlockerCache[$k] = $links
+    $info[$k] = [pscustomobject]@{ Issue = $issue; Links = $links }
+    $hold = Get-HoldReason @($f.Labels)
+    if ($hold) { $why[$k] = $hold; continue }
+    $bad = Test-PbiBody $issue @($f.Labels)
+    if ($bad) { $why[$k] = $bad; continue }
+    if ($Milestone -and -not $f.InMs -and [string]$issue.milestone.title -ne $f0.Title) {
+      $why[$k] = "outside $Milestone (milestone: $(if ($issue.milestone) { $issue.milestone.title } else { 'none' }))"; continue
+    }
+    $outside = @($links | Where-Object { $_.Repo -or -not $items.Contains("$($_.Number)") })
+    if ($outside) { $why[$k] = 'open blocker ' + (($outside | ForEach-Object { if ($_.Repo) { "$($_.Repo)#$($_.Number)" } else { "#$($_.Number)" } }) -join ', ') }
+  }
+  # the in-set blockers of a PBI that passed its own checks
+  $deps = @{}
+  foreach ($k in $items.Keys) { $deps[$k] = @($(if ($info.ContainsKey($k)) { $info[$k].Links | Where-Object { -not $_.Repo -and $items.Contains("$($_.Number)") } | ForEach-Object { "$($_.Number)" } })) }
+  # a cycle: a PBI that reaches itself through the blocked-by links; both (all) members of the ring are left out
+  $reachOf = @{}
+  foreach ($k in $items.Keys) {
+    $reach = [System.Collections.Generic.HashSet[string]]::new(); $queue = [System.Collections.Generic.Queue[string]]::new()
+    foreach ($d in $deps[$k]) { $queue.Enqueue($d) }
+    while ($queue.Count) { $x = $queue.Dequeue(); if ($reach.Add($x)) { foreach ($d in $deps[$x]) { $queue.Enqueue($d) } } }
+    $reachOf[$k] = $reach
+  }
+  foreach ($k in $items.Keys) {
+    if (-not $reachOf[$k].Contains($k) -or $why.Contains($k)) { continue }
+    $ring = @($items.Keys | Where-Object { $_ -eq $k -or ($reachOf[$k].Contains($_) -and $reachOf[$_].Contains($k)) })
+    $why[$k] = 'cycle in blocked-by: ' + (($ring | Sort-Object { [int]$_ } | ForEach-Object { "#$_" }) -join ' ↔ ')
+  }
+  # a blocker in the set that is itself not deliverable
+  do {
+    $changed = $false
+    foreach ($k in $items.Keys) {
+      if ($why.Contains($k)) { continue }
+      $bad = @($deps[$k] | Where-Object { $why.Contains($_) })
+      if ($bad) { $why[$k] = "blocker #$($bad[0]) is not deliverable ($($why[$bad[0]]))"; $changed = $true }
+    }
+  } while ($changed)
+  # delivery order: the loop takes the lowest ready number, so a topological order with the lowest number first
+  $left = [System.Collections.Generic.List[string]]::new(); foreach ($k in $items.Keys) { if (-not $why.Contains($k)) { $left.Add($k) } }
+  $order = @(); $done = [System.Collections.Generic.HashSet[string]]::new()
+  while ($left.Count) {
+    $next = $left | Where-Object { $k2 = $_; -not @($deps[$k2] | Where-Object { -not $done.Contains($_) }) } | Select-Object -First 1
+    if (-not $next) { break }
+    $order += $next; [void]$done.Add($next); [void]$left.Remove($next)
+  }
+  $deliver = @($order | ForEach-Object { [pscustomobject]@{ Number = [int]$_; Tier = (Get-PbiTier ([int]$_) $info[$_].Issue).Tier } })
+  $notDelivered = @($why.Keys | ForEach-Object { [pscustomobject]@{ Number = [int]$_; Reason = $why[$_] } })
+  foreach ($sk in $f0.Skipped) { $notDelivered += [pscustomobject]@{ Number = [int]$sk.Number; Reason = "outside $Milestone (milestone: $($sk.Milestone))" } }
+  [pscustomobject]@{ Deliver = $deliver; Left = @($notDelivered | Sort-Object Number); Held = @($why.Keys) }
+}
+
+function Write-RunPlan($plan) {
+  Write-Step "run plan: $(@($plan.Deliver).Count) to deliver, $(@($plan.Left).Count) not delivered" 'cyan'
+  $n = 0
+  foreach ($d in $plan.Deliver) { $n++; Write-Step "  $n. #$($d.Number) tier $($d.Tier)" }
+  foreach ($l in $plan.Left) { Write-Step "  not delivered: #$($l.Number) $($l.Reason)" 'yellow' }
 }
 
 # One REST list (Get-MergingPrs.ps1) refreshes $Merging: a PR that is still `waiting` stays; red by this change leaves the set and
@@ -879,6 +994,12 @@ function Invoke-Iteration([int]$n, [int]$total, $state) {
   }
 }
 
+# #673: -DryRun prints the plan and ends; nothing starts, nothing is written to GitHub (and the release branch is not created)
+if ($DryRun) {
+  try { Write-RunPlan (New-RunPlan); exit 0 }
+  catch { Write-Step "failed: $($_.Exception.Message)" 'red'; exit 5 }
+}
+
 # release/next missing (deleted after the release PR): no agent starts, no PBI is labeled (Test-DeliverPreflight.ps1 release-branch)
 $rbJson = (& pwsh -NoProfile -File (Join-Path $PSScriptRoot 'Test-DeliverPreflight.ps1') -ProjectRoot (Get-Location).Path -Check release-branch 2>$null) -join "`n"
 $rbCheck = @(($rbJson | ConvertFrom-Json -ErrorAction SilentlyContinue).checks | Where-Object { $_.name -eq 'release-branch' })
@@ -928,6 +1049,10 @@ try {
   Read-StatusBlock
   Start-Run
   Send-BlockEvents
+  # #673: the whole set is checked once; a PBI that fails a check is never started (set aside from the start, nothing is written to its issue)
+  $plan = New-RunPlan
+  Write-RunPlan $plan
+  foreach ($l in $plan.Left) { if ($plan.Held -contains "$($l.Number)") { $SetAside["$($l.Number)"] = $l.Reason } }
   $state = Get-State
   Write-ProgressLine
   Write-ProgressRecord 'start' @{ targets = @($Nrs); milestone = $Milestone; max = $Max; harness = $Harness; model = $Model; open = $state.Open }

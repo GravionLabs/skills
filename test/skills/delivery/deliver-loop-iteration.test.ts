@@ -42,8 +42,8 @@ describe.skipIf(!hasPwsh || process.platform === 'win32')('Invoke-DeliverLoop.ps
     it('hands the session the PBI the iteration is logged under: file, records and tier model agree', async () => {
       const gh = fx.setup({
         issues: {
-          81: pbi({ body: 'Tier: fast' }),
-          82: pbi({ body: 'Tier: strong' }),
+          81: pbi({ body: 'Tier: fast\n\n## Acceptance Criteria\n- [ ] x' }),
+          82: pbi({ body: 'Tier: strong\n\n## Acceptance Criteria\n- [ ] x' }),
         },
         milestones: { M4: [81, 82] },
         effect: 'close-first',
