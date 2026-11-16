@@ -391,11 +391,23 @@ async function deliver(item: Item): Promise<{ reason?: string; pull?: Pull }> {
   return { reason, pull };
 }
 
-if (!attempt('git', ['ls-remote', '--exit-code', '--heads', 'origin', BASE], root)) {
-  fail(
-    `${BASE} is missing on origin${BASE === 'release/next' ? ': run github-release cut first' : ''}`,
-    3,
-  );
+const baseExists = () =>
+  attempt('git', ['ls-remote', '--exit-code', '--heads', 'origin', BASE], root) !== undefined;
+if (!baseExists()) {
+  // after every release the merge deletes release/next: cut it again from the default branch, as github-release cut does
+  if (BASE !== 'release/next') fail(`${BASE} is missing on origin`, 3);
+  if (opt['dry-run']) {
+    console.log(`${BASE} is missing on origin, the loop cuts it from the default branch`);
+  } else {
+    try {
+      const target = tracker.defaultBranch();
+      run('git', ['fetch', '--quiet', 'origin', target], root);
+      run('git', ['push', '--quiet', 'origin', `origin/${target}:refs/heads/${BASE}`], root);
+      console.log(`${BASE} was missing on origin: cut from ${target}`);
+    } catch (error) {
+      fail(`${BASE} is missing on origin and could not be cut: ${firstLine(error)}`, 3);
+    }
+  }
 }
 
 const required = tracker.requiredChecks();
@@ -532,6 +544,42 @@ try {
   process.exit(1);
 }
 
+// A fully delivered milestone ends with the release pull request, which a person merges.
+let needsYou: string[] = [];
+let releaseError = '';
+const complete = Boolean(opt.milestone) && !stopped && aside.size === 0 && waiting.length === 0;
+if (complete) {
+  try {
+    if (tracker.items().length === 0) {
+      const release = tracker.ensureReleasePull();
+      log(`release pull request: ${release.url} (never merged by the loop)`, 'info');
+      emit('step.finished', {
+        task: 'release',
+        step: { name: 'release-pr', text: 'release pull request' },
+        links: [{ rel: 'pull-request', url: release.url, title: release.title }],
+      });
+      for (const test of tracker.releaseTests()) {
+        needsYou.push(`#${test.id} ${test.title}`);
+        emit(
+          'attention',
+          {
+            id: `release-test-${test.id}`,
+            reason: 'release-test',
+            text: `#${test.id} release test is open: a person tests the release candidate`,
+            needsYou: true,
+            links: [{ rel: 'issue', url: test.url }],
+          },
+          'warning',
+        );
+      }
+    }
+  } catch (error) {
+    needsYou = [];
+    log(`release pull request: ${firstLine(error)}`, 'bad');
+    releaseError = firstLine(error);
+  }
+}
+
 say('');
 say(
   `merged (${merged.length}):${merged.map((line) => `\n  ${line}`).join('')}`,
@@ -545,7 +593,12 @@ say(
   `waiting (${waiting.length}):${waiting.map((line) => `\n  ${line}`).join('')}`,
   waiting.length ? 'warn' : undefined,
 );
-const clean = aside.size === 0 && waiting.length === 0;
+if (releaseError) say(`release pull request failed: ${releaseError}`, 'bad');
+say(
+  `needs you (${needsYou.length}):${needsYou.map((line) => `\n  ${line}`).join('')}`,
+  needsYou.length ? 'warn' : undefined,
+);
+const clean = !releaseError && aside.size === 0 && waiting.length === 0;
 // An incomplete run (issues set aside or waiting) is no success: the agent-events format has no
 // other outcome for it than `failed`; the counts are in the text.
 emit(
@@ -553,7 +606,7 @@ emit(
   {
     outcome: stopped ? 'cancelled' : clean ? 'succeeded' : 'failed',
     ...(stopped || clean ? {} : { reason: 'incomplete' }),
-    text: `merged ${merged.length}, set aside ${aside.size}, waiting ${waiting.length}`,
+    text: `merged ${merged.length}, set aside ${aside.size}, waiting ${waiting.length}${needsYou.length ? `, needs you ${needsYou.length}` : ''}`,
   },
   stopped ? 'neutral' : clean ? 'success' : 'warning',
 );

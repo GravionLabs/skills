@@ -64,6 +64,12 @@ export interface Tracker {
   requiredChecks(): string[];
   /** The paths the pull request changes, a rename with both names. */
   changedFiles(pull: Pull): string[];
+  /** The branch the release goes into (`main`), where a missing base branch is cut from. */
+  defaultBranch(): string;
+  /** The open `release-test` issues of the selection: a person tests the release candidate, the loop never starts them. */
+  releaseTests(): Item[];
+  /** The open release pull request from the base branch into the default branch; opens it when missing. Never merges it. */
+  ensureReleasePull(): Pull;
   /** The environment that makes a session act with `token` instead of the login of the user. */
   sessionEnv(token: string): Record<string, string>;
 }
