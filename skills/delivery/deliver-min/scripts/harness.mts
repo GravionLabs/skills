@@ -34,7 +34,7 @@ export const HARNESSES: Record<string, Harness> = {
       '--verbose',
     ],
   },
-  // Flags as the previous deliver loop used them (Copilot CLI 1.0.105); not run with deliver-min yet.
+  // Flags checked against `copilot --help` (Copilot CLI 1.0.108). No stream format: the loop logs plain lines.
   copilot: {
     defaultModel: 'auto',
     claudeStream: false,
@@ -47,6 +47,7 @@ export const HARNESSES: Record<string, Harness> = {
       '--allow-all-paths',
       '--allow-all-urls',
       '--no-ask-user',
+      '--no-color',
     ],
   },
 };

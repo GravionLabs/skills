@@ -265,6 +265,7 @@ function startSession(item: Item, cwd: string, file: string): Promise<Session> {
     // -p stops subagents 10 minutes after the last turn unless the ceiling is off
     CLAUDE_CODE_PRINT_BG_WAIT_CEILING_MS: '0',
     ...process.env,
+    DELIVER_MIN_RUN: runId,
     ...(SESSION_TOKEN ? tracker.sessionEnv(SESSION_TOKEN) : {}),
   };
   delete env.DELIVER_MIN_SESSION_TOKEN;
@@ -282,7 +283,11 @@ function startSession(item: Item, cwd: string, file: string): Promise<Session> {
     createInterface({ input: child.stdout! }).on('line', (line) => {
       out.write(`${line}\n`);
       if (harness.claudeStream) render(line, session);
-      else say(`  ${line}`);
+      else {
+        // no stream format: the plain lines of the harness, without color codes and empty lines
+        const plain = line.replace(/\u001b\[[0-9;]*[A-Za-z]/g, '').trimEnd();
+        if (plain) say(`  ${plain}`);
+      }
     });
     child.on('error', (error) => log(`#${item.id} session: ${error.message}`, 'bad'));
     child.on('close', (code) => {
