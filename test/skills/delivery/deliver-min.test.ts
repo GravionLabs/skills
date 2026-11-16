@@ -29,12 +29,14 @@ type Scenario = {
   exits?: number[];
   noPull?: boolean;
   closeAfterCalls?: number;
+  releaseTests?: number[];
 };
 type Outcome = {
   status: number | null;
   stdout: string;
   stderr: string;
   merges: { pull: number; head: string }[];
+  releasePulls: number;
   sessions: {
     id: number;
     prompt: string;
@@ -69,6 +71,7 @@ function loop(
   scenario: Scenario,
   options: {
     args?: string[];
+    milestone?: boolean;
     env?: Record<string, string>;
     whenStdout?: (out: string, stop: () => void) => void;
   } = {},
@@ -93,7 +96,13 @@ function loop(
   return new Promise((done) => {
     const child = spawn(
       'node',
-      [loopScript, '--tracker', 'fake', '--issues', issues, ...(options.args ?? [])],
+      [
+        loopScript,
+        '--tracker',
+        'fake',
+        ...(options.milestone ? ['--milestone', 'M001'] : ['--issues', issues]),
+        ...(options.args ?? []),
+      ],
       { cwd: repo, env, stdio: ['ignore', 'pipe', 'pipe'] },
     );
     let stdout = '';
@@ -119,6 +128,9 @@ function loop(
         merges: lines<{ call: string; pull: number; head: string }>(
           path.join(dir, 'calls.jsonl'),
         ).filter((call) => call.call === 'merge'),
+        releasePulls: lines<{ call: string }>(path.join(dir, 'calls.jsonl')).filter(
+          (call) => call.call === 'releasePull',
+        ).length,
         sessions: lines(path.join(dir, 'sessions.jsonl')),
         results: results ? lines(results) : [],
         events: existsSync(events) ? lines(path.join(events, readdirSync(events)[0] ?? '')) : [],
@@ -143,7 +155,7 @@ beforeAll(() => {
   git(repo, 'add', 'README.md');
   git(repo, 'commit', '--quiet', '-m', 'chore: fixture');
   git(repo, 'remote', 'add', 'origin', origin);
-  git(repo, 'push', '--quiet', 'origin', 'main:release/next');
+  git(repo, 'push', '--quiet', 'origin', 'main', 'main:release/next');
 });
 
 afterAll(() => {
@@ -427,6 +439,77 @@ describe.skipIf(process.platform === 'win32')('deliver-min loop', () => {
       status = (error as { status: number }).status;
     }
     expect(status).toBe(64);
+  });
+  describe('end of a milestone', () => {
+    it('opens the release pull request once everything is merged and reports an open release-test as needs you', async () => {
+      const out = await loop(
+        { items: [{ id: 31, title: '[PBI] feat: last' }], releaseTests: [39] },
+        { milestone: true },
+      );
+      expect(out.status).toBe(0);
+      expect(out.merges).toHaveLength(1);
+      expect(out.releasePulls).toBe(1);
+      expect(out.stdout).toContain('release pull request: https://example.test/pull/900');
+      expect(out.stdout).toMatch(/needs you \(1\):\n {2}#39 /);
+      expect(out.sessions.map((s) => s.prompt).join('\n')).not.toContain('/deliver-min 39');
+      expect(out.events.find((e) => e.type === 'attention')).toMatchObject({
+        reason: 'release-test',
+        needsYou: true,
+      });
+      // the release pull request is never merged
+      expect(out.merges.map((m) => m.pull)).not.toContain(900);
+    });
+
+    it('does none of this with an issue set aside or waiting', async () => {
+      const aside = await loop(
+        { items: [{ id: 41, title: '[PBI] feat: fails' }], exits: [3], releaseTests: [49] },
+        { milestone: true },
+      );
+      expect(aside.releasePulls).toBe(0);
+      expect(aside.stdout).not.toContain('needs you (1)');
+      expect(aside.events.some((e) => e.type === 'attention' && e.reason === 'release-test')).toBe(
+        false,
+      );
+      const waiting = await loop(
+        { items: [{ id: 43, title: '[PBI] feat: blocked', blockedBy: [42] }], releaseTests: [49] },
+        { milestone: true },
+      );
+      expect(waiting.releasePulls).toBe(0);
+    });
+
+    it('does not open it with --issues', async () => {
+      const out = await loop({ items: [{ id: 51, title: '[PBI] feat: one' }] });
+      expect(out.releasePulls).toBe(0);
+    });
+  });
+
+  describe('missing base branch', () => {
+    const originRef = () =>
+      execFileSync('git', ['ls-remote', '--heads', path.join(root, 'origin.git'), 'release/next'], {
+        encoding: 'utf8',
+      }).trim();
+    afterEach(() => {
+      if (!originRef()) git(repo, 'push', '--quiet', 'origin', 'main:release/next');
+    });
+
+    it('cuts release/next from the default branch', async () => {
+      git(repo, 'push', '--quiet', 'origin', ':release/next');
+      expect(originRef()).toBe('');
+      const out = await loop({ items: [{ id: 61, title: '[PBI] feat: one' }] });
+      expect(out.status).toBe(0);
+      expect(out.stdout).toContain('release/next was missing on origin: cut from main');
+      expect(originRef()).not.toBe('');
+      expect(out.merges).toHaveLength(1);
+    });
+
+    it('stays an error for another base', async () => {
+      const out = await loop(
+        { items: [{ id: 62, title: '[PBI] feat: one' }] },
+        { args: ['--base', 'release/other'] },
+      );
+      expect(out.status).toBe(3);
+      expect(out.stderr).toContain('release/other is missing on origin');
+    });
   });
 });
 

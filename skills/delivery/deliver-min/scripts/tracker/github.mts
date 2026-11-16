@@ -268,6 +268,53 @@ export function create({ cwd, base, selection, trustAuthors }: TrackerContext): 
         .filter(Boolean);
     },
 
+    defaultBranch(): string {
+      return gh('repo', 'view', '--json', 'defaultBranchRef', '-q', '.defaultBranchRef.name');
+    },
+
+    releaseTests(): Item[] {
+      if (!selection.milestone) return [];
+      return list<Issue>(
+        `repos/${repo}/issues?milestone=${milestone().number}&state=open&per_page=100`,
+      )
+        .filter((i) => !i.pull_request && i.labels.some((l) => l.name === 'release-test'))
+        .sort((a, b) => a.number - b.number)
+        .map(toItem);
+    },
+
+    ensureReleasePull(): Pull {
+      const target = this.defaultBranch();
+      const owner = repo.split('/')[0];
+      const find = () =>
+        list<PullRecord>(
+          `repos/${repo}/pulls?state=open&base=${target}&head=${owner}:${base}&per_page=100`,
+        )[0];
+      let found = find();
+      if (!found) {
+        const url = gh(
+          'pr',
+          'create',
+          '--repo',
+          repo,
+          '--base',
+          target,
+          '--head',
+          base,
+          '--title',
+          `release: ${base}`,
+          '--body',
+          `Release pull request of ${selection.milestone ?? base}. Merged by a person, never by the loop.`,
+        );
+        found = find() ?? {
+          number: Number(url.split('/').pop()),
+          title: `release: ${base}`,
+          html_url: url,
+          head: { ref: base, repo: { full_name: repo } },
+        };
+      }
+      return { id: found.number, title: found.title, url: found.html_url, branch: found.head.ref };
+    },
+
     sessionEnv(token: string): Record<string, string> {
       // gh reads GH_TOKEN; git push must use it too, not a stored credential of the user
       const n = Number(process.env.GIT_CONFIG_COUNT ?? 0);

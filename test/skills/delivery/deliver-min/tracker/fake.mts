@@ -24,6 +24,8 @@ type Scenario = {
   gateBlockMs?: number;
   /** A merged item stays listed (and keeps blocking) for this many items() calls, as a tracker that closes late. */
   closeAfterCalls?: number;
+  /** Open release-test issues of the milestone. */
+  releaseTests?: number[];
 };
 
 export function create(): Tracker {
@@ -102,6 +104,24 @@ export function create(): Tracker {
       fileReads += 1;
       const files = fileReads > 1 ? (scenario.filesLater ?? scenario.files) : scenario.files;
       return files ?? ['src/a.ts'];
+    },
+    defaultBranch: () => 'main',
+    releaseTests: (): Item[] =>
+      (scenario.releaseTests ?? []).map((id) => ({
+        id,
+        title: '[PBI] test: release candidate',
+        url: `https://example.test/issues/${id}`,
+        labels: ['release-test'],
+        body: '',
+      })),
+    ensureReleasePull(): Pull {
+      record({ call: 'releasePull' });
+      return {
+        id: 900,
+        title: 'release: release/next',
+        url: 'https://example.test/pull/900',
+        branch: 'release/next',
+      };
     },
     sessionEnv: (token: string) => ({ GH_TOKEN: token }),
   };
