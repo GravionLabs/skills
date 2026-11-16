@@ -2,7 +2,6 @@
 // a host knows where a harness session runs. Node built-ins only, erasable syntax only.
 
 export type Harness = 'claude' | 'copilot';
-export type Tone = 'success' | 'info' | 'warning' | 'danger';
 
 export type SessionRequest = {
   harness: Harness;
@@ -22,6 +21,4 @@ export type RawRecord =
 export interface LoopHost {
   /** Starts one harness session and yields its output until it ends; the exit code is the last record. */
   runSession(req: SessionRequest): AsyncIterable<RawRecord>;
-  /** A short notice for the person watching (today: Send-Notice). */
-  notice(text: string, tone?: Tone): void;
 }

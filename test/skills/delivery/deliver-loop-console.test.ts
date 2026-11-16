@@ -149,7 +149,7 @@ esac
     });
   });
 
-  // Lines, colors and notifications come from the events the harness writes (tone, attention, task.finished); the stream's
+  // Lines and colors come from the events the harness writes (tone, attention, task.finished); the stream's
   // assistant text is logged uncolored and never parsed. The claude stub appends raw events to the loop's run and closes #401.
   describe('events', () => {
     type Ev = Record<string, unknown>;
@@ -243,70 +243,33 @@ fs.writeFileSync(${JSON.stringify(state)}, JSON.stringify({ state: 'closed' }));
       expect(first.subject).toMatchObject({ kind: 'github.issue', id: '#401', title: '#401' });
     });
 
-    it.skipIf(process.platform !== 'darwin')(
-      'notifies per attention kind and delivered issue, with the urgency from the tone',
-      async () => {
-        const gh = open([
-          attention('pr_opened', 'success'),
-          attention('review_fix', 'warning'),
-          attention('ci_red', 'danger'),
-          attention('paused', 'warning'),
-          attention('blocked', 'danger'),
-          attention('needs_you', 'warning'),
-          ev('task.finished', 'success', {
-            outcome: 'succeeded',
-            deliver: { outcome: 'delivered' },
-          }),
-        ]);
-        await worker.run(['-Target', '401', '-Model', 'sonnet'], {
-          cwd,
-          env: { ...gh.env(), HERDR_ENV: '', NO_COLOR: '', POIMEN_TERMINAL_ID: '' },
-        });
-        const notes = read('notices.txt').trim().split('\n');
-        expect(notes).toHaveLength(7);
-        expect(notes[0]).toContain('#401 PR opened');
-        expect(notes[0]).not.toContain('sound name');
-        expect(notes[1]).toContain('#401 review fix round');
-        expect(notes[1]).toContain('sound name "Ping"');
-        expect(notes[2]).toContain('#401 CI red');
-        expect(notes[2]).toContain('sound name "Basso"');
-        expect(notes[3]).toContain('#401 paused');
-        expect(notes[4]).toContain('#401 blocked');
-        expect(notes[5]).toContain('#401 merged');
-        expect(notes[6]).toContain('loop result: done');
-      },
-    );
-
-    it('sends no notification with POIMEN_TERMINAL_ID, -NoNotify or deliver.notifications false', async () => {
-      const cases: [string[], Record<string, string>, boolean][] = [
-        [[], { POIMEN_TERMINAL_ID: 'abc' }, false],
-        [['-NoNotify'], {}, false],
-        [[], {}, true],
+    it('starts no osascript for attention events, a delivered PBI or the loop result; -NoNotify is a deprecated no-op (#705)', async () => {
+      const events = [
+        attention('ci_red', 'danger'),
+        attention('paused', 'warning'),
+        ev('task.finished', 'success', { outcome: 'succeeded', deliver: { outcome: 'delivered' } }),
       ];
-      for (const [args, extra, config] of cases) {
-        const gh = prepare();
-        fs.writeFileSync(
-          path.join(gh.bin, 'osascript'),
-          `#!/bin/sh\necho "$*" >> ${cwd}/notices.txt\n`,
-          { mode: 0o755 },
-        );
-        if (config) {
-          fs.mkdirSync(path.join(cwd, '.agents'), { recursive: true });
-          fs.writeFileSync(
-            path.join(cwd, '.agents/config.json'),
-            '{"deliver":{"notifications":false}}',
-          );
-        }
-        await worker.run(['-Target', '401', '-Model', 'sonnet', ...args], {
-          cwd,
-          env: { ...gh.env(), HERDR_ENV: '', NO_COLOR: '', POIMEN_TERMINAL_ID: '', ...extra },
-        });
-        expect(fs.existsSync(path.join(cwd, 'notices.txt'))).toBe(false);
-        fs.rmSync(path.join(cwd, '.agents'), { recursive: true, force: true });
-      }
+      const env = { HERDR_ENV: '', NO_COLOR: '', POIMEN_TERMINAL_ID: '' };
+      let gh = open(events);
+      const r = await worker.run(['-Target', '401', '-Model', 'sonnet'], {
+        cwd,
+        env: { ...gh.env(), ...env },
+      });
+      expect(r.stdout).toContain('loop result:');
+      expect(fs.existsSync(path.join(cwd, 'notices.txt'))).toBe(false);
+      // own process: the worker does not capture [Console]::Error
+      gh = open(events);
+      const nn = spawnSync(
+        'pwsh',
+        ['-NoProfile', '-File', SCRIPT, '-Target', '401', '-Model', 'sonnet', '-NoNotify'],
+        { cwd, encoding: 'utf8', env: { ...gh.env(), ...env, DELIVER_LOOP_ASSUME_TTY: '' } },
+      );
+      expect(nn.stdout).toContain('loop result:');
+      expect(nn.stderr).toContain('-NoNotify is deprecated');
+      expect(fs.existsSync(path.join(cwd, 'notices.txt'))).toBe(false);
     });
 
-    it('writes no step line from assistant text alone, neither color nor notification', async () => {
+    it('writes no step line from assistant text alone, no color', async () => {
       const gh = open([], '#401 pr: opened #55\n#401 ci: red\n#401 paused: x');
       const r = await worker.run(['-Target', '401', '-Model', 'sonnet'], {
         cwd,
@@ -318,7 +281,6 @@ fs.writeFileSync(${JSON.stringify(state)}, JSON.stringify({ state: 'closed' }));
       expect(log).not.toMatch(/\d\d:\d\d:\d\d #401 (pr|ci|paused)/);
       expect(r.stdout).not.toContain(`${ESC}[31m#401 ci`);
       expect(r.stdout).not.toContain(`${ESC}[33m`);
-      expect(read('notices.txt')).not.toMatch(/PR opened|CI red|paused/);
     });
   });
 });

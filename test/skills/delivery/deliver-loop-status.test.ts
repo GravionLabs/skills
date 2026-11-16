@@ -93,7 +93,6 @@ const s = JSON.parse(fs.readFileSync(f, 'utf8')); s.issues[10].state = 'closed';
         'poimen-server',
         `echo "$*" >> ${cwd}/poimen-calls.txt${opts.backendFails ? '\nexit 1' : ''}`,
       );
-      stub('osascript', 'true');
       return gh;
     };
     const run = (gh: ReturnType<typeof createFakeGh>, env: NodeJS.ProcessEnv = {}) =>

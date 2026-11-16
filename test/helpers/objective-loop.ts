@@ -221,7 +221,6 @@ export function setupObjective(
     `#!/bin/sh\nnode ${JSON.stringify(path.join(root, 'effect.js'))} "$2"\n`,
     { mode: 0o755 },
   );
-  fs.writeFileSync(path.join(gh.bin, 'osascript'), '#!/bin/sh\n', { mode: 0o755 });
   const fullEnv = gh.env({
     ...process.env,
     HOME: home,

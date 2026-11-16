@@ -615,6 +615,5 @@ function Invoke-ObjectiveLoop {
   if ($result -eq 'gated') { Write-NeedsYou $s $cutRepos }
   $color = if ($result -in 'done', 'dry run', 'released') { 'green' } else { 'yellow' }
   Write-Step "objective result: $result ($round round(s))" $color
-  if ($result -ne 'dry run') { Send-Notice "objective $Ref`: $result" }
   return $code
 }

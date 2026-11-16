@@ -59,7 +59,6 @@ describe.skipIf(!hasPwsh || process.platform === 'win32')(
         fs.writeFileSync(path.join(gh.bin, name), `#!/bin/sh\n${body}\n`, { mode: 0o755 });
       stub('claude', `cat ${dir}/stream.jsonl\nnode ${dir}/effect.js`);
       stub('herdr', 'true');
-      stub('osascript', 'true');
 
       const r = await worker.run(['-Milestone', 'M4', '-Model', 'sonnet'], {
         cwd: dir,

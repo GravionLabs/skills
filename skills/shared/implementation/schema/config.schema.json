@@ -124,9 +124,9 @@
           "minimum": 1000
         },
         "notifications": {
-          "description": "false: deliver-loop sends no desktop notification (default true; none is sent inside a poimen terminal, POIMEN_TERMINAL_ID set).",
+          "description": "Deprecated and ignored: deliver-loop sends no desktop notifications (#705). Still accepted so existing files stay valid.",
           "type": "boolean",
-          "default": true
+          "deprecated": true
         },
         "sessionTimeoutMinutes": {
           "description": "Minutes after which deliver-loop stops a /deliver session with its process tree (default 120); the PBI gets one more session, a second timeout sets it aside with the reason session timeout.",

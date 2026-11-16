@@ -9,8 +9,8 @@
   (step line `#<nr> set aside: <reason>`, each PBI is selected once); nothing open means done (unless a closed PBI of the milestone carries needs-decision, the paused release review: blocked); open PBIs of which none is ready (not set aside, no open blocker, no label) mean blocked; the last lines list the set-aside PBIs.
   Observability: every stream record goes to .agents/deliver-loop/<run>/<nr>.jsonl (<nr> is the first PBI that was ready
   at the start of the iteration), a summary line per step to .agents/deliver-loop.log (plain) and stdout, colored on a terminal
-  (long text is cut to the terminal width, 120 characters when redirected), desktop notifications for the attention steps (macOS osascript,
-  Windows toast), progress events (Report-Progress.ps1, agent-events core plus the deliver profile: run.started, task.started,
+  (long text is cut to the terminal width, 120 characters when redirected),
+  progress events (Report-Progress.ps1, agent-events core plus the deliver profile: run.started, task.started,
   step.finished, attention, progress, task.finished, deliver.merging, deliver.release.updated, deliver.iteration, run.finished),
   a progress line per step
   (references/loop.md) and, with -LogPane in herdr on a terminal,
@@ -62,8 +62,7 @@
 .PARAMETER NoColor
   Colors no stdout (as does a non-empty NO_COLOR); the pane tails the plain log.
 .PARAMETER NoNotify
-  Sends no desktop notification (as does `deliver.notifications: false` in .agents/config.json). Inside a poimen terminal
-  (POIMEN_TERMINAL_ID set) none is sent either: poimen shows the same attention itself.
+  Deprecated no-op: the loop sends no desktop notifications any more (#705).
 #>
 [CmdletBinding()]
 param(
@@ -91,6 +90,7 @@ if ($Harness -notin $Harnesses) {
 }
 
 if ($NoPane) { [Console]::Error.WriteLine('deliver-loop: -NoPane is deprecated and does nothing (the log pane is off by default; -LogPane opens it).') }
+if ($NoNotify) { [Console]::Error.WriteLine('deliver-loop: -NoNotify is deprecated and does nothing (the loop sends no desktop notifications).') }
 
 if ($Harness -eq 'copilot' -and -not $Model) { $Model = 'auto' }
 
@@ -162,33 +162,6 @@ function Write-Step([string]$text, [string]$Color = '', [string]$Tool = '', [int
   Write-Host $(if ($ColorStdout) { $colored } else { $line })
   $Recent.Add($line)
   if ($Recent.Count -gt 10) { $Recent.RemoveAt(0) }
-}
-
-# Urgency from the tone of the event: danger and warning get a sound on macOS, the rest is silent.
-function Test-NoticesEnabled {
-  if ($NoNotify -or $env:POIMEN_TERMINAL_ID) { return $false }
-  $f = Join-Path (Get-Location) '.agents/config.json'
-  if (-not (Test-Path -LiteralPath $f)) { return $true }
-  $v = try { (Get-Content -LiteralPath $f -Raw | ConvertFrom-Json -AsHashtable).deliver.notifications } catch { $null }
-  return $v -ne $false
-}
-
-function Send-Notice([string]$text, [string]$Tone = '') {
-  if (-not (Test-NoticesEnabled)) { return }
-  try {
-    if ($IsMacOS) {
-      $esc = $text.Replace('\', '\\').Replace('"', '\"')
-      $sound = switch ($Tone) { 'danger' { ' sound name "Basso"' } 'warning' { ' sound name "Ping"' } default { '' } }
-      & osascript -e "display notification `"$esc`" with title `"deliver loop`"$sound" 2>$null | Out-Null
-    } elseif ($IsWindows) {
-      [void][Windows.UI.Notifications.ToastNotificationManager, Windows.UI.Notifications, ContentType = WindowsRuntime]
-      $xml = [Windows.UI.Notifications.ToastNotificationManager]::GetTemplateContent('ToastText02')
-      $nodes = $xml.GetElementsByTagName('text')
-      [void]$nodes.Item(0).AppendChild($xml.CreateTextNode('deliver loop'))
-      [void]$nodes.Item(1).AppendChild($xml.CreateTextNode($text))
-      [Windows.UI.Notifications.ToastNotificationManager]::CreateToastNotifier('PowerShell').Show([Windows.UI.Notifications.ToastNotification]::new($xml))
-    }
-  } catch { Write-Verbose "notification failed: $_" }
 }
 
 # Mode -Objective: rounds over the repositories (ObjectiveLoop.ps1); each repository runs this script with -Target.
@@ -720,7 +693,7 @@ function Write-ToolStep([string]$prefix, [string]$name, $in) {
   Write-Step "$prefix$name $what" -Tool $name -ToolAt $prefix.Length
 }
 
-# Assistant text is logged uncolored and never parsed: steps, colors and notifications come from the events (Show-NewEvents).
+# Assistant text is logged uncolored and never parsed: steps and colors come from the events (Show-NewEvents).
 function Write-TextStep([string]$prefix, [string]$text) {
   Write-Step "$prefix» $(Get-Short $text)"
 }
@@ -751,12 +724,10 @@ function Get-ResumeCommand([int]$ran) {
   $parts -join ' '
 }
 
-$AttentionText = @{ set_aside = 'set aside'; stopping = 'stop requested'; pr_opened = 'PR opened'; review_fix = 'review fix round'; ci_red = 'CI red'; paused = 'paused'; blocked = 'blocked' }
 $EventOffset = 0
 
 # The new events of the run's event file (written by the harness through Report-Progress.ps1 while it runs): one line
-# `#<nr> <step>: <result>` each, colored by tone (the tone rules live in Report-Progress.ps1). Notifications come from
-# attention and issue.finished delivered; the urgency from tone.
+# `#<nr> <step>: <result>` each, colored by tone (the tone rules live in Report-Progress.ps1).
 function Show-NewEvents {
   Watch-Stop
   if (-not $EventFile -or -not (Test-Path -LiteralPath $EventFile)) { return }
@@ -783,19 +754,18 @@ function Show-NewEvents {
     # the issue of a task is its id issue-<nr>; an attention without task names it in deliver.issue
     $nr = if ([string]$ev.task -match '^issue-(\d+)') { [int]$Matches[1] } elseif ($ev.deliver.issue) { [int]$ev.deliver.issue } else { 0 }
     $pr = @($ev.links | Where-Object { $_ -and $_.rel -eq 'pull-request' } | ForEach-Object { [string]$_.url }) | Select-Object -First 1
-    $step = $null; $res = ''; $notice = $null
+    $step = $null; $res = ''
     switch ($ev.type) {
       'step.finished' { $step = [string]$ev.step.name; $res = [string]$ev.step.text; $script:IterStepFinished = $true }
       'attention' {
         $kind = [string]$ev.deliver.kind
         if ($kind -eq 'needs_you') { continue }
         $step = $kind; $res = [string]$ev.text
-        if ($AttentionText.ContainsKey($step)) { $notice = $AttentionText[$step] }
         if ($kind -in 'paused', 'blocked' -and $nr) { $LineOutcome["$nr"] = @{ Outcome = $kind; Reason = $(if ($res) { $res } else { $kind }) } }
       }
       'task.finished' {
         $step = if ($ev.deliver.outcome) { [string]$ev.deliver.outcome } else { [string]$ev.outcome }
-        $res = [string]$ev.text; if ($step -eq 'delivered') { $notice = 'merged' }
+        $res = [string]$ev.text
       }
       'deliver.merging' {
         $step = 'merging'; $res = [string]$ev.text
@@ -806,7 +776,6 @@ function Show-NewEvents {
     if ($nr -and $pr) { $Prs["$nr"] = $pr }
     $head = if ($nr -and $step -ne 'stopping') { "#$nr $step" } elseif ($step -eq 'stopping') { 'stop requested' } else { $step }
     Write-Step $(if ($res) { "${head}: $res" } else { $head }) $ToneColor[[string]$ev.tone]
-    if ($notice) { Send-Notice "$(if ($nr) { "#$nr " })$notice" -Tone ([string]$ev.tone) }
     $shown = $true
   }
   if ($shown) { if ($Milestone) { Update-Projection }; Write-ProgressLine }
@@ -1023,7 +992,7 @@ $Timeouts = @{}
 $RetryPbi = 0
 $FailCause = ''
 
-# The end of a run: result line, set-aside PBIs, run.finished, result record, notification; `failed` names its cause last.
+# The end of a run: result line, set-aside PBIs, run.finished, result record; `failed` names its cause last.
 function Complete-Run {
   $script:code = switch ($result) { 'no progress' { 1 } 'blocked' { 2 } 'failed' { 5 } default { 0 } }
   $color = if ($result -in 'done', 'max reached') { 'green' } elseif ($result -eq 'failed') { 'red' } else { 'yellow' }
@@ -1032,7 +1001,6 @@ function Complete-Run {
   foreach ($k in $SetAside.Keys) { Write-Step "set aside #${k}: $($SetAside[$k]) ($(if ($Prs[$k]) { $Prs[$k] } else { 'no PR' }))" 'yellow' }
   Stop-Run $result
   Write-ProgressRecord 'result' @{ result = $result; code = $script:code; iterations = $i; open = $open; cause = $FailCause }
-  Send-Notice "loop result: $result" -Tone $(if ($result -eq 'failed') { 'danger' } else { '' })
   if ($result -eq 'stopped') {
     Remove-Item -LiteralPath (Join-Path $RunDir 'stop') -Force -ErrorAction SilentlyContinue
     Write-Step "resume: $(Get-ResumeCommand $i)" 'yellow'

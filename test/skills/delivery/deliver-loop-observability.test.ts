@@ -131,12 +131,6 @@ describe.skipIf(!hasPwsh || process.platform === 'win32')('Invoke-DeliverLoop.ps
       expect(ansi).toContain(`${ESC}[32m#401 merged: squash${ESC}[0m`);
       expect(ansi).toContain(`${ESC}[32m#401 pr: opened #55${ESC}[0m`);
       expect(ansi).toContain(`${ESC}[0m » #401 ci: red`);
-      if (process.platform === 'darwin') {
-        // osascript stub: attention step and loop result
-        const notes = fx.read('notices.txt');
-        expect(notes).toContain('#401 CI red');
-        expect(notes).toContain('loop result: blocked');
-      }
     });
   });
 });

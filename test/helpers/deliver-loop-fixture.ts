@@ -170,7 +170,6 @@ fs.writeFileSync(f, JSON.stringify(s));`,
       `echo "$*" >> ${this.cwd}/harness-calls.txt\necho "herdr_env=[$HERDR_ENV]" >> ${this.cwd}/harness-calls.txt\necho "ceiling=[$CLAUDE_CODE_PRINT_BG_WAIT_CEILING_MS] copilot_wait=[$COPILOT_TASK_WAIT_TIMEOUT_SECONDS]" >> ${this.cwd}/harness-calls.txt\ncat ${this.cwd}/stream.jsonl\n${stderrLine}${stopDuring}${events}node ${this.cwd}/effect.js "$(grep -c '^-p' ${this.cwd}/harness-calls.txt)"`,
     );
     stub('herdr', `echo "$*" >> ${this.cwd}/herdr-calls.txt`);
-    stub('osascript', `echo "$*" >> ${this.cwd}/notices.txt`);
     void bin;
     return gh;
   };

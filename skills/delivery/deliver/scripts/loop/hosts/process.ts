@@ -1,9 +1,7 @@
 // Default host: the harness runs as a child process of the loop, never through a shell.
-import { execFile, spawn } from 'node:child_process';
-import { existsSync, readFileSync } from 'node:fs';
-import { join } from 'node:path';
+import { spawn } from 'node:child_process';
 import { createInterface } from 'node:readline';
-import type { Harness, LoopHost, RawRecord, SessionRequest, Tone } from '../host.ts';
+import type { Harness, LoopHost, RawRecord, SessionRequest } from '../host.ts';
 
 /** The argv of a session (the same as the PowerShell loop). */
 export function buildArgv(req: Pick<SessionRequest, 'harness' | 'model' | 'prompt'>): string[] {
@@ -59,17 +57,6 @@ export function buildEnv(
   return env;
 }
 
-function noticesEnabled(env: Record<string, string | undefined>): boolean {
-  if (env.POIMEN_TERMINAL_ID) return false;
-  const f = join(process.cwd(), '.agents', 'config.json');
-  if (!existsSync(f)) return true;
-  try {
-    return JSON.parse(readFileSync(f, 'utf8'))?.deliver?.notifications !== false;
-  } catch {
-    return true;
-  }
-}
-
 export class ProcessHost implements LoopHost {
   async *runSession(req: SessionRequest): AsyncGenerator<RawRecord> {
     const child = spawn(req.harness, buildArgv(req), {
@@ -123,36 +110,6 @@ export class ProcessHost implements LoopHost {
         if (queue.length) resolve();
       });
       wake = null;
-    }
-  }
-
-  notice(text: string, tone?: Tone): void {
-    if (!noticesEnabled(process.env)) return;
-    try {
-      if (process.platform === 'darwin') {
-        const esc = text.replaceAll('\\', '\\\\').replaceAll('"', '\\"');
-        const sound =
-          tone === 'danger'
-            ? ' sound name "Basso"'
-            : tone === 'warning'
-              ? ' sound name "Ping"'
-              : '';
-        execFile(
-          'osascript',
-          ['-e', `display notification "${esc}" with title "deliver loop"${sound}`],
-          () => {},
-        );
-      } else if (process.platform === 'win32') {
-        const t = text.replaceAll("'", "''");
-        const script =
-          '[void][Windows.UI.Notifications.ToastNotificationManager, Windows.UI.Notifications, ContentType = WindowsRuntime];' +
-          "$x=[Windows.UI.Notifications.ToastNotificationManager]::GetTemplateContent('ToastText02');$n=$x.GetElementsByTagName('text');" +
-          `[void]$n.Item(0).AppendChild($x.CreateTextNode('deliver loop'));[void]$n.Item(1).AppendChild($x.CreateTextNode('${t}'));` +
-          "[Windows.UI.Notifications.ToastNotificationManager]::CreateToastNotifier('PowerShell').Show([Windows.UI.Notifications.ToastNotification]::new($x))";
-        execFile('powershell', ['-NoProfile', '-Command', script], () => {});
-      }
-    } catch {
-      // a failed notice never stops the loop
     }
   }
 }

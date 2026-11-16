@@ -95,7 +95,6 @@ fs.writeFileSync(f, JSON.stringify(s));`,
       fs.writeFileSync(path.join(gh.bin, 'claude'), `#!/bin/sh\nnode ${cwd}/harness.js\n`, {
         mode: 0o755,
       });
-      fs.writeFileSync(path.join(gh.bin, 'osascript'), '#!/bin/sh\ntrue\n', { mode: 0o755 });
       return gh;
     };
     const run = (gh: ReturnType<typeof createFakeGh>) =>
