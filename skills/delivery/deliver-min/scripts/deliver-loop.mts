@@ -546,14 +546,15 @@ say(
   waiting.length ? 'warn' : undefined,
 );
 const clean = aside.size === 0 && waiting.length === 0;
-// nothing merged and something set aside is no success
-const nothing = merged.length === 0 && aside.size > 0;
+// An incomplete run (issues set aside or waiting) is no success: the agent-events format has no
+// other outcome for it than `failed`; the counts are in the text.
 emit(
   'run.finished',
   {
-    outcome: stopped ? 'cancelled' : nothing ? 'failed' : 'succeeded',
+    outcome: stopped ? 'cancelled' : clean ? 'succeeded' : 'failed',
+    ...(stopped || clean ? {} : { reason: 'incomplete' }),
     text: `merged ${merged.length}, set aside ${aside.size}, waiting ${waiting.length}`,
   },
-  stopped ? 'neutral' : nothing ? 'danger' : clean ? 'success' : 'warning',
+  stopped ? 'neutral' : clean ? 'success' : 'warning',
 );
 process.exit(stopped ? 130 : clean ? 0 : 2);
