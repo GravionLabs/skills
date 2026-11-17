@@ -26,6 +26,8 @@ type Scenario = {
   closeAfterCalls?: number;
   /** Open release-test issues of the milestone. */
   releaseTests?: number[];
+  /** Commits of the base branch beyond the default branch, default 1. */
+  releaseCommits?: number;
 };
 
 export function create(): Tracker {
@@ -114,6 +116,7 @@ export function create(): Tracker {
         labels: ['release-test'],
         body: '',
       })),
+    releaseCommits: () => scenario.releaseCommits ?? 1,
     ensureReleasePull(): Pull {
       record({ call: 'releasePull' });
       return {

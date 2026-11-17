@@ -454,6 +454,7 @@ async function deliver(item: Item): Promise<{ reason?: string; pull?: Pull }> {
   return { reason, pull };
 }
 
+let cutNote = '';
 const baseExists = () =>
   attempt('git', ['ls-remote', '--exit-code', '--heads', 'origin', BASE], root) !== undefined;
 if (!baseExists()) {
@@ -466,7 +467,7 @@ if (!baseExists()) {
       const target = tracker.defaultBranch();
       run('git', ['fetch', '--quiet', 'origin', target], root);
       run('git', ['push', '--quiet', 'origin', `origin/${target}:refs/heads/${BASE}`], root);
-      console.log(`${BASE} was missing on origin: cut from ${target}`);
+      cutNote = `${BASE} was missing on origin: cut from ${target}`;
     } catch (error) {
       fail(`${BASE} is missing on origin and could not be cut: ${firstLine(error)}`, 3);
     }
@@ -503,6 +504,7 @@ mkdirSync(runDir, { recursive: true });
 logFile = path.join(path.dirname(runDir), 'loop.log');
 emit = openEvents(process.env.AGENT_EVENTS_DIR ?? path.join(commonDir, '.agents', 'events'), runId);
 log(`run ${runId} in ${tracker.repo}, results: ${path.join(runDir, 'results.jsonl')}`, 'dim');
+if (cutNote) log(cutNote, 'info');
 if (!TOKEN_SOURCE) {
   log(
     'the session uses your own login: set DELIVER_APP_ID with DELIVER_APP_KEY_FILE or DELIVER_APP_KEY_COMMAND (GitHub App), or DELIVER_SESSION_TOKEN',
@@ -627,7 +629,12 @@ const complete =
   waiting.length === 0;
 if (complete) {
   try {
-    if (tracker.items().length === 0) {
+    if (tracker.items().length === 0 && merged.length === 0 && tracker.releaseCommits() === 0) {
+      log(
+        `milestone ${opt.milestone} has no open issue and ${BASE} has no commit beyond ${tracker.defaultBranch()}, nothing to deliver`,
+        'info',
+      );
+    } else if (tracker.items().length === 0) {
       const release = tracker.ensureReleasePull();
       log(`release pull request: ${release.url} (never merged by the loop)`, 'info');
       emit('step.finished', {

@@ -68,6 +68,8 @@ export interface Tracker {
   defaultBranch(): string;
   /** The open `release-test` issues of the selection: a person tests the release candidate, the loop never starts them. */
   releaseTests(): Item[];
+  /** The number of commits the base branch has that the default branch lacks; 0: a release pull request cannot be opened. */
+  releaseCommits(): number;
   /** The open release pull request from the base branch into the default branch; opens it when missing. Never merges it. */
   ensureReleasePull(): Pull;
   /** The environment that makes a session act with `token` instead of the login of the user. */
