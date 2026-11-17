@@ -383,6 +383,31 @@ describe('deliver loop', () => {
     );
   });
 
+  it('lists a hand-over by rule under needs you, a failure under set aside', async () => {
+    const handed = await loop({
+      items: [{ id: 62, title: '[PBI] ci: workflow' }],
+      files: ['.github/workflows/ci.yml'],
+    });
+    expect(handed.status).toBe(2);
+    expect(handed.stdout).toMatch(/set aside \(0\):/);
+    expect(handed.stdout).toMatch(
+      /needs you \(1\):\n {2}#62 changes protected paths \(\.github\/workflows\/ci\.yml\), \S+/,
+    );
+    expect(handed.stdout).toMatch(
+      /merge the pull request .* start the loop again with the same arguments/,
+    );
+    expect(handed.events.find((e) => e.type === 'attention')).toMatchObject({
+      reason: 'set-aside',
+      needsYou: true,
+    });
+    expect(handed.events.at(-1)).toMatchObject({ outcome: 'failed', reason: 'incomplete' });
+    const failed = await loop({ items: [{ id: 63, title: '[PBI] feat: fails' }], exits: [3] });
+    expect(failed.status).toBe(2);
+    expect(failed.stdout).toMatch(/set aside \(1\):\n {2}#63 session failed/);
+    expect(failed.stdout).toMatch(/needs you \(0\):/);
+    expect(failed.stdout).not.toContain('next step: merge');
+  });
+
   it('refuses a base branch without required checks unless the flag allows it', async () => {
     const scenario = { items: [{ id: 71, title: '[PBI] feat: unguarded' }], required: [] };
     const refused = await loop(scenario);
