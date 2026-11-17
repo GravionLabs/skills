@@ -4,6 +4,7 @@
 import { appendFileSync, existsSync, readFileSync } from 'node:fs';
 import path from 'node:path';
 import type {
+  BaseState,
   Gate,
   Item,
   Pull,
@@ -28,6 +29,8 @@ type Scenario = {
   releaseTests?: number[];
   /** Commits of the base branch beyond the default branch, default 1. */
   releaseCommits?: number;
+  /** One entry per baseState() call, the last one repeats. `throw` is a failing tracker call. */
+  base?: ('green' | 'pending' | 'red' | 'throw')[];
 };
 
 export function create(): Tracker {
@@ -40,6 +43,7 @@ export function create(): Tracker {
   const listedCalls = new Map<number, number>();
   let gateCalls = 0;
   let fileReads = 0;
+  let baseCalls = 0;
   const itemOf = (pull: Pull) => pull.id - 100;
 
   return {
@@ -102,6 +106,27 @@ export function create(): Tracker {
     },
     dropBranch: (pull: Pull) => record({ call: 'dropBranch', pull: pull.id }),
     requiredChecks: () => scenario.required ?? ['ci'],
+    baseState(): BaseState {
+      const states = scenario.base ?? ['green'];
+      const state = states[Math.min(baseCalls, states.length - 1)];
+      baseCalls += 1;
+      if (state === 'throw') throw new Error('network down');
+      return {
+        state,
+        failed: state === 'red' ? [{ name: 'ci', url: 'https://example.test/runs/1' }] : [],
+      };
+    },
+    rerunFailed: () => record({ call: 'rerun' }),
+    reportBaseRed(): Item {
+      record({ call: 'baseBug' });
+      return {
+        id: 900,
+        title: '[Bug] fix: release/next is red (ci)',
+        url: 'https://example.test/issues/900',
+        labels: ['bug'],
+        body: 'body of the bug',
+      };
+    },
     changedFiles(): string[] {
       fileReads += 1;
       const files = fileReads > 1 ? (scenario.filesLater ?? scenario.files) : scenario.files;

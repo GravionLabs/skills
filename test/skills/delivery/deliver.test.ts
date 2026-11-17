@@ -44,6 +44,7 @@ type Scenario = {
   noPull?: boolean;
   closeAfterCalls?: number;
   releaseTests?: number[];
+  base?: string[];
 };
 type Outcome = {
   status: number | null;
@@ -51,6 +52,7 @@ type Outcome = {
   stderr: string;
   merges: { pull: number; head: string }[];
   releasePulls: number;
+  calls: string[];
   sessions: {
     id: number;
     prompt: string;
@@ -154,6 +156,7 @@ function loop(
         releasePulls: lines<{ call: string }>(path.join(dir, 'calls.jsonl')).filter(
           (call) => call.call === 'releasePull',
         ).length,
+        calls: lines<{ call: string }>(path.join(dir, 'calls.jsonl')).map((call) => call.call),
         sessions: lines(path.join(dir, 'sessions.jsonl')),
         results: results ? lines(results) : [],
         events: existsSync(events) ? lines(path.join(events, readdirSync(events)[0] ?? '')) : [],
@@ -183,6 +186,54 @@ beforeAll(() => {
 
 afterAll(() => {
   rmSync(root, { recursive: true, force: true });
+});
+
+describe('deliver loop: base check', () => {
+  const items = [{ id: 81, title: '[PBI] feat: one' }];
+
+  it('starts the issue on a green base without a rerun', async () => {
+    const out = await loop({ items, base: ['green'] });
+    expect(out.status).toBe(0);
+    expect(out.calls).not.toContain('rerun');
+    expect(out.merges).toHaveLength(1);
+  });
+
+  it('reruns a red base once and goes on when it is green, no Bug', async () => {
+    const out = await loop({ items, base: ['red', 'green'] });
+    expect(out.status).toBe(0);
+    expect(out.calls).toContain('rerun');
+    expect(out.calls).not.toContain('baseBug');
+    expect(out.log).toContain('release/next: green after rerun (flake)');
+    expect(out.merges.map((m) => m.pull)).toEqual([181]);
+  });
+
+  it('files a Bug for a base that stays red, delivers it first and goes on', async () => {
+    const out = await loop({ items, base: ['red', 'red', 'green'] });
+    expect(out.status).toBe(0);
+    expect(out.calls.filter((c) => c === 'baseBug')).toHaveLength(1);
+    expect(out.merges.map((m) => m.pull)).toEqual([1000, 181]);
+    expect(out.sessions.map((s) => s.id)).toEqual([900, 81]);
+  });
+
+  it('ends blocked (exit 2) when the base is red after its repair', async () => {
+    const out = await loop({ items, base: ['red', 'red', 'red'] });
+    expect(out.status).toBe(2);
+    expect(out.merges.map((m) => m.pull)).toEqual([1000]);
+    expect(out.sessions.map((s) => s.id)).toEqual([900]);
+    const last = out.stdout.trim().split('\n').slice(-1)[0];
+    expect(out.stdout).toMatch(
+      /blocked: release\/next is red \(ci\) after its repair, Bug https:\/\/example\.test\/issues\/900/,
+    );
+    expect(last).toBeTruthy();
+    expect(out.events.at(-1)).toMatchObject({ outcome: 'failed' });
+  });
+
+  it('starts the issue when the base state cannot be read', async () => {
+    const out = await loop({ items, base: ['throw'] });
+    expect(out.status).toBe(0);
+    expect(out.merges).toHaveLength(1);
+    expect(out.log).toContain('state unreadable');
+  });
 });
 
 describe('deliver loop', () => {
