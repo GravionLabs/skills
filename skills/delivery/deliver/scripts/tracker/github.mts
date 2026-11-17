@@ -282,6 +282,11 @@ export function create({ cwd, base, selection, trustAuthors }: TrackerContext): 
         .map(toItem);
     },
 
+    releaseCommits(): number {
+      const target = this.defaultBranch();
+      return Number(gh('api', `repos/${repo}/compare/${target}...${base}`, '-q', '.ahead_by'));
+    },
+
     ensureReleasePull(): Pull {
       const target = this.defaultBranch();
       const owner = repo.split('/')[0];

@@ -703,6 +703,17 @@ describe('deliver loop', () => {
       expect(out.merges.map((m) => m.pull)).not.toContain(900);
     });
 
+    it('opens no release pull request for a milestone without open issues and without commits', async () => {
+      const out = await loop({ items: [], releaseCommits: 0 }, { milestone: true });
+      expect(out.status).toBe(0);
+      expect(out.releasePulls).toBe(0);
+      expect(out.stdout).toContain('nothing to deliver');
+      expect(out.stdout).not.toContain('release pull request failed');
+      expect(out.events.find((e) => e.type === 'run.finished')).toMatchObject({
+        outcome: 'succeeded',
+      });
+    });
+
     it('does none of this with an issue set aside or waiting', async () => {
       const aside = await loop(
         { items: [{ id: 41, title: '[PBI] feat: fails' }], exits: [3], releaseTests: [49] },
@@ -741,6 +752,7 @@ describe('deliver loop', () => {
       const out = await loop({ items: [{ id: 61, title: '[PBI] feat: one' }] });
       expect(out.status).toBe(0);
       expect(out.stdout).toContain('release/next was missing on origin: cut from main');
+      expect(out.log).toContain('release/next was missing on origin: cut from main');
       expect(originRef()).not.toBe('');
       expect(out.merges).toHaveLength(1);
     });
