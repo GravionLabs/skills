@@ -25,22 +25,34 @@ import { type Gate, type Item, type Pull, loadTracker } from './tracker.mts';
 // before anything reads the environment; the warnings are printed once the log exists
 const legacyWarnings = adoptLegacyEnv();
 
-const { values: opt } = parseArgs({
-  options: {
-    milestone: { type: 'string' },
-    issues: { type: 'string' },
-    base: { type: 'string' },
-    tracker: { type: 'string' },
-    harness: { type: 'string' },
-    max: { type: 'string', default: '0' },
-    model: { type: 'string' },
-    'session-minutes': { type: 'string', default: '90' },
-    'merge-minutes': { type: 'string', default: '30' },
-    'dry-run': { type: 'boolean', default: false },
-    'allow-no-required-checks': { type: 'boolean', default: false },
-    'trust-authors': { type: 'boolean', default: false },
-  },
-});
+const parsed = (() => {
+  try {
+    return parseArgs({
+      options: {
+        milestone: { type: 'string' },
+        issues: { type: 'string' },
+        base: { type: 'string' },
+        tracker: { type: 'string' },
+        harness: { type: 'string' },
+        max: { type: 'string', default: '0' },
+        model: { type: 'string' },
+        'session-minutes': { type: 'string', default: '90' },
+        'merge-minutes': { type: 'string', default: '30' },
+        'dry-run': { type: 'boolean', default: false },
+        'allow-no-required-checks': { type: 'boolean', default: false },
+        'trust-authors': { type: 'boolean', default: false },
+      },
+    });
+  } catch (error) {
+    // an unknown option or a missing value: one line, no stack trace
+    const message = (error as Error).message.split('\n')[0];
+    console.error(
+      `deliver-loop: ${message}. Options: --milestone, --issues, --base, --tracker, --harness, --max, --model, --session-minutes, --merge-minutes, --dry-run, --allow-no-required-checks, --trust-authors.`,
+    );
+    process.exit(1);
+  }
+})();
+const opt = parsed.values;
 
 type Session = { exit: number | null; turns: number; costUsd: number; peakContext: number };
 type Tone = 'ok' | 'bad' | 'warn' | 'info' | 'dim' | 'bold';
@@ -109,7 +121,12 @@ const requestStop = () => {
   stopped = true;
   stopSession?.();
 };
-const root = run('git', ['rev-parse', '--show-toplevel']);
+const root =
+  attempt('git', ['rev-parse', '--show-toplevel']) ??
+  fail(
+    'deliver-loop: not a git repository. Run it from the repository whose issues it should deliver.',
+    1,
+  );
 const commonDir = path.resolve(root, run('git', ['rev-parse', '--git-common-dir'], root));
 let config: {
   deliver?: { base?: string; harness?: string; tracker?: string; protectedPaths?: string[] };
