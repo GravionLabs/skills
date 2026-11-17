@@ -276,6 +276,16 @@ describe('Get-Milestones.ps1 -Mode close', () => {
       expect(writes).toEqual([patchM(8, 'M002 (1.2.0)')]);
     });
 
+    it('with -Version carried by another milestone: accepted, both milestones share the version (#716)', async () => {
+      const { out, writes } = await ok(['-Name', 'M2', '-Version', '1.0.0'], numbered);
+      expect(out).toMatchObject({
+        closed: true,
+        version: '1.0.0',
+        milestone: { number: 8, title: 'M002 (1.0.0)', state: 'closed' },
+      });
+      expect(writes).toEqual([patchM(8, 'M002 (1.0.0)')]);
+    });
+
     it('open issues moved to M<m>, then renamed and closed', async () => {
       const { out, writes } = await ok(['-Name', 'M2', '-MoveTo', 'M3'], {
         ...numbered,
@@ -312,19 +322,13 @@ describe('Get-Milestones.ps1 -Mode close', () => {
         case: 'no unassigned release tag',
         args: ['-Name', 'M2'],
         env: { FAKE_TAGS: ['v1.0.0', 'v1.1.0'] },
-        msg: 'no release tag without a milestone',
+        msg: 'pass -Version x.y.z to give this milestone the version of another one',
       },
       {
         case: '-Version tag missing',
         args: ['-Name', 'M2', '-Version', '9.0.0'],
         env: {},
         msg: 'tag v9.0.0 does not exist',
-      },
-      {
-        case: '-Version already assigned',
-        args: ['-Name', 'M2', '-Version', '1.0.0'],
-        env: {},
-        msg: 'already assigned to another milestone',
       },
       {
         case: '-Version not x.y.z',
