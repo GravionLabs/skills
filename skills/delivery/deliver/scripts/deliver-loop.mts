@@ -522,6 +522,8 @@ emit('run.started', {
 });
 
 const aside = new Map<number, string>();
+// handed over by rule (the guard): a person merges the pull request, it is no failure
+const handedOver = new Map<number, string>();
 const merged: string[] = [];
 let waiting: string[] = [];
 let total = 0;
@@ -544,7 +546,7 @@ try {
     waiting = [];
     let next: Item | undefined;
     for (const item of open) {
-      if (aside.has(item.id)) continue;
+      if (aside.has(item.id) || handedOver.has(item.id)) continue;
       const reason = tracker.waitReason(item);
       if (reason) waiting.push(`#${item.id} ${reason}`);
       else if (!next) next = item;
@@ -579,8 +581,15 @@ try {
       log(`#${next.id} stopped: not merged${pull ? `, ${pull.url}` : ''}`, 'warn');
       emit('task.finished', { task: `issue-${next.id}`, outcome: 'cancelled', text: 'stopped' });
     } else {
-      aside.set(next.id, `${reason}${pull ? `, ${pull.url}` : ''}`);
-      log(`#${next.id} set aside: ${reason}`, 'bad');
+      const planned = reason.endsWith(HANDS_OFF);
+      const why = planned ? reason.slice(0, -HANDS_OFF.length) : reason;
+      (planned ? handedOver : aside).set(next.id, `${why}${pull ? `, ${pull.url}` : ''}`);
+      log(
+        planned
+          ? `#${next.id} handed over: ${why}, merge it yourself`
+          : `#${next.id} set aside: ${reason}`,
+        planned ? 'warn' : 'bad',
+      );
       emit(
         'task.finished',
         { task: `issue-${next.id}`, outcome: 'skipped', text: reason },
@@ -610,7 +619,12 @@ try {
 // A fully delivered milestone ends with the release pull request, which a person merges.
 let needsYou: string[] = [];
 let releaseError = '';
-const complete = Boolean(opt.milestone) && !stopped && aside.size === 0 && waiting.length === 0;
+const complete =
+  Boolean(opt.milestone) &&
+  !stopped &&
+  aside.size === 0 &&
+  handedOver.size === 0 &&
+  waiting.length === 0;
 if (complete) {
   try {
     if (tracker.items().length === 0) {
@@ -643,6 +657,7 @@ if (complete) {
   }
 }
 
+needsYou = [...[...handedOver].map(([nr, why]) => `#${nr} ${why}`), ...needsYou];
 say('');
 say(
   `merged (${merged.length}):${merged.map((line) => `\n  ${line}`).join('')}`,
@@ -661,7 +676,13 @@ say(
   `needs you (${needsYou.length}):${needsYou.map((line) => `\n  ${line}`).join('')}`,
   needsYou.length ? 'warn' : undefined,
 );
-const clean = !releaseError && aside.size === 0 && waiting.length === 0;
+if (handedOver.size) {
+  say(
+    'next step: merge the pull request above yourself, then start the loop again with the same arguments',
+    'warn',
+  );
+}
+const clean = !releaseError && aside.size === 0 && handedOver.size === 0 && waiting.length === 0;
 // An incomplete run (issues set aside or waiting) is no success: the agent-events format has no
 // other outcome for it than `failed`; the counts are in the text.
 emit(
