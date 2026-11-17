@@ -42,6 +42,9 @@ type Scenario = {
   gateBlockMs?: number;
   exits?: number[];
   noPull?: boolean;
+  filesFailures?: number;
+  blocked?: string;
+  earlierPull?: boolean;
   closeAfterCalls?: number;
   releaseTests?: number[];
 };
@@ -95,6 +98,8 @@ function loop(
   const dir = path.join(root, `case-${count}`);
   mkdirSync(dir);
   writeFileSync(path.join(dir, 'scenario.json'), JSON.stringify(scenario));
+  if (scenario.earlierPull)
+    for (const item of scenario.items) writeFileSync(path.join(dir, `pr-${item.id}`), '');
   const env: NodeJS.ProcessEnv = {
     ...process.env,
     NO_COLOR: '1',
@@ -381,6 +386,56 @@ describe('deliver loop', () => {
     expect(out.results[0]?.reason).toBe(
       'changes protected paths (.github/workflows/ci.yml, packages/x/package.json), merge it yourself',
     );
+  });
+
+  it('reads the changed files again after a failed read', async () => {
+    const out = await loop({
+      items: [{ id: 71, title: '[PBI] feat: flaky read' }],
+      filesFailures: 1,
+    });
+    expect(out.status).toBe(0);
+    expect(out.merges).toHaveLength(1);
+  });
+
+  it('hands the issue over after the reads kept failing', async () => {
+    const out = await loop({
+      items: [{ id: 72, title: '[PBI] feat: broken read' }],
+      filesFailures: 9,
+    });
+    expect(out.merges).toEqual([]);
+    expect(out.results[0]?.reason).toContain('could not read the changed files (HTTP 500)');
+  });
+
+  it('starts no session for an open pull request that changes a protected path', async () => {
+    const out = await loop({
+      items: [{ id: 73, title: '[PBI] feat: earlier pull' }],
+      files: ['Cargo.toml'],
+      earlierPull: true,
+    });
+    expect(out.sessions).toHaveLength(0);
+    expect(out.merges).toEqual([]);
+    expect(out.results[0]?.reason).toBe('changes protected paths (Cargo.toml), merge it yourself');
+  });
+
+  it('starts a session for an open pull request without a protected path', async () => {
+    const out = await loop({
+      items: [{ id: 74, title: '[PBI] feat: earlier clean pull' }],
+      earlierPull: true,
+    });
+    expect(out.sessions).toHaveLength(1);
+    expect(out.merges).toHaveLength(1);
+  });
+
+  it('keeps the reason of a blocked session next to the reason of the guard', async () => {
+    const out = await loop({
+      items: [{ id: 75, title: '[PBI] feat: blocked' }],
+      files: ['Cargo.toml'],
+      blocked: 'Dependency review fails',
+    });
+    const reason =
+      'changes protected paths (Cargo.toml) (session: blocked Dependency review fails)';
+    expect(out.results[0]?.reason).toBe(`${reason}, merge it yourself`);
+    expect(out.log).toContain('Dependency review fails');
   });
 
   it('lists a hand-over by rule under needs you, a failure under set aside', async () => {

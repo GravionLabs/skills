@@ -21,5 +21,6 @@ appendFileSync(
   })}\n`,
 );
 if (!scenario.noPull) writeFileSync(path.join(dir, `pr-${id}`), '');
-console.log(`result: pr https://example.test/pull/${100 + Number(id)}`);
+if (scenario.blocked) console.log(`result: blocked ${scenario.blocked}`);
+else console.log(`result: pr https://example.test/pull/${100 + Number(id)}`);
 process.exit(scenario.exits?.[index] ?? 0);

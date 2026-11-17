@@ -54,7 +54,14 @@ const parsed = (() => {
 })();
 const opt = parsed.values;
 
-type Session = { exit: number | null; turns: number; costUsd: number; peakContext: number };
+type Session = {
+  exit: number | null;
+  turns: number;
+  costUsd: number;
+  peakContext: number;
+  /** The reason of a final `result: blocked <reason>` line of the session. */
+  blocked?: string;
+};
 type Tone = 'ok' | 'bad' | 'warn' | 'info' | 'dim' | 'bold';
 
 const run = (cmd: string, args: string[], cwd?: string): string =>
@@ -201,16 +208,33 @@ const protectedHits = (files: string[]): string[] =>
   });
 /** Why the loop does not merge the pull request as it is now, else nothing. A person decides then, no repair session. */
 const HANDS_OFF = ', merge it yourself';
-function guard(pull: Pull): string | undefined {
-  let hits: string[];
-  try {
-    hits = protectedHits(tracker.changedFiles(pull));
-  } catch (error) {
-    // unknown is not safe: a person looks
-    return `could not read the changed files (${firstLine(error)})${HANDS_OFF}`;
+const GUARD_READS = 3;
+async function guard(pull: Pull): Promise<string | undefined> {
+  let hits: string[] = [];
+  for (let read = 1; ; read++) {
+    try {
+      hits = protectedHits(tracker.changedFiles(pull));
+      break;
+    } catch (error) {
+      // a read that fails once (server load, rate limit) is asked again, as the gate is
+      if (read < GUARD_READS && !stopped) {
+        for (let second = 0; second < 5 && !stopped; second++) await sleep(1);
+        continue;
+      }
+      // unknown is not safe: a person looks
+      return `could not read the changed files (${firstLine(error)})${HANDS_OFF}`;
+    }
   }
   if (hits.length === 0) return undefined;
   return `changes protected paths (${hits.slice(0, 3).join(', ')}${hits.length > 3 ? ', …' : ''})${HANDS_OFF}`;
+}
+/** The reason of a `result: blocked` session is kept next to the reason of the loop. */
+function withBlocked(reason: string, session: Session): string {
+  if (!session.blocked) return reason;
+  const note = `session: blocked ${session.blocked}`;
+  return reason.endsWith(HANDS_OFF)
+    ? `${reason.slice(0, -HANDS_OFF.length)} (${note})${HANDS_OFF}`
+    : `${reason} (${note})`;
 }
 // The session acts with a token instead of the login of the user: an installation token of the GitHub App
 // (DELIVER_APP_ID and a key file or command), else DELIVER_SESSION_TOKEN (a token limited to this repository).
@@ -245,12 +269,18 @@ type StreamRecord = {
   };
 };
 
+const noteBlocked = (text: string, session: Session): void => {
+  const blocked = /^result:\s*blocked\s+(.+)$/.exec(text.trim());
+  if (blocked) session.blocked = blocked[1]?.slice(0, 300);
+};
+
 /** Prints the readable part of one stream record and keeps the numbers of the session. */
 function render(line: string, session: Session): void {
   let event: StreamRecord;
   try {
     event = JSON.parse(line);
   } catch {
+    noteBlocked(line, session);
     say(`  ${line}`);
     return;
   }
@@ -273,6 +303,7 @@ function render(line: string, session: Session): void {
     if (block.type === 'text' && main) {
       for (const text of String(block.text).split('\n')) {
         if (!text.trim()) continue;
+        noteBlocked(text, session);
         say(
           `  ${text.trim().slice(0, 160)}`,
           text.trim().startsWith('result:') ? 'info' : undefined,
@@ -332,7 +363,10 @@ async function startSession(item: Item, cwd: string, file: string): Promise<Sess
       else {
         // no stream format: the plain lines of the harness, without color codes and empty lines
         const plain = line.replace(/\u001b\[[0-9;]*[A-Za-z]/g, '').trimEnd();
-        if (plain) say(`  ${plain}`);
+        if (plain) {
+          noteBlocked(plain, session);
+          say(`  ${plain}`);
+        }
       }
     });
     child.on('error', (error) => log(`#${item.id} session: ${error.message}`, 'bad'));
@@ -372,7 +406,7 @@ async function merge(pull: Pull): Promise<string | undefined> {
       if (stopped) break;
       // the files of the commit that is merged, not of the one the session left: a later push is checked too.
       // The merge names gate.head, so a push after this read is refused by the tracker.
-      const handsOff = guard(pull);
+      const handsOff = await guard(pull);
       if (handsOff) return handsOff;
       try {
         tracker.merge(pull, gate.head);
@@ -397,6 +431,28 @@ async function deliver(item: Item): Promise<{ reason?: string; pull?: Pull }> {
   let pull: Pull | undefined;
   let reason: string | undefined;
   const started = Date.now();
+  // a pull request of an earlier run that changes a protected path is handed over before a session is paid for;
+  // a failed read is no verdict here, the guard after the session asks again
+  const earlier = tracker.pullOf(item);
+  if (earlier) {
+    const early = await guard(earlier);
+    if (early?.startsWith('changes protected paths')) {
+      appendFileSync(
+        path.join(runDir, 'results.jsonl'),
+        `${JSON.stringify({
+          issue: item.id,
+          title: item.title,
+          outcome: 'aside',
+          reason: early,
+          pr: earlier.url,
+          minutes: 0,
+          sessions,
+        })}\n`,
+      );
+      log(`#${item.id} worktree kept: ${worktree}`, 'warn');
+      return { reason: early, pull: earlier };
+    }
+  }
   for (let round = 1; round <= 2; round++) {
     const session = await startSession(
       item,
@@ -406,15 +462,24 @@ async function deliver(item: Item): Promise<{ reason?: string; pull?: Pull }> {
     sessions.push(session);
     reason = undefined;
     pull = tracker.pullOf(item);
+    const settle = () => {
+      if (reason) reason = withBlocked(reason, session);
+    };
     // a stopped or failed session never leads to a merge, also when a pull request is open
     if (stopped) reason = 'stopped';
     else if (session.exit !== 0) reason = `session failed (exit ${session.exit})`;
     // the session asked a question: a pull request of an earlier run is not its answer
     else if (tracker.needsDecision(item)) reason = 'needs-decision';
     else if (!pull) reason = 'session ended without a pull request';
-    if (reason || !pull) break;
-    reason = guard(pull);
-    if (reason) break;
+    if (reason || !pull) {
+      settle();
+      break;
+    }
+    reason = await guard(pull);
+    if (reason) {
+      settle();
+      break;
+    }
     if (round === 1) {
       emit('step.finished', {
         task,
