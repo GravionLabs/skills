@@ -69,17 +69,17 @@ jobs:
       - name: Build docs site
         run: pnpm --filter site build
 
-  # One Vitest project, two shards in parallel. The aggregate job "Test" keeps the ruleset's required check name.
+  # One Vitest project, four shards in parallel. The aggregate job "Test" keeps the ruleset's required check name.
   # GravionLabs/ci/node/test@v1 is not used: its artifact and check names are fixed.
   test-shard:
-    name: Test (${{ matrix.shard }}/2)
+    name: Test (${{ matrix.shard }}/4)
     runs-on: ubuntu-latest
     permissions:
       contents: read
     strategy:
       fail-fast: false
       matrix:
-        shard: [1, 2]
+        shard: [1, 2, 3, 4]
     env:
       PUPPETEER_SKIP_DOWNLOAD: true
     steps:
@@ -108,7 +108,7 @@ jobs:
           # the vendored agent-events copy must equal its pinned tag (test/skills/delivery/agent-events.test.ts)
           AGENT_EVENTS_VERIFY: '1'
           GH_TOKEN: ${{ github.token }}
-        run: pnpm exec vitest run --shard=${{ matrix.shard }}/2
+        run: pnpm exec vitest run --shard=${{ matrix.shard }}/4
 
       - name: Upload test results
         if: success() || failure()
@@ -149,7 +149,7 @@ jobs:
       - name: Test
         run: pnpm exec vitest run test/skills/delivery/deliver.test.ts
 
-  # Aggregate check "Test": green only when both shards succeeded. The github-actions reporter annotates failures.
+  # Aggregate check "Test": green only when all four shards succeeded. The github-actions reporter annotates failures.
   test:
     name: Test
     runs-on: ubuntu-latest
@@ -158,12 +158,12 @@ jobs:
     permissions:
       contents: read
     steps:
-      - name: Require both shards to succeed
+      - name: Require all shards to succeed
         env:
           RESULT: ${{ needs.test-shard.result }}
         run: |
           if [ "$RESULT" != "success" ]; then
-            echo "Test shards finished with result: $RESULT (both shards must succeed)"
+            echo "Test shards finished with result: $RESULT (all four shards must succeed)"
             exit 1
           fi
 
