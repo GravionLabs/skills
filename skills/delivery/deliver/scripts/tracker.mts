@@ -55,6 +55,11 @@ export interface Tracker {
   needsDecision(item: Item): boolean;
   /** The open pull request of the item, found by its branch `<type>/<id>-…`. */
   pullOf(item: Item): Pull | undefined;
+  /**
+   * A pull request of the item that is already merged into the base branch, merged after the item was last
+   * opened (a reopened item with an old merged pull request is still work). The item is delivered.
+   */
+  mergedPullOf(item: Item): Pull | undefined;
   gate(pull: Pull): Gate;
   /** Squash-merges exactly the commit `head`. Throws an Error whose message is the reason when the tracker refuses. */
   merge(pull: Pull, head: string): void;

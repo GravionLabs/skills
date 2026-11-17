@@ -387,8 +387,26 @@ async function merge(pull: Pull): Promise<string | undefined> {
   return 'stopped';
 }
 
+function cleanup(item: Item, pull: Pull): void {
+  const worktree = path.join(path.dirname(root), `${path.basename(root)}-wt-${item.id}`);
+  attempt('git', ['worktree', 'remove', '--force', worktree], root);
+  attempt('git', ['branch', '-D', pull.branch], root);
+  tracker.dropBranch(pull);
+}
+
 async function deliver(item: Item): Promise<{ reason?: string; pull?: Pull }> {
   const task = `issue-${item.id}`;
+  // merged by someone else a moment ago, the issue is not closed yet: nothing to start
+  const already = tracker.mergedPullOf(item);
+  if (already) {
+    log(`#${item.id} merged by someone else: ${already.url}, no session`, 'info');
+    cleanup(item, already);
+    appendFileSync(
+      path.join(runDir, 'results.jsonl'),
+      `${JSON.stringify({ issue: item.id, title: item.title, outcome: 'merged', pr: already.url, minutes: 0, sessions: [] })}\n`,
+    );
+    return { pull: already };
+  }
   const worktree = path.join(path.dirname(root), `${path.basename(root)}-wt-${item.id}`);
   run('git', ['fetch', '--quiet', 'origin', BASE], root);
   if (!existsSync(worktree))
@@ -411,7 +429,16 @@ async function deliver(item: Item): Promise<{ reason?: string; pull?: Pull }> {
     else if (session.exit !== 0) reason = `session failed (exit ${session.exit})`;
     // the session asked a question: a pull request of an earlier run is not its answer
     else if (tracker.needsDecision(item)) reason = 'needs-decision';
-    else if (!pull) reason = 'session ended without a pull request';
+    else if (!pull) {
+      // merged by hand while the session ran: delivered, not set aside
+      const byOther = tracker.mergedPullOf(item);
+      if (byOther) {
+        log(`#${item.id} merged by someone else: ${byOther.url}`, 'info');
+        pull = byOther;
+        break;
+      }
+      reason = 'session ended without a pull request';
+    }
     if (reason || !pull) break;
     reason = guard(pull);
     if (reason) break;
@@ -432,9 +459,7 @@ async function deliver(item: Item): Promise<{ reason?: string; pull?: Pull }> {
   }
   if (pull && !reason) {
     // merged: the worktree and the branches can go
-    attempt('git', ['worktree', 'remove', '--force', worktree], root);
-    attempt('git', ['branch', '-D', pull.branch], root);
-    tracker.dropBranch(pull);
+    cleanup(item, pull);
   } else {
     // not merged: the worktree may hold work that is not pushed
     log(`#${item.id} worktree kept: ${worktree}`, 'warn');
