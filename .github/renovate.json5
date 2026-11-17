@@ -1,0 +1,35 @@
+// Renovate keeps npm packages and GitHub Actions current: grouped pull requests against release/next, gated by CI,
+// merged by a person (no automerge). The shared preset github>GravionLabs/ci sets the 7-day minimum release age and
+// pins actions to a commit SHA; set no weaker release age here (test/repo/renovate-config.test.ts).
+{
+  $schema: "https://docs.renovatebot.com/renovate-schema.json",
+  extends: ["config:recommended", "github>GravionLabs/ci", ":semanticCommits", ":dependencyDashboard"],
+  baseBranchPatterns: ["release/next"],
+  // `chore(deps): ...` keeps dependency updates out of the release notes.
+  // Issue titles start with their level (AGENTS.md): the dashboard is a PBI.
+  dependencyDashboard: { enabled: true, title: "[PBI] chore: Dependency Dashboard" },
+  semanticCommitType: "chore",
+  semanticCommitScope: "deps",
+  timezone: "Europe/Zurich",
+  schedule: ["before 6am on monday"],
+  lockFileMaintenance: { enabled: true, schedule: ["before 6am on the first day of the month"] },
+  automerge: false,
+  labels: ["dependencies"],
+  enabledManagers: ["npm", "github-actions"],
+  ignorePaths: ["**/node_modules/**", "skills/**/templates/**"],
+  vulnerabilityAlerts: { enabled: true, labels: ["security"], schedule: ["at any time"] },
+  packageRules: [
+    {
+      // The shared workflows follow the major tag on purpose: no digest pin, no major bump.
+      matchManagers: ["github-actions"],
+      matchPackageNames: ["GravionLabs/ci", "GravionLabs/ci/**"],
+      pinDigests: false,
+      matchUpdateTypes: ["major"],
+      enabled: false,
+    },
+    {
+      matchUpdateTypes: ["major"],
+      addLabels: ["major"],
+    },
+  ],
+}

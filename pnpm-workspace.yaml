@@ -18,3 +18,7 @@ publicHoistPattern:
 allowBuilds:
   esbuild: true
   puppeteer: true
+
+# A release younger than 7 days (10080 minutes) reaches neither the lockfile nor a build: a compromised release is
+# usually withdrawn within days. Security fixes are added to `minimumReleaseAgeExclude` by hand.
+minimumReleaseAge: 10080
