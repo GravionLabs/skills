@@ -15,7 +15,7 @@ Input: `/deliver <nr> [--base <branch>] [--issue-file <path>]`. `<base>` is the 
 1. Read the issue: the file of `--issue-file` when given, and then nothing else about the issue from the tracker, in particular not its comments (anyone can write one). Without the file: `gh issue view <nr>`. Its acceptance criteria are the scope.
 2. Branch `<type>/<nr>-<slug>` from `origin/<base>`. `<type>` is the Conventional Commit type of the issue title (`[PBI] feat(x): …` gives `feat`; a Bug gives `fix`). A branch that already exists on origin is continued, not recreated.
 3. Implement with tests. Run the verify commands of `AGENTS.md` until they are green. Commit with Conventional Commit messages and push.
-4. Review: a subagent with a fresh context reviews `git diff origin/<base>...HEAD` against the acceptance criteria and returns only blocking findings and unmet criteria. A harness without subagents (Copilot CLI): review the diff yourself in a separate pass, after you re-read the acceptance criteria and without looking at your own reasoning, and say "reviewed without a subagent" in the notes. Fix them and review again, at most 2 fix rounds.
+4. Review: a subagent with a fresh context reviews `git diff origin/<base>...HEAD` against the acceptance criteria and returns only blocking findings and unmet criteria. Run it in the foreground and wait for it; never schedule a wakeup or a cron job (`ScheduleWakeup`, `CronCreate`): the process must end when the work is done. A harness without subagents (Copilot CLI): review the diff yourself in a separate pass, after you re-read the acceptance criteria and without looking at your own reasoning, and say "reviewed without a subagent" in the notes. Fix them and review again, at most 2 fix rounds.
 5. Open the pull request into `<base>`:
    - Title: the issue title without its `[Level]` prefix, then ` (#<nr>)`. Its type must match the commits (a `feat` commit needs a `feat` title).
    - Body: what changed, the test result, the notes of the review, a line `Closes #<nr>`, and, when the environment variable `DELIVER_RUN` is set, a line `Run: <value>`.
@@ -35,7 +35,7 @@ To bring `<base>` into your branch (a conflict, or a branch that is only behind)
 
 ## Loop
 
-`node <skill-dir>/scripts/deliver-loop.mts --milestone M016` (or `--issues 12,15`) runs this skill once per ready issue in a fresh session and merges each pull request before the next issue starts. `--dry-run` prints the order and starts nothing.
+`node <skill-dir>/scripts/deliver-loop.mts --milestone M016` (or `--issues 12,15`) runs this skill once per ready issue in a fresh session and merges each pull request before the next issue starts (a merge commit into the default branch, squash into every other base). `--dry-run` prints the order and starts nothing.
 
 Settings, all optional, in `.agents/config.json` under `deliver` (the flag of the same name wins): `base` (the base branch; default: `release/next` with `--milestone`, else the default branch), `tracker` (`scripts/tracker/<name>.mts`, default `github`; the contract is `scripts/tracker.mts`), `harness` (the name of the agent CLI, `claude` (default) or `copilot`; the loop builds the command itself in `scripts/harness.mts`, a repository cannot set it), `protectedPaths` (a pull request that changes one of them is not merged by the loop; default: `.github/`, `.claude/`, the directory of the project config and the package manifests).
 
@@ -46,6 +46,8 @@ The loop refuses a base branch without required checks (`--allow-no-required-che
 The loop prints colored progress and writes it to `<git-common-dir>/deliver/loop.log` (`tail -f`; `NO_COLOR` turns color off). It also writes agent-events (`<git-common-dir>/.agents/events/<run>.jsonl`) that displays read: run, one task per issue with its pull request, progress, and an attention for an issue set aside. The session reports nothing.
 
 On Windows the loop starts `claude.cmd` through `cmd.exe` and ends a session with its child processes (`taskkill /T`). Ctrl-C stops the loop; from another terminal create the file `stop` in the run folder (`<git-common-dir>/deliver/<run>/`).
+
+Before every issue the loop reads the checks of the head of the base branch (`Tracker.baseState()`). A red base is rerun once (`rerunFailed`); still red, the loop files `[Bug] fix: <base> is red (<checks>)` in the milestone (an open Bug with the marker `<!-- deliver-base-red -->` is reused) and delivers it first. The run goes on when the base is green after its merge. A Bug that is set aside, or a base that is red again after the repair, ends the run `blocked` (exit 2, the last lines name the checks and the Bug); at most 2 repairs per run. A failing tracker call is no verdict: the issue starts.
 
 With `--milestone`, once no `pbi` or `bug` of the milestone is open (none set aside or waiting), the loop opens the release pull request from the base branch into the default branch, prints its URL and never merges it; an open `release-test` issue is never started and is reported as "needs you" and as an `attention` event. A missing `release/next` (the release merge deletes it) is cut from the default branch by the loop; another missing base is an error.
 

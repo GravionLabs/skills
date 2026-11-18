@@ -21,5 +21,14 @@ appendFileSync(
   })}\n`,
 );
 if (!scenario.noPull) writeFileSync(path.join(dir, `pr-${id}`), '');
-console.log(`result: pr https://example.test/pull/${100 + Number(id)}`);
-process.exit(scenario.exits?.[index] ?? 0);
+const final = scenario.blocked
+  ? `result: blocked ${scenario.blocked}`
+  : `result: pr https://example.test/pull/${100 + Number(id)}`;
+if (scenario.lingers) {
+  // like a session with a pending wakeup: the final result record, then the process stays alive
+  console.log(JSON.stringify({ type: 'result', is_error: false, result: `done\n${final}` }));
+  setTimeout(() => {}, 60_000);
+} else {
+  console.log(final);
+  process.exit(scenario.exits?.[index] ?? 0);
+}

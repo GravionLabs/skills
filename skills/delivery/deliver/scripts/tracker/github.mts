@@ -1,6 +1,6 @@
 // GitHub tracker: issues, sub-issue dependencies, pull requests and checks through the gh CLI.
 import { execFileSync } from 'node:child_process';
-import type { Gate, Item, Pull, Subject, Tracker, TrackerContext } from '../tracker.mts';
+import type { BaseState, Gate, Item, Pull, Subject, Tracker, TrackerContext } from '../tracker.mts';
 
 const HOLD = ['needs-decision', 'needs-refinement', 'interactive', 'release-test'];
 // only these can change the text of an issue they wrote; anyone can write a comment
@@ -15,6 +15,8 @@ type Issue = {
   author_association: string;
   labels: { name: string }[];
   pull_request?: unknown;
+  user?: { type?: string };
+  milestone?: { number: number } | null;
 };
 type Milestone = { number: number; title: string; html_url: string };
 type PullRecord = {
@@ -22,6 +24,7 @@ type PullRecord = {
   title: string;
   html_url: string;
   head: { ref: string; repo: { full_name: string } | null };
+  merged_at?: string | null;
 };
 type Check = { name: string; bucket: string };
 
@@ -44,15 +47,82 @@ export function checkVerdict(
   return { state: missing || !gating.every(passed) ? 'pending' : 'green' };
 }
 
+/** The marker of the Bug about a red base branch: an open Bug that has it is reused. */
+export const BASE_RED_MARKER = '<!-- deliver-base-red -->';
+
+type CheckRun = {
+  name: string;
+  status: string;
+  conclusion: string | null;
+  html_url: string | null;
+  details_url: string | null;
+};
+
+/** The state of the check runs of a commit, by the same rule as the checks of a pull request. */
+export function baseVerdict(required: string[], runs: CheckRun[]): BaseState {
+  const bucket = (run: CheckRun): string =>
+    run.status !== 'completed'
+      ? 'pending'
+      : ['success', 'neutral'].includes(String(run.conclusion))
+        ? 'pass'
+        : run.conclusion === 'skipped'
+          ? 'skipping'
+          : 'fail';
+  const verdict = checkVerdict(
+    required,
+    runs.map((run) => ({ name: run.name, bucket: bucket(run) })),
+  );
+  if (verdict.state !== 'red') return { state: verdict.state, failed: [] };
+  const names = verdict.detail.split(', ');
+  const failed = runs
+    .filter(
+      (run) => bucket(run) === 'fail' && (required.length === 0 || required.includes(run.name)),
+    )
+    .filter((run) => names.includes(run.name))
+    .map((run) => ({ name: run.name, url: run.details_url ?? run.html_url ?? '' }));
+  return { state: 'red', failed };
+}
+
+/**
+ * The merged pull request of issue `id` (head `<type>/<id>-…` of this repository) that was merged at or after
+ * `since`, the moment the issue was last opened. The newest one wins.
+ */
+export function mergedPullSince(
+  records: PullRecord[],
+  repo: string,
+  id: number,
+  since: string,
+): PullRecord | undefined {
+  return records
+    .filter(
+      (p) =>
+        p.merged_at &&
+        Date.parse(p.merged_at) >= Date.parse(since) &&
+        p.head.repo?.full_name === repo &&
+        new RegExp(`^[a-z]+/${id}-`).test(p.head.ref),
+    )
+    .sort((a, b) => Date.parse(b.merged_at ?? '') - Date.parse(a.merged_at ?? ''))[0];
+}
+
+/** The default branch takes merge commits (its ruleset allows only those, and the Conventional Commits stay visible); every other base takes squash. */
+export function mergeMethodFor(base: string, defaultBranch: string): 'merge' | 'squash' {
+  return base === defaultBranch ? 'merge' : 'squash';
+}
+
 export function create({ cwd, base, selection, trustAuthors }: TrackerContext): Tracker {
-  const gh = (...args: string[]): string =>
-    execFileSync('gh', args, {
+  // an argument that is an object is an environment added to the process: the token of the session
+  const gh = (...input: (string | Record<string, string>)[]): string => {
+    const env = input.find((a): a is Record<string, string> => typeof a === 'object');
+    const args = input.filter((a): a is string => typeof a === 'string');
+    return execFileSync('gh', args, {
       cwd,
+      ...(env ? { env: { ...process.env, ...env } } : {}),
       encoding: 'utf8',
       stdio: ['ignore', 'pipe', 'pipe'],
       // the default of 1 MB is too small for the lists of a large repository
       maxBuffer: 256 * 1024 * 1024,
     }).trim();
+  };
   const api = <T,>(route: string): T => JSON.parse(gh('api', route));
   const list = <T,>(route: string): T[] =>
     (JSON.parse(gh('api', route, '--paginate', '--slurp')) as T[][]).flat();
@@ -97,6 +167,7 @@ export function create({ cwd, base, selection, trustAuthors }: TrackerContext): 
     }
   };
 
+  let lastFailed: BaseState['failed'] = [];
   let requiredCache: string[] | undefined;
   const required = (): string[] => {
     if (requiredCache) return requiredCache;
@@ -202,6 +273,31 @@ export function create({ cwd, base, selection, trustAuthors }: TrackerContext): 
       );
     },
 
+    mergedPullOf(item: Item): Pull | undefined {
+      // the issue counts as opened at its creation or at its last reopening
+      const issue = api<Issue & { created_at: string }>(`repos/${repo}/issues/${item.id}`);
+      const reopened = list<{ event: string; created_at: string }>(
+        `repos/${repo}/issues/${item.id}/events?per_page=100`,
+      )
+        .filter((e) => e.event === 'reopened')
+        .map((e) => e.created_at)
+        .sort()
+        .pop();
+      // the newest closed pull requests first: one page holds the recent merges
+      const closed = api<PullRecord[]>(
+        `repos/${repo}/pulls?state=closed&base=${base}&sort=updated&direction=desc&per_page=100`,
+      );
+      const found = mergedPullSince(closed, repo, item.id, reopened ?? issue.created_at);
+      return (
+        found && {
+          id: found.number,
+          title: found.title,
+          url: found.html_url,
+          branch: found.head.ref,
+        }
+      );
+    },
+
     gate(pull: Pull): Gate {
       const view = JSON.parse(
         gh('pr', 'view', String(pull.id), '--repo', repo, '--json', 'state,mergeable,headRefOid'),
@@ -224,13 +320,14 @@ export function create({ cwd, base, selection, trustAuthors }: TrackerContext): 
 
     merge(pull: Pull, head: string): void {
       try {
+        const method = mergeMethodFor(base, this.defaultBranch());
         gh(
           'api',
           '-X',
           'PUT',
           `repos/${repo}/pulls/${pull.id}/merge`,
           '-f',
-          'merge_method=squash',
+          `merge_method=${method}`,
           '-f',
           `commit_title=${pull.title} (#${pull.id})`,
           // only the commit whose checks were read: a later push is refused
@@ -253,6 +350,73 @@ export function create({ cwd, base, selection, trustAuthors }: TrackerContext): 
 
     requiredChecks(): string[] {
       return required();
+    },
+
+    baseState(): BaseState {
+      const pages = JSON.parse(
+        gh(
+          'api',
+          `repos/${repo}/commits/${encodeURIComponent(base)}/check-runs?per_page=100`,
+          '--paginate',
+          '--slurp',
+        ),
+      ) as { check_runs: CheckRun[] }[];
+      const state = baseVerdict(
+        required(),
+        pages.flatMap((page) => page.check_runs),
+      );
+      lastFailed = state.failed;
+      return state;
+    },
+
+    rerunFailed(env: Record<string, string>): void {
+      // one run per URL: several failed jobs of a workflow run are rerun together
+      const runs = new Set(
+        lastFailed.map((f) => /\/actions\/runs\/(\d+)/.exec(f.url)?.[1]).filter(Boolean),
+      );
+      if (runs.size === 0) throw new Error('no workflow run to rerun');
+      for (const id of runs)
+        gh('api', '-X', 'POST', `repos/${repo}/actions/runs/${id}/rerun-failed-jobs`, env);
+    },
+
+    reportBaseRed(failed: BaseState['failed'], env: Record<string, string>): Item {
+      const open = list<Issue>(`repos/${repo}/issues?labels=bug&state=open&per_page=100`).find(
+        (i) =>
+          !i.pull_request &&
+          (i.body ?? '').includes(BASE_RED_MARKER) &&
+          (trustAuthors || TRUSTED.includes(i.author_association) || i.user?.type === 'Bot'),
+      );
+      if (open) return toItem(open);
+      const checks = [...new Set(failed.map((f) => f.name))].join(', ');
+      const body = [
+        BASE_RED_MARKER,
+        '',
+        `## Reproduction`,
+        '',
+        `The required checks of \`${base}\` are red:`,
+        '',
+        ...failed.map((f) => `- ${f.name}: ${f.url}`),
+        '',
+        '## Acceptance Criteria',
+        '',
+        `- [ ] the required checks of \`${base}\` are green`,
+        '',
+        'Filed by the deliver loop.',
+      ].join('\n');
+      const number = selection.milestone
+        ? milestone().number
+        : api<Issue>(`repos/${repo}/issues/${(selection.issues ?? [])[0]?.trim()}`).milestone
+            ?.number;
+      const fields = [
+        '-f',
+        `title=[Bug] fix: ${base} is red (${checks})`,
+        '-f',
+        `body=${body}`,
+        '-f',
+        'labels[]=bug',
+        ...(number ? ['-F', `milestone=${number}`] : []),
+      ];
+      return toItem(JSON.parse(gh('api', '-X', 'POST', `repos/${repo}/issues`, ...fields, env)));
     },
 
     changedFiles(pull: Pull): string[] {
@@ -280,6 +444,11 @@ export function create({ cwd, base, selection, trustAuthors }: TrackerContext): 
         .filter((i) => !i.pull_request && i.labels.some((l) => l.name === 'release-test'))
         .sort((a, b) => a.number - b.number)
         .map(toItem);
+    },
+
+    releaseCommits(): number {
+      const target = this.defaultBranch();
+      return Number(gh('api', `repos/${repo}/compare/${target}...${base}`, '-q', '.ahead_by'));
     },
 
     ensureReleasePull(): Pull {

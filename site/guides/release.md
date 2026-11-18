@@ -144,7 +144,9 @@ The `main` branch has its own ruleset that allows merge commits only, for the re
 
 ## 7. Close the milestone
 
-Once the release job has tagged `v1.3.0`, close the milestone and create the next one. The next `github-release finish` (the run that deletes the merged `release/next`) prints this hint for the lowest open `M<nnn>`, with the version taken from the tag:
+The release job closes the milestone itself: once it has tagged `v1.3.0` (`close-milestones` of the `gh-release` action of GravionLabs/ci), every open milestone whose issues all shipped with the release is closed and renamed `M003 (1.3.0)`. A milestone with open issues stays open, and the job names it and the issues in a notice. Nothing is left to do after the merge except `/github-milestone create M004` when the next work starts.
+
+If the job did not close it (a failed step, a pre-release, a milestone with leftovers), repair it by hand. `github-release finish` (the run that deletes the merged `release/next`) prints this hint for the lowest open `M<nnn>`, with the version taken from the tag:
 
 ```text
 /github-milestone create M004
@@ -153,7 +155,7 @@ Once the release job has tagged `v1.3.0`, close the milestone and create the nex
 
 With open issues left, create the next milestone first and move them: `/github-milestone create M004`, then `/github-milestone close M003 --move-to M004`. `--move-to` needs the target to exist and be open, so `create` always comes before `close ... --move-to`; `create` is idempotent. Legacy repositories whose open milestone is named `x.y.z` get the old hint: `create` the next `x.y.z` milestone first, then `/github-milestone close 1.3.0 [--move-to <next>]`.
 
-`close` needs the release tag: without `--version <x.y.z>` it takes the newest tag not yet assigned to a milestone, and renames `M003` to `M003 (1.3.0)` (`M003 Market data` to `M003 Market data (1.3.0)`) while closing it. Open issues stay, and nothing is renamed or closed, unless you pass `--move-to M<nnn>`, an existing open milestone that receives them (create it first). Pull requests are not moved. A milestone that is already closed is left as is. `close` renames only to add the version, never edits the due date or deletes a milestone. To rename a legacy `x.y.z` milestone (or any open one) use `/github-milestone rename <name> <new title>`: `rename 0.2.0 "M002 (0.1.1)"` (the version comes from the new title, the number of an `M<nnn>` never changes, closed milestones are refused).
+`close` needs the release tag: without `--version <x.y.z>` it takes the newest tag not yet assigned to a milestone (when every tag is assigned, the error names `--version <x.y.z>`), and renames `M003` to `M003 (1.3.0)` (`M003 Market data` to `M003 Market data (1.3.0)`) while closing it. One release can ship several milestones: with an explicit `--version <x.y.z>` a version that another milestone already carries is accepted, so `close M016 --version 5.0.0` and `close M017 --version 5.0.0` both give `(5.0.0)`; the tag must exist. Open issues stay, and nothing is renamed or closed, unless you pass `--move-to M<nnn>`, an existing open milestone that receives them (create it first). Pull requests are not moved. A milestone that is already closed is left as is. `close` renames only to add the version, never edits the due date or deletes a milestone. To rename a legacy `x.y.z` milestone (or any open one) use `/github-milestone rename <name> <new title>`: `rename 0.2.0 "M002 (0.1.1)"` (the version comes from the new title, the number of an `M<nnn>` never changes, closed milestones are refused).
 
 ## Migrate legacy milestones
 

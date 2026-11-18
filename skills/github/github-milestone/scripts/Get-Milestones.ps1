@@ -52,7 +52,7 @@
 .PARAMETER To
   rename: the new title, M<n> [<Topic>] [(x.y.z)].
 .PARAMETER Version
-  close M<n>: the release version x.y.z for the new title; default the newest release tag not yet assigned to a milestone.
+  close M<n>: the release version x.y.z for the new title; default the newest release tag not yet assigned to a milestone; an explicit version may be carried by several milestones.
 .PARAMETER MoveTo
   close: M<m> (or legacy x.y.z) of an existing open milestone that receives the open issues.
 .PARAMETER State
@@ -133,7 +133,7 @@ function Find-Milestone($all, [string]$name) {
     $hit = $all | Where-Object { $p = Get-Title $_.title; $p.kind -eq 'numbered' -and $p.n -eq $n } | Select-Object -First 1
   }
   if (-not $hit -and $bare -match $semverRx) {
-    $hit = $all | Where-Object { $p = Get-Title $_.title; $p.kind -eq 'numbered' -and $p.version -eq $bare } | Select-Object -First 1
+    $hit = $all | Where-Object { $p = Get-Title $_.title; $p.kind -eq 'numbered' -and $p.version -eq $bare } | Sort-Object number | Select-Object -First 1
   }
   $hit
 }
@@ -344,14 +344,14 @@ if ($Mode -eq 'close') {
     if ($ver -and -not (ConvertTo-Version $ver)) { Fail "invalid -Version '$Version': expected x.y.z" }
     $assigned = @($milestones | Where-Object { $_.number -ne $m.number } | ForEach-Object { (Get-Title $_.title).version } | Where-Object { $_ })
     if ($ver) {
-      if ($assigned -contains $ver) { Fail "version $ver is already assigned to another milestone" }
+      # several milestones may ship in one release: an explicit version already carried by another milestone is accepted
       $null = & gh api "repos/$Repo/git/ref/tags/v$ver" 2>$null
       if ($LASTEXITCODE -ne 0) { Fail "tag v$ver does not exist: release first, then close the milestone" }
     }
     else {
       $cand = @((Get-Paged "repos/$Repo/tags?per_page=100") | ForEach-Object { $_.name } | Where-Object { $_ -match '^v[0-9]+\.[0-9]+\.[0-9]+$' -and $assigned -notcontains $_.Substring(1) } |
           Sort-Object { [version]($_.Substring(1)) })
-      if (-not $cand.Count) { Fail "no release tag without a milestone: release first, or pass -Version x.y.z" }
+      if (-not $cand.Count) { Fail "no release tag without a milestone: release first, or pass -Version x.y.z to give this milestone the version of another one (one release can ship several milestones)" }
       $ver = $cand[-1].Substring(1)
     }
     $mt = Get-Title $m.title

@@ -28,7 +28,7 @@ flowchart TD
   S[next ready issue] --> W[worktree at origin/base]
   W --> A[fresh agent session: /deliver nr]
   A -->|pull request| C[wait for required checks]
-  C -->|green| M[squash merge]
+  C -->|green| M[squash merge, merge commit into main]
   C -->|red| A
   M -->|more issues| S
   M -->|milestone done| R[release pull request into main, a person merges]
@@ -42,7 +42,7 @@ deliver-loop --milestone M004 --dry-run
 
 Install the `deliver-loop` command with `skills-manage` ([launcher](#the-deliver-loop-command)). Without it: `node <skill-dir>/scripts/deliver-loop.mts --milestone M004`.
 
-The loop reads the state from the tracker before every issue and remembers only what it set aside, so it can be stopped and started again. It orders the issues by their blocked-by links, skips those with `needs-decision`, `needs-refinement` or an open blocker, and merges one pull request before the next issue starts. `--dry-run` prints the order, the required checks and the session token source and starts nothing.
+The loop reads the state from the tracker before every issue and remembers only what it set aside, so it can be stopped and started again. It orders the issues by their blocked-by links, skips those with `needs-decision`, `needs-refinement` or an open blocker, and merges one pull request before the next issue starts. The merge method follows the base: a merge commit when the base is the default branch (its ruleset allows only merge commits, so the Conventional Commits stay visible to GitVersion and git-cliff), squash for every other base. `--dry-run` prints the order, the required checks and the session token source and starts nothing.
 
 Name the milestone `M<nnn>` (`M004`): the lookup finds the open `M004` and, after `/github-milestone close M004` renamed it, `M004 (0.2.0)`. A legacy title such as `1.3.0` works as before; to move a repository to `M<nnn>` see [Migrate legacy milestones](release.md#migrate-legacy-milestones).
 
@@ -63,7 +63,7 @@ With `--milestone`, once no PBI or Bug of the milestone is open (none set aside 
 | `--allow-no-required-checks` | Deliver into a base without required checks.                                                          |
 | `--trust-authors`            | Also deliver issues of authors without write access.                                                  |
 
-Exit codes: 0 everything done or `--max` reached, 2 open issues remain and none is ready, 3 the base is missing or has no required checks, 64 wrong arguments or settings, 130 stopped with Ctrl+C. Colored progress goes to the terminal (`NO_COLOR` turns it off) and to `<git-common-dir>/deliver/loop.log`; to stop from another terminal create the file `stop` in the run folder `<git-common-dir>/deliver/<run>/`.
+Exit codes: 0 everything done or `--max` reached, 2 open issues remain and none is ready or the base stayed red (see below), 3 the base is missing or has no required checks, 64 wrong arguments or settings, 130 stopped with Ctrl+C. Colored progress goes to the terminal (`NO_COLOR` turns it off) and to `<git-common-dir>/deliver/loop.log`; to stop from another terminal create the file `stop` in the run folder `<git-common-dir>/deliver/<run>/`.
 
 ## Settings
 
@@ -80,6 +80,7 @@ Other keys (`roles`, `loopThreshold`, `parallel`, `sessionTimeoutMinutes`) are i
 
 ## What the loop refuses
 
+- **A red base.** Before every issue the loop reads the checks of the head of the base branch. Red: it reruns the failed jobs once and waits (`release/next: green after rerun (flake)`). Still red: it files `[Bug] fix: release/next is red (<checks>)` in the milestone of the run (the first target with `--issues`) with the failed checks and their run URLs, reuses an open Bug with the marker `<!-- deliver-base-red -->`, and delivers it first. Green after its merge, the run goes on. A Bug that is set aside, or a base that is red again after the repair, ends the run `blocked` with exit 2; the last lines name the failed checks and the Bug URL, and no further issue starts. At most 2 repairs per run. A failing tracker call is no verdict: the issue starts.
 - **A base without required checks.** Nothing would guard the merge. Add a ruleset with required checks, or pass `--allow-no-required-checks`. Exit 3.
 - **Issues of authors without write access.** Anyone can open an issue, and its text becomes the task of an agent. Such an issue is listed as waiting (`author has no write access`); `--trust-authors` delivers it.
 - **Pull requests that change protected paths.** The loop does not merge a pull request that touches `.github/`, `.agents/`, `.claude/` or a package manifest (a workflow or an agent setting would let a change run with more rights). It says why and leaves the merge to you. `deliver.protectedPaths` replaces the list.
@@ -111,7 +112,7 @@ The launcher finds the installed `deliver` skill (project first, then your home)
 
 ## Resume and feedback
 
-State lives in GitHub (issue, branch, pull request, checks). After a crash, a closed terminal or a stop, run the same command again: closed issues are not selected, an existing pull request goes straight to its checks. A session that ends `needs-decision` or `blocked` is set aside for the rest of the run and listed at the end with its reason. Answer in the issue, remove the label (`gh issue edit 43 --remove-label needs-decision`) and run again.
+State lives in GitHub (issue, branch, pull request, checks). After a crash, a closed terminal or a stop, run the same command again: closed issues are not selected, an existing pull request goes straight to its checks. A session that ends `needs-decision` or `blocked` is set aside for the rest of the run and listed at the end with its reason. Answer in the issue, remove the label (`gh issue edit 43 --remove-label needs-decision`) and run again. A pull request that changes protected paths is no failure: it is listed under `needs you` (yellow) with its URL; merge it yourself, then run the same command again. The run still ends with exit code 2.
 
 ## Progress events
 
