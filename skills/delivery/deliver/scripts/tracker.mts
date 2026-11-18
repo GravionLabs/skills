@@ -67,7 +67,7 @@ export interface Tracker {
    */
   mergedPullOf(item: Item): Pull | undefined;
   gate(pull: Pull): Gate;
-  /** Squash-merges exactly the commit `head`. Throws an Error whose message is the reason when the tracker refuses. */
+  /** Merges exactly the commit `head`: a merge commit into the default branch, a squash into every other base. Throws an Error whose message is the reason when the tracker refuses. */
   merge(pull: Pull, head: string): void;
   /** Removes the branch of a merged pull request on the remote. */
   dropBranch(pull: Pull): void;
