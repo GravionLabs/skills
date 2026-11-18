@@ -161,11 +161,19 @@ describe('github-release skill refuses a released branch (#252)', () => {
     expect(skill).not.toContain('GIT_GUARDRAILS_OFF');
   });
 
-  it('resolver step 4 ignores release branches whose .0 tag exists', () => {
-    const step4 = section(reference, '4. `release/next` on origin', '5. None exists');
-    expect(step4).toContain('whose tag `v<x.y>.0` is not on origin');
-    expect(step4).toContain('Get-ReleaseState.ps1 -Mode base');
-    expect(step4).not.toContain('git ls-remote');
+  it('the base is the default branch unless a milestone or a release branch is the target (#736)', () => {
+    const resolve = section(reference, '## Resolve the base branch', '`<default>` is');
+    expect(resolve).toContain('2. A milestone is worked through: `release/next`');
+    expect(resolve).toContain('5. The default branch (`main`).');
+    expect(resolve).toContain('Get-ReleaseState.ps1 -Mode base');
+    expect(resolve).not.toContain('git ls-remote');
+    expect(reference).not.toMatch(/never targets `main`|is a mistake/);
     expect(reference).toContain('already released');
+    const issueSkill = fs.readFileSync(
+      path.join(root, 'skills/github/github-issue/SKILL.md'),
+      'utf-8',
+    );
+    expect(issueSkill).toContain('the default branch (`main`), or `release/next` when a milestone');
+    expect(issueSkill).not.toContain('never `main`');
   });
 });

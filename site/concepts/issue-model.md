@@ -37,7 +37,7 @@ A milestone holds the work items that are delivered: PBIs and Bugs always have o
 ## Branches and the release branch
 
 - Work branches are named `<type>/<nr>-<slug>`, for example `feat/42-csv-export`. The slug comes from the title without its `[Level]` prefix and conventional type.
-- Branches are cut from and merged into `release/next`, the rolling integration branch, never `main`. `github-release` cuts it and finishes it with the release PR into `main`, the human gate. Milestones are the releases.
+- Branches are cut from and merged into `main`. When a milestone is worked through, or a release branch is given as the target, the base is `release/next`: `github-release` cuts it and finishes it with the release PR into `main`, the human gate. Milestones are the releases.
 - Commit and PR titles end with `(#<nr>)`; the PR body has `Closes #<nr>`.
 
 ## Related

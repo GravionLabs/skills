@@ -11,10 +11,10 @@
   state: absent (not on origin), fresh (equals default), unreleased (own work, not behind), behind (default
   has commits the branch lacks), merged (tip is the second parent of a merge on default), released (ancestor
   of default, not a merge tip), released-continued (continued after its release merge).
-  Mode base resolves the integration branch instead and prints { base, source, warning }: source input (-Branch
-  given), issue (Release branch: line of -Issue or a parent, one Parent <Level>: #N line at a time), current
-  (current release/* branch), origin (release/next, else the highest unreleased release/<x.y>) or none (base null,
-  exit 0: the caller cuts one). warning is set when base is a released, not yet reset release/next.
+  Mode base resolves the base branch of a pull request instead and prints { base, source, warning }: source input
+  (-Branch given), issue (Release branch: line of -Issue or a parent, one Parent <Level>: #N line at a time), current
+  (current release/* branch) or default (the default branch). warning is set when base is a released, not yet reset
+  release/next.
 .PARAMETER Mode
   cut, finish or base.
 .PARAMETER Branch
@@ -73,14 +73,14 @@ function Get-IssueBase([int]$nr) {
 }
 
 if ($Mode -eq 'base') {
-  $source = 'none'; $base = $null
+  $source = 'default'; $base = $null
   if ($Branch) { $base = $Branch; $source = 'input' }
   if (-not $base -and $Issue) { $base = Get-IssueBase $Issue; if ($base) { $source = 'issue' } }
   if (-not $base) {
     $cur = Invoke-Git branch --show-current
     if ($cur -match '^release/') { $base = $cur; $source = 'current' }
   }
-  if (-not $base) { $base = Get-OriginBase; if ($base) { $source = 'origin' } }
+  if (-not $base) { $base = $default }
   $warning = $null
   if ($base -eq 'release/next' -and $heads -contains $base) {
     $null = Invoke-Git merge-base --is-ancestor origin/release/next "origin/$default"; $inDefault = $gitOk

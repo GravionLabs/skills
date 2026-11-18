@@ -122,7 +122,15 @@ try {
 for (const warning of legacyWarnings) log(warning, 'warn');
 const configWarning = unknownConfigKeys(config.deliver);
 if (configWarning) log(configWarning, 'warn');
-const BASE: string = opt.base ?? config.deliver?.base ?? 'release/next';
+// The base: the flag, then the project config; else release/next for a milestone and the default branch otherwise.
+const BASE: string =
+  opt.base ??
+  config.deliver?.base ??
+  (opt.milestone
+    ? 'release/next'
+    : (attempt('git', ['ls-remote', '--symref', 'origin', 'HEAD'], root)?.match(
+        /^ref: refs\/heads\/(\S+)\s+HEAD/m,
+      )?.[1] ?? 'main'));
 // The harness is a name (harness.mts builds the command). A command from the project config would let
 // a change in the repository decide what the loop runs.
 const harnessName = String(opt.harness ?? config.deliver?.harness ?? 'claude');

@@ -4,13 +4,13 @@ import { createFakeGh } from '../../helpers/fake-gh';
 import { PwshWorker } from '../../helpers/pwsh-worker';
 import { useReleaseFixture } from '../../helpers/release-fixture';
 
-// Resolve the integration branch (release-branches.md steps 2-4, #252, #779) through Get-ReleaseState.ps1 -Mode base,
+// Resolve the base branch of a pull request (release-branches.md, #252, #779, #736) through Get-ReleaseState.ps1 -Mode base,
 // run against the shared release fixture.
 const root = path.resolve(__dirname, '../../..');
 const script = path.join(root, 'skills/github/github-release/scripts/Get-ReleaseState.ps1');
 
 const fx = useReleaseFixture();
-const { git, dropRef, resetHeads } = fx;
+const { git, resetHeads } = fx;
 
 describe('Get-ReleaseState.ps1 -Mode base', () => {
   let worker: PwshWorker;
@@ -46,48 +46,45 @@ describe('Get-ReleaseState.ps1 -Mode base', () => {
     return JSON.parse(r.stdout);
   };
 
-  describe('origin (step 4)', () => {
-    it('prefers release/next when it exists', async () => {
-      expect(await base()).toEqual({ base: 'release/next', source: 'origin', warning: null });
-    });
-
-    it('skips release/<x.y> lines whose v<x.y>.0 tag is on origin (even the highest) and legacy names', async () => {
-      dropRef('refs/heads/release/next');
-      expect(await base()).toEqual({ base: 'release/2.2', source: 'origin', warning: null });
-    });
-
-    it('returns none with exit 0 when every release/<x.y> is released', async () => {
-      dropRef('refs/heads/release/next');
-      dropRef('refs/heads/release/2.2');
-      expect(await base()).toEqual({ base: null, source: 'none', warning: null });
+  describe('default branch', () => {
+    it('is the base when no release branch is given, also while release/next exists', async () => {
+      expect(await base()).toEqual({ base: 'main', source: 'default', warning: null });
     });
   });
 
-  describe('released, not reset', () => {
+  describe('milestone (release/next given as -Branch)', () => {
+    it('returns release/next', async () => {
+      expect(await base(['-Branch', 'release/next'])).toEqual({
+        base: 'release/next',
+        source: 'input',
+        warning: null,
+      });
+    });
+
     it('warns when release/next is an ancestor of main but not equal to it', async () => {
       git(fx.origin, 'update-ref', 'refs/heads/release/next', 'release/legacy');
-      expect(await base()).toEqual({
+      expect(await base(['-Branch', 'release/next'])).toEqual({
         base: 'release/next',
-        source: 'origin',
+        source: 'input',
         warning: 'released, not reset: run github-release cut',
       });
     });
 
     it('does not warn when release/next equals main (fresh)', async () => {
       git(fx.origin, 'update-ref', 'refs/heads/release/next', 'main');
-      expect((await base()).warning).toBeNull();
+      expect((await base(['-Branch', 'release/next'])).warning).toBeNull();
     });
   });
 
   describe('current branch (step 3)', () => {
-    it('uses the current release/* branch before origin', async () => {
+    it('uses the current release/* branch before the default branch', async () => {
       git(fx.clone, 'checkout', '-q', '-B', 'release/2.1', 'origin/release/2.1');
       expect(await base()).toEqual({ base: 'release/2.1', source: 'current', warning: null });
     });
 
     it('ignores a current branch outside release/*', async () => {
       git(fx.clone, 'checkout', '-q', '-B', 'feat/1-x', 'origin/main');
-      expect((await base()).source).toBe('origin');
+      expect((await base()).source).toBe('default');
     });
   });
 
@@ -116,18 +113,18 @@ describe('Get-ReleaseState.ps1 -Mode base', () => {
       });
     });
 
-    it('falls through to origin when neither the issue nor its parents name a branch', async () => {
+    it('falls through to the default branch when neither the issue nor its parents name a branch', async () => {
       const issues = { '5': 'Parent Feature: #4\n\nRelease branch: main', '4': 'no line' };
       expect(await base(['-Issue', '5'], issues)).toEqual({
-        base: 'release/next',
-        source: 'origin',
+        base: 'main',
+        source: 'default',
         warning: null,
       });
     });
 
     it('stops on a Parent cycle', async () => {
       const issues = { '8': 'Parent PBI: #9', '9': 'Parent Feature: #8' };
-      expect((await base(['-Issue', '8'], issues)).source).toBe('origin');
+      expect((await base(['-Issue', '8'], issues)).source).toBe('default');
     });
 
     it('fails when gh cannot read the issue', async () => {
