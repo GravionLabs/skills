@@ -26,7 +26,10 @@ import {
   resolveWindows,
 } from '../../../skills/delivery/deliver/scripts/process.mts';
 import { HARNESSES } from '../../../skills/delivery/deliver/scripts/harness.mts';
-import { checkVerdict } from '../../../skills/delivery/deliver/scripts/tracker/github.mts';
+import {
+  checkVerdict,
+  mergeMethod,
+} from '../../../skills/delivery/deliver/scripts/tracker/github.mts';
 
 const skill = path.resolve(__dirname, '../../../skills/delivery/deliver');
 const loopScript = path.join(skill, 'scripts/deliver-loop.mts');
@@ -742,6 +745,17 @@ describe('deliver loop', () => {
       expect(out.status).toBe(3);
       expect(out.stderr).toContain('release/other is missing on origin');
     });
+  });
+});
+
+describe('mergeMethod of the GitHub tracker', () => {
+  it('merges into the default branch with a merge commit', () => {
+    expect(mergeMethod('main', 'main')).toBe('merge');
+  });
+
+  it('squashes into every other base', () => {
+    expect(mergeMethod('release/next', 'main')).toBe('squash');
+    expect(mergeMethod('release/1.2', 'main')).toBe('squash');
   });
 });
 

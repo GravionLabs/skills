@@ -44,6 +44,15 @@ export function checkVerdict(
   return { state: missing || !gating.every(passed) ? 'pending' : 'green' };
 }
 
+/**
+ * How the loop merges a pull request. The default branch takes a merge commit: its ruleset allows
+ * nothing else, and the versioning reads the Conventional Commits of the branch. Every other base
+ * (a release branch) takes one squash commit per issue.
+ */
+export function mergeMethod(base: string, defaultBranch: string): 'merge' | 'squash' {
+  return base === defaultBranch ? 'merge' : 'squash';
+}
+
 export function create({ cwd, base, selection, trustAuthors }: TrackerContext): Tracker {
   const gh = (...args: string[]): string =>
     execFileSync('gh', args, {
@@ -230,7 +239,7 @@ export function create({ cwd, base, selection, trustAuthors }: TrackerContext): 
           'PUT',
           `repos/${repo}/pulls/${pull.id}/merge`,
           '-f',
-          'merge_method=squash',
+          `merge_method=${mergeMethod(base, this.defaultBranch())}`,
           '-f',
           `commit_title=${pull.title} (#${pull.id})`,
           // only the commit whose checks were read: a later push is refused

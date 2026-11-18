@@ -28,7 +28,7 @@ flowchart TD
   S[next ready issue] --> W[worktree at origin/base]
   W --> A[fresh agent session: /deliver nr]
   A -->|pull request| C[wait for required checks]
-  C -->|green| M[squash merge]
+  C -->|green| M[merge: merge commit into main, squash into a release branch]
   C -->|red| A
   M -->|more issues| S
   M -->|milestone done| R[release pull request into main, a person merges]

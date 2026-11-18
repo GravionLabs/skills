@@ -35,7 +35,7 @@ To bring `<base>` into your branch (a conflict, or a branch that is only behind)
 
 ## Loop
 
-`node <skill-dir>/scripts/deliver-loop.mts --milestone M016` (or `--issues 12,15`) runs this skill once per ready issue in a fresh session and merges each pull request before the next issue starts. `--dry-run` prints the order and starts nothing.
+`node <skill-dir>/scripts/deliver-loop.mts --milestone M016` (or `--issues 12,15`) runs this skill once per ready issue in a fresh session and merges each pull request before the next issue starts (a merge commit into the default branch, a squash into any other base). `--dry-run` prints the order and starts nothing.
 
 Settings, all optional, in `.agents/config.json` under `deliver` (the flag of the same name wins): `base` (the base branch; default: `release/next` with `--milestone`, else the default branch), `tracker` (`scripts/tracker/<name>.mts`, default `github`; the contract is `scripts/tracker.mts`), `harness` (the name of the agent CLI, `claude` (default) or `copilot`; the loop builds the command itself in `scripts/harness.mts`, a repository cannot set it), `protectedPaths` (a pull request that changes one of them is not merged by the loop; default: `.github/`, `.claude/`, the directory of the project config and the package manifests).
 
