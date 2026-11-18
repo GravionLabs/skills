@@ -45,7 +45,7 @@ Milestones: a PBI and a Bug always have one; a Feature only when all its PBIs ar
 
 ## Shared constraints (all workflows)
 
-- Work branches are cut from and merged into the integration branch (`release/next` by default, explicit `release/<x.y>` only for parallel lines), never `main` (`references/release-branches.md`); `github-release` cuts and finishes it.
+- Work branches are cut from and merged into `<base>`: the default branch (`main`), or `release/next` when a milestone is worked through or a release branch is given as the target (`references/release-branches.md`); `github-release` cuts and finishes `release/next`.
 - Branch name `<type>/<nr>-<slug>` per `references/conventional-commits.md`; `<slug>` from the issue title after stripping `^\[(Objective|Epic|Feature|PBI|Task|Bug)\] ` (case-insensitive) and the legacy `Epic: ` / `Feature: `, then the conventional type and scope (lowercase, spaces → `-`, drop parenthetical scope, max ~40 chars).
 - One logical change per commit; commit format per `references/conventional-commits.md`.
 - Commit and PR titles reference the issue: `<type>: <description> (#<nr>)`; the PR body contains `Closes #<nr>` for every issue it completes (only partly delivered: `Refs #<nr>` and `## Not delivered`, see `github-pull-request`).

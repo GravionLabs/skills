@@ -4,7 +4,7 @@ Reference for the skill `deliver` (group `delivery`) and its loop `deliver-loop`
 
 ## The skill
 
-`/deliver <nr> [--base <branch>] [--issue-file <path>]` delivers one PBI or Bug as a pull request into the base branch (`release/next` unless `--base` names another) and never merges. It runs unattended in its own worktree at `origin/<base>`:
+`/deliver <nr> [--base <branch>] [--issue-file <path>]` delivers one PBI or Bug as a pull request into the base branch (`--base`, else the default branch) and never merges. It runs unattended in its own worktree at `origin/<base>`:
 
 1. Reads the issue (the file of `--issue-file`, else `gh issue view`; never its comments, anyone can write one). Its acceptance criteria are the scope.
 2. Branch `<type>/<nr>-<slug>` from `origin/<base>`; an existing branch is continued.

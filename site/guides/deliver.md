@@ -1,6 +1,6 @@
 # Deliver issues with /deliver
 
-`/deliver <nr>` takes one open PBI or Bug and delivers it as a pull request into the base branch (`release/next`). The `deliver-loop` runs it for a whole milestone or a list of issues: a fresh agent session per issue, each in its own worktree, and it merges the pull request once every required check passed. The reference is in [delivery](../delivery.md); coming from the PowerShell loop: [migrating](migrate-powershell-loop.md).
+`/deliver <nr>` takes one open PBI or Bug and delivers it as a pull request into the base branch (`release/next` for a milestone, else the default branch). The `deliver-loop` runs it for a whole milestone or a list of issues: a fresh agent session per issue, each in its own worktree, and it merges the pull request once every required check passed. The reference is in [delivery](../delivery.md); coming from the PowerShell loop: [migrating](migrate-powershell-loop.md).
 
 ::: tip Prerequisites
 - `gh auth status` works and you can push to the repository.
@@ -50,18 +50,18 @@ With `--milestone`, once no PBI or Bug of the milestone is open (none set aside 
 
 ## Options
 
-| Option                       | Meaning                                                                           |
-| :--------------------------- | :-------------------------------------------------------------------------------- |
-| `--milestone <M>`            | The open work items of a milestone. Exactly one of `--milestone` and `--issues`.  |
-| `--issues <nr,…>`            | These issues.                                                                     |
-| `--base <branch>`            | Base branch. Default `deliver.base`, else `release/next`.                         |
-| `--harness <name>`           | `claude` (default) or `copilot`. `--model <name>` passes a model of that harness. |
-| `--max <n>`                  | Stops after `n` issues.                                                           |
-| `--session-minutes <n>`      | Longest session. Default 90.                                                      |
-| `--merge-minutes <n>`        | How long it waits for checks after a pull request. Default 30.                    |
-| `--dry-run`                  | Print the plan, start nothing.                                                    |
-| `--allow-no-required-checks` | Deliver into a base without required checks.                                      |
-| `--trust-authors`            | Also deliver issues of authors without write access.                              |
+| Option                       | Meaning                                                                                               |
+| :--------------------------- | :---------------------------------------------------------------------------------------------------- |
+| `--milestone <M>`            | The open work items of a milestone. Exactly one of `--milestone` and `--issues`.                      |
+| `--issues <nr,…>`            | These issues.                                                                                         |
+| `--base <branch>`            | Base branch. Default `deliver.base`, else `release/next` with `--milestone`, else the default branch. |
+| `--harness <name>`           | `claude` (default) or `copilot`. `--model <name>` passes a model of that harness.                     |
+| `--max <n>`                  | Stops after `n` issues.                                                                               |
+| `--session-minutes <n>`      | Longest session. Default 90.                                                                          |
+| `--merge-minutes <n>`        | How long it waits for checks after a pull request. Default 30.                                        |
+| `--dry-run`                  | Print the plan, start nothing.                                                                        |
+| `--allow-no-required-checks` | Deliver into a base without required checks.                                                          |
+| `--trust-authors`            | Also deliver issues of authors without write access.                                                  |
 
 Exit codes: 0 everything done or `--max` reached, 2 open issues remain and none is ready or the base stayed red (see below), 3 the base is missing or has no required checks, 64 wrong arguments or settings, 130 stopped with Ctrl+C. Colored progress goes to the terminal (`NO_COLOR` turns it off) and to `<git-common-dir>/deliver/loop.log`; to stop from another terminal create the file `stop` in the run folder `<git-common-dir>/deliver/<run>/`.
 
@@ -71,7 +71,7 @@ Optional, under `deliver` in `.agents/config.json` ([project config](../usage/pr
 
 | Key              | Default                                                      |
 | :--------------- | :----------------------------------------------------------- |
-| `base`           | `release/next`                                               |
+| `base`           | `release/next` with `--milestone`, else the default branch   |
 | `tracker`        | `github` (`scripts/tracker/<name>.mts`)                      |
 | `harness`        | `claude`; a name only, a repository cannot set a command     |
 | `protectedPaths` | `.github/`, `.agents/`, `.claude/` and the package manifests |
