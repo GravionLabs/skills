@@ -43,6 +43,6 @@ The skills ship no git guardrail hook. Guard destructive git commands (force pus
 
 ## Releases and changelog
 
-`github-release cut` creates the rolling `release/next` branch, PBI pull requests target it, and `github-release finish` opens the release PR into `main` with the changelog.
+`github-release cut` creates the rolling `release/next` branch, the pull requests of a milestone target it, and `github-release finish` opens the release PR into `main` with the changelog.
 
 The walkthrough with prompts, the changelog setup and the ruleset on `release/next` are in the [release guide](release.md).

@@ -44,7 +44,6 @@ describe('github-pull-request release mode', () => {
 
   it('still stops for any other head without a number', () => {
     expect(prSkill).toMatch(/Every other head without a number still stops/);
-    expect(prSkill).toMatch(/the head is not `release\/\*`[^\n]*stop and report/);
   });
 
   it('keeps auto_merge false, non-empty PR, pushed branch and CHANGELOG.md untouched', () => {
@@ -75,6 +74,15 @@ describe('github-pull-request release mode', () => {
     const step12 = /\n12\. [^\n]*/.exec(standalone)?.[0] ?? '';
     expect(step12).toMatch(/`base_branch: <base>`/);
     expect(step12).not.toMatch(/<type>|Closes/);
+  });
+});
+
+describe('github-pull-request base (#736)', () => {
+  it('defaults to the default branch, to release/next for a milestone, and never stops on main', () => {
+    const input = /- `base_branch` [^\n]*/.exec(prSkill)?.[0] ?? '';
+    expect(input).toContain('default: the default branch');
+    expect(input).toContain('`release/next` when the caller works through a milestone');
+    expect(prSkill).not.toContain('belongs on `release/next`');
   });
 });
 
