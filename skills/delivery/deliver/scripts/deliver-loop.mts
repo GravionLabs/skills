@@ -20,7 +20,7 @@ import { type Emit, openEvents } from './events.mts';
 import { HARNESSES } from './harness.mts';
 import { adoptLegacyEnv, unknownConfigKeys } from './legacy.mts';
 import { killTree, launch, promptPath } from './process.mts';
-import { type Gate, type Item, type Pull, loadTracker } from './tracker.mts';
+import { type BaseState, type Gate, type Item, type Pull, loadTracker } from './tracker.mts';
 
 // before anything reads the environment; the warnings are printed once the log exists
 const legacyWarnings = adoptLegacyEnv();
@@ -656,6 +656,75 @@ setInterval(() => {
   if (!stopped && existsSync(path.join(runDir, 'stop'))) requestStop();
 }, 500).unref();
 
+// The base branch is checked before every issue: a red base would set every pull request aside.
+// A red one is rerun once, then a Bug is filed and delivered first. At most BASE_REPAIRS repairs per run.
+const BASE_REPAIRS = 2;
+let repairs = 0;
+let repairBug: Item | undefined;
+let baseBlocked = '';
+const readBase = (): BaseState | undefined => {
+  try {
+    return tracker.baseState();
+  } catch (error) {
+    // a failing tracker call is no verdict: the issue starts
+    log(`${BASE} state unreadable: ${firstLine(error)}`, 'warn');
+    return undefined;
+  }
+};
+/** Reads the base until its checks are no longer pending (or the merge time is over). */
+async function settleBase(): Promise<BaseState | undefined> {
+  const start = Date.now();
+  for (;;) {
+    const state = readBase();
+    if (!state || state.state !== 'pending' || stopped) return state;
+    if (Date.now() - start > MERGE_MINUTES * 60_000) return state;
+    for (let second = 0; second < 30 && !stopped; second++) await sleep(1);
+  }
+}
+/** The environment of the session token for the calls that change something. A failed mint throws. */
+async function actEnv(): Promise<Record<string, string>> {
+  const token = tokenSource ? (await tokenSource.current()).token : FIXED_TOKEN;
+  return token ? tracker.sessionEnv(token) : {};
+}
+const names = (failed: BaseState['failed']) => [...new Set(failed.map((f) => f.name))].join(', ');
+/** The Bug to deliver first when the base is red, else nothing. Sets `baseBlocked` when the run must end. */
+async function checkBase(): Promise<Item | undefined> {
+  let state = readBase();
+  if (state?.state === 'pending' && repairBug) state = await settleBase();
+  if (!state || state.state === 'pending') return undefined;
+  if (state.state === 'green') {
+    repairBug = undefined;
+    return undefined;
+  }
+  const blocked = (failed: BaseState['failed'], why = '') => {
+    baseBlocked = `${BASE} is red (${names(failed)})${why}${repairBug ? `, Bug ${repairBug.url}` : ''}`;
+    return undefined;
+  };
+  // red again after its repair: no second rerun, no second Bug
+  if (repairBug) return blocked(state.failed, ' after its repair');
+  log(`${BASE} is red (${names(state.failed)}), reruns the failed jobs`, 'warn');
+  try {
+    tracker.rerunFailed(await actEnv());
+    for (let second = 0; second < 30 && !stopped; second++) await sleep(1);
+    state = (await settleBase()) ?? state;
+  } catch (error) {
+    log(`${BASE} rerun failed: ${firstLine(error)}`, 'warn');
+  }
+  if (state.state !== 'red') {
+    if (state.state === 'green') log(`${BASE}: green after rerun (flake)`, 'ok');
+    return undefined;
+  }
+  if (repairs >= BASE_REPAIRS) return blocked(state.failed, `: ${BASE_REPAIRS} repairs used`);
+  try {
+    repairBug = tracker.reportBaseRed(state.failed, await actEnv());
+  } catch (error) {
+    return blocked(state.failed, `: no Bug filed (${firstLine(error)})`);
+  }
+  repairs += 1;
+  log(`${BASE} is still red: delivers ${repairBug.url} first`, 'warn');
+  return repairBug;
+}
+
 try {
   for (let count = 0; !stopped && (MAX === 0 || count < MAX); count++) {
     // an issue closes a moment after its merge: do not pick it again
@@ -667,8 +736,14 @@ try {
       emit('progress', { done: 0, total, label: 'PBIs' });
     }
     waiting = [];
-    let next: Item | undefined;
-    for (const item of open) {
+    let next: Item | undefined = await checkBase();
+    if (baseBlocked) break;
+    if (next) {
+      // the Bug of a red base goes first, as a normal iteration (it may not be in the selection)
+      const repair = next;
+      next = open.find((item) => item.id === repair.id) ?? repair;
+    }
+    for (const item of next ? [] : open) {
       if (aside.has(item.id) || handedOver.has(item.id)) continue;
       const reason = tracker.waitReason(item);
       if (reason) waiting.push(`#${item.id} ${reason}`);
@@ -747,6 +822,7 @@ const complete =
   !stopped &&
   aside.size === 0 &&
   handedOver.size === 0 &&
+  !baseBlocked &&
   waiting.length === 0;
 if (complete) {
   try {
@@ -804,13 +880,32 @@ say(
   `needs you (${needsYou.length}):${needsYou.map((line) => `\n  ${line}`).join('')}`,
   needsYou.length ? 'warn' : undefined,
 );
+if (baseBlocked) {
+  say(`blocked: ${baseBlocked}`, 'bad');
+  emit(
+    'attention',
+    {
+      id: 'base-red',
+      reason: 'base-red',
+      text: `blocked: ${baseBlocked}`,
+      needsYou: true,
+      links: repairBug ? [{ rel: 'issue', url: repairBug.url }] : [],
+    },
+    'warning',
+  );
+}
 if (handedOver.size) {
   say(
     'next step: merge the pull request above yourself, then start the loop again with the same arguments',
     'warn',
   );
 }
-const clean = !releaseError && aside.size === 0 && handedOver.size === 0 && waiting.length === 0;
+const clean =
+  !baseBlocked &&
+  !releaseError &&
+  aside.size === 0 &&
+  handedOver.size === 0 &&
+  waiting.length === 0;
 // An incomplete run (issues set aside or waiting) is no success: the agent-events format has no
 // other outcome for it than `failed`; the counts are in the text.
 emit(

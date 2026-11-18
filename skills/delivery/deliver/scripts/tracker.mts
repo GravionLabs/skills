@@ -27,6 +27,12 @@ export type Gate =
   | { state: 'pending'; reported: boolean; head?: string }
   | { state: 'ready'; reported: boolean; head: string };
 
+/** The check runs of the head of the base branch. `failed` names the red checks with the URL of their run. */
+export type BaseState = {
+  state: 'green' | 'pending' | 'red';
+  failed: { name: string; url: string }[];
+};
+
 export type Selection = { milestone?: string; issues?: string[] };
 
 export type TrackerContext = {
@@ -67,6 +73,12 @@ export interface Tracker {
   dropBranch(pull: Pull): void;
   /** The checks the base branch requires before a merge. None: the tracker does not guard the merge. */
   requiredChecks(): string[];
+  /** The check runs of the head of the base branch (the required checks, all runs when none can be read). */
+  baseState(): BaseState;
+  /** Reruns the failed jobs of the last red `baseState()`. `env` is the environment of the session token. */
+  rerunFailed(env: Record<string, string>): void;
+  /** The open Bug about a red base (marker `<!-- deliver-base-red -->`), reused, else filed in the milestone of the run. */
+  reportBaseRed(failed: BaseState['failed'], env: Record<string, string>): Item;
   /** The paths the pull request changes, a rename with both names. */
   changedFiles(pull: Pull): string[];
   /** The branch the release goes into (`main`), where a missing base branch is cut from. */

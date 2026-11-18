@@ -1,6 +1,6 @@
 // GitHub tracker: issues, sub-issue dependencies, pull requests and checks through the gh CLI.
 import { execFileSync } from 'node:child_process';
-import type { Gate, Item, Pull, Subject, Tracker, TrackerContext } from '../tracker.mts';
+import type { BaseState, Gate, Item, Pull, Subject, Tracker, TrackerContext } from '../tracker.mts';
 
 const HOLD = ['needs-decision', 'needs-refinement', 'interactive', 'release-test'];
 // only these can change the text of an issue they wrote; anyone can write a comment
@@ -15,6 +15,8 @@ type Issue = {
   author_association: string;
   labels: { name: string }[];
   pull_request?: unknown;
+  user?: { type?: string };
+  milestone?: { number: number } | null;
 };
 type Milestone = { number: number; title: string; html_url: string };
 type PullRecord = {
@@ -45,6 +47,42 @@ export function checkVerdict(
   return { state: missing || !gating.every(passed) ? 'pending' : 'green' };
 }
 
+/** The marker of the Bug about a red base branch: an open Bug that has it is reused. */
+export const BASE_RED_MARKER = '<!-- deliver-base-red -->';
+
+type CheckRun = {
+  name: string;
+  status: string;
+  conclusion: string | null;
+  html_url: string | null;
+  details_url: string | null;
+};
+
+/** The state of the check runs of a commit, by the same rule as the checks of a pull request. */
+export function baseVerdict(required: string[], runs: CheckRun[]): BaseState {
+  const bucket = (run: CheckRun): string =>
+    run.status !== 'completed'
+      ? 'pending'
+      : ['success', 'neutral'].includes(String(run.conclusion))
+        ? 'pass'
+        : run.conclusion === 'skipped'
+          ? 'skipping'
+          : 'fail';
+  const verdict = checkVerdict(
+    required,
+    runs.map((run) => ({ name: run.name, bucket: bucket(run) })),
+  );
+  if (verdict.state !== 'red') return { state: verdict.state, failed: [] };
+  const names = verdict.detail.split(', ');
+  const failed = runs
+    .filter(
+      (run) => bucket(run) === 'fail' && (required.length === 0 || required.includes(run.name)),
+    )
+    .filter((run) => names.includes(run.name))
+    .map((run) => ({ name: run.name, url: run.details_url ?? run.html_url ?? '' }));
+  return { state: 'red', failed };
+}
+
 /**
  * The merged pull request of issue `id` (head `<type>/<id>-…` of this repository) that was merged at or after
  * `since`, the moment the issue was last opened. The newest one wins.
@@ -67,14 +105,19 @@ export function mergedPullSince(
 }
 
 export function create({ cwd, base, selection, trustAuthors }: TrackerContext): Tracker {
-  const gh = (...args: string[]): string =>
-    execFileSync('gh', args, {
+  // an argument that is an object is an environment added to the process: the token of the session
+  const gh = (...input: (string | Record<string, string>)[]): string => {
+    const env = input.find((a): a is Record<string, string> => typeof a === 'object');
+    const args = input.filter((a): a is string => typeof a === 'string');
+    return execFileSync('gh', args, {
       cwd,
+      ...(env ? { env: { ...process.env, ...env } } : {}),
       encoding: 'utf8',
       stdio: ['ignore', 'pipe', 'pipe'],
       // the default of 1 MB is too small for the lists of a large repository
       maxBuffer: 256 * 1024 * 1024,
     }).trim();
+  };
   const api = <T,>(route: string): T => JSON.parse(gh('api', route));
   const list = <T,>(route: string): T[] =>
     (JSON.parse(gh('api', route, '--paginate', '--slurp')) as T[][]).flat();
@@ -119,6 +162,7 @@ export function create({ cwd, base, selection, trustAuthors }: TrackerContext): 
     }
   };
 
+  let lastFailed: BaseState['failed'] = [];
   let requiredCache: string[] | undefined;
   const required = (): string[] => {
     if (requiredCache) return requiredCache;
@@ -300,6 +344,73 @@ export function create({ cwd, base, selection, trustAuthors }: TrackerContext): 
 
     requiredChecks(): string[] {
       return required();
+    },
+
+    baseState(): BaseState {
+      const pages = JSON.parse(
+        gh(
+          'api',
+          `repos/${repo}/commits/${encodeURIComponent(base)}/check-runs?per_page=100`,
+          '--paginate',
+          '--slurp',
+        ),
+      ) as { check_runs: CheckRun[] }[];
+      const state = baseVerdict(
+        required(),
+        pages.flatMap((page) => page.check_runs),
+      );
+      lastFailed = state.failed;
+      return state;
+    },
+
+    rerunFailed(env: Record<string, string>): void {
+      // one run per URL: several failed jobs of a workflow run are rerun together
+      const runs = new Set(
+        lastFailed.map((f) => /\/actions\/runs\/(\d+)/.exec(f.url)?.[1]).filter(Boolean),
+      );
+      if (runs.size === 0) throw new Error('no workflow run to rerun');
+      for (const id of runs)
+        gh('api', '-X', 'POST', `repos/${repo}/actions/runs/${id}/rerun-failed-jobs`, env);
+    },
+
+    reportBaseRed(failed: BaseState['failed'], env: Record<string, string>): Item {
+      const open = list<Issue>(`repos/${repo}/issues?labels=bug&state=open&per_page=100`).find(
+        (i) =>
+          !i.pull_request &&
+          (i.body ?? '').includes(BASE_RED_MARKER) &&
+          (trustAuthors || TRUSTED.includes(i.author_association) || i.user?.type === 'Bot'),
+      );
+      if (open) return toItem(open);
+      const checks = [...new Set(failed.map((f) => f.name))].join(', ');
+      const body = [
+        BASE_RED_MARKER,
+        '',
+        `## Reproduction`,
+        '',
+        `The required checks of \`${base}\` are red:`,
+        '',
+        ...failed.map((f) => `- ${f.name}: ${f.url}`),
+        '',
+        '## Acceptance Criteria',
+        '',
+        `- [ ] the required checks of \`${base}\` are green`,
+        '',
+        'Filed by the deliver loop.',
+      ].join('\n');
+      const number = selection.milestone
+        ? milestone().number
+        : api<Issue>(`repos/${repo}/issues/${(selection.issues ?? [])[0]?.trim()}`).milestone
+            ?.number;
+      const fields = [
+        '-f',
+        `title=[Bug] fix: ${base} is red (${checks})`,
+        '-f',
+        `body=${body}`,
+        '-f',
+        'labels[]=bug',
+        ...(number ? ['-F', `milestone=${number}`] : []),
+      ];
+      return toItem(JSON.parse(gh('api', '-X', 'POST', `repos/${repo}/issues`, ...fields, env)));
     },
 
     changedFiles(pull: Pull): string[] {
