@@ -45,6 +45,7 @@ type Scenario = {
   gateBlockMs?: number;
   exits?: number[];
   noPull?: boolean;
+  lingers?: boolean;
   closeAfterCalls?: number;
   releaseTests?: number[];
   mergedBefore?: number[];
@@ -437,6 +438,22 @@ describe('deliver loop', () => {
   it('names the run to the session, so the pull request body can carry it', async () => {
     const out = await loop({ items: [{ id: 103, title: '[PBI] feat: run' }] });
     expect(out.sessions[0]?.run).toMatch(/^\d{8}T\d{6}-\d+$/);
+  });
+
+  it('ends a session that printed its final result and stays alive, and goes on to the merge', async () => {
+    const out = await loop(
+      { items: [{ id: 717, title: '[PBI] feat: lingers' }], lingers: true },
+      { env: { DELIVER_RESULT_GRACE_MS: '300' } },
+    );
+    expect(out.stdout).toContain('ended by the loop');
+    expect(out.stdout).toMatch(/#717.*merged/s);
+  }, 20_000);
+
+  it('keeps the wakeup tools away from the claude session', () => {
+    const argv = HARNESSES.claude.command({ prompt: '/deliver 1' });
+    expect(argv.slice(argv.indexOf('--disallowedTools'))).toEqual(
+      expect.arrayContaining(['ScheduleWakeup', 'CronCreate']),
+    );
   });
 
   it('builds the copilot command with plain output and no questions', () => {
