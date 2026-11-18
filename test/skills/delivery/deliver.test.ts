@@ -214,7 +214,7 @@ describe('deliver loop: base check', () => {
     expect(out.status).toBe(0);
     expect(out.calls).toContain('rerun');
     expect(out.calls).not.toContain('baseBug');
-    expect(out.log).toContain('release/next: green after rerun (flake)');
+    expect(out.log).toContain('main: green after rerun (flake)');
     expect(out.merges.map((m) => m.pull)).toEqual([181]);
   });
 
@@ -233,7 +233,7 @@ describe('deliver loop: base check', () => {
     expect(out.sessions.map((s) => s.id)).toEqual([900]);
     const last = out.stdout.trim().split('\n').slice(-1)[0];
     expect(out.stdout).toMatch(
-      /blocked: release\/next is red \(ci\) after its repair, Bug https:\/\/example\.test\/issues\/900/,
+      /blocked: main is red \(ci\) after its repair, Bug https:\/\/example\.test\/issues\/900/,
     );
     expect(last).toBeTruthy();
     expect(out.events.at(-1)).toMatchObject({ outcome: 'failed' });
