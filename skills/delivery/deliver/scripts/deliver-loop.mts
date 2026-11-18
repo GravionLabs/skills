@@ -20,7 +20,7 @@ import { type Emit, openEvents } from './events.mts';
 import { HARNESSES } from './harness.mts';
 import { adoptLegacyEnv, unknownConfigKeys } from './legacy.mts';
 import { killTree, launch, promptPath } from './process.mts';
-import { type Gate, type Item, type Pull, loadTracker } from './tracker.mts';
+import { type BaseState, type Gate, type Item, type Pull, loadTracker } from './tracker.mts';
 
 // before anything reads the environment; the warnings are printed once the log exists
 const legacyWarnings = adoptLegacyEnv();
@@ -54,7 +54,14 @@ const parsed = (() => {
 })();
 const opt = parsed.values;
 
-type Session = { exit: number | null; turns: number; costUsd: number; peakContext: number };
+type Session = {
+  exit: number | null;
+  turns: number;
+  costUsd: number;
+  peakContext: number;
+  /** The reason of a final `result: blocked <reason>` line of the session. */
+  blocked?: string;
+};
 type Tone = 'ok' | 'bad' | 'warn' | 'info' | 'dim' | 'bold';
 
 const run = (cmd: string, args: string[], cwd?: string): string =>
@@ -201,16 +208,33 @@ const protectedHits = (files: string[]): string[] =>
   });
 /** Why the loop does not merge the pull request as it is now, else nothing. A person decides then, no repair session. */
 const HANDS_OFF = ', merge it yourself';
-function guard(pull: Pull): string | undefined {
-  let hits: string[];
-  try {
-    hits = protectedHits(tracker.changedFiles(pull));
-  } catch (error) {
-    // unknown is not safe: a person looks
-    return `could not read the changed files (${firstLine(error)})${HANDS_OFF}`;
+const GUARD_READS = 3;
+async function guard(pull: Pull): Promise<string | undefined> {
+  let hits: string[] = [];
+  for (let read = 1; ; read++) {
+    try {
+      hits = protectedHits(tracker.changedFiles(pull));
+      break;
+    } catch (error) {
+      // a read that fails once (server load, rate limit) is asked again, as the gate is
+      if (read < GUARD_READS && !stopped) {
+        for (let second = 0; second < 5 && !stopped; second++) await sleep(1);
+        continue;
+      }
+      // unknown is not safe: a person looks
+      return `could not read the changed files (${firstLine(error)})${HANDS_OFF}`;
+    }
   }
   if (hits.length === 0) return undefined;
   return `changes protected paths (${hits.slice(0, 3).join(', ')}${hits.length > 3 ? ', …' : ''})${HANDS_OFF}`;
+}
+/** The reason of a `result: blocked` session is kept next to the reason of the loop. */
+function withBlocked(reason: string, session: Session): string {
+  if (!session.blocked) return reason;
+  const note = `session: blocked ${session.blocked}`;
+  return reason.endsWith(HANDS_OFF)
+    ? `${reason.slice(0, -HANDS_OFF.length)} (${note})${HANDS_OFF}`
+    : `${reason} (${note})`;
 }
 // The session acts with a token instead of the login of the user: an installation token of the GitHub App
 // (DELIVER_APP_ID and a key file or command), else DELIVER_SESSION_TOKEN (a token limited to this repository).
@@ -238,6 +262,8 @@ type StreamRecord = {
   type?: string;
   num_turns?: number;
   total_cost_usd?: number;
+  is_error?: boolean;
+  result?: string;
   parent_tool_use_id?: string | null;
   message?: {
     usage?: Record<string, number | undefined>;
@@ -245,12 +271,34 @@ type StreamRecord = {
   };
 };
 
+const noteBlocked = (text: string, session: Session): void => {
+  const blocked = /^result:\s*blocked\s+(.+)$/.exec(text.trim());
+  if (blocked) session.blocked = blocked[1]?.slice(0, 300);
+};
+
+const RESULT_GRACE_MS = Number(process.env.DELIVER_RESULT_GRACE_MS ?? 30_000);
+
+/** True for the final `result` record of a session whose text ends with a `result:` line. */
+function finishedResult(line: string): boolean {
+  if (!line.startsWith('{')) return false;
+  try {
+    const event: StreamRecord = JSON.parse(line);
+    if (event?.type !== 'result' || event.is_error || typeof event.result !== 'string')
+      return false;
+    const last = event.result.trimEnd().split('\n').pop() ?? '';
+    return /^result: (pr \S+|needs-decision|blocked\b.*)$/.test(last.trim());
+  } catch {
+    return false;
+  }
+}
+
 /** Prints the readable part of one stream record and keeps the numbers of the session. */
 function render(line: string, session: Session): void {
   let event: StreamRecord;
   try {
     event = JSON.parse(line);
   } catch {
+    noteBlocked(line, session);
     say(`  ${line}`);
     return;
   }
@@ -273,6 +321,7 @@ function render(line: string, session: Session): void {
     if (block.type === 'text' && main) {
       for (const text of String(block.text).split('\n')) {
         if (!text.trim()) continue;
+        noteBlocked(text, session);
         say(
           `  ${text.trim().slice(0, 160)}`,
           text.trim().startsWith('result:') ? 'info' : undefined,
@@ -326,21 +375,37 @@ async function startSession(item: Item, cwd: string, file: string): Promise<Sess
     const timer = setTimeout(() => killTree(child), SESSION_MINUTES * 60_000);
     const stop = () => killTree(child);
     stopSession = stop;
+    // a session that scheduled a wakeup prints its final result and then stays alive until the wakeup fires:
+    // once the final `result:` line is in and nothing follows for a moment, the loop ends the process itself
+    let grace: NodeJS.Timeout | undefined;
+    let finished = false;
     createInterface({ input: child.stdout! }).on('line', (line) => {
       out.write(`${line}\n`);
+      clearTimeout(grace);
+      if (finishedResult(line)) {
+        grace = setTimeout(() => {
+          finished = true;
+          log(`#${item.id} session printed its result and stays alive: ended by the loop`, 'dim');
+          killTree(child);
+        }, RESULT_GRACE_MS);
+      }
       if (harness.claudeStream) render(line, session);
       else {
         // no stream format: the plain lines of the harness, without color codes and empty lines
         const plain = line.replace(/\u001b\[[0-9;]*[A-Za-z]/g, '').trimEnd();
-        if (plain) say(`  ${plain}`);
+        if (plain) {
+          noteBlocked(plain, session);
+          say(`  ${plain}`);
+        }
       }
     });
     child.on('error', (error) => log(`#${item.id} session: ${error.message}`, 'bad'));
     child.on('close', (code) => {
       clearTimeout(timer);
+      clearTimeout(grace);
       if (stopSession === stop) stopSession = undefined;
       out.end();
-      session.exit = code;
+      session.exit = finished ? 0 : code;
       done(session);
     });
   });
@@ -372,7 +437,7 @@ async function merge(pull: Pull): Promise<string | undefined> {
       if (stopped) break;
       // the files of the commit that is merged, not of the one the session left: a later push is checked too.
       // The merge names gate.head, so a push after this read is refused by the tracker.
-      const handsOff = guard(pull);
+      const handsOff = await guard(pull);
       if (handsOff) return handsOff;
       try {
         tracker.merge(pull, gate.head);
@@ -387,8 +452,26 @@ async function merge(pull: Pull): Promise<string | undefined> {
   return 'stopped';
 }
 
+function cleanup(item: Item, pull: Pull): void {
+  const worktree = path.join(path.dirname(root), `${path.basename(root)}-wt-${item.id}`);
+  attempt('git', ['worktree', 'remove', '--force', worktree], root);
+  attempt('git', ['branch', '-D', pull.branch], root);
+  tracker.dropBranch(pull);
+}
+
 async function deliver(item: Item): Promise<{ reason?: string; pull?: Pull }> {
   const task = `issue-${item.id}`;
+  // merged by someone else a moment ago, the issue is not closed yet: nothing to start
+  const already = tracker.mergedPullOf(item);
+  if (already) {
+    log(`#${item.id} merged by someone else: ${already.url}, no session`, 'info');
+    cleanup(item, already);
+    appendFileSync(
+      path.join(runDir, 'results.jsonl'),
+      `${JSON.stringify({ issue: item.id, title: item.title, outcome: 'merged', pr: already.url, minutes: 0, sessions: [] })}\n`,
+    );
+    return { pull: already };
+  }
   const worktree = path.join(path.dirname(root), `${path.basename(root)}-wt-${item.id}`);
   run('git', ['fetch', '--quiet', 'origin', BASE], root);
   if (!existsSync(worktree))
@@ -397,6 +480,28 @@ async function deliver(item: Item): Promise<{ reason?: string; pull?: Pull }> {
   let pull: Pull | undefined;
   let reason: string | undefined;
   const started = Date.now();
+  // a pull request of an earlier run that changes a protected path is handed over before a session is paid for;
+  // a failed read is no verdict here, the guard after the session asks again
+  const earlier = tracker.pullOf(item);
+  if (earlier) {
+    const early = await guard(earlier);
+    if (early?.startsWith('changes protected paths')) {
+      appendFileSync(
+        path.join(runDir, 'results.jsonl'),
+        `${JSON.stringify({
+          issue: item.id,
+          title: item.title,
+          outcome: 'aside',
+          reason: early,
+          pr: earlier.url,
+          minutes: 0,
+          sessions,
+        })}\n`,
+      );
+      log(`#${item.id} worktree kept: ${worktree}`, 'warn');
+      return { reason: early, pull: earlier };
+    }
+  }
   for (let round = 1; round <= 2; round++) {
     const session = await startSession(
       item,
@@ -406,15 +511,33 @@ async function deliver(item: Item): Promise<{ reason?: string; pull?: Pull }> {
     sessions.push(session);
     reason = undefined;
     pull = tracker.pullOf(item);
+    const settle = () => {
+      if (reason) reason = withBlocked(reason, session);
+    };
     // a stopped or failed session never leads to a merge, also when a pull request is open
     if (stopped) reason = 'stopped';
     else if (session.exit !== 0) reason = `session failed (exit ${session.exit})`;
     // the session asked a question: a pull request of an earlier run is not its answer
     else if (tracker.needsDecision(item)) reason = 'needs-decision';
-    else if (!pull) reason = 'session ended without a pull request';
-    if (reason || !pull) break;
-    reason = guard(pull);
-    if (reason) break;
+    else if (!pull) {
+      // merged by hand while the session ran: delivered, not set aside
+      const byOther = tracker.mergedPullOf(item);
+      if (byOther) {
+        log(`#${item.id} merged by someone else: ${byOther.url}`, 'info');
+        pull = byOther;
+        break;
+      }
+      reason = 'session ended without a pull request';
+    }
+    if (reason || !pull) {
+      settle();
+      break;
+    }
+    reason = await guard(pull);
+    if (reason) {
+      settle();
+      break;
+    }
     if (round === 1) {
       emit('step.finished', {
         task,
@@ -432,9 +555,7 @@ async function deliver(item: Item): Promise<{ reason?: string; pull?: Pull }> {
   }
   if (pull && !reason) {
     // merged: the worktree and the branches can go
-    attempt('git', ['worktree', 'remove', '--force', worktree], root);
-    attempt('git', ['branch', '-D', pull.branch], root);
-    tracker.dropBranch(pull);
+    cleanup(item, pull);
   } else {
     // not merged: the worktree may hold work that is not pushed
     log(`#${item.id} worktree kept: ${worktree}`, 'warn');
@@ -535,6 +656,75 @@ setInterval(() => {
   if (!stopped && existsSync(path.join(runDir, 'stop'))) requestStop();
 }, 500).unref();
 
+// The base branch is checked before every issue: a red base would set every pull request aside.
+// A red one is rerun once, then a Bug is filed and delivered first. At most BASE_REPAIRS repairs per run.
+const BASE_REPAIRS = 2;
+let repairs = 0;
+let repairBug: Item | undefined;
+let baseBlocked = '';
+const readBase = (): BaseState | undefined => {
+  try {
+    return tracker.baseState();
+  } catch (error) {
+    // a failing tracker call is no verdict: the issue starts
+    log(`${BASE} state unreadable: ${firstLine(error)}`, 'warn');
+    return undefined;
+  }
+};
+/** Reads the base until its checks are no longer pending (or the merge time is over). */
+async function settleBase(): Promise<BaseState | undefined> {
+  const start = Date.now();
+  for (;;) {
+    const state = readBase();
+    if (!state || state.state !== 'pending' || stopped) return state;
+    if (Date.now() - start > MERGE_MINUTES * 60_000) return state;
+    for (let second = 0; second < 30 && !stopped; second++) await sleep(1);
+  }
+}
+/** The environment of the session token for the calls that change something. A failed mint throws. */
+async function actEnv(): Promise<Record<string, string>> {
+  const token = tokenSource ? (await tokenSource.current()).token : FIXED_TOKEN;
+  return token ? tracker.sessionEnv(token) : {};
+}
+const names = (failed: BaseState['failed']) => [...new Set(failed.map((f) => f.name))].join(', ');
+/** The Bug to deliver first when the base is red, else nothing. Sets `baseBlocked` when the run must end. */
+async function checkBase(): Promise<Item | undefined> {
+  let state = readBase();
+  if (state?.state === 'pending' && repairBug) state = await settleBase();
+  if (!state || state.state === 'pending') return undefined;
+  if (state.state === 'green') {
+    repairBug = undefined;
+    return undefined;
+  }
+  const blocked = (failed: BaseState['failed'], why = '') => {
+    baseBlocked = `${BASE} is red (${names(failed)})${why}${repairBug ? `, Bug ${repairBug.url}` : ''}`;
+    return undefined;
+  };
+  // red again after its repair: no second rerun, no second Bug
+  if (repairBug) return blocked(state.failed, ' after its repair');
+  log(`${BASE} is red (${names(state.failed)}), reruns the failed jobs`, 'warn');
+  try {
+    tracker.rerunFailed(await actEnv());
+    for (let second = 0; second < 30 && !stopped; second++) await sleep(1);
+    state = (await settleBase()) ?? state;
+  } catch (error) {
+    log(`${BASE} rerun failed: ${firstLine(error)}`, 'warn');
+  }
+  if (state.state !== 'red') {
+    if (state.state === 'green') log(`${BASE}: green after rerun (flake)`, 'ok');
+    return undefined;
+  }
+  if (repairs >= BASE_REPAIRS) return blocked(state.failed, `: ${BASE_REPAIRS} repairs used`);
+  try {
+    repairBug = tracker.reportBaseRed(state.failed, await actEnv());
+  } catch (error) {
+    return blocked(state.failed, `: no Bug filed (${firstLine(error)})`);
+  }
+  repairs += 1;
+  log(`${BASE} is still red: delivers ${repairBug.url} first`, 'warn');
+  return repairBug;
+}
+
 try {
   for (let count = 0; !stopped && (MAX === 0 || count < MAX); count++) {
     // an issue closes a moment after its merge: do not pick it again
@@ -546,8 +736,14 @@ try {
       emit('progress', { done: 0, total, label: 'PBIs' });
     }
     waiting = [];
-    let next: Item | undefined;
-    for (const item of open) {
+    let next: Item | undefined = await checkBase();
+    if (baseBlocked) break;
+    if (next) {
+      // the Bug of a red base goes first, as a normal iteration (it may not be in the selection)
+      const repair = next;
+      next = open.find((item) => item.id === repair.id) ?? repair;
+    }
+    for (const item of next ? [] : open) {
       if (aside.has(item.id) || handedOver.has(item.id)) continue;
       const reason = tracker.waitReason(item);
       if (reason) waiting.push(`#${item.id} ${reason}`);
@@ -626,6 +822,7 @@ const complete =
   !stopped &&
   aside.size === 0 &&
   handedOver.size === 0 &&
+  !baseBlocked &&
   waiting.length === 0;
 if (complete) {
   try {
@@ -683,13 +880,32 @@ say(
   `needs you (${needsYou.length}):${needsYou.map((line) => `\n  ${line}`).join('')}`,
   needsYou.length ? 'warn' : undefined,
 );
+if (baseBlocked) {
+  say(`blocked: ${baseBlocked}`, 'bad');
+  emit(
+    'attention',
+    {
+      id: 'base-red',
+      reason: 'base-red',
+      text: `blocked: ${baseBlocked}`,
+      needsYou: true,
+      links: repairBug ? [{ rel: 'issue', url: repairBug.url }] : [],
+    },
+    'warning',
+  );
+}
 if (handedOver.size) {
   say(
     'next step: merge the pull request above yourself, then start the loop again with the same arguments',
     'warn',
   );
 }
-const clean = !releaseError && aside.size === 0 && handedOver.size === 0 && waiting.length === 0;
+const clean =
+  !baseBlocked &&
+  !releaseError &&
+  aside.size === 0 &&
+  handedOver.size === 0 &&
+  waiting.length === 0;
 // An incomplete run (issues set aside or waiting) is no success: the agent-events format has no
 // other outcome for it than `failed`; the counts are in the text.
 emit(

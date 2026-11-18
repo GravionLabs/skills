@@ -26,7 +26,10 @@ import {
   resolveWindows,
 } from '../../../skills/delivery/deliver/scripts/process.mts';
 import { HARNESSES } from '../../../skills/delivery/deliver/scripts/harness.mts';
-import { checkVerdict } from '../../../skills/delivery/deliver/scripts/tracker/github.mts';
+import {
+  checkVerdict,
+  mergedPullSince,
+} from '../../../skills/delivery/deliver/scripts/tracker/github.mts';
 
 const skill = path.resolve(__dirname, '../../../skills/delivery/deliver');
 const loopScript = path.join(skill, 'scripts/deliver-loop.mts');
@@ -42,8 +45,15 @@ type Scenario = {
   gateBlockMs?: number;
   exits?: number[];
   noPull?: boolean;
+  filesFailures?: number;
+  blocked?: string;
+  earlierPull?: boolean;
+  lingers?: boolean;
   closeAfterCalls?: number;
   releaseTests?: number[];
+  base?: string[];
+  mergedBefore?: number[];
+  mergedDuring?: number[];
 };
 type Outcome = {
   status: number | null;
@@ -51,6 +61,7 @@ type Outcome = {
   stderr: string;
   merges: { pull: number; head: string }[];
   releasePulls: number;
+  calls: string[];
   sessions: {
     id: number;
     prompt: string;
@@ -95,6 +106,8 @@ function loop(
   const dir = path.join(root, `case-${count}`);
   mkdirSync(dir);
   writeFileSync(path.join(dir, 'scenario.json'), JSON.stringify(scenario));
+  if (scenario.earlierPull)
+    for (const item of scenario.items) writeFileSync(path.join(dir, `pr-${item.id}`), '');
   const env: NodeJS.ProcessEnv = {
     ...process.env,
     NO_COLOR: '1',
@@ -154,6 +167,7 @@ function loop(
         releasePulls: lines<{ call: string }>(path.join(dir, 'calls.jsonl')).filter(
           (call) => call.call === 'releasePull',
         ).length,
+        calls: lines<{ call: string }>(path.join(dir, 'calls.jsonl')).map((call) => call.call),
         sessions: lines(path.join(dir, 'sessions.jsonl')),
         results: results ? lines(results) : [],
         events: existsSync(events) ? lines(path.join(events, readdirSync(events)[0] ?? '')) : [],
@@ -183,6 +197,54 @@ beforeAll(() => {
 
 afterAll(() => {
   rmSync(root, { recursive: true, force: true });
+});
+
+describe('deliver loop: base check', () => {
+  const items = [{ id: 81, title: '[PBI] feat: one' }];
+
+  it('starts the issue on a green base without a rerun', async () => {
+    const out = await loop({ items, base: ['green'] });
+    expect(out.status).toBe(0);
+    expect(out.calls).not.toContain('rerun');
+    expect(out.merges).toHaveLength(1);
+  });
+
+  it('reruns a red base once and goes on when it is green, no Bug', async () => {
+    const out = await loop({ items, base: ['red', 'green'] });
+    expect(out.status).toBe(0);
+    expect(out.calls).toContain('rerun');
+    expect(out.calls).not.toContain('baseBug');
+    expect(out.log).toContain('release/next: green after rerun (flake)');
+    expect(out.merges.map((m) => m.pull)).toEqual([181]);
+  });
+
+  it('files a Bug for a base that stays red, delivers it first and goes on', async () => {
+    const out = await loop({ items, base: ['red', 'red', 'green'] });
+    expect(out.status).toBe(0);
+    expect(out.calls.filter((c) => c === 'baseBug')).toHaveLength(1);
+    expect(out.merges.map((m) => m.pull)).toEqual([1000, 181]);
+    expect(out.sessions.map((s) => s.id)).toEqual([900, 81]);
+  });
+
+  it('ends blocked (exit 2) when the base is red after its repair', async () => {
+    const out = await loop({ items, base: ['red', 'red', 'red'] });
+    expect(out.status).toBe(2);
+    expect(out.merges.map((m) => m.pull)).toEqual([1000]);
+    expect(out.sessions.map((s) => s.id)).toEqual([900]);
+    const last = out.stdout.trim().split('\n').slice(-1)[0];
+    expect(out.stdout).toMatch(
+      /blocked: release\/next is red \(ci\) after its repair, Bug https:\/\/example\.test\/issues\/900/,
+    );
+    expect(last).toBeTruthy();
+    expect(out.events.at(-1)).toMatchObject({ outcome: 'failed' });
+  });
+
+  it('starts the issue when the base state cannot be read', async () => {
+    const out = await loop({ items, base: ['throw'] });
+    expect(out.status).toBe(0);
+    expect(out.merges).toHaveLength(1);
+    expect(out.log).toContain('state unreadable');
+  });
 });
 
 describe('deliver loop', () => {
@@ -383,6 +445,56 @@ describe('deliver loop', () => {
     );
   });
 
+  it('reads the changed files again after a failed read', async () => {
+    const out = await loop({
+      items: [{ id: 71, title: '[PBI] feat: flaky read' }],
+      filesFailures: 1,
+    });
+    expect(out.status).toBe(0);
+    expect(out.merges).toHaveLength(1);
+  });
+
+  it('hands the issue over after the reads kept failing', async () => {
+    const out = await loop({
+      items: [{ id: 72, title: '[PBI] feat: broken read' }],
+      filesFailures: 9,
+    });
+    expect(out.merges).toEqual([]);
+    expect(out.results[0]?.reason).toContain('could not read the changed files (HTTP 500)');
+  });
+
+  it('starts no session for an open pull request that changes a protected path', async () => {
+    const out = await loop({
+      items: [{ id: 73, title: '[PBI] feat: earlier pull' }],
+      files: ['Cargo.toml'],
+      earlierPull: true,
+    });
+    expect(out.sessions).toHaveLength(0);
+    expect(out.merges).toEqual([]);
+    expect(out.results[0]?.reason).toBe('changes protected paths (Cargo.toml), merge it yourself');
+  });
+
+  it('starts a session for an open pull request without a protected path', async () => {
+    const out = await loop({
+      items: [{ id: 74, title: '[PBI] feat: earlier clean pull' }],
+      earlierPull: true,
+    });
+    expect(out.sessions).toHaveLength(1);
+    expect(out.merges).toHaveLength(1);
+  });
+
+  it('keeps the reason of a blocked session next to the reason of the guard', async () => {
+    const out = await loop({
+      items: [{ id: 75, title: '[PBI] feat: blocked' }],
+      files: ['Cargo.toml'],
+      blocked: 'Dependency review fails',
+    });
+    const reason =
+      'changes protected paths (Cargo.toml) (session: blocked Dependency review fails)';
+    expect(out.results[0]?.reason).toBe(`${reason}, merge it yourself`);
+    expect(out.log).toContain('Dependency review fails');
+  });
+
   it('lists a hand-over by rule under needs you, a failure under set aside', async () => {
     const handed = await loop({
       items: [{ id: 62, title: '[PBI] ci: workflow' }],
@@ -434,6 +546,22 @@ describe('deliver loop', () => {
     expect(out.sessions[0]?.run).toMatch(/^\d{8}T\d{6}-\d+$/);
   });
 
+  it('ends a session that printed its final result and stays alive, and goes on to the merge', async () => {
+    const out = await loop(
+      { items: [{ id: 717, title: '[PBI] feat: lingers' }], lingers: true },
+      { env: { DELIVER_RESULT_GRACE_MS: '300' } },
+    );
+    expect(out.stdout).toContain('ended by the loop');
+    expect(out.stdout).toMatch(/#717.*merged/s);
+  }, 20_000);
+
+  it('keeps the wakeup tools away from the claude session', () => {
+    const argv = HARNESSES.claude.command({ prompt: '/deliver 1' });
+    expect(argv.slice(argv.indexOf('--disallowedTools'))).toEqual(
+      expect.arrayContaining(['ScheduleWakeup', 'CronCreate']),
+    );
+  });
+
   it('builds the copilot command with plain output and no questions', () => {
     const argv = HARNESSES.copilot.command({ prompt: '/deliver 1' });
     expect(argv.slice(0, 3)).toEqual(['copilot', '-p', '/deliver 1']);
@@ -448,6 +576,29 @@ describe('deliver loop', () => {
     const out = await loop({ items: [{ id: 91, title: '[PBI] feat: nothing' }], noPull: true });
     expect(out.status).toBe(2);
     expect(out.results[0]?.reason).toBe('session ended without a pull request');
+  });
+
+  it('starts no session for an issue whose pull request is already merged', async () => {
+    const out = await loop({
+      items: [{ id: 92, title: '[PBI] feat: delivered' }],
+      mergedBefore: [92],
+    });
+    expect(out.status).toBe(0);
+    expect(out.sessions).toHaveLength(0);
+    expect(out.log).toMatch(/#92 merged by someone else/);
+    expect(out.results[0]?.outcome).toBe('merged');
+  });
+
+  it('counts a pull request merged during the session as merged, not set aside', async () => {
+    const out = await loop({
+      items: [{ id: 93, title: '[PBI] feat: by hand' }],
+      noPull: true,
+      mergedDuring: [93],
+    });
+    expect(out.status).toBe(0);
+    expect(out.sessions).toHaveLength(1);
+    expect(out.results[0]).toMatchObject({ issue: 93, outcome: 'merged' });
+    expect(out.merges).toHaveLength(0);
   });
 
   it('gives the session the session token as GH_TOKEN and not the variable itself', async () => {
@@ -765,6 +916,38 @@ describe('deliver loop', () => {
       expect(out.status).toBe(3);
       expect(out.stderr).toContain('release/other is missing on origin');
     });
+  });
+});
+
+describe('mergedPullSince of the GitHub tracker', () => {
+  const pr = (number: number, ref: string, merged_at: string | null, full_name = 'o/r') => ({
+    number,
+    title: 't',
+    html_url: `u${number}`,
+    head: { ref, repo: { full_name } },
+    merged_at,
+  });
+  const since = '2026-11-10T00:00:00Z';
+
+  it('finds the pull request merged after the issue was opened', () => {
+    const found = mergedPullSince([pr(5, 'feat/7-x', '2026-11-16T11:00:00Z')], 'o/r', 7, since);
+    expect(found?.number).toBe(5);
+  });
+
+  it('ignores an old merged pull request of a reopened issue', () => {
+    expect(
+      mergedPullSince([pr(5, 'feat/7-x', '2026-11-01T11:00:00Z')], 'o/r', 7, since),
+    ).toBeUndefined();
+  });
+
+  it('ignores closed unmerged, other issues, other numbers with the same prefix and forks', () => {
+    const records = [
+      pr(1, 'feat/7-x', null),
+      pr(2, 'feat/8-x', '2026-11-16T11:00:00Z'),
+      pr(3, 'feat/70-x', '2026-11-16T11:00:00Z'),
+      pr(4, 'feat/7-x', '2026-11-16T11:00:00Z', 'fork/r'),
+    ];
+    expect(mergedPullSince(records, 'o/r', 7, since)).toBeUndefined();
   });
 });
 

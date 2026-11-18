@@ -5,6 +5,12 @@ Versioning follows [Semantic Versioning](https://semver.org/).
 
 ---
 
+## [5.0.1] — 2026-11-18
+
+### Bug Fixes
+- **deps**: 7-day minimum release age (#730)
+
+
 ## [5.0.0] — 2026-11-16
 
 ### Bug Fixes
@@ -18,6 +24,7 @@ Versioning follows [Semantic Versioning](https://semver.org/).
 ### Documentation
 - **deliver**: Merge row of the preflight table names the missing release/next (#649) (#665)
 - **deliver**: Site, shim and installer describe the new loop (#695) (#711)
+- Update CHANGELOG.md for v5.0.0 [skip ci]
 
 
 ### Features
