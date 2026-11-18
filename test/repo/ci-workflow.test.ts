@@ -18,10 +18,10 @@ const steps = (job: string): Step[] => wf.jobs[job].steps;
 const pkgJson = JSON.parse(fs.readFileSync(path.resolve(__dirname, '../../package.json'), 'utf-8'));
 
 describe('ci.yml test jobs', () => {
-  it('runs one Vitest project as two shards, with an aggregate check named Test', () => {
+  it('runs one Vitest project as four shards, with an aggregate check named Test', () => {
     expect(config.test?.projects).toBeUndefined();
-    expect(wf.jobs['test-shard'].strategy.matrix.shard).toEqual([1, 2]);
-    expect(wf.jobs['test-shard'].name).toBe('Test (${{ matrix.shard }}/2)');
+    expect(wf.jobs['test-shard'].strategy.matrix.shard).toEqual([1, 2, 3, 4]);
+    expect(wf.jobs['test-shard'].name).toBe('Test (${{ matrix.shard }}/4)');
     expect(wf.jobs.test.strategy).toBeUndefined();
     expect(wf.jobs.test.name).toBe('Test');
     expect(wf.on.push.branches).toEqual(['main', 'release/**']);
@@ -29,7 +29,7 @@ describe('ci.yml test jobs', () => {
 
   it('runs each shard with vitest --shard and its own junit file', () => {
     const run = steps('test-shard').find((s) => s.run?.includes('vitest run'));
-    expect(run?.run).toBe('pnpm exec vitest run --shard=${{ matrix.shard }}/2');
+    expect(run?.run).toBe('pnpm exec vitest run --shard=${{ matrix.shard }}/4');
     expect(run?.env?.['VITEST_JUNIT_OUTPUT']).toBe('test-results/junit-${{ matrix.shard }}.xml');
   });
 
@@ -47,7 +47,7 @@ describe('ci.yml test jobs', () => {
     expect(JSON.stringify(wf)).not.toMatch(/coverage|dorny|--coverage/i);
   });
 
-  it('keeps the aggregate Test green only when both shards succeeded', () => {
+  it('keeps the aggregate Test green only when all four shards succeeded', () => {
     expect(wf.jobs.test.needs).toBe('test-shard');
     expect(wf.jobs.test.if).toBe('always()');
     const check = steps('test').find((s) => s.run?.includes('exit 1'));
