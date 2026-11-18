@@ -27,7 +27,7 @@
     },
     {
       "name": "github",
-      "description": "GitHub workflow: issue hierarchy (Epic, Feature, PBI, Task, Bug) with native sub-issues, pull requests into the release branch, release branches (cut, finish).",
+      "description": "GitHub workflow: issue hierarchy (Epic, Feature, PBI, Task, Bug) with native sub-issues, pull requests, release branches (cut, finish).",
       "source": "./",
       "strict": false,
       "skills": [

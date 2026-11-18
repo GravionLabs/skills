@@ -163,6 +163,14 @@ describe.skipIf(!hasPwsh)('Get-GovernanceMatches.ps1', () => {
     expect(JSON.parse(none.stdout).adr.matched).toEqual([]);
   });
 
+  it('diffs against origin/main without -Base (#736)', async () => {
+    config({ governance: gov });
+    git('update-ref', 'refs/remotes/origin/main', 'main');
+    const r = await worker.run(['-Head', 'adr-no-file'], { cwd: repo });
+    expect(r.status).toBe(0);
+    expect(JSON.parse(r.stdout).adr.matched).toEqual(['infra/main.tf']);
+  });
+
   it.each(globCases.map((c) => [c.glob, c.path, c.match] as const))(
     'glob %s on %s matches: %s',
     async (glob, p, match) => {

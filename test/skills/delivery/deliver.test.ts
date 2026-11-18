@@ -186,7 +186,7 @@ beforeAll(() => {
   root = mkdtempSync(path.join(tmpdir(), 'deliver-'));
   const origin = path.join(root, 'origin.git');
   repo = path.join(root, 'repo');
-  execFileSync('git', ['init', '--quiet', '--bare', origin]);
+  execFileSync('git', ['init', '--quiet', '--bare', '--initial-branch', 'main', origin]);
   execFileSync('git', ['init', '--quiet', '--initial-branch', 'main', repo]);
   writeFileSync(path.join(repo, 'README.md'), 'fixture\n');
   git(repo, 'add', 'README.md');
@@ -264,8 +264,9 @@ describe('deliver loop', () => {
       [11, 'merged'],
       [12, 'merged'],
     ]);
+    // --issues without a base: the default branch
     expect(out.sessions[0]?.prompt).toMatch(
-      /^\/deliver 11 --base release\/next --issue-file \S+11\.issue\.md$/,
+      /^\/deliver 11 --base main --issue-file \S+11\.issue\.md$/,
     );
     expect(out.events.map((e) => e.type)).toEqual([
       'run.started',
@@ -524,7 +525,7 @@ describe('deliver loop', () => {
     const scenario = { items: [{ id: 71, title: '[PBI] feat: unguarded' }], required: [] };
     const refused = await loop(scenario);
     expect(refused.status).toBe(3);
-    expect(refused.stderr).toContain('release/next requires no checks in fake/repo');
+    expect(refused.stderr).toContain('main requires no checks in fake/repo');
     expect(refused.sessions).toEqual([]);
     const allowed = await loop(scenario, { args: ['--allow-no-required-checks'] });
     expect(allowed.status).toBe(0);
@@ -845,6 +846,8 @@ describe('deliver loop', () => {
       expect(out.releasePulls).toBe(1);
       expect(out.stdout).toContain('release pull request: https://example.test/pull/900');
       expect(out.stdout).toMatch(/needs you \(1\):\n {2}#39 /);
+      // a milestone is delivered into release/next
+      expect(out.sessions[0]?.prompt).toMatch(/^\/deliver 31 --base release\/next /);
       expect(out.sessions.map((s) => s.prompt).join('\n')).not.toContain('/deliver 39');
       expect(out.events.find((e) => e.type === 'attention')).toMatchObject({
         reason: 'release-test',
@@ -882,6 +885,14 @@ describe('deliver loop', () => {
       expect(waiting.releasePulls).toBe(0);
     });
 
+    it('takes an explicit base before release/next', async () => {
+      const out = await loop(
+        { items: [{ id: 45, title: '[PBI] feat: one' }] },
+        { milestone: true, args: ['--base', 'main', '--dry-run'] },
+      );
+      expect(out.stdout).toContain('tracker: fake, base: main');
+    });
+
     it('does not open it with --issues', async () => {
       const out = await loop({ items: [{ id: 51, title: '[PBI] feat: one' }] });
       expect(out.releasePulls).toBe(0);
@@ -900,7 +911,10 @@ describe('deliver loop', () => {
     it('cuts release/next from the default branch', async () => {
       git(repo, 'push', '--quiet', 'origin', ':release/next');
       expect(originRef()).toBe('');
-      const out = await loop({ items: [{ id: 61, title: '[PBI] feat: one' }] });
+      const out = await loop(
+        { items: [{ id: 61, title: '[PBI] feat: one' }] },
+        { milestone: true },
+      );
       expect(out.status).toBe(0);
       expect(out.stdout).toContain('release/next was missing on origin: cut from main');
       expect(out.log).toContain('release/next was missing on origin: cut from main');

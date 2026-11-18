@@ -59,7 +59,7 @@ describe('github-release finish bump (#101)', () => {
     expect(workRow).toContain('squash (the `release/**` ruleset allows only squash');
     expect(pullRequest).toContain('`gh pr merge <pr> --auto --squash`');
     expect(pullRequest).not.toContain('`--squash` (hotfix)');
-    expect(pullRequest).toContain('(release or hotfix) is merged by the owner with `--merge`');
+    expect(pullRequest).toContain('A PR into `main` is merged by the owner with `--merge`');
   });
 });
 
