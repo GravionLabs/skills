@@ -19,6 +19,8 @@ type Scenario = {
   files?: string[];
   /** The changed files from the second read on: a push after the session ended. */
   filesLater?: string[];
+  /** The first this many reads of the changed files fail. */
+  filesFailures?: number;
   required?: string[];
   needsDecision?: boolean;
   /** Every gate() call blocks this long, as a slow call of a real tracker does. */
@@ -31,6 +33,10 @@ type Scenario = {
   releaseCommits?: number;
   /** One entry per baseState() call, the last one repeats. `throw` is a failing tracker call. */
   base?: ('green' | 'pending' | 'red' | 'throw')[];
+  /** Items whose pull request is already merged before the loop starts the item. */
+  mergedBefore?: number[];
+  /** Items whose pull request is merged by someone else while their session runs. */
+  mergedDuring?: number[];
 };
 
 export function create(): Tracker {
@@ -89,6 +95,24 @@ export function create(): Tracker {
         branch: `feat/${item.id}-fake`,
       };
     },
+    mergedPullOf(item: Item): Pull | undefined {
+      const sessions = path.join(dir, 'sessions.jsonl');
+      const started =
+        existsSync(sessions) &&
+        readFileSync(sessions, 'utf8')
+          .split('\n')
+          .some((line) => line && JSON.parse(line).id === item.id);
+      const isMerged =
+        (scenario.mergedBefore ?? []).includes(item.id) ||
+        ((scenario.mergedDuring ?? []).includes(item.id) && started);
+      if (!isMerged) return undefined;
+      return {
+        id: 100 + item.id,
+        title: item.title,
+        url: `https://example.test/pull/${100 + item.id}`,
+        branch: `feat/${item.id}-fake`,
+      };
+    },
     gate(pull: Pull): Gate {
       if (merged.has(itemOf(pull))) return { state: 'merged' };
       if (scenario.gateBlockMs) {
@@ -129,7 +153,9 @@ export function create(): Tracker {
     },
     changedFiles(): string[] {
       fileReads += 1;
-      const files = fileReads > 1 ? (scenario.filesLater ?? scenario.files) : scenario.files;
+      if (fileReads <= (scenario.filesFailures ?? 0)) throw new Error('HTTP 500');
+      const reads = fileReads - (scenario.filesFailures ?? 0);
+      const files = reads > 1 ? (scenario.filesLater ?? scenario.files) : scenario.files;
       return files ?? ['src/a.ts'];
     },
     defaultBranch: () => 'main',

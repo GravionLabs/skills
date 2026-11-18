@@ -24,6 +24,7 @@ type PullRecord = {
   title: string;
   html_url: string;
   head: { ref: string; repo: { full_name: string } | null };
+  merged_at?: string | null;
 };
 type Check = { name: string; bucket: string };
 
@@ -80,6 +81,27 @@ export function baseVerdict(required: string[], runs: CheckRun[]): BaseState {
     .filter((run) => names.includes(run.name))
     .map((run) => ({ name: run.name, url: run.details_url ?? run.html_url ?? '' }));
   return { state: 'red', failed };
+}
+
+/**
+ * The merged pull request of issue `id` (head `<type>/<id>-…` of this repository) that was merged at or after
+ * `since`, the moment the issue was last opened. The newest one wins.
+ */
+export function mergedPullSince(
+  records: PullRecord[],
+  repo: string,
+  id: number,
+  since: string,
+): PullRecord | undefined {
+  return records
+    .filter(
+      (p) =>
+        p.merged_at &&
+        Date.parse(p.merged_at) >= Date.parse(since) &&
+        p.head.repo?.full_name === repo &&
+        new RegExp(`^[a-z]+/${id}-`).test(p.head.ref),
+    )
+    .sort((a, b) => Date.parse(b.merged_at ?? '') - Date.parse(a.merged_at ?? ''))[0];
 }
 
 export function create({ cwd, base, selection, trustAuthors }: TrackerContext): Tracker {
@@ -236,6 +258,31 @@ export function create({ cwd, base, selection, trustAuthors }: TrackerContext): 
         (p) =>
           p.head.repo?.full_name === repo && new RegExp(`^[a-z]+/${item.id}-`).test(p.head.ref),
       );
+      return (
+        found && {
+          id: found.number,
+          title: found.title,
+          url: found.html_url,
+          branch: found.head.ref,
+        }
+      );
+    },
+
+    mergedPullOf(item: Item): Pull | undefined {
+      // the issue counts as opened at its creation or at its last reopening
+      const issue = api<Issue & { created_at: string }>(`repos/${repo}/issues/${item.id}`);
+      const reopened = list<{ event: string; created_at: string }>(
+        `repos/${repo}/issues/${item.id}/events?per_page=100`,
+      )
+        .filter((e) => e.event === 'reopened')
+        .map((e) => e.created_at)
+        .sort()
+        .pop();
+      // the newest closed pull requests first: one page holds the recent merges
+      const closed = api<PullRecord[]>(
+        `repos/${repo}/pulls?state=closed&base=${base}&sort=updated&direction=desc&per_page=100`,
+      );
+      const found = mergedPullSince(closed, repo, item.id, reopened ?? issue.created_at);
       return (
         found && {
           id: found.number,
