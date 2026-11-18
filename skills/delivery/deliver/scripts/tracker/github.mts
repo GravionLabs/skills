@@ -104,6 +104,11 @@ export function mergedPullSince(
     .sort((a, b) => Date.parse(b.merged_at ?? '') - Date.parse(a.merged_at ?? ''))[0];
 }
 
+/** The default branch takes merge commits (its ruleset allows only those, and the Conventional Commits stay visible); every other base takes squash. */
+export function mergeMethodFor(base: string, defaultBranch: string): 'merge' | 'squash' {
+  return base === defaultBranch ? 'merge' : 'squash';
+}
+
 export function create({ cwd, base, selection, trustAuthors }: TrackerContext): Tracker {
   // an argument that is an object is an environment added to the process: the token of the session
   const gh = (...input: (string | Record<string, string>)[]): string => {
@@ -315,13 +320,14 @@ export function create({ cwd, base, selection, trustAuthors }: TrackerContext): 
 
     merge(pull: Pull, head: string): void {
       try {
+        const method = mergeMethodFor(base, this.defaultBranch());
         gh(
           'api',
           '-X',
           'PUT',
           `repos/${repo}/pulls/${pull.id}/merge`,
           '-f',
-          'merge_method=squash',
+          `merge_method=${method}`,
           '-f',
           `commit_title=${pull.title} (#${pull.id})`,
           // only the commit whose checks were read: a later push is refused
