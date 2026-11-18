@@ -21,7 +21,9 @@ appendFileSync(
   })}\n`,
 );
 if (!scenario.noPull) writeFileSync(path.join(dir, `pr-${id}`), '');
-const final = `result: pr https://example.test/pull/${100 + Number(id)}`;
+const final = scenario.blocked
+  ? `result: blocked ${scenario.blocked}`
+  : `result: pr https://example.test/pull/${100 + Number(id)}`;
 if (scenario.lingers) {
   // like a session with a pending wakeup: the final result record, then the process stays alive
   console.log(JSON.stringify({ type: 'result', is_error: false, result: `done\n${final}` }));

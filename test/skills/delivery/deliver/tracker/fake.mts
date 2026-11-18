@@ -18,6 +18,8 @@ type Scenario = {
   files?: string[];
   /** The changed files from the second read on: a push after the session ended. */
   filesLater?: string[];
+  /** The first this many reads of the changed files fail. */
+  filesFailures?: number;
   required?: string[];
   needsDecision?: boolean;
   /** Every gate() call blocks this long, as a slow call of a real tracker does. */
@@ -126,7 +128,9 @@ export function create(): Tracker {
     requiredChecks: () => scenario.required ?? ['ci'],
     changedFiles(): string[] {
       fileReads += 1;
-      const files = fileReads > 1 ? (scenario.filesLater ?? scenario.files) : scenario.files;
+      if (fileReads <= (scenario.filesFailures ?? 0)) throw new Error('HTTP 500');
+      const reads = fileReads - (scenario.filesFailures ?? 0);
+      const files = reads > 1 ? (scenario.filesLater ?? scenario.files) : scenario.files;
       return files ?? ['src/a.ts'];
     },
     defaultBranch: () => 'main',
