@@ -26,7 +26,10 @@ import {
   resolveWindows,
 } from '../../../skills/delivery/deliver/scripts/process.mts';
 import { HARNESSES } from '../../../skills/delivery/deliver/scripts/harness.mts';
-import { checkVerdict } from '../../../skills/delivery/deliver/scripts/tracker/github.mts';
+import {
+  checkVerdict,
+  mergedPullSince,
+} from '../../../skills/delivery/deliver/scripts/tracker/github.mts';
 
 const skill = path.resolve(__dirname, '../../../skills/delivery/deliver');
 const loopScript = path.join(skill, 'scripts/deliver-loop.mts');
@@ -45,6 +48,8 @@ type Scenario = {
   lingers?: boolean;
   closeAfterCalls?: number;
   releaseTests?: number[];
+  mergedBefore?: number[];
+  mergedDuring?: number[];
 };
 type Outcome = {
   status: number | null;
@@ -467,6 +472,29 @@ describe('deliver loop', () => {
     expect(out.results[0]?.reason).toBe('session ended without a pull request');
   });
 
+  it('starts no session for an issue whose pull request is already merged', async () => {
+    const out = await loop({
+      items: [{ id: 92, title: '[PBI] feat: delivered' }],
+      mergedBefore: [92],
+    });
+    expect(out.status).toBe(0);
+    expect(out.sessions).toHaveLength(0);
+    expect(out.log).toMatch(/#92 merged by someone else/);
+    expect(out.results[0]?.outcome).toBe('merged');
+  });
+
+  it('counts a pull request merged during the session as merged, not set aside', async () => {
+    const out = await loop({
+      items: [{ id: 93, title: '[PBI] feat: by hand' }],
+      noPull: true,
+      mergedDuring: [93],
+    });
+    expect(out.status).toBe(0);
+    expect(out.sessions).toHaveLength(1);
+    expect(out.results[0]).toMatchObject({ issue: 93, outcome: 'merged' });
+    expect(out.merges).toHaveLength(0);
+  });
+
   it('gives the session the session token as GH_TOKEN and not the variable itself', async () => {
     const withToken = await loop(
       { items: [{ id: 101, title: '[PBI] feat: token' }] },
@@ -782,6 +810,38 @@ describe('deliver loop', () => {
       expect(out.status).toBe(3);
       expect(out.stderr).toContain('release/other is missing on origin');
     });
+  });
+});
+
+describe('mergedPullSince of the GitHub tracker', () => {
+  const pr = (number: number, ref: string, merged_at: string | null, full_name = 'o/r') => ({
+    number,
+    title: 't',
+    html_url: `u${number}`,
+    head: { ref, repo: { full_name } },
+    merged_at,
+  });
+  const since = '2026-11-10T00:00:00Z';
+
+  it('finds the pull request merged after the issue was opened', () => {
+    const found = mergedPullSince([pr(5, 'feat/7-x', '2026-11-16T11:00:00Z')], 'o/r', 7, since);
+    expect(found?.number).toBe(5);
+  });
+
+  it('ignores an old merged pull request of a reopened issue', () => {
+    expect(
+      mergedPullSince([pr(5, 'feat/7-x', '2026-11-01T11:00:00Z')], 'o/r', 7, since),
+    ).toBeUndefined();
+  });
+
+  it('ignores closed unmerged, other issues, other numbers with the same prefix and forks', () => {
+    const records = [
+      pr(1, 'feat/7-x', null),
+      pr(2, 'feat/8-x', '2026-11-16T11:00:00Z'),
+      pr(3, 'feat/70-x', '2026-11-16T11:00:00Z'),
+      pr(4, 'feat/7-x', '2026-11-16T11:00:00Z', 'fork/r'),
+    ];
+    expect(mergedPullSince(records, 'o/r', 7, since)).toBeUndefined();
   });
 });
 
