@@ -5,11 +5,33 @@ Versioning follows [Semantic Versioning](https://semver.org/).
 
 ---
 
+## [5.1.0] — 2026-11-18
+
+### Bug Fixes
+- **deliver**: Deliver-loop ends with one line instead of a stack trace outside a git repository or on an unknown option (#712) (#721)
+- **deliver**: A milestone without open issues ends with a failed release pull request (#714) (#724)
+- **deliver**: A released milestone stays open and no step points to closing it (#715) (#725)
+- **deliver**: A session that scheduled a wakeup keeps the loop waiting up to 20 minutes (#717) (#727)
+- **deliver**: An issue whose pull request is already merged is started again or set aside (#718) (#728)
+- **deliver**: The guard repeats a failed read, runs before a session and keeps the blocked reason (#719) (#729)
+- **github-milestone**: Close refuses a version that a second milestone of the same release needs (#716) (#726)
+- **deliver**: The loop merges into the default branch with a merge commit (#740) (#742)
+
+
+### Features
+- **deliver**: A pull request handed over for protected paths does not look like a failure (#713) (#723)
+- **deliver**: The loop checks release/next before every PBI and repairs a red one (#674) (#731)
+
+
 ## [5.0.2] — 2026-11-18
 
 ### Bug Fixes
 - Pull requests target main unless a milestone or a release branch is the target (#736)
 - **deps**: Renovate opens its pull requests against the default branch (#737)
+
+
+### Documentation
+- Update CHANGELOG.md for v5.0.2 [skip ci]
 
 
 ## [5.0.1] — 2026-11-18
