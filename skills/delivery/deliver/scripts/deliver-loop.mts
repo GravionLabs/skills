@@ -238,12 +238,30 @@ type StreamRecord = {
   type?: string;
   num_turns?: number;
   total_cost_usd?: number;
+  is_error?: boolean;
+  result?: string;
   parent_tool_use_id?: string | null;
   message?: {
     usage?: Record<string, number | undefined>;
     content?: { type: string; text?: string; name?: string; input?: Record<string, unknown> }[];
   };
 };
+
+const RESULT_GRACE_MS = Number(process.env.DELIVER_RESULT_GRACE_MS ?? 30_000);
+
+/** True for the final `result` record of a session whose text ends with a `result:` line. */
+function finishedResult(line: string): boolean {
+  if (!line.startsWith('{')) return false;
+  try {
+    const event: StreamRecord = JSON.parse(line);
+    if (event?.type !== 'result' || event.is_error || typeof event.result !== 'string')
+      return false;
+    const last = event.result.trimEnd().split('\n').pop() ?? '';
+    return /^result: (pr \S+|needs-decision|blocked\b.*)$/.test(last.trim());
+  } catch {
+    return false;
+  }
+}
 
 /** Prints the readable part of one stream record and keeps the numbers of the session. */
 function render(line: string, session: Session): void {
@@ -326,8 +344,20 @@ async function startSession(item: Item, cwd: string, file: string): Promise<Sess
     const timer = setTimeout(() => killTree(child), SESSION_MINUTES * 60_000);
     const stop = () => killTree(child);
     stopSession = stop;
+    // a session that scheduled a wakeup prints its final result and then stays alive until the wakeup fires:
+    // once the final `result:` line is in and nothing follows for a moment, the loop ends the process itself
+    let grace: NodeJS.Timeout | undefined;
+    let finished = false;
     createInterface({ input: child.stdout! }).on('line', (line) => {
       out.write(`${line}\n`);
+      clearTimeout(grace);
+      if (finishedResult(line)) {
+        grace = setTimeout(() => {
+          finished = true;
+          log(`#${item.id} session printed its result and stays alive: ended by the loop`, 'dim');
+          killTree(child);
+        }, RESULT_GRACE_MS);
+      }
       if (harness.claudeStream) render(line, session);
       else {
         // no stream format: the plain lines of the harness, without color codes and empty lines
@@ -338,9 +368,10 @@ async function startSession(item: Item, cwd: string, file: string): Promise<Sess
     child.on('error', (error) => log(`#${item.id} session: ${error.message}`, 'bad'));
     child.on('close', (code) => {
       clearTimeout(timer);
+      clearTimeout(grace);
       if (stopSession === stop) stopSession = undefined;
       out.end();
-      session.exit = code;
+      session.exit = finished ? 0 : code;
       done(session);
     });
   });

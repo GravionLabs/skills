@@ -32,6 +32,10 @@ export const HARNESSES: Record<string, Harness> = {
       '--output-format',
       'stream-json',
       '--verbose',
+      // a wakeup keeps the process alive after the result; the review runs in the foreground
+      '--disallowedTools',
+      'ScheduleWakeup',
+      'CronCreate',
     ],
   },
   // Flags checked against `copilot --help` (Copilot CLI 1.0.108). No stream format: the loop logs plain lines.
