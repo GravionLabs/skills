@@ -1,0 +1,33 @@
+name: Renovate config
+
+# A typo in the Renovate configuration stops the dependency updates without a sound: check it.
+on:
+  pull_request:
+    branches: [main, 'release/**']
+    paths:
+      - '.github/renovate.json5'
+      - '.github/workflows/renovate-config.yml'
+
+permissions:
+  contents: read
+
+jobs:
+  validate:
+    name: Validate the configuration
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+
+      # node/setup has no node-version-file input: the version comes from .nvmrc
+      - name: Read the Node version
+        id: node
+        run: echo "version=$(cat .nvmrc)" >> "$GITHUB_OUTPUT"
+
+      - name: Set up Node and pnpm
+        uses: GravionLabs/ci/node/setup@v1
+        with:
+          node-version: ${{ steps.node.outputs.version }}
+          package-manager: pnpm
+
+      # No install of the repository: the validator is a one-off tool.
+      - run: pnpm dlx --package renovate renovate-config-validator --strict .github/renovate.json5

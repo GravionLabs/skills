@@ -35,13 +35,13 @@ describe('pr-checks.yml', () => {
   });
 
   // GitHub validates the permissions of every called job at startup, skipped ones included: the caller grants the
-  // union of readiness, adr and title of ci v1.5.0, read-only (less ended in startup_failure on PR #125).
-  it('grants nothing at top level, the read-only union of the called jobs to the job, and passes no secrets', () => {
+  // union of the called jobs; pull-requests: write since the retarget job of ci v1.14.0 (less ended in startup_failure on PR #125).
+  it('grants nothing at top level, the union of the called jobs to the job, and passes no secrets', () => {
     expect(wf.permissions).toEqual({});
     expect(job.permissions).toEqual({
       contents: 'read',
       issues: 'read',
-      'pull-requests': 'read',
+      'pull-requests': 'write',
     });
     expect(job.secrets).toBeUndefined();
     expect(text).not.toContain('pull_request_target');
