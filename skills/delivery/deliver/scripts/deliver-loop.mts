@@ -262,6 +262,8 @@ type StreamRecord = {
   type?: string;
   num_turns?: number;
   total_cost_usd?: number;
+  is_error?: boolean;
+  result?: string;
   parent_tool_use_id?: string | null;
   message?: {
     usage?: Record<string, number | undefined>;
@@ -273,6 +275,22 @@ const noteBlocked = (text: string, session: Session): void => {
   const blocked = /^result:\s*blocked\s+(.+)$/.exec(text.trim());
   if (blocked) session.blocked = blocked[1]?.slice(0, 300);
 };
+
+const RESULT_GRACE_MS = Number(process.env.DELIVER_RESULT_GRACE_MS ?? 30_000);
+
+/** True for the final `result` record of a session whose text ends with a `result:` line. */
+function finishedResult(line: string): boolean {
+  if (!line.startsWith('{')) return false;
+  try {
+    const event: StreamRecord = JSON.parse(line);
+    if (event?.type !== 'result' || event.is_error || typeof event.result !== 'string')
+      return false;
+    const last = event.result.trimEnd().split('\n').pop() ?? '';
+    return /^result: (pr \S+|needs-decision|blocked\b.*)$/.test(last.trim());
+  } catch {
+    return false;
+  }
+}
 
 /** Prints the readable part of one stream record and keeps the numbers of the session. */
 function render(line: string, session: Session): void {
@@ -357,8 +375,20 @@ async function startSession(item: Item, cwd: string, file: string): Promise<Sess
     const timer = setTimeout(() => killTree(child), SESSION_MINUTES * 60_000);
     const stop = () => killTree(child);
     stopSession = stop;
+    // a session that scheduled a wakeup prints its final result and then stays alive until the wakeup fires:
+    // once the final `result:` line is in and nothing follows for a moment, the loop ends the process itself
+    let grace: NodeJS.Timeout | undefined;
+    let finished = false;
     createInterface({ input: child.stdout! }).on('line', (line) => {
       out.write(`${line}\n`);
+      clearTimeout(grace);
+      if (finishedResult(line)) {
+        grace = setTimeout(() => {
+          finished = true;
+          log(`#${item.id} session printed its result and stays alive: ended by the loop`, 'dim');
+          killTree(child);
+        }, RESULT_GRACE_MS);
+      }
       if (harness.claudeStream) render(line, session);
       else {
         // no stream format: the plain lines of the harness, without color codes and empty lines
@@ -372,9 +402,10 @@ async function startSession(item: Item, cwd: string, file: string): Promise<Sess
     child.on('error', (error) => log(`#${item.id} session: ${error.message}`, 'bad'));
     child.on('close', (code) => {
       clearTimeout(timer);
+      clearTimeout(grace);
       if (stopSession === stop) stopSession = undefined;
       out.end();
-      session.exit = code;
+      session.exit = finished ? 0 : code;
       done(session);
     });
   });
@@ -421,8 +452,26 @@ async function merge(pull: Pull): Promise<string | undefined> {
   return 'stopped';
 }
 
+function cleanup(item: Item, pull: Pull): void {
+  const worktree = path.join(path.dirname(root), `${path.basename(root)}-wt-${item.id}`);
+  attempt('git', ['worktree', 'remove', '--force', worktree], root);
+  attempt('git', ['branch', '-D', pull.branch], root);
+  tracker.dropBranch(pull);
+}
+
 async function deliver(item: Item): Promise<{ reason?: string; pull?: Pull }> {
   const task = `issue-${item.id}`;
+  // merged by someone else a moment ago, the issue is not closed yet: nothing to start
+  const already = tracker.mergedPullOf(item);
+  if (already) {
+    log(`#${item.id} merged by someone else: ${already.url}, no session`, 'info');
+    cleanup(item, already);
+    appendFileSync(
+      path.join(runDir, 'results.jsonl'),
+      `${JSON.stringify({ issue: item.id, title: item.title, outcome: 'merged', pr: already.url, minutes: 0, sessions: [] })}\n`,
+    );
+    return { pull: already };
+  }
   const worktree = path.join(path.dirname(root), `${path.basename(root)}-wt-${item.id}`);
   run('git', ['fetch', '--quiet', 'origin', BASE], root);
   if (!existsSync(worktree))
@@ -470,7 +519,16 @@ async function deliver(item: Item): Promise<{ reason?: string; pull?: Pull }> {
     else if (session.exit !== 0) reason = `session failed (exit ${session.exit})`;
     // the session asked a question: a pull request of an earlier run is not its answer
     else if (tracker.needsDecision(item)) reason = 'needs-decision';
-    else if (!pull) reason = 'session ended without a pull request';
+    else if (!pull) {
+      // merged by hand while the session ran: delivered, not set aside
+      const byOther = tracker.mergedPullOf(item);
+      if (byOther) {
+        log(`#${item.id} merged by someone else: ${byOther.url}`, 'info');
+        pull = byOther;
+        break;
+      }
+      reason = 'session ended without a pull request';
+    }
     if (reason || !pull) {
       settle();
       break;
@@ -497,9 +555,7 @@ async function deliver(item: Item): Promise<{ reason?: string; pull?: Pull }> {
   }
   if (pull && !reason) {
     // merged: the worktree and the branches can go
-    attempt('git', ['worktree', 'remove', '--force', worktree], root);
-    attempt('git', ['branch', '-D', pull.branch], root);
-    tracker.dropBranch(pull);
+    cleanup(item, pull);
   } else {
     // not merged: the worktree may hold work that is not pushed
     log(`#${item.id} worktree kept: ${worktree}`, 'warn');

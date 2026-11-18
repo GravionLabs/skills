@@ -30,6 +30,10 @@ type Scenario = {
   releaseTests?: number[];
   /** Commits of the base branch beyond the default branch, default 1. */
   releaseCommits?: number;
+  /** Items whose pull request is already merged before the loop starts the item. */
+  mergedBefore?: number[];
+  /** Items whose pull request is merged by someone else while their session runs. */
+  mergedDuring?: number[];
 };
 
 export function create(): Tracker {
@@ -84,6 +88,24 @@ export function create(): Tracker {
         id,
         title: item.title,
         url: `https://example.test/pull/${id}`,
+        branch: `feat/${item.id}-fake`,
+      };
+    },
+    mergedPullOf(item: Item): Pull | undefined {
+      const sessions = path.join(dir, 'sessions.jsonl');
+      const started =
+        existsSync(sessions) &&
+        readFileSync(sessions, 'utf8')
+          .split('\n')
+          .some((line) => line && JSON.parse(line).id === item.id);
+      const isMerged =
+        (scenario.mergedBefore ?? []).includes(item.id) ||
+        ((scenario.mergedDuring ?? []).includes(item.id) && started);
+      if (!isMerged) return undefined;
+      return {
+        id: 100 + item.id,
+        title: item.title,
+        url: `https://example.test/pull/${100 + item.id}`,
         branch: `feat/${item.id}-fake`,
       };
     },

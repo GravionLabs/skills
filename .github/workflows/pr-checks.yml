@@ -7,7 +7,7 @@
 # - adr and spec: skipped green, the repository has no governance key in .agents/config.json.
 # The job id `pr-checks` makes the required status check "pr-checks / PR checks" (rulesets main and release).
 # No secrets, no checkout: pr-checks.yml reads the PR and the issues through the API with the GITHUB_TOKEN.
-# The job grants the union of what the jobs of pr-checks.yml request (readiness, adr, spec, title): GitHub validates
+# The job grants the union of what the jobs of pr-checks.yml request (readiness, adr, spec, title, retarget): GitHub validates
 # the permissions of every called job at startup, skipped ones included, so less ends in startup_failure.
 name: PR checks
 
@@ -23,5 +23,5 @@ jobs:
     permissions:
       contents: read
       issues: read
-      pull-requests: read
+      pull-requests: write # the retarget job of ci pr-checks since v1.14.0 (ci#232)
     uses: GravionLabs/ci/.github/workflows/pr-checks.yml@v1
