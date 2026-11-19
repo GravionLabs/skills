@@ -19,7 +19,8 @@
       "Bash(pnpm run check)",
       "Bash(poimen-server report:*)",
       "Edit",
-      "Write"
+      "Write",
+      "Bash(pnpm run format:check:*)"
     ],
     "deny": ["Bash(git push --force:*)", "Bash(git push -f:*)", "Bash(gh pr merge --admin:*)"]
   }
