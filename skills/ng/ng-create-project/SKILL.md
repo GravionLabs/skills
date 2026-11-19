@@ -24,7 +24,7 @@ Scaffold a new Angular 21+ project with a production-ready baseline. Paths to `s
    pwsh scripts/New-AngularProject.ps1 -ProjectName <Name> [-SelectorPrefix app] [-ProjectType app|workspace] [-SkipVitest] [-SkipEslint] [-OutputDirectory .]
    ```
 
-   It runs `ng new --style scss --ssr false`, replaces `tsconfig.json` with the strict template, installs Vitest with the template config and patches the `test` scripts, then runs the code-quality setup.
+   It runs `ng new --style css --ssr false`, replaces `tsconfig.json` with the strict template, installs Vitest with the template config and patches the `test` scripts, then runs the code-quality setup.
 3. Verify: `ng build`, `npm test`, `ng serve` (http://localhost:4200)
 4. Next steps: components and signal stores via `ng-implementation` (`references/component.md`, `references/signal-store.md`)
 
@@ -39,7 +39,7 @@ Scaffold a new Angular 21+ project with a production-ready baseline. Paths to `s
 ## Constraints
 
 - Standalone components only; `standalone: true` is the default, never add NgModules
-- SCSS for styles; SSR off unless explicitly requested
+- Plain CSS for styles (SCSS only as a reasoned exception, see `ng-implementation`); SSR off unless explicitly requested
 - Angular 21+ only
 
 Report: summary, project path, verify commands.
