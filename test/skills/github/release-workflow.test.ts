@@ -30,7 +30,8 @@ describe.each(Object.entries(files))('release-branch caller %s (#358)', (_name, 
     expect(job.uses).toBe('GravionLabs/ci/.github/workflows/release-branch.yml@v1');
     expect(job.with['project-url']).toMatch(/^https:\/\/github\.com\/users\//);
     expect(job.secrets).toEqual({
-      GH_PAT: '${{ secrets.GH_PAT }}',
+      CI_APP_ID: '${{ secrets.CI_APP_ID }}',
+      CI_APP_PRIVATE_KEY: '${{ secrets.CI_APP_PRIVATE_KEY }}',
       PROJECT_TOKEN: '${{ secrets.PROJECT_TOKEN }}',
     });
     expect(job.with).not.toHaveProperty('label');

@@ -22,10 +22,10 @@ One PR per repo: copy `templates/release-branch.yml` to `.github/workflows/relea
 
 ## Permissions
 
-- Token requirements are in the README of GravionLabs/ci (`release-branch.yml`): a classic PAT with scopes `repo` and `workflow` (and `project`).
+- Token requirements are in the README of GravionLabs/ci (`release-branch.yml`): the GitHub App GravionLabs CI (`CI_APP_ID`, `CI_APP_PRIVATE_KEY`) and, for the project, a classic PAT with scope `project`.
 - The workflow needs `contents: read`, `issues: write`, `pull-requests: write` (the calling job grants them to the reusable workflow, `permissions: {}` at the top).
-- Secrets are passed explicitly (`GH_PAT` required, `PROJECT_TOKEN` optional), not `secrets: inherit`. Without `GH_PAT` the workflow falls back to `github.token`: a PAT is needed so PRs created by CI trigger the required checks; closing works with `github.token`.
-- The project Needs sync needs a classic PAT with scope `project` in secret `PROJECT_TOKEN`, else `GH_PAT`. A fine-grained token does not work for a user-owned project (only an organization-owned project accepts one). Failures per issue are warnings and never fail the job.
+- Secrets are passed explicitly (`CI_APP_ID` and `CI_APP_PRIVATE_KEY` required, `PROJECT_TOKEN` optional), not `secrets: inherit`. The release PR is created with the app's installation token so its required checks run; without the app secrets the workflow fails at once (`CI_APP_ID and CI_APP_PRIVATE_KEY are required`). `GH_PAT` is ignored by v1 (the fallback was removed); a caller that still passes only `GH_PAT` fails on every push to `release/**`.
+- The project Needs sync needs a classic PAT with scope `project` in secret `PROJECT_TOKEN`. A fine-grained token does not work for a user-owned project (only an organization-owned project accepts one). Failures per issue are warnings and never fail the job.
 
 ## Known limit
 
