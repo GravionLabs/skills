@@ -21,6 +21,7 @@ The official `angular-developer` skill (dependency `angular/skills`) covers the 
 - Forms: Reactive Forms by default; Signal Forms (`@angular/forms/signals`) only when requested or already used in the codebase
 - Subscriptions cleaned up via `DestroyRef` / `takeUntilDestroyed`
 - Upgrades: one major at a time with `ng update`; `ng generate @angular/core:control-flow` migrates legacy templates
+- Styles: plain CSS (`.css` files, `inlineStyleLanguage` and the schematic `style` are `css`; nesting is native, tokens are custom properties). SCSS is the exception: one file that needs a Sass feature CSS lacks (`meta.load-css`), with the reason in a comment at its top; never for nesting, variables or a mixin alone. Under a selector list write nested rules out (native nesting wraps the list in `:is()` and changes the specificity)
 - Formatting: Angular stays on Prettier + angular-eslint (Biome lacks Angular template support and SCSS formatting); no `biome.json`
 
 ## File naming

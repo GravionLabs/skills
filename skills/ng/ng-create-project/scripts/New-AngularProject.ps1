@@ -43,7 +43,7 @@ Write-Host "Scaffolding Angular project: $ProjectName" -ForegroundColor Cyan
 # Run ng new
 $ngArgs = @(
   'new', $ProjectName,
-  '--style', 'scss',
+  '--style', 'css',
   '--ssr', 'false',
   '--skip-tests'  # we'll set up Vitest separately
 )
