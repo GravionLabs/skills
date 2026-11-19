@@ -18,6 +18,10 @@ Versioning follows [Semantic Versioning](https://semver.org/).
 - **deliver**: The loop merges into the default branch with a merge commit (#740) (#742)
 
 
+### Documentation
+- Update CHANGELOG.md for v5.1.0 [skip ci]
+
+
 ### Features
 - **deliver**: A pull request handed over for protected paths does not look like a failure (#713) (#723)
 - **deliver**: The loop checks release/next before every PBI and repairs a red one (#674) (#731)
