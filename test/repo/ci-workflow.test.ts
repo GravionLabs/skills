@@ -14,7 +14,7 @@ type Step = {
   env?: Record<string, string>;
   with?: Record<string, string>;
 };
-const steps = (job: string): Step[] => wf.jobs[job].steps;
+const steps = (job: string): Step[] => wf.jobs[job].steps ?? [];
 const pkgJson = JSON.parse(fs.readFileSync(path.resolve(__dirname, '../../package.json'), 'utf-8'));
 
 describe('ci.yml test jobs', () => {
@@ -53,6 +53,7 @@ describe('ci.yml test jobs', () => {
     const check = steps('test').find((s) => s.run?.includes('exit 1'));
     expect(check?.env?.['RESULT']).toBe('${{ needs.test-shard.result }}');
     expect(check?.run).toContain('"$RESULT" != "success"');
+    expect(check?.run).toContain('"$RESULT" != "skipped"');
   });
 
   it('does not use the fixed-name node/test action in any job', () => {
@@ -70,7 +71,7 @@ describe('ci.yml test jobs', () => {
     expect(wf.jobs['regenerate-and-commit']).toBeUndefined();
     expect(wf.jobs['lint-no-generated-files']).toBeUndefined();
     const runs = Object.values(wf.jobs).flatMap((j) =>
-      (j as { steps: Step[] }).steps.map((s) => `${s.run ?? ''} ${s.uses ?? ''}`),
+      ((j as { steps?: Step[] }).steps ?? []).map((s) => `${s.run ?? ''} ${s.uses ?? ''}`),
     );
     for (const r of runs) expect(r).not.toMatch(/git push|apm /);
   });
@@ -117,13 +118,43 @@ describe('ci.yml checks', () => {
 });
 
 describe('ci.yml formatting check and triggers', () => {
-  it('runs on pull requests into main and release/next', () => {
-    expect(wf.on.pull_request.branches).toEqual(['main', 'release/next']);
+  it('runs on pull requests into main and release/**', () => {
+    expect(wf.on.pull_request.branches).toEqual(['main', 'release/**']);
   });
 
   it('runs the oxfmt check and oxlint in CI and oxfmt locally (ADR 0006)', () => {
     expect(pkgJson.scripts.format).toBe('oxfmt');
     expect(pkgJson.scripts['format:check']).toBe('oxfmt --check && oxlint');
     expect(steps('build-test').some((s) => s.run === 'pnpm run format:check')).toBe(true);
+  });
+});
+
+// #836: one aggregate job is the only required check, so jobs can change without a ruleset change.
+describe('ci.yml aggregate required check', () => {
+  const aggregate = wf.jobs['pr-checks-passed'];
+
+  it('has the job PR checks passed, which runs always and needs every other job', () => {
+    expect(aggregate.name).toBe('PR checks passed');
+    expect(aggregate.if).toBe('always()');
+    const others = Object.keys(wf.jobs).filter((j) => j !== 'pr-checks-passed');
+    expect([...aggregate.needs].sort()).toEqual([...others].sort());
+    expect(Object.keys(wf.jobs).at(-1)).toBe('pr-checks-passed');
+  });
+
+  it('fails when a needed job failed or was cancelled and accepts skipped', () => {
+    const check = steps('pr-checks-passed').find((s) => s.run?.includes('exit 1'));
+    expect(check?.env?.['NEEDS']).toBe('${{ toJSON(needs) }}');
+    expect(check?.run).toContain('.result == "success" or .result == "skipped"');
+  });
+
+  it('names the required check in a comment above the jobs', () => {
+    const text = fs.readFileSync(file, 'utf-8');
+    expect(text.indexOf('"PR checks passed"')).toBeLessThan(text.indexOf('\njobs:'));
+  });
+
+  it('skips build and test jobs for the pr-checks-only event types', () => {
+    for (const job of ['build-test', 'test-shard', 'test-windows']) {
+      expect(wf.jobs[job].if).toContain('"opened","synchronize","reopened","labeled"');
+    }
   });
 });
