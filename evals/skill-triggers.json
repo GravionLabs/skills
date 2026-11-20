@@ -270,6 +270,17 @@
     ]
   },
   {
+    "skill": "github-workflow-lint",
+    "shouldTrigger": [
+      "Lint the GitHub Actions workflows before I push",
+      "Check .github/workflows for broken expressions and security issues"
+    ],
+    "shouldNotTrigger": [
+      "Set up GitHub Pages for this repository",
+      "Write the changelog for the next release"
+    ]
+  },
+  {
     "skill": "github-milestone",
     "shouldTrigger": [
       "Which milestone are we working on and which of its issues are ready or blocked?",

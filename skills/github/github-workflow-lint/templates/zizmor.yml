@@ -1,0 +1,8 @@
+# zizmor policy (copy to .github/zizmor.yml). Our own reusable workflows may be pinned to a ref
+# (@v1, as `implementation` demands); every other action must be pinned to a commit SHA.
+rules:
+  unpinned-uses:
+    config:
+      policies:
+        "GravionLabs/ci/*": ref-pin
+        "*": hash-pin

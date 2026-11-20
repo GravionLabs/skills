@@ -40,7 +40,8 @@
         "./skills/github/github-pages",
         "./skills/github/github-project",
         "./skills/github/github-pull-request",
-        "./skills/github/github-release"
+        "./skills/github/github-release",
+        "./skills/github/github-workflow-lint"
       ]
     },
     {

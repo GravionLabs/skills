@@ -20,7 +20,8 @@
     "github-pages",
     "github-project",
     "github-pull-request",
-    "github-release"
+    "github-release",
+    "github-workflow-lint"
   ],
   "go": [
     "go-implementation",
