@@ -14,6 +14,7 @@ Versioning follows [Semantic Versioning](https://semver.org/).
 
 ### Documentation
 - **adr**: Oxlint and oxfmt are the lint and format standard (#769) (#782)
+- Update CHANGELOG.md for v5.2.0 [skip ci]
 
 
 ### Features
