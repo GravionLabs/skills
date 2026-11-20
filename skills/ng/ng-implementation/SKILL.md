@@ -49,6 +49,10 @@ Match the project's existing convention. New Angular 20+ projects follow the CLI
 
 Load `ng-test` for TestBed setup, signal testing, mocking and async patterns.
 
+## Gate
+
+Run `pnpm check:changed` once when the work is done (the gate of this stack; `implementation` runs it through `Invoke-Gate.ps1`): `../../shared/implementation/references/gate.md`.
+
 ## Review rules
 
 - 🔴 Lint run (`Format-Changed.ps1 -Lint -Language ng`, oxlint + ESLint on `.html`, or ESLint) exits non-zero: error-level findings; 🟡 warning-level findings

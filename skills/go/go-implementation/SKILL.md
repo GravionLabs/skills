@@ -50,6 +50,10 @@ description: 'Go implementation rules (gofmt, go vet, golangci-lint) extending `
 
 Load `go-test` for table-driven tests, testify, parallelism, race detector and build tags.
 
+## Gate
+
+Run `just check-changed` once when the work is done (the gate of this stack; `implementation` runs it through `Invoke-Gate.ps1`): `../../shared/implementation/references/gate.md`.
+
 ## Review rules
 
 - 🔴 Lint run (`Format-Changed.ps1 -Lint -Language go`, golangci-lint) exits non-zero: error-level findings; 🟡 warning-level findings
