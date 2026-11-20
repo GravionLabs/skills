@@ -33,3 +33,6 @@ ui-styleguide: docs/styleguide/
 # docs/STYLEGUIDE.md and docs/styleguide/ux-review-rubric.md are target repository files the UX review reads, not files of the skill
 code-review: docs/STYLEGUIDE.md
 code-review: docs/styleguide/ux-review-rubric.md
+
+# docs/STYLEGUIDE.md is the style guide of the target repository, named in the messages of the stylelint template, not a file of the skill
+ng-implementation: docs/STYLEGUIDE.md
