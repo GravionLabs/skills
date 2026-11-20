@@ -5,6 +5,31 @@ Versioning follows [Semantic Versioning](https://semver.org/).
 
 ---
 
+## [5.2.0] — 2026-11-20
+
+### Bug Fixes
+- **deliver**: The stop-request test fails now and then in CI (#747) (#772)
+- **github-release**: The release-branch template does not pass the CI app secrets (#750) (#773)
+
+
+### Documentation
+- **adr**: Oxlint and oxfmt are the lint and format standard (#769) (#782)
+
+
+### Features
+- **ng**: CSS as the default style language, SCSS only as an exception (#748) (#749)
+- **planner**: Cut PBIs that change protected paths into their own interactive PBI (#752) (#774)
+- **deliver**: The report names the PBIs that wait for a handed-over PR (#753) (#776)
+- **deliver**: Progress bar with x of y at the start of each issue in the loop output (#780) (#781)
+- **ts**: Setup-oxc-husky replaces the Biome and the Prettier/ESLint setup skills (#770) (#783)
+
+
+## [5.1.1] — 2026-11-19
+
+### Documentation
+- Update CHANGELOG.md for v5.1.1 [skip ci]
+
+
 ## [5.1.0] — 2026-11-18
 
 ### Bug Fixes
