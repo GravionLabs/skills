@@ -31,7 +31,7 @@ Exit 2 on a usage error or a missing baseline.
 
 ## Runner
 
-`node scripts/run-ratchets.mts [--dir scripts/ratchets] [--only <name>] [--init | --prune]` runs every `check-*-ratchet.mts` of the directory in parallel, one output block per script, exit 1 when any fails. `--init` and `--prune` are passed to the scripts. Start a script from `templates/check-example-ratchet.mts`. Details: `references/runner.md`.
+`node scripts/run-ratchets.mts [--dir scripts/ratchets] [--only <name>] [--init | --prune]` runs every `check-*-ratchet.mts` of the directory in parallel, one output block per script, exit 1 when any fails. `--init` and `--prune` are passed to the scripts. Start a script from `templates/check-example-ratchet.mts`. Details: `references/runner.md`. CI: copy `templates/ratchet.yml` to `.github/workflows/ratchet.yml` (runs the runner on `pull_request`).
 
 ## Ratchets
 
