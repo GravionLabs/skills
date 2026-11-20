@@ -129,7 +129,7 @@ describe('ast-grep-rules skill files', () => {
       fs.readFileSync(path.join(root, 'skills/delivery/skills-manage/scripts/groups.json'), 'utf8'),
     );
     expect(JSON.stringify(groups)).toContain('ast-grep-rules');
-    for (const f of ['README.md', 'AGENTS.md'])
+    for (const f of ['README.md', 'docs/agents-md-refs/shared.md'])
       expect(fs.readFileSync(path.join(root, f), 'utf8')).toContain('`ast-grep-rules`');
   });
 });
