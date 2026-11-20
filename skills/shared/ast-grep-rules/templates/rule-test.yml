@@ -1,0 +1,6 @@
+# ast-grep/rule-tests/<id>-test.yml; `id` is the id of the rule.
+id: no-example-call
+valid:
+  - saferCall(value)
+invalid:
+  - exampleCall(value)

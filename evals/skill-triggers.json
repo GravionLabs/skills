@@ -305,5 +305,13 @@
       "Grandfather the current violations of this lint rule so that new ones fail the check"
     ],
     "shouldNotTrigger": ["Format the changed files", "Write an ADR for the new queue"]
+  },
+  {
+    "skill": "ast-grep-rules",
+    "shouldTrigger": [
+      "Add an ast-grep rule that bans console.log after the incident in #412",
+      "Check that every ast-grep rule has a message and a rule test"
+    ],
+    "shouldNotTrigger": ["Add a ratchet for skipped tests", "Rename the variable in this function"]
   }
 ]
