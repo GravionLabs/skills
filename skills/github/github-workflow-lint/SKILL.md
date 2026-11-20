@@ -38,6 +38,10 @@ In a repository with workflows add a fast check to `.agents/config.json`, run by
 
 Only repositories with workflows need it.
 
+## CI job
+
+`templates/workflow-lint.yml` (copy to `.github/workflows/workflow-lint.yml`) runs the script on every pull request that touches workflows, for repositories that do not get the job from GravionLabs/ci. It installs actionlint and zizmor at the pinned versions (release binary, sha256 checked); adjust the script path to where the skill is committed.
+
 ## A finding
 
 Fix it. Only when it is a false positive or accepted, record it with a reason: inline `# zizmor: ignore[<rule>] <reason>` (zizmor) or `.github/actionlint.yaml` (actionlint); the reason is required. Details: `references/workflow-lint.md`.

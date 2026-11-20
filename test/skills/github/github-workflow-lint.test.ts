@@ -109,3 +109,35 @@ describe('github-workflow-lint skill', () => {
     });
   });
 });
+
+describe('CI job template', () => {
+  const tpl = parse(fs.readFileSync(path.join(skillDir, 'templates/workflow-lint.yml'), 'utf8'));
+  const job = tpl.jobs['workflow-lint'];
+  const steps: Array<{ uses?: string; run?: string }> = job.steps;
+
+  it('has a timeout and minimal permissions', () => {
+    expect(job['timeout-minutes']).toBeGreaterThan(0);
+    expect(tpl.permissions).toEqual({ contents: 'read' });
+  });
+
+  it('pins every action to a commit SHA', () => {
+    const uses = steps.filter((s) => s.uses).map((s) => s.uses as string);
+    expect(uses.length).toBeGreaterThan(0);
+    for (const u of uses) expect(u).toMatch(/@[0-9a-f]{40}(\s|$)/);
+  });
+
+  it('installs the pinned tools with a checked sha256 and runs the script', () => {
+    const text = steps.map((s) => s.run ?? '').join('\n');
+    expect(text).toContain('sha256sum -c');
+    expect(text).toContain('Invoke-WorkflowLint.ps1');
+    const ref = fs.readFileSync(path.join(skillDir, 'references/workflow-lint.md'), 'utf8');
+    expect(ref).toContain(job.env.ACTIONLINT_VERSION);
+    expect(ref).toContain(job.env.ZIZMOR_VERSION);
+  });
+
+  it('is named in SKILL.md', () => {
+    expect(fs.readFileSync(path.join(skillDir, 'SKILL.md'), 'utf8')).toContain(
+      'templates/workflow-lint.yml',
+    );
+  });
+});

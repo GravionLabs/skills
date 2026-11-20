@@ -1,0 +1,52 @@
+# Copy to .github/workflows/workflow-lint.yml. Versions: references/workflow-lint.md.
+name: workflow-lint
+
+on:
+  pull_request:
+    paths:
+      - '.github/workflows/**'
+      - '.github/actionlint.yaml'
+      - '.github/zizmor.yml'
+
+permissions:
+  contents: read
+
+concurrency:
+  group: workflow-lint-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  workflow-lint:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    env:
+      ACTIONLINT_VERSION: '1.7.12'
+      ACTIONLINT_SHA256: '8aca8db96f1b94770f1b0d72b6dddcb1ebb8123cb3712530b08cc387b349a3d8'
+      ZIZMOR_VERSION: '1.32.0'
+      ZIZMOR_SHA256: 'bb110cc765eca9cd7efb2e284a956be5974c60027b0970f16397d86208a9957b'
+    steps:
+      - name: Checkout
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+        with:
+          persist-credentials: false
+
+      - name: Install actionlint and zizmor
+        shell: bash
+        run: |
+          set -euo pipefail
+          tmp="$(mktemp -d)"
+          mkdir -p "$HOME/.local/bin"
+          curl -sSfL -o "$tmp/actionlint.tar.gz" \
+            "https://github.com/rhysd/actionlint/releases/download/v${ACTIONLINT_VERSION}/actionlint_${ACTIONLINT_VERSION}_linux_amd64.tar.gz"
+          echo "${ACTIONLINT_SHA256}  $tmp/actionlint.tar.gz" | sha256sum -c -
+          tar -xzf "$tmp/actionlint.tar.gz" -C "$HOME/.local/bin" actionlint
+          curl -sSfL -o "$tmp/zizmor.tar.gz" \
+            "https://github.com/zizmorcore/zizmor/releases/download/v${ZIZMOR_VERSION}/zizmor-x86_64-unknown-linux-gnu.tar.gz"
+          echo "${ZIZMOR_SHA256}  $tmp/zizmor.tar.gz" | sha256sum -c -
+          tar -xzf "$tmp/zizmor.tar.gz" -C "$HOME/.local/bin" zizmor
+          echo "$HOME/.local/bin" >> "$GITHUB_PATH"
+
+      - name: Lint workflows
+        shell: pwsh
+        # Path of the skill in the repository (npx skills install: .agents/skills/github-workflow-lint)
+        run: pwsh .agents/skills/github-workflow-lint/scripts/Invoke-WorkflowLint.ps1
