@@ -33,6 +33,7 @@ The project's test command: the `test` key of `.agents/config.json`, run by `imp
 - Exactly one type mark per test function: `@pytest.mark.unit`, `.integration` or `.manual`
 
 Reference files (load when needed):
+
 - `references/marks-and-naming.md` — directory structure, marks, naming and parametrize patterns
 - `references/mocking-python.md` — `pytest-mock`, `unittest.mock`, respx, freezegun examples
 

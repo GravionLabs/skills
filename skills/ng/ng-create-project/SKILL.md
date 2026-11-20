@@ -25,6 +25,7 @@ Scaffold a new Angular 21+ project with a production-ready baseline. Paths to `s
    ```
 
    It runs `ng new --style css --ssr false`, replaces `tsconfig.json` with the strict template, installs Vitest with the template config and patches the `test` scripts, then runs the code-quality setup.
+
 3. Verify: `ng build`, `npm test`, `ng serve` (http://localhost:4200)
 4. Next steps: components and signal stores via `ng-implementation` (`references/component.md`, `references/signal-store.md`)
 

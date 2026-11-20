@@ -38,8 +38,8 @@ describe('roadmap foreign blocker (#272)', () => {
     md = new PwshWorker(path.join(skill, 'scripts/New-Roadmap.ps1'));
   });
   afterAll(async () => {
-    await state.close();
-    await md.close();
+    state.close();
+    md.close();
   });
 
   const getState = async (blockers: unknown[]) => {

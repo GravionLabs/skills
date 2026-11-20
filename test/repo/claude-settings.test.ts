@@ -51,6 +51,6 @@ describe('.claude/settings.json', () => {
   });
 
   it('has no Bash wildcard', () => {
-    expect(settings.permissions.allow.filter((e) => /^Bash\(\*/.test(e))).toEqual([]);
+    expect(settings.permissions.allow.filter((e) => e.startsWith('Bash(*'))).toEqual([]);
   });
 });

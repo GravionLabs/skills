@@ -7,13 +7,18 @@ import { readFileSync } from 'node:fs';
 
 const E = '\x1b';
 const num = (v) => (typeof v === 'number' && Number.isFinite(v) ? v : 0);
-const tok = (n) => (n >= 999500 ? `${Math.floor((n + 5e4) / 1e5) / 10}M`.replace('.0M', 'M') : `${Math.floor((n + 500) / 1000)}k`);
+const tok = (n) =>
+  n >= 999500
+    ? `${Math.floor((n + 5e4) / 1e5) / 10}M`.replace('.0M', 'M')
+    : `${Math.floor((n + 500) / 1000)}k`;
 const str = (v) => (typeof v === 'string' ? v : '');
 
 function row(t) {
   if (!t || typeof t !== 'object' || t.id === undefined || t.id === null) return null;
   const agent = str(t.agentType) || str(t.name) || 'agent';
-  const model = str(t.model).replace(/^claude-/, '').replace(/-\d{8}$/, '');
+  const model = str(t.model)
+    .replace(/^claude-/, '')
+    .replace(/-\d{8}$/, '');
   const tokens = num(t.tokenCount);
   const size = num(t.contextWindowSize);
   const label = str(t.label) || str(t.description);
@@ -21,7 +26,8 @@ function row(t) {
   let ctx;
   if (size > 0) {
     const pct = Math.floor((tokens * 100) / size);
-    const color = tokens < Math.min(size / 2, 250000) ? 32 : tokens < Math.min(size * 0.8, 500000) ? 33 : 31;
+    const color =
+      tokens < Math.min(size / 2, 250000) ? 32 : tokens < Math.min(size * 0.8, 500000) ? 33 : 31;
     ctx = ` ${E}[${color}mctx:${pct}% (${k}/${tok(size)})${E}[0m`;
   } else {
     ctx = ` ${k}`;
@@ -33,6 +39,11 @@ function row(t) {
 try {
   const input = JSON.parse(readFileSync(0, 'utf8'));
   const tasks = Array.isArray(input?.tasks) ? input.tasks : [];
-  const lines = tasks.map(row).filter(Boolean).map((r) => JSON.stringify(r));
+  const lines = tasks
+    .map(row)
+    .filter(Boolean)
+    .map((r) => JSON.stringify(r));
   if (lines.length) process.stdout.write(lines.join('\n') + '\n');
-} catch { /* invalid input: no output */ }
+} catch {
+  /* invalid input: no output */
+}

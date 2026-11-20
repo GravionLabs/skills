@@ -70,7 +70,7 @@ The title of an issue starts with its level: `[Epic]`, `[Feature]`, `[PBI]` or `
 pnpm install
 pnpm run check                          # local equivalent of the CI checks
 pnpm test                               # all tests
-pnpm run format:check                   # Biome format + lint of code, Markdown and YAML (pnpm run format writes)
+pnpm run format:check                   # oxfmt check + oxlint of code, Markdown and YAML (pnpm run format writes; ADR 0006)
 pnpm run lint:ps                        # PSScriptAnalyzer (PSScriptAnalyzerSettings.psd1)
 node scripts/check-marketplace.mjs --fix   # skill lists of marketplace.json and groups.json from the folders
 pnpm run generate                       # site/skill-list.md for the site

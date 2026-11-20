@@ -78,7 +78,7 @@ describe('New-Roadmap.ps1 renumbered keys', () => {
       expect(order.every((i) => i >= 0)).toBe(true);
       expect([...order].sort((a, b) => a - b)).toEqual(order);
     } finally {
-      await worker.close();
+      worker.close();
       fs.rmSync(tmp, { recursive: true, force: true });
     }
   });

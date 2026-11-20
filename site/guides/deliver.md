@@ -8,7 +8,7 @@
 - A GitHub ruleset on the base branch with required checks. The loop refuses a base without them.
 - The agent CLI of the harness (`claude`, or `copilot`) is installed and signed in.
 - `git`, `gh` and the verify commands of your `AGENTS.md` are allowed for the agent, otherwise an unattended session stops at a prompt.
-  :::
+:::
 
 ## One issue
 
