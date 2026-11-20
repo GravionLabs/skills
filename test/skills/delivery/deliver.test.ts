@@ -44,6 +44,7 @@ type Scenario = {
   needsDecision?: boolean;
   gateBlockMs?: number;
   stopInGate?: boolean;
+  stopInChangedFiles?: boolean;
   exits?: number[];
   noPull?: boolean;
   filesFailures?: number;
@@ -356,19 +357,19 @@ describe('deliver loop', () => {
   });
 
   // SIGINT cannot be sent to a process on Windows; there the stop file is only read every 500 ms
-  it.skipIf(process.platform === 'win32')(
-    'does not merge when the stop request arrives during a tracker call that then reports ready',
-    async () => {
-      // the fake tracker sends the stop request inside gate(): no timing window in the test
-      const out = await loop({
-        items: [{ id: 52, title: '[PBI] feat: stopped late' }],
-        stopInGate: true,
-      });
-      expect(out.status).toBe(130);
-      expect(out.merges).toEqual([]);
-      expect(out.results[0]).toMatchObject({ outcome: 'stopped' });
-    },
-  );
+  it.skipIf(process.platform === 'win32').each([
+    ['gate', { stopInGate: true }],
+    ['the read of the changed files', { stopInChangedFiles: true }],
+  ] as const)('does not merge when the stop request arrives during %s', async (_name, stop) => {
+    // the fake tracker sends the stop request inside the call: no timing window in the test
+    const out = await loop({
+      items: [{ id: 52, title: '[PBI] feat: stopped late' }],
+      ...stop,
+    });
+    expect(out.status).toBe(130);
+    expect(out.merges).toEqual([]);
+    expect(out.results[0]).toMatchObject({ outcome: 'stopped' });
+  });
 
   it('does not merge a pull request that got a protected path after the session ended', async () => {
     const out = await loop({
