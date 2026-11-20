@@ -149,6 +149,7 @@ export function create({
   trustAuthors,
   stopFile,
   onStop,
+  onExhausted,
   log,
 }: TrackerContext): Tracker {
   const run = (args: string[], env?: Record<string, string>): string =>
@@ -182,12 +183,16 @@ export function create({
         return out;
       } catch (error) {
         const e = error as { stderr?: string; message?: string };
-        if (!isRateLimit(`${e.stderr ?? ''}\n${e.message ?? ''}`)) throw error;
-        if (waitsInARow >= RATE_LIMIT_WAITS) throw error;
+        // stderr only: the message of the error repeats the arguments (an issue title may say "rate limit")
+        if (!isRateLimit(e.stderr ?? '')) throw error;
+        if (waitsInARow >= RATE_LIMIT_WAITS) {
+          onExhausted?.(error as Error);
+          throw error;
+        }
         waitsInARow++;
         let seconds: number | undefined;
         try {
-          seconds = primaryWait(run(['api', 'rate_limit']), Date.now() / 1000);
+          seconds = primaryWait(run(['api', 'rate_limit'], env), Date.now() / 1000);
         } catch {
           // unreadable: treated like a secondary limit
         }

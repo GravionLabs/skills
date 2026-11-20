@@ -47,6 +47,8 @@ export type TrackerContext = {
   stopFile?: string;
   /** Called when a wait saw the stop request (the tracker call blocks, so the loop cannot see it itself). */
   onStop?: () => void;
+  /** Called when the cap of rate-limit waits is used up: callers of the tracker may swallow the error, the run still ends `failed`. */
+  onExhausted?: (error: Error) => void;
   /** Progress lines of a rate-limit wait. */
   log?: (text: string) => void;
 };

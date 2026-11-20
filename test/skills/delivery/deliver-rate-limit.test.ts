@@ -48,6 +48,7 @@ describe('github tracker rate-limit wait', () => {
       trustAuthors: false,
       stopFile,
       onStop: () => stops.push(1),
+      onExhausted: () => stops.push(2),
       log: (t: string) => logs.push(t),
       ...extra,
     });
@@ -91,9 +92,10 @@ describe('github tracker rate-limit wait', () => {
   }, 20_000);
 
   it('the fourth rate-limit error in a row is thrown', async () => {
-    const { logs } = await setup(99, true);
+    const { logs, stops } = await setup(99, true);
     expect(() => fetchMilestone()).toThrow(/rate limit/i);
     expect(logs).toHaveLength(3);
+    expect(stops).toEqual([2]);
   });
 
   it('a stop during a wait ends it and tells the loop', async () => {

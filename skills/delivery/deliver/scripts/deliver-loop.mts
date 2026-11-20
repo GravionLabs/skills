@@ -268,6 +268,11 @@ const tracker = await loadTracker(opt.tracker ?? config.deliver?.tracker ?? 'git
   trustAuthors: opt['trust-authors'],
   stopFile: path.join(runDir, 'stop'),
   onStop: requestStop,
+  onExhausted: (error) => {
+    emit('run.finished', { outcome: 'failed', text: firstLine(error).slice(0, 300) }, 'danger');
+    log(`run failed: rate limit, ${firstLine(error)}`, 'bad');
+    process.exit(1);
+  },
   log: (text) => log(text, 'warn'),
 }).catch((error) => fail(`tracker: ${firstLine(error)}`, 64));
 const tokenSource = app ? makeSource(app, tracker.repo, SESSION_MINUTES * 60_000) : undefined;
