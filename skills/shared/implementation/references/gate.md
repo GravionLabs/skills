@@ -44,3 +44,14 @@ A pass is cached by the hash of the changed files plus the base ref. An unchange
 | .NET     | `dotnet format --verify-no-changes` | `dotnet format analyzers --verify-no-changes` | `dotnet build --no-restore`     | `dotnet test --no-build` |
 | Rust     | `cargo fmt --check`                 | `cargo clippy -- -D warnings`                 | `cargo check` (clippy compiles) | `cargo test`             |
 | Python   | `ruff format --check`               | `ruff check`                                  | `pyright` or `mypy`             | `pytest`                 |
+| Go       | `gofmt -l .`                        | `golangci-lint run`                           | `go build ./...`                | `go test ./...`          |
+
+## Command per stack
+
+| Stack               | Gate command          |
+| :------------------ | :-------------------- |
+| TypeScript, Angular | `pnpm check:changed`  |
+| .NET, Python, Go    | `just check-changed`  |
+| Rust                | `cargo check-changed` |
+
+The language implementation skills name these.
