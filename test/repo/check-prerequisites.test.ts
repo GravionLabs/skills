@@ -72,4 +72,30 @@ describe.skipIf(!hasPwsh || process.platform === 'win32')('Check-Prerequisites.p
     expect(r.code).toBe(1);
     expect(r.out).toContain('Node.js');
   });
+
+  describe('ast-grep with sgconfig.yml', () => {
+    it('fails and names ast-grep when sgconfig.yml exists and ast-grep is missing', async () => {
+      fs.writeFileSync(path.join(proj, 'sgconfig.yml'), 'ruleDirs:\n  - rules\n');
+      const r = await run(full);
+      expect(r.code).toBe(1);
+      expect(r.out).toContain('ast-grep');
+    });
+
+    it('passes without sgconfig.yml and ignores a sg binary', async () => {
+      const r = await run(full);
+      expect(r.code).toBe(0);
+      expect(r.out).not.toContain('ast-grep');
+    });
+
+    it('passes with sgconfig.yml when ast-grep is installed', async () => {
+      fs.writeFileSync(path.join(proj, 'sgconfig.yml'), 'ruleDirs:\n  - rules\n');
+      const withTool = path.join(dir, 'with-ast-grep');
+      linkTools(withTool, ['git', 'node', 'npm', 'uname', 'sh']);
+      const fake = path.join(withTool, 'ast-grep');
+      fs.writeFileSync(fake, '#!/bin/sh\necho "ast-grep 0.0.0"\n', { mode: 0o755 });
+      const r = await run(withTool);
+      expect(r.code).toBe(0);
+      expect(r.out).toContain('ast-grep');
+    });
+  });
 });
