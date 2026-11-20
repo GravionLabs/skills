@@ -346,5 +346,16 @@
       "Write an AGENTS.md for this repository"
     ],
     "shouldNotTrigger": ["Add a UI style guide to this project", "Summarize the open pull requests"]
+  },
+  {
+    "skill": "poimen-lead",
+    "shouldTrigger": [
+      "I run in poimen. Split this refactor across three worker agents, one worktree each, wait for them and collect their reports.",
+      "Use the poimen MCP tools to start workers for these independent tasks and wait for their results."
+    ],
+    "shouldNotTrigger": [
+      "Add a new endpoint for listing orders",
+      "Review my changes for style issues"
+    ]
   }
 ]
