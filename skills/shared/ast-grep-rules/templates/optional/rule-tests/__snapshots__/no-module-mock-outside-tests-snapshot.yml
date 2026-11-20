@@ -1,0 +1,14 @@
+id: no-module-mock-outside-tests
+snapshots:
+  "jest.mock('./clock', () => ({ now: () => 1 }))\n":
+    labels:
+    - source: "jest.mock('./clock', () => ({ now: () => 1 }))"
+      style: primary
+      start: 0
+      end: 46
+  vi.mock('./clock'):
+    labels:
+    - source: vi.mock('./clock')
+      style: primary
+      start: 0
+      end: 18

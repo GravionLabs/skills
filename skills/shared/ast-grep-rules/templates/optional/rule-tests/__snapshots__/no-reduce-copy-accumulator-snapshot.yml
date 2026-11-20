@@ -1,0 +1,22 @@
+id: no-reduce-copy-accumulator
+snapshots:
+  "items.reduce((acc, x) => ({ ...acc, [x.id]: x }), {})\n":
+    labels:
+    - source: "items.reduce((acc, x) => ({ ...acc, [x.id]: x }), {})"
+      style: primary
+      start: 0
+      end: 53
+    - source: "{ ...acc, [x.id]: x }"
+      style: secondary
+      start: 26
+      end: 47
+  "items.reduce((acc, x) => [...acc, x], [])":
+    labels:
+    - source: items.reduce((acc, x) => [...acc, x], [])
+      style: primary
+      start: 0
+      end: 41
+    - source: "[...acc, x]"
+      style: secondary
+      start: 25
+      end: 36

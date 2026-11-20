@@ -1,0 +1,14 @@
+id: no-widen-then-assert
+snapshots:
+  expect(value as any).toBe(x):
+    labels:
+    - source: expect(value as any)
+      style: primary
+      start: 0
+      end: 20
+  expect(value as unknown as Foo).toEqual(x):
+    labels:
+    - source: expect(value as unknown as Foo)
+      style: primary
+      start: 0
+      end: 31

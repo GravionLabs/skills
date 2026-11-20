@@ -1,0 +1,12 @@
+id: no-reduce-copy-accumulator
+valid:
+  - items.reduce((sum, x) => sum + x, 0)
+  - |
+    items.reduce((acc, x) => {
+      acc.push(x);
+      return acc;
+    }, [])
+invalid:
+  - |
+    items.reduce((acc, x) => ({ ...acc, [x.id]: x }), {})
+  - items.reduce((acc, x) => [...acc, x], [])

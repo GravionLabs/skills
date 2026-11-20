@@ -53,6 +53,16 @@ A file may hold several rules separated by `---`; each needs its own test.
 
 Check them from the skill directory: `ast-grep test --config templates/sgconfig.starter.yml` and `node scripts/check-rules.mts --config templates/sgconfig.starter.yml --allow-placeholder`. Snapshots live in `templates/rule-tests/__snapshots__/` (copy them too). The rules use `language: Tsx` and `languageGlobs` of the starter config maps `*.ts`, `*.mts`, `*.cts` to it, so one rule covers all three; `files` limits them to `*.test.*` and `*.spec.*`. The reason comment sits on the line above the statement; a trailing comment does not count.
 
+## Opt-in rules
+
+`templates/optional/` (rules, rule-tests, snapshots, `sgconfig.yml`) holds `no-module-mock-outside-tests`, `no-widen-then-assert` and `no-reduce-copy-accumulator`. None is enabled by default. To enable one:
+
+1. Copy `optional/rules/<id>.yml` to `ast-grep/rules/`, and `optional/rule-tests/<id>-test.yml` plus `optional/rule-tests/__snapshots__/<id>-snapshot.yml` to `ast-grep/rule-tests/` (with its `__snapshots__/`).
+2. Replace `#<nr>` in the message with the issue of your incident, and adjust `files`/`ignores` to the repository layout.
+3. Run `ast-grep test`, `ast-grep scan`, fix or baseline the violations, then `node scripts/check-rules.mts`.
+
+Check the templates from the skill directory: `ast-grep test --config templates/optional/sgconfig.yml` and `node scripts/check-rules.mts --config templates/optional/sgconfig.yml --allow-placeholder`. `.ts` sources need the `languageGlobs` of that config (or of `sgconfig.starter.yml`) because the rules use `language: Tsx`.
+
 ## Pitfalls
 
 - Do not call `sg`; use `ast-grep`.

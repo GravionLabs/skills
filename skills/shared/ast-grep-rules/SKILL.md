@@ -44,4 +44,14 @@ Wire the three commands as `checks` entries of `.agents/config.json` with `fast:
 
 `templates/rules/` and `templates/rule-tests/` hold four TypeScript test rules (`.ts`, `.tsx`, `.mts` test and spec files): real-time waits, polling loops, a skip without `// quarantine: <reason>`, a timeout without `// timeout: <reason>`. Copy what the repository needs; replace `#<nr>` with its own incident (the placeholder passes `check-rules.mts` only with `--allow-placeholder`, used on `templates/sgconfig.starter.yml`).
 
+## Opt-in rules
+
+`templates/optional/` holds three anti-slop rules with rule tests. They are not part of the starter set and no default setup copies them: a repository copies one rule and its test after its first incident of that kind.
+
+- `no-module-mock-outside-tests`: `vi.mock`/`jest.mock` in a non-test source.
+- `no-widen-then-assert`: `expect(x as any)` or `expect(x as unknown as T)` in a test.
+- `no-reduce-copy-accumulator`: `reduce` whose callback spreads the accumulator (`{ ...acc, … }`, `[...acc, …]`).
+
+How to enable one: `references/rules.md`.
+
 Details, rule syntax pointers and pitfalls: `references/rules.md`.

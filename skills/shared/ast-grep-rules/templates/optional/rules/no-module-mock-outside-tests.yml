@@ -1,0 +1,19 @@
+# Opt-in rule. Replace #<nr> with the issue of your own incident before use.
+id: no-module-mock-outside-tests
+language: Tsx
+severity: error
+message: 'Why: a module mock in a non-test source replaces real code for every importer and hides the wiring that production runs. Instead: inject the dependency as a parameter or use a test double in the test file. See #<nr>.'
+files:
+  - '**/*.ts'
+  - '**/*.tsx'
+  - '**/*.mts'
+ignores:
+  - '**/*.test.*'
+  - '**/*.spec.*'
+  - '**/__tests__/**'
+  - '**/test/**'
+  - '**/tests/**'
+rule:
+  any:
+    - pattern: vi.mock($$$ARGS)
+    - pattern: jest.mock($$$ARGS)
