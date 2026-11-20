@@ -106,3 +106,30 @@ describe('governance rules of code-review', () => {
     expect(rules).toContain('no spec change needed: <that spec>');
   });
 });
+
+describe('rule proposal', () => {
+  const shared = path.resolve(__dirname, '../../../skills/shared');
+  const skill = read('SKILL.md');
+  const proposal = read('references/rule-proposal.md');
+  const contract = fs.readFileSync(path.join(shared, 'lessons/references/contract.md'), 'utf-8');
+
+  it('code-review names the proposal and links the skill and reference', () => {
+    expect(skill).toContain('propose ast-grep rule');
+    expect(skill).toContain('references/rule-proposal.md');
+    expect(skill).toContain('ast-grep-rules');
+    expect(skill.split('\n').length).toBeLessThanOrEqual(100);
+    expect(proposal).toContain('propose ast-grep rule');
+    expect(proposal).toContain('ast-grep-rules');
+    expect(proposal).toMatch(/Why: .* Instead: .* See #/);
+  });
+
+  it('the lessons contract documents the rule pointer', () => {
+    expect(contract).toContain('rule: <rule id>');
+    expect(contract).toContain('ast-grep-rules');
+    expect(contract).toMatch(/candidate to retire/);
+  });
+
+  it('keeps the reviewer result schema unchanged', () => {
+    expect(Object.keys(schema.properties).sort()).toEqual(['blocking', 'notes']);
+  });
+});
