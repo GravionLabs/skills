@@ -52,8 +52,13 @@ node scripts/check-agents-md.mts [repo] [--budget <n>] [--json]
 
 Prints `<path>: <characters> / 8000` per `AGENTS.md` (root and nested). Exit 1 for a file over the budget, a file under `docs/agents-md-refs/` that no `AGENTS.md` names, a reference without a reading condition and a named file that is missing.
 
+## Ratchet
+
+A file over the budget may not grow while it is slimmed: copy `templates/check-agents-md-size-ratchet.mts` into the ratchet directory of the repository (skill `ratchet`, found by its runner). It keeps a count baseline of characters per over-budget `AGENTS.md`; growth fails, shrinking fails as stale until `--prune`, a file within the budget needs no entry.
+
 ## References
 
 - `references/budget.md`: why characters, how to count, what to do at the limit.
 - `references/ref-files.md`: the reference-file rule.
 - `templates/AGENTS.md`: the skeleton.
+- `templates/check-agents-md-size-ratchet.mts`: the size ratchet.
