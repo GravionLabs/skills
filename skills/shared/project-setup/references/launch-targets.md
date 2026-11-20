@@ -23,7 +23,7 @@ The mapping language or framework to start target, build and test command and de
 
 ## VS Code files
 
-- `settings.json`: `editor.formatOnSave` and per language id `editor.defaultFormatter`: ts/ng `biomejs.biome` or `esbenp.prettier-vscode` (the `format` key of `.agents/config.json`, else the detected tool, else Prettier); py `charliermarsh.ruff`; dotnet `ms-dotnettools.csdevkit`; rust `rust-lang.rust-analyzer`; go `golang.go`.
+- `settings.json`: `editor.formatOnSave` and per language id `editor.defaultFormatter`: ts/ng `oxc.oxc-vscode`, `biomejs.biome` or `esbenp.prettier-vscode` (the `format` key of `.agents/config.json`, else the detected tool: oxfmt before Biome, else Prettier); py `charliermarsh.ruff`; dotnet `ms-dotnettools.csdevkit`; rust `rust-lang.rust-analyzer`; go `golang.go`.
 - `extensions.json`: formatter, language support, `vitest.explorer` with Vitest, `angular.ng-template` for ng, `vadimcn.vscode-lldb` for rust.
 - `tasks.json`: `build: <key>` and `test: <key>`. `launch.json`: the start targets.
 - An existing file is never changed or merged: the plan shows `missing` (settings keys, extension ids, task labels, configuration names), the user adds them by hand. Comments in the existing file are tolerated for the comparison.
@@ -32,7 +32,7 @@ The mapping language or framework to start target, build and test command and de
 
 `-Editor zed` writes `.zed/settings.json`, `tasks.json` and `debug.json` from the same mapping (same commands, same start targets, no second mapping).
 
-- `settings.json`: `format_on_save: on` and per Zed language a `formatter`: ts/ng `prettier` or the `biome` language server (same choice as VS Code), py ruff, dotnet OmniSharp, rust rust-analyzer, go gopls (language servers).
+- `settings.json`: `format_on_save: on` and per Zed language a `formatter`: ts/ng `oxfmt` as external formatter (`npx --no-install oxfmt --stdin-filepath {buffer_path}`), `prettier` or the `biome` language server (same choice as VS Code), py ruff, dotnet OmniSharp, rust rust-analyzer, go gopls (language servers).
 - `tasks.json`: array with `build: <key>` and `test: <key>`.
 - `debug.json`: array of the start targets with Zed adapters: ts/ng `JavaScript` (dev server, `Debug Vitest`), py `Debugpy`, rust `CodeLLDB`, go `Delve`. dotnet gets no debug entry (Zed has no built-in .NET adapter), with a note.
 - An existing file is never changed; the plan shows `missing` (settings keys, task labels, debug labels).

@@ -40,6 +40,6 @@ User-invoked: `/project-setup [dry-run]`. It detects the stack, lets the user pi
 
 - `jb cleanupcode` has no read-only mode: its entry keeps `dotnet format --verify-no-changes` as `check`. It needs a `*.slnx` or `*.sln` in the root.
 - A choice for a language that is not detected, an unknown option or `custom` without both commands is an error (exit 1). Invalid JSON in `.agents/config.json` stops the run.
-- ts/ng entries of `prettier-eslint` and `biome` run on one extension list (the eslint extensions resp. plus json, css, html, md, yaml for biome).
+- ts/ng entries of `prettier-eslint`, `biome` and `oxc` run on one extension list (the eslint extensions resp. plus json, css, html, md, yaml for biome and oxc). `oxc` is the default once `.oxfmtrc.json[c]` exists, `oxlint` the lint default once `.oxlintrc.json` exists.
 - `jb inspectcode` writes SARIF (`obj/inspect.sarif`) and needs a `*.slnx` or `*.sln` in the root; whether it exits non-zero on findings is not verified.
 - Parts follow the same pattern in the script: one `Get-*Plan` and one `Write-*` function per part (format, lint, governance, editorconfig).

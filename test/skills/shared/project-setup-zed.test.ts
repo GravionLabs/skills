@@ -67,6 +67,16 @@ describe.skipIf(!hasPwsh)('New-EditorConfig.ps1 -Editor zed', () => {
     expect(labels('.zed/debug.json')).toEqual(['Debug dev server (dev)', 'Debug Vitest']);
   });
 
+  it('an oxfmt project formats through oxfmt on stdin (ADR 0006)', async () => {
+    await run({ languages: ['ts'], tools: ['oxfmt'] }, ['-Apply']);
+    expect(readJson('.zed/settings.json').languages.TypeScript.formatter).toEqual({
+      external: {
+        command: 'npx',
+        arguments: ['--no-install', 'oxfmt', '--stdin-filepath', '{buffer_path}'],
+      },
+    });
+  });
+
   it('ng defaults to prettier and uses the start script', async () => {
     write('package.json', JSON.stringify({ scripts: { start: 'ng serve' } }));
     await run({ languages: ['ts'], frameworks: ['angular'] }, ['-Apply']);
