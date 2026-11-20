@@ -18,6 +18,8 @@ Create a PR from the current branch. No dialogue — tool calls only. On Claude 
 - `not_delivered` (default: empty): acceptance-criterion text this PR leaves open; the PR body lists no task numbers
 - `review_notes` (default: empty): lines `file:line title — <why>` for findings not fixed (declined, deferred, advisory)
 - `spec_notes` (default: empty): lines `no spec change needed: <spec> — <reason>`, from the implementer notes
+- `risk` (default: none): `level` low|medium|high, `what` could break and for whom, `backout` how to undo it; levels in `references/risk-and-proof.md`
+- `visual_proof` (default: none): lines `before: <path or text>`, `after: <path or text>`, or `N/A: <reason>`
 - `auto_merge` (default: false)
 - `add_reviewer` (default: false)
 
@@ -32,6 +34,10 @@ Create a PR from the current branch. No dialogue — tool calls only. On Claude 
 
    <what changed and why>
 
+   ## Risk
+
+   <level, what could break and for whom, backout; without the input: `Risk: not assessed`>
+
    ## Changes
 
    <bullets from git log>
@@ -39,6 +45,10 @@ Create a PR from the current branch. No dialogue — tool calls only. On Claude 
    ## Verification
 
    <the build/test/lint commands actually run and their result, one sentence>
+
+   ## Visual proof
+
+   <the `visual_proof` lines; without the input: `N/A: not stated`>
 
    ## Suggested AGENTS.md additions
 
@@ -48,6 +58,8 @@ Create a PR from the current branch. No dialogue — tool calls only. On Claude 
    ```
 
    `## Suggested AGENTS.md additions` is optional: omit it when empty (not in release mode). One line per entry: the trap, why it is not obvious, where it was hit. A person decides by the admission rule of the `agents-md` skill; the agent never edits `AGENTS.md` for it.
+
+   `## Risk` and `## Visual proof` are always present (not in release mode); levels, the `N/A` form and the rule for a visible change: `references/risk-and-proof.md`. No AI-disclosure or ELI5 section.
 
    Release mode: body per `references/release-mode.md`; the footer is `Closes #<feature_number>` only when passed, else none, and `not_delivered` does not apply.
    `not_delivered` non-empty: add `## Not delivered` (one bullet per item, its follow-up `#<n>` when known) before the footer and end with `Refs #<issue_number>` instead of `Closes`, so the release leaves the issue open.

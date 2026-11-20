@@ -238,7 +238,9 @@
     "skill": "github-pull-request",
     "shouldTrigger": [
       "Create a PR for the current branch",
-      "Open a pull request linked to issue #266"
+      "Open a pull request linked to issue #266",
+      "Create a PR for the button color change in the settings page with before and after screenshots",
+      "Create a PR for the refactor of the parser and state its risk and that there is no visual proof"
     ],
     "shouldNotTrigger": [
       "Finish the release with the release PR and changelog",
