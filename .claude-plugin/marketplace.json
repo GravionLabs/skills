@@ -24,7 +24,8 @@
         "./skills/shared/implementation",
         "./skills/shared/lessons",
         "./skills/shared/project-setup",
-        "./skills/shared/ratchet"
+        "./skills/shared/ratchet",
+        "./skills/shared/ui-styleguide"
       ]
     },
     {
