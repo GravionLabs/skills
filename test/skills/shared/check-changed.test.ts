@@ -19,10 +19,11 @@ describe.skipIf(!posix)('check-changed.mts', () => {
   let tmp: string;
   const sh = (cmd: string, ...args: string[]) =>
     spawnSync(cmd, args, { cwd: tmp, encoding: 'utf8' });
-  const run = (...args: string[]) => {
+  const runRaw = (...args: string[]) => {
     const r = sh(process.execPath, SCRIPT, ...args);
     return { status: r.status, out: r.stdout, err: r.stderr };
   };
+  const run = (...args: string[]) => runRaw('--no-cache', ...args);
 
   beforeAll(() => {
     tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'check-changed-'));
@@ -84,7 +85,7 @@ describe.skipIf(!posix)('check-changed.mts', () => {
 
   it('selects tests with vitest related from the changed files and passes the worker limit', () => {
     fs.writeFileSync(path.join(tmp, 'fail-vitest'), '');
-    const r = spawnSync(process.execPath, [SCRIPT], {
+    const r = spawnSync(process.execPath, [SCRIPT, '--no-cache'], {
       cwd: tmp,
       encoding: 'utf8',
       env: { ...process.env, GATE_MAX_WORKERS: '3' },
@@ -97,5 +98,67 @@ describe.skipIf(!posix)('check-changed.mts', () => {
     const r = run('--base=nope');
     expect(r.status).toBe(2);
     expect(r.err).toContain('merge-base');
+  });
+
+  describe('pass cache', () => {
+    const cacheDir = () => path.join(tmp, '.git/check-changed');
+    const entries = () => (fs.existsSync(cacheDir()) ? fs.readdirSync(cacheDir()).length : 0);
+    beforeEach(() => fs.rmSync(cacheDir(), { recursive: true, force: true }));
+    afterEach(() => {
+      fs.writeFileSync(path.join(tmp, 'b.ts'), 'export const b = 2;\n');
+      fs.rmSync(path.join(tmp, '.agents/config.json.bak'), { force: true });
+    });
+
+    it('a second run on unchanged content is a cache hit, stored under the git dir', () => {
+      expect(runRaw().out).toContain('check:changed: ok');
+      expect(entries()).toBe(1);
+      const second = runRaw();
+      expect(second.status).toBe(0);
+      expect(second.out.trim()).toBe('cached pass');
+      expect(fs.existsSync(path.join(tmp, 'check-changed'))).toBe(false);
+    });
+
+    it('--no-cache ignores the cache and stores nothing', () => {
+      expect(runRaw('--no-cache').out).toContain('check:changed: ok');
+      expect(entries()).toBe(0);
+      runRaw();
+      expect(runRaw('--no-cache').out).toContain('check:changed: ok');
+    });
+
+    it('a changed file is a cache miss', () => {
+      runRaw();
+      fs.writeFileSync(path.join(tmp, 'b.ts'), 'export const b = 22;\n');
+      expect(runRaw().out).toContain('check:changed: ok');
+      expect(entries()).toBe(2);
+    });
+
+    it('another --base is a cache miss', () => {
+      const id = ['-c', 'user.name=t', '-c', 'user.email=t@t'];
+      sh('git', 'branch', '-f', 'other', 'main');
+      sh('git', 'checkout', '-q', 'other');
+      sh('git', ...id, 'commit', '-q', '--allow-empty', '-m', 'other');
+      sh('git', 'checkout', '-q', 'work');
+      expect(runRaw('--base=main').out).toContain('check:changed: ok');
+      expect(runRaw('--base=other').out).toContain('check:changed: ok');
+      expect(entries()).toBe(2);
+    });
+
+    it('a changed step list is a cache miss', () => {
+      runRaw();
+      const cfg = path.join(tmp, '.agents/config.json');
+      const orig = fs.readFileSync(cfg, 'utf8');
+      fs.writeFileSync(cfg, JSON.stringify({ checks: [{ name: 'more', command: 'echo more' }] }));
+      const r = runRaw();
+      fs.writeFileSync(cfg, orig);
+      expect(r.out).toContain('check:changed: ok');
+      expect(entries()).toBe(2);
+    });
+
+    it('a failed run is never cached', () => {
+      fs.writeFileSync(path.join(tmp, 'fail-oxlint'), '');
+      expect(runRaw().status).toBe(1);
+      expect(entries()).toBe(0);
+      expect(runRaw().status).toBe(1);
+    });
   });
 });
