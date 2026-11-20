@@ -37,7 +37,7 @@ beforeAll(() => {
   worker = new PwshWorker(script);
 });
 afterAll(async () => {
-  await worker.close();
+  worker.close();
   fs.rmSync(tmp, { recursive: true, force: true });
 });
 

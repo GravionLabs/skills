@@ -3,6 +3,7 @@
 Order of work and release assignment for the open issues. Written 2026-10-30 after the move from GravionLabs/apm-hub (archived by #21). The generated blocks (between `roadmap:begin` and `roadmap:end` comments) are written by the `roadmap` skill and are not edited by hand; everything around them is hand-written.
 
 <!-- roadmap:begin intro -->
+
 Updated 2026-11-15. Last release `v4.3.1`.
 <!-- roadmap:end -->
 
@@ -13,6 +14,7 @@ History: apm-hub 2.x and 3.x are in the [apm-hub roadmap](https://github.com/Gra
 ## Where we are
 
 <!-- roadmap:begin where -->
+
 | Epic / Feature                                                                                | State                                                                              | Milestone     |
 | --------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------- | ------------- |
 | #8 [Epic] Stack packages for more languages and frameworks                                    | open: #9                                                                           | not scheduled |
@@ -21,6 +23,7 @@ History: apm-hub 2.x and 3.x are in the [apm-hub roadmap](https://github.com/Gra
 | #395 [Feature] read-only MCP server over progress events                                      | no open children                                                                   | not scheduled |
 | #606 [Feature] deliver-loop -Objective schedules repository loops as a pool instead of rounds | no open children                                                                   | not scheduled |
 | #611 [Feature] deliver scripts in TypeScript behind a host interface                          | open: #612, #613, #614, #615, #616, #617, #618, #619, #620, #621, #635, #636, #637 | not scheduled |
+
 <!-- roadmap:end -->
 
 Closed and therefore not listed above: Epic #1 (deliver issues through Claude Code workflows; Features #2, #3 in 1.0.2, #15 in 1.1.0), Feature #64 (ADRs and specs in the skills; PBIs #65–#68, #86, #87 in 1.2.0), Feature #104 (help for user-invoked skills, 1.3.0) and Epic #165 (documentation site, 1.4.0 and 1.5.0). Epic #8 waits for the decision on #10 (one `jvm` group or two).
@@ -30,6 +33,7 @@ Closed and therefore not listed above: Epic #1 (deliver issues through Claude Co
 v1.0.0 is apm-hub 3.3.0 (released there as `v3.2.1`) plus its unreleased `release/next` (apm-hub#881–#907): `deliver` for several issues or a milestone, `Invoke-DeliverLoop.ps1`, planning without Task issues, `planner refine` with a definition of ready, Biome for Markdown and YAML, `Format-Changed.ps1` detection without `-Language`. The layout is `skills/<group>/<name>/`, installed with `npx skills`. v1.0.1 fixes the group paths of the ported tests.
 
 <!-- roadmap:begin done 1.0.2 -->
+
 ## Done in 1.0.2
 
 | Issue | Title                                                                                              |
@@ -60,6 +64,7 @@ v1.0.0 is apm-hub 3.3.0 (released there as `v3.2.1`) plus its unreleased `releas
 | #55   | [PBI] fix(delivery): Remove-PbiWorktrees deletes merged branches with git branch -d first          |
 | #56   | [PBI] fix: find the flaky tests of pnpm run check                                                  |
 | #57   | [PBI] refactor(delivery): remove the frozen workflow.js                                            |
+
 <!-- roadmap:end -->
 
 Planned as 1.1.0; the release PR #70 carried no minor bump, so GitVersion tagged `v1.0.2` (worked around by #73, replaced by the Conventional Commit versioning of #102). Milestone 1.0.2 (renamed from 1.1.0): repository settings and ruleset on `release/next` (#19), trigger evals (#20), the lessons contract of Feature #3 (#23–#28, #43), the `deliver` trials in OpenCode (#4) and Copilot CLI (#5) with their fixes (#45, #47–#49), the retro (#6) and its follow-ups (#54–#57), the archive of GravionLabs/apm-hub (#21). Features #2, #3 and #18 are closed.
@@ -67,6 +72,7 @@ Planned as 1.1.0; the release PR #70 carried no minor bump, so GitVersion tagged
 Retro #6 (2026-10-31, 14 `deliver` runs: 12 Claude Code, 1 OpenCode, 1 Copilot CLI): red CI at the end 0 %, fix rounds 0.21 per PBI, median time per PBI about 8 min, human wait ≈ 0 except the Copilot allowlist pause (fixed by #49); cost not measured (agentlens not installed). **Decision: `deliver/workflow.js` is deleted** (#57); plain subagents sufficed on all three harnesses. The Claude Code runs loaded an outdated global `deliver`, hence #54.
 
 <!-- roadmap:begin done 1.1.0 -->
+
 ## Done in 1.1.0
 
 | Issue | Title                                                                                            |
@@ -79,11 +85,13 @@ Retro #6 (2026-10-31, 14 `deliver` runs: 12 Claude Code, 1 OpenCode, 1 Copilot C
 | #72   | [PBI] build: move to Node.js 26                                                                  |
 | #73   | [PBI] fix: GitVersion bumps the minor version on a release merge into main                       |
 | #78   | [PBI] feat(deliver): merge into release/next without asking, end a milestone with the release PR |
+
 <!-- roadmap:end -->
 
 GitVersion bumps the minor version on a release merge into `main` (#73; since #101 and #102 the bump comes from the Conventional Commits, GravionLabs/ci#107), Node.js 26 (#72), `deliver` merges into `release/next` without asking (#78), the herdr integration of Feature #15: pane tokens (#16), the log pane of `Invoke-DeliverLoop` (#12) and its herdr key (#13). The herdr plugin of #17 moved to [GravionLabs/herdr-plugins](https://github.com/GravionLabs/herdr-plugins): GravionLabs/herdr-plugins#3 (`deliver-starter`), #5 (`agent-notify`), #22 (`deliver-view`) and #23 (`deliver-log`) there build on #16 and #13 here.
 
 <!-- roadmap:begin done 1.2.0 -->
+
 ## Done in 1.2.0
 
 | Issue | Title                                                                                |
@@ -109,11 +117,13 @@ GitVersion bumps the minor version on a release merge into `main` (#73; since #1
 | #117  | [PBI] perf(github): move hot gh reads and CI polling off GraphQL                     |
 | #130  | [Bug] fix: standalone issue merges into main with --squash                           |
 | #131  | [Bug] fix: release review runs governance on the wrong diff without waivers          |
+
 <!-- roadmap:end -->
 
 Review file, Aspire, ADRs and specs. `release/next` was cut from `v1.1.0`; release PR #96. Notes: #53 is read by GravionLabs/herdr-plugins#4 (`review-popup`); #65 defines the `governance` key names read by GravionLabs/ci#94 and ci#95; #65–#68, #86 and #87 are Feature #64; #97–#99 were found while delivering #64; #100 is described in [delivery](site/delivery.md#release-review); #102 belongs to GravionLabs/ci#107 and ci#108 (ci v1.4.0). Also in the milestone: #112 (these docs) and #115 (drop the hourly project-needs sync). How the ADR and spec rules work together: [ADRs and specs](site/usage/governance.md).
 
 <!-- roadmap:begin done 1.3.0 -->
+
 ## Done in 1.3.0
 
 | Issue | Title                                                                              |
@@ -133,11 +143,13 @@ Review file, Aspire, ADRs and specs. `release/next` was cut from `v1.1.0`; relea
 | #137  | [PBI] fix(delivery): release review round-3 pause is recorded and not repeated     |
 | #149  | [PBI] docs(deliver): sidebar layout "repo first" in references/herdr.md            |
 | #155  | [Bug] fix: deliver step 9 reads the round-3 pause marker from an open-only list    |
+
 <!-- roadmap:end -->
 
 Help for user-invoked skills: #105 sets the help convention and the test helper; #106–#111 add `references/help.md` to `deliver`, `planner`, `skills-install`, `github-release`, `retro` and `context-statusline`.
 
 <!-- roadmap:begin done 1.4.0 -->
+
 ## Done in 1.4.0
 
 | Issue | Title                                                                                    |
@@ -161,9 +173,11 @@ Help for user-invoked skills: #105 sets the help convention and the test helper;
 | #178  | [PBI] docs: concept pages for the issue model and skill composition                      |
 | #179  | [PBI] docs: troubleshooting page                                                         |
 | #181  | [PBI] feat(retro): flow diagram of the agent calls of a run                              |
+
 <!-- roadmap:end -->
 
 <!-- roadmap:begin done 1.5.0 -->
+
 ## Done in 1.5.0
 
 | Issue | Title                                                                            |
@@ -182,6 +196,7 @@ Help for user-invoked skills: #105 sets the help convention and the test helper;
 | #207  | [Feature] Release routine closes and opens milestones through skills             |
 | #216  | [Bug] fix: merge main (v1.4.1 hotfixes #201, #202) back into release/next        |
 | #219  | [PBI] docs: guides and AGENTS.md mention the loop features of 1.5.0              |
+
 <!-- roadmap:end -->
 
 Herdr and the deliver loop, released as `v1.5.0` on 2026-11-03. The release routine of Feature #207 closes the milestone and opens the next one (#206 in 1.5.0, #223, #226 and #236 in 1.6.0).
@@ -191,6 +206,7 @@ Herdr and the deliver loop, released as `v1.5.0` on 2026-11-03. The release rout
      (table: order, issue, title, size, depends on / decision). -->
 
 <!-- roadmap:begin done 1.6.0 -->
+
 ## Done in 1.6.0
 
 | Issue | Title                                                                                                     |
@@ -222,9 +238,11 @@ Herdr and the deliver loop, released as `v1.5.0` on 2026-11-03. The release rout
 | #272  | [Bug] fix(delivery): roadmap state keeps the repository of a foreign blocker                              |
 | #273  | [PBI] refactor(ng): rename skill ng-ag-grid-developer to ng-ag-grid                                       |
 | #276  | [Bug] fix(delivery): roadmap scripts cannot find github-milestone in the installed layout                 |
+
 <!-- roadmap:end -->
 
 <!-- roadmap:begin done M001 -->
+
 ## Done in M001
 
 | Issue | Title                                                                                 |
@@ -234,9 +252,11 @@ Herdr and the deliver loop, released as `v1.5.0` on 2026-11-03. The release rout
 | #285  | [Bug] fix: skills-install -Update skips the update when npx skills check exits 1      |
 | #286  | [Bug] fix: skills-install -Update hides a failing newMembers child process            |
 | #289  | [PBI] feat(statusline): context warning threshold follows the context window size     |
+
 <!-- roadmap:end -->
 
 <!-- roadmap:begin done M002 -->
+
 ## Done in M002 (2.2.0)
 
 | Issue | Title                                                                                    |
@@ -245,24 +265,29 @@ Herdr and the deliver loop, released as `v1.5.0` on 2026-11-03. The release rout
 | #291  | [PBI] feat(delivery): skill-manage with install and update                               |
 | #292  | [PBI] feat(obsolete): group obsolete with skills-install as a forwarder                  |
 | #293  | [PBI] docs: README, AGENTS and docs name skill-manage                                    |
+
 <!-- roadmap:end -->
 
 <!-- roadmap:begin done M003 -->
+
 ## Done in M003
 
 No issues listed.
 <!-- roadmap:end -->
 
 <!-- roadmap:begin done M004 -->
+
 ## Done in M004 (3.0.0)
 
 | Issue | Title                                                                            |
 | ----- | -------------------------------------------------------------------------------- |
 | #299  | [PBI] refactor(delivery): rename skill-manage to skills-manage                   |
 | #302  | [PBI] refactor(skills): remove the obsolete group (skills-install, skill-manage) |
+
 <!-- roadmap:end -->
 
 <!-- roadmap:begin done M005 -->
+
 ## Done in M005 (3.1.0)
 
 | Issue | Title                                                                                                         |
@@ -300,9 +325,11 @@ No issues listed.
 | #359  | [Bug] fix: AGENTS.md repeats the Test-DeliverPreflight sentence in the delivery row                           |
 | #360  | [Bug] fix: control session does not handle the loop result max reached                                        |
 | #366  | [Bug] fix: deliver-preflight test still times out under parallel load                                         |
+
 <!-- roadmap:end -->
 
 <!-- roadmap:begin done M006 -->
+
 ## Done in M006 (3.2.0)
 
 | Issue | Title                                                                                                                    |
@@ -328,9 +355,11 @@ No issues listed.
 | #409  | [Bug] fix: finish looks up the release-test issue by exact milestone title, topic milestones skip the RC gate            |
 | #411  | [Bug] fix: a nested harness session's run.started is appended to the loop's run and a nested run.finished is not stopped |
 | #412  | [Bug] fix: release-test rule in milestones.md still says deliver selects it as the last open item                        |
+
 <!-- roadmap:end -->
 
 <!-- roadmap:begin done M007 -->
+
 ## Done in M007 (3.3.0)
 
 | Issue | Title                                                                                         |
@@ -342,9 +371,11 @@ No issues listed.
 | #425  | [PBI] feat(github): add the github-project skill from GravionLabs/ci                          |
 | #428  | [Bug] fix: AGENTS.md says github-project is not in this repository                            |
 | #429  | [Bug] fix: github-project live tests exceed the time budget and hit the worker timeout        |
+
 <!-- roadmap:end -->
 
 <!-- roadmap:begin done M008 -->
+
 ## Done in M008 (3.4.0)
 
 | Issue | Title                                                                                                          |
@@ -366,9 +397,11 @@ No issues listed.
 | #467  | [Bug] fix(docs): ADR 0003 must supersede ADR 0002 in part                                                      |
 | #468  | [Bug] fix(deliver): one milestone key form in docs, schema and state files                                     |
 | #469  | [Bug] fix(docs): github-milestone modes renumber and assign missing from AGENTS.md, SKILL.md and release guide |
+
 <!-- roadmap:end -->
 
 <!-- roadmap:begin done M009 -->
+
 ## Done in M009 (4.0.0)
 
 | Issue | Title                                                                                                  |
@@ -388,9 +421,11 @@ No issues listed.
 | #493  | [PBI] refactor: move the public docs from docs/ to site/                                               |
 | #494  | [PBI] refactor: pages.yml uses the ci VitePress workflow                                               |
 | #504  | [PBI] docs(github-issue): the RC of a desktop app installs side by side                                |
+
 <!-- roadmap:end -->
 
 <!-- roadmap:begin done M010 -->
+
 ## Done in M010 (4.1.0)
 
 | Issue | Title                                                                                                   |
@@ -401,9 +436,11 @@ No issues listed.
 | #463  | [Bug] fix(deliver): a nested PBI session's run.finished sets the loop result to done                    |
 | #506  | [PBI] fix(github-release): recognize the local path of release-branch.yml                               |
 | #507  | [PBI] feat(shared): test key in the project config and a runner that does not guess the test tool       |
+
 <!-- roadmap:end -->
 
 <!-- roadmap:begin done M011 -->
+
 ## Done in M011 (4.1.3)
 
 | Issue | Title                                                                                                 |
@@ -415,9 +452,11 @@ No issues listed.
 | #524  | [PBI] chore: back-merge main into release/next                                                        |
 | #528  | [Bug] fix(github-release): merging the release PR deletes release/next and retargets open PRs to main |
 | #529  | [Bug] fix(test): the prUrl null case of #511 exists twice                                             |
+
 <!-- roadmap:end -->
 
 <!-- roadmap:begin done M012 -->
+
 ## Done in M012 (4.2.0)
 
 | Issue | Title                                                                                      |
@@ -434,9 +473,11 @@ No issues listed.
 | #541  | [PBI] feat(planner): plan an objective into Features of the target repositories            |
 | #542  | [PBI] feat(planner): refine an objective checks repos, release edges and criteria          |
 | #559  | [Bug] fix: Get-ObjectiveStatus ignores Requires lines on PBIs and Bugs                     |
+
 <!-- roadmap:end -->
 
 <!-- roadmap:begin done M013 -->
+
 ## Done in M013 (4.3.0)
 
 | Issue | Title                                                                                   |
@@ -450,9 +491,11 @@ No issues listed.
 | #548  | [PBI] feat(deliver): deliver.parallel runs several loops across repositories            |
 | #563  | [PBI] feat(implementation): forbid background persistence in apps                       |
 | #570  | [Bug] fix: contract-change rule reads the label from the PR, deliver sets it on the PBI |
+
 <!-- roadmap:end -->
 
 <!-- roadmap:begin done M014 -->
+
 ## Done in M014 (4.3.1)
 
 | Issue | Title                                                                                               |
@@ -467,6 +510,7 @@ No issues listed.
 | #579  | [PBI] docs(implementation): one wording for the background-persistence rule                         |
 | #580  | [PBI] test(deliver): cut deliver-loop-objective-rules tests below the 15 s budget                   |
 | #584  | [Feature] Objectives: fixes after the first orchestrator runs                                       |
+
 <!-- roadmap:end -->
 
 <!-- roadmap:slot done -->
@@ -474,6 +518,7 @@ No issues listed.
 Numbered milestones and the roadmap skill. Delivered on `release/next`: the release routine closes and opens milestones (#222, #223, #226, #236), `github-milestone` with `M<n>`, `M<n> <Topic>`, rename and insert (#234, #242, #249, #255, #229 docs), `deliver` and the loop with `M<n>` (#235), the `roadmap` skill (#244–#248), the migration guide (#243), and fixes of the Copilot harness, the shim and the read-only reviewers (#220, #221, #224, #227, #228). Features #233 and #241 have all their PBIs delivered and are closed with the release.
 
 <!-- roadmap:begin plan M015 -->
+
 ## M015
 
 Progress: 50 % (9 of 18 issues closed).
@@ -488,9 +533,11 @@ Progress: 50 % (9 of 18 issues closed).
 | 6     | #608  | [PBI] feat(deliver): repair an existing PR of the own branch instead of pausing                                 | ?    |                       |
 | 7     | #633  | [PBI] fix(deliver): preflight and loop start although release/next is missing                                   | S    |                       |
 | 8     | #634  | [Bug] fix(deliver): the loop sends desktop notifications inside a poimen terminal                               | ?    |                       |
+
 <!-- roadmap:end -->
 
 <!-- roadmap:begin plan M016 -->
+
 ## M016
 
 Progress: 0 % (0 of 6 issues closed).
@@ -503,9 +550,11 @@ Progress: 0 % (0 of 6 issues closed).
 | 4     | #615  | [PBI] feat(deliver): the TypeScript loop delivers a milestone end to end                 | L    | blocked by #613, #614 |
 | 5     | #616  | [PBI] refactor(deliver): emitter, reducer and run state in TypeScript                    | L    | blocked by #612       |
 | 6     | #617  | [PBI] feat(deliver): stop request in the TypeScript loop                                 | S    | blocked by #615       |
+
 <!-- roadmap:end -->
 
 <!-- roadmap:begin plan M017 -->
+
 ## M017
 
 Progress: 0 % (0 of 7 issues closed).
@@ -519,6 +568,7 @@ Progress: 0 % (0 of 7 issues closed).
 | 5     | #635  | [PBI] refactor(deliver): objective status in TypeScript                    | M    | blocked by #616, #618       |
 | 6     | #636  | [PBI] refactor(deliver): preflight in TypeScript                           | M    | blocked by #616             |
 | 7     | #637  | [PBI] refactor(deliver): contract check and worktree cleanup in TypeScript | S    | blocked by #616             |
+
 <!-- roadmap:end -->
 
 <!-- roadmap:slot plan -->
@@ -526,6 +576,7 @@ Progress: 0 % (0 of 7 issues closed).
 ## Later
 
 <!-- roadmap:begin later -->
+
 | Issue | Title                                                                                                  | Why later                         |
 | ----- | ------------------------------------------------------------------------------------------------------ | --------------------------------- |
 | #10   | [PBI] feat(jvm): jvm package for Java and Kotlin with jvm-implementation and jvm-test                  | `needs-decision`                  |
@@ -535,6 +586,7 @@ Progress: 0 % (0 of 7 issues closed).
 | #581  | [PBI] feat(deliver): report the loop state with OSC 7501                                               | blocked by GravionLabs/poimen#681 |
 | #599  | [PBI] feat(deliver): deliver.parallel defaults to 3 across repositories                                | `needs-decision`                  |
 | #606  | [Feature] deliver-loop -Objective schedules repository loops as a pool instead of rounds               | no milestone                      |
+
 <!-- roadmap:end -->
 
 ## Risks

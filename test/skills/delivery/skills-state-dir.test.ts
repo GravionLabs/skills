@@ -13,11 +13,9 @@ function walk(dir: string): string[] {
 }
 
 describe('delivery and shared skills keep no state under .agents/', () => {
-  const files = [
-    ...['delivery', 'shared'].flatMap((group) =>
-      groupSkills(group).flatMap((s) => walk(path.join(root, group, s))),
-    ),
-  ].filter((f) => /\.(md)$/.test(f));
+  const files = ['delivery', 'shared']
+    .flatMap((group) => groupSkills(group).flatMap((s) => walk(path.join(root, group, s))))
+    .filter((f) => /\.(md)$/.test(f));
 
   it('has no .agents state path except the .agents/skills install dir', () => {
     const offenders = files.filter((f) =>

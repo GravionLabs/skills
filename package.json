@@ -5,25 +5,27 @@
   "description": "Checks, docs generator and tests for the GravionLabs skills",
   "scripts": {
     "generate": "node scripts/generate-skill-list.mjs",
-    "format": "biome format --write .",
-    "format:check": "biome check .",
+    "format": "oxfmt",
+    "format:check": "oxfmt --check && oxlint",
     "check": "pnpm run format:check && node scripts/check-marketplace.mjs && pwsh skills/skill-tooling/skill-slim/scripts/Get-SkillReport.ps1 -Root . -FailOnDangling && pnpm run lint:ps && pnpm test",
     "check:marketplace": "node scripts/check-marketplace.mjs",
     "test": "vitest run",
     "test:ci": "vitest run",
     "test:watch": "vitest",
     "typecheck": "tsc -p test --noEmit",
-    "lint": "biome lint .",
+    "lint": "oxlint",
     "lint:ps": "pwsh scripts/Invoke-ScriptAnalysis.ps1"
   },
   "dependencies": {
     "yaml": "^2.8.3"
   },
   "devDependencies": {
-    "@biomejs/biome": "^2.6.4",
     "@types/node": "^26.0.0",
     "@vitest/coverage-v8": "^4.1.2",
     "ajv": "^8.20.0",
+    "oxfmt": "0.78.0",
+    "oxlint": "1.93.0",
+    "oxlint-tsgolint": "7.0.2007",
     "typescript": "^7.0.2",
     "vitest": "^4.1.2"
   }

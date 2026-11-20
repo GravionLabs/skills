@@ -117,7 +117,7 @@ describe('New-Roadmap.ps1', () => {
     expect(r.status).toBe(0);
     const text = flat(fs.readFileSync(file(), 'utf8'));
     expect(text).not.toContain('roadmap:begin plan M3');
-    expect(text).toContain('<!-- roadmap:begin done M3 -->\n## Done in M3 Roadmap (1.6.0)');
+    expect(text).toContain('<!-- roadmap:begin done M3 -->\n\n## Done in M3 Roadmap (1.6.0)');
     expect(text).toContain('| #4 | [PBI] four |');
     expect(text).toContain('| #5 | [PBI] five \\| piped |');
     expect(text).toContain('## M4');

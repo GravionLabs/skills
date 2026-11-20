@@ -6,7 +6,7 @@ import { PwshWorker } from '../../helpers/pwsh-worker';
 
 const root = path.resolve(__dirname, '../../..');
 const script = path.join(root, 'skills/delivery/roadmap/scripts/New-Roadmap.ps1');
-const biome = path.join(root, 'node_modules/@biomejs/biome/bin/biome');
+const oxfmt = path.join(root, 'node_modules/oxfmt/bin/oxfmt');
 
 const issue = (
   number: number,
@@ -53,7 +53,7 @@ const state = {
   ],
 };
 
-describe('ROADMAP.md is stable under the generator and Biome', () => {
+describe('ROADMAP.md is stable under the generator and oxfmt', () => {
   let worker: PwshWorker;
   let dir: string;
   beforeAll(() => {
@@ -69,18 +69,15 @@ describe('ROADMAP.md is stable under the generator and Biome', () => {
     );
   const file = () => path.join(dir, 'ROADMAP.md');
 
-  it('writes tables that Biome leaves unchanged', async () => {
+  it('writes blocks and tables that oxfmt leaves unchanged', async () => {
     const r = await run(['-Write']);
     expect(r.status).toBe(0);
     const text = fs.readFileSync(file(), 'utf8');
-    const formatted = spawnSync(
-      process.execPath,
-      [biome, 'format', '--stdin-file-path=ROADMAP.md'],
-      {
-        input: text,
-        encoding: 'utf8',
-      },
-    );
+    const formatted = spawnSync(process.execPath, [oxfmt, '--stdin-filepath=ROADMAP.md'], {
+      cwd: root,
+      input: text,
+      encoding: 'utf8',
+    });
     expect(formatted.status).toBe(0);
     expect(formatted.stdout).toBe(text);
   });

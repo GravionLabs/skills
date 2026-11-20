@@ -121,9 +121,9 @@ describe('ci.yml formatting check and triggers', () => {
     expect(wf.on.pull_request.branches).toEqual(['main', 'release/next']);
   });
 
-  it('runs biome check (format and lint) in CI and biome format --write locally', () => {
-    expect(pkgJson.scripts.format).toBe('biome format --write .');
-    expect(pkgJson.scripts['format:check']).toBe('biome check .');
+  it('runs the oxfmt check and oxlint in CI and oxfmt locally (ADR 0006)', () => {
+    expect(pkgJson.scripts.format).toBe('oxfmt');
+    expect(pkgJson.scripts['format:check']).toBe('oxfmt --check && oxlint');
     expect(steps('build-test').some((s) => s.run === 'pnpm run format:check')).toBe(true);
   });
 });
