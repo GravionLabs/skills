@@ -127,7 +127,7 @@ describe.skipIf(!hasPwsh)('Set-ProjectSetup.ps1', () => {
       const r = await run();
       expect(r.json.languages.map((l: any) => l.language)).toEqual(['ng']);
       expect(lang(r.json, 'ng').default).toBe('prettier-eslint');
-      expect(lang(r.json, 'ng').options).toEqual(['prettier-eslint', 'biome', 'custom']);
+      expect(lang(r.json, 'ng').options).toEqual(['prettier-eslint', 'biome', 'oxc', 'custom']);
     });
 
     it('an empty project has no languages', async () => {
@@ -138,6 +138,8 @@ describe.skipIf(!hasPwsh)('Set-ProjectSetup.ps1', () => {
       [['js'], ['biome', 'eslint'], 'ts', 'biome', 'biome+eslint'],
       [['ts'], ['prettier'], 'ts', 'prettier-eslint', 'prettier'],
       [['ts'], [], 'ng', 'prettier-eslint', null],
+      // ADR 0006: oxfmt wins over a leftover biome
+      [['ts'], ['biome', 'oxlint', 'oxfmt'], 'ts', 'oxc', 'biome+oxlint+oxfmt'],
     ])('report %j tools %j gives %s default %s', async (langs, tools, key, def, detected) => {
       use(langs, tools, key === 'ng' ? ['angular'] : []);
       const r = await run();

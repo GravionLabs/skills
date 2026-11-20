@@ -91,18 +91,16 @@ describe.skipIf(!hasPwsh)('Add-BaseFiles.ps1', () => {
   });
 
   describe('hook', () => {
-    it('delegates a pure ts repository to setup-biome-husky', async () => {
+    it('delegates a pure ts repository to setup-oxc-husky', async () => {
       const r = await run(['ts'], ['-Apply']);
       expect(r.json.hook.action).toBe('delegate');
-      expect(r.json.hook.skill).toBe('setup-biome-husky');
+      expect(r.json.hook.skill).toBe('setup-oxc-husky');
       expect(exists('lefthook.yml')).toBe(false);
     });
-    it('delegates Angular and prettier repositories to setup-prettier-eslint-husky', async () => {
-      expect((await run(['ts'], [], ['angular'])).json.hook.skill).toBe(
-        'setup-prettier-eslint-husky',
-      );
+    it('delegates Angular and prettier repositories to setup-oxc-husky too (ADR 0006)', async () => {
+      expect((await run(['ts'], [], ['angular'])).json.hook.skill).toBe('setup-oxc-husky');
       write('.prettierrc', '{}');
-      expect((await run(['ts'])).json.hook.skill).toBe('setup-prettier-eslint-husky');
+      expect((await run(['ts'])).json.hook.skill).toBe('setup-oxc-husky');
     });
     it('writes one lefthook.yml for all languages incl. ts when a non-ts language exists', async () => {
       const r = await run(['ts', 'py'], ['-Apply']);

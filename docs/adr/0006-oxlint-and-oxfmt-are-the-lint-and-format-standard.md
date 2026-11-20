@@ -1,41 +1,44 @@
 # ADR 0006: oxlint and oxfmt are the lint and format standard
 
-- Status: Proposed
+- Status: Accepted (2026-11-20)
 - Date: 2026-11-20
-- Issues: #769, Feature #763
+- Issues: #769, #763
 
 ## Context
 
-Today a TypeScript repository formats and lints with Prettier plus ESLint (`setup-prettier-eslint-husky`) or with Biome (`setup-biome-husky`). Two toolchains mean two sets of configs, hooks and rules in `implementation`, and ESLint with type-aware rules is slow.
+The TypeScript repositories use three setups: Biome (kontex, noesis, skills), ESLint with `angular-eslint` plus Prettier (agentlens, ariadne, mcp-studio, poimen), Biome plus ESLint (helix), oxlint plus Prettier (elysion). The skills ship two setup skills for them, `setup-biome-husky` and `setup-prettier-eslint-husky`, and `implementation` knows both. Agents write most of the code, so one tool set means one set of rules, one set of error messages and one setup skill.
 
-Pilot findings:
+A pilot compared oxlint 1.93.0 and oxfmt 0.78.0 with the current tools in skills (#764) and poimen (GravionLabs/poimen#1050):
 
-- Skills repository (Node): [#764](https://github.com/GravionLabs/skills/issues/764).
-- Angular: [GravionLabs/poimen#1050](https://github.com/GravionLabs/poimen/issues/1050).
+- oxfmt formats TypeScript, Angular templates (including `@if`, `@for`, `@switch`, `@defer`, `@let`), CSS, SCSS, JSON, Markdown and YAML. In poimen 14 of 475 files differ from Prettier (closing brackets after inline elements, long union types); in skills no TypeScript file differs from Biome, 21 Markdown files get a blank line around HTML comments.
+- oxlint loads `@angular-eslint/eslint-plugin` as a JS plugin and reported the same five class violations of a probe component as ESLint. JS plugins cannot use a custom parser, so oxlint does not lint `.html` templates.
+- The Biome rules in use map 1:1 to oxlint rules. Type-aware linting (oxlint-tsgolint) works without setup and found 39 new issues in skills, 5 correct `no-unsafe-optional-chaining` findings in poimen.
+- Speed is not a deciding factor at our sizes (poimen: lint 6.0 s to 3.8 s, format check 6.7 s to 1.2 s; skills: below one second either way).
 
-Summary (`agent-guardrails-2026-11-20.md` §4): oxfmt replaces Prettier and the Biome formatter. oxlint replaces Biome and ESLint for `.ts`, with `@angular-eslint/eslint-plugin` loaded as a JS plugin, and type-aware rules come for free. oxlint does not lint `.html`, because custom parsers are not supported for JS plugins.
+Sources: oxc docs on the [formatter](https://oxc.rs/docs/guide/usage/formatter.html), [JS plugins](https://oxc.rs/docs/guide/usage/linter/js-plugins.html) and [type-aware linting](https://oxc.rs/docs/guide/usage/linter/type-aware.html).
 
 ## Decision
 
-oxlint and oxfmt are the lint and format standard of every TypeScript repository (plain TypeScript, Node and Angular). Conditions:
+oxlint and oxfmt are the lint and format tools of every TypeScript repository.
 
-1. **Exact versions.** oxlint and oxfmt are pinned to exact versions (no range) in `package.json`; an update is a deliberate change.
-2. **Angular probe test.** An Angular repository carries a test that proves the `@angular-eslint` rules run through oxlint (a probe file that must produce the expected findings). If the probe fails after an update, the update is not taken.
-3. **ESLint only for `.html`.** ESLint stays in an Angular repository only for Angular templates (`.html`) with `@angular-eslint/template`. It lints no `.ts`.
-4. **Inline templates move to `.html` files.** A component template that is linted is an `.html` file, not an inline `template:` string, because oxlint cannot see inside it.
+- oxfmt replaces Prettier and the Biome formatter.
+- oxlint replaces Biome and ESLint for `.ts` and `.js`, with type-aware rules on. Angular repositories load `@angular-eslint/eslint-plugin` as a JS plugin.
+- ESLint stays only for Angular `.html` templates (`@angular-eslint/eslint-plugin-template`). Components keep their templates in `.html` files; an inline `template:` outside spec files is a lint error, so ESLint never has to read `.ts` files.
+- oxlint, oxfmt and oxlint-tsgolint are pinned to exact versions, because JS plugins are alpha. Updates go through Renovate with the release-age delay.
+- Angular repositories keep a probe component with known class and template violations and a test that oxlint and ESLint still report them.
+- One setup skill, `setup-oxc-husky`, replaces `setup-biome-husky` and `setup-prettier-eslint-husky`.
 
 ## Consequences
 
-- `setup-biome-husky` and `setup-prettier-eslint-husky` stop being the standard. A follow-up PBI replaces them with an oxlint/oxfmt setup (hook, configs, Angular variant with ESLint for `.html`); the two skills are deprecated or removed there, following the rename policy in CONTRIBUTING.md.
-- `detect-techstack` reports oxlint/oxfmt (and ESLint for `.html`) as the detected tools, and still reports Biome, Prettier and ESLint for existing repositories.
-- `implementation` (`Format-Changed.ps1`, `-Lint`, `references/lint.md`, the `format` and `lint` keys of `.agents/config.json`) gets oxfmt and oxlint as the TypeScript defaults; the Angular default adds the ESLint run for `.html`.
-- `project-setup` offers the oxlint/oxfmt option first for ts and ng.
-- Existing repositories migrate on their own schedule; the old options stay selectable until they are removed.
-- Easier: one formatter and one linter for all `.ts`, faster runs, type-aware rules without a separate ESLint setup.
-- Harder: the toolchain is young, so versions are pinned and the Angular probe guards it; inline templates have to be moved out; the Angular repository keeps ESLint as a second tool for `.html`.
-- Out of scope here: changes to skills, configs or CI (PBI #770 and later).
+- One formatter config and one linter config shape for all repositories; `implementation` formats with `oxfmt` and lints with `oxlint` once `.oxfmtrc.json` / `.oxlintrc.json` exist. Biome and Prettier stay supported there until the last repository is migrated.
+- Angular repositories still run two linters, oxlint for TypeScript and ESLint for templates. When oxlint supports custom parsers for JS plugins, ESLint can go.
+- Each repository needs one migration PR with a reformat commit (listed in `.git-blame-ignore-revs`). Biome lint configs have no migration tool; the rules are mapped by hand.
+- oxfmt formats every supported file unless ignored, unlike Biome's `files.includes` allowlist; templates and fixtures need explicit ignore patterns.
+- The `roadmap` skill must write its HTML comment markers the way oxfmt formats them.
+- A JS plugin regression in an oxlint update shows up as a failing probe test, not as silently missing findings.
 
 ## Alternatives
 
-- **Biome everywhere plus ESLint for Angular.** One tool for plain TypeScript, but Biome cannot run the `@angular-eslint` rules, so Angular keeps ESLint for `.ts` and `.html` and the formatter and linter would differ between repositories. Not chosen.
-- **Status quo (Prettier plus ESLint, or Biome).** No migration cost, but two toolchains stay, type-aware linting stays slow, and the skills keep two setups in sync. Not chosen.
+- **Biome everywhere, ESLint for Angular.** The first recommendation. Biome cannot load ESLint plugins, so Angular repositories would keep ESLint for TypeScript and templates and Prettier or Biome for formatting; no type-aware rules.
+- **Status quo.** Three setups and two setup skills to maintain; agents meet different rules per repository.
+- **Vite+ (`vp`) as a wrapper.** Bundles the same oxc tools; out of scope until the plain tools are in place.

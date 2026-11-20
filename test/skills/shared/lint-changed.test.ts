@@ -16,7 +16,7 @@ describe.skipIf(!hasPwsh || process.platform === 'win32')('Format-Changed.ps1 -L
   let worker: PwshWorker;
   let tmp: string;
   const bins = { ok: '', noProbe: '', gitOnly: '' };
-  const repo = { langs: '', cfg: '' };
+  const repo = { langs: '', cfg: '', oxc: '' };
   const log = () => path.join(tmp, 'calls.log');
   const git = (cwd: string, ...a: string[]) => spawnSync('git', a, { cwd });
   const write = (cwd: string, rel: string, c = 'x') => {
@@ -54,6 +54,7 @@ describe.skipIf(!hasPwsh || process.platform === 'win32')('Format-Changed.ps1 -L
     fs.symlinkSync(gitPath, path.join(bins.gitOnly, 'git'));
     repo.langs = mkRepo('langs', ['a.ts', 'e.py', 'F.cs', 'src/lib.rs', 'cmd/main.go', 'n.md']);
     repo.cfg = mkRepo('cfg', ['a.ts', 'A.cs', 'B.cs']);
+    repo.oxc = mkRepo('oxc', ['.oxlintrc.json', 'biome.json', 'a.ts', 'c.html']);
   });
   afterAll(() => {
     worker.close();
@@ -90,6 +91,22 @@ describe.skipIf(!hasPwsh || process.platform === 'win32')('Format-Changed.ps1 -L
     const r = await go(repo.langs, ['-Lint', '-Language', lang]);
     expect(r).toMatchObject({ status: 0, stdout: 'linted: 1 files\n' });
     expect(callLines()).toEqual([cmd]);
+  });
+
+  // ADR 0006: .oxlintrc.json wins over a leftover biome.json; ng keeps eslint for the .html templates
+  it.each([
+    ['ts', ['npx --no-install oxlint --no-error-on-unmatched-pattern a.ts']],
+    [
+      'ng',
+      [
+        'npx --no-install oxlint --no-error-on-unmatched-pattern a.ts',
+        'npx --no-install eslint c.html',
+      ],
+    ],
+  ])('an oxc project lints %s with oxlint', async (lang, cmds) => {
+    const r = await go(repo.oxc, ['-Lint', '-Language', lang]);
+    expect(r.status).toBe(0);
+    expect(callLines()).toEqual(cmds);
   });
 
   it('without -Language each language of the changed files runs its default', async () => {

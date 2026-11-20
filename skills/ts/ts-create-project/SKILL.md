@@ -32,7 +32,7 @@ Scaffold a TypeScript/Node.js project with a production-ready baseline. Paths to
    npm run build   # tsc — no errors
    npm test        # vitest run — all tests pass
    ```
-5. **Next steps:** set up linting and formatting with `setup-biome-husky`; migrate to pnpm with `ts-pnpm-workflow`
+5. **Next steps:** set up linting and formatting with `setup-oxc-husky`; migrate to pnpm with `ts-pnpm-workflow`
 
 Parameters: `-ProjectName` (required), `-ProjectType` (app/library/cli), `-PackageManager` (npm/pnpm), `-OutputDirectory`
 

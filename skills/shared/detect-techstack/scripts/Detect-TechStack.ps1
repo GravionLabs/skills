@@ -59,6 +59,8 @@ if ((Test-RootFile 'vitest.config.*') -or (Test-RootMatch 'vite.config.*' '\btes
 if ((Test-RootFile 'biome.json') -or (Test-RootFile 'biome.jsonc')) { $tools.Add('biome') }
 if ((Test-RootFile 'eslint.config.*') -or (Test-RootFile '.eslintrc*')) { $tools.Add('eslint') }
 if ((Test-RootFile '.prettierrc*') -or (Test-RootFile 'prettier.config.*')) { $tools.Add('prettier') }
+if (Test-RootFile '.oxlintrc.json') { $tools.Add('oxlint') }
+if ((Test-RootFile '.oxfmtrc.json') -or (Test-RootFile '.oxfmtrc.jsonc')) { $tools.Add('oxfmt') }
 if (Test-RootFile 'jest.config.*') { $tools.Add('jest') }
 if ((Test-RootFile 'pytest.ini') -or (Test-RootMatch 'pyproject.toml' '(?m)^\[tool\.pytest')) { $tools.Add('pytest') }
 if (Test-RootFile 'Cargo.toml') { $tools.Add('cargo') }

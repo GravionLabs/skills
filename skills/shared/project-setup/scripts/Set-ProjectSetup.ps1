@@ -118,6 +118,10 @@ $jbHint = 'dotnet tool install -g JetBrains.ReSharper.GlobalTools'
 $webExt = @('.ts', '.tsx', '.js', '.mjs', '.cjs')
 $biomeFmt = 'npx biome check --write --no-errors-on-unmatched {files}'
 $biomeChk = 'npx biome check --no-errors-on-unmatched {files}'
+# oxc (ADR 0006): oxfmt formats, oxlint fixes; Format-Changed.ps1 runs the same steps without an entry once .oxfmtrc.json exists
+$oxcFmt = @('npx --no-install oxfmt --no-error-on-unmatched-pattern {files}', 'npx --no-install oxlint --fix --no-error-on-unmatched-pattern {files}')
+$oxcChk = @('npx --no-install oxfmt --check --no-error-on-unmatched-pattern {files}', 'npx --no-install oxlint --no-error-on-unmatched-pattern {files}')
+$oxlintCmd = 'npx --no-install oxlint --no-error-on-unmatched-pattern {files}'
 $defaultExt = @{
   ts = $webExt + '.jsx'; ng = $webExt; py = @('.py', '.pyi'); dotnet = @('.cs'); rust = @('.rs'); go = @('.go')
 }
@@ -133,7 +137,7 @@ function Find-Solution {
 function Get-DetectedTool([string]$Lang, [string[]]$Tools) {
   switch ($Lang) {
     { $_ -in 'ts', 'ng' } {
-      $t = @($Tools | Where-Object { $_ -in 'biome', 'prettier', 'eslint' })
+      $t = @($Tools | Where-Object { $_ -in 'biome', 'prettier', 'eslint', 'oxlint', 'oxfmt' })
       if ($t.Count) { return ($t -join '+') } else { return $null }
     }
     'py' {
@@ -158,10 +162,12 @@ function Get-FormatOptions([string]$Lang, [string[]]$Tools) {
         check      = @('npx --no-install prettier --check {files}', 'npx --no-install eslint {files}')
       }
       $bio = [ordered]@{ extensions = @($defaultExt[$Lang] + @('.json', '.css', '.html', '.md', '.yml', '.yaml')); format = $biomeFmt; check = $biomeChk }
-      $biomeDefault = $Tools -contains 'biome'
-      $opts['prettier-eslint'] = if ($biomeDefault) { $pe } else { $null }
-      $opts['biome'] = if ($biomeDefault) { $null } else { $bio }
-      $defaultId = if ($biomeDefault) { 'biome' } else { 'prettier-eslint' }
+      $oxc = [ordered]@{ extensions = @($defaultExt[$Lang] + @('.json', '.css', '.html', '.md', '.yml', '.yaml')); format = $oxcFmt; check = $oxcChk }
+      # the default is what Format-Changed.ps1 runs without an entry: oxc wins over biome, biome over prettier-eslint
+      $defaultId = if ($Tools -contains 'oxfmt') { 'oxc' } elseif ($Tools -contains 'biome') { 'biome' } else { 'prettier-eslint' }
+      $opts['prettier-eslint'] = if ($defaultId -eq 'prettier-eslint') { $null } else { $pe }
+      $opts['biome'] = if ($defaultId -eq 'biome') { $null } else { $bio }
+      $opts['oxc'] = if ($defaultId -eq 'oxc') { $null } else { $oxc }
     }
     'py' { $opts['ruff'] = $null; $defaultId = 'ruff' }
     'dotnet' {
@@ -228,11 +234,10 @@ function Get-LintOptions([string]$Lang, [string[]]$Tools) {
   $opts = [ordered]@{}
   switch ($Lang) {
     { $_ -in 'ts', 'ng' } {
-      $biomeDefault = $Tools -contains 'biome'
-      $opts['eslint'] = if ($biomeDefault) { [ordered]@{ extensions = @($defaultExt[$Lang]); command = 'npx --no-install eslint {files}' } } else { $null }
-      $opts['biome'] = if ($biomeDefault) { $null } else { [ordered]@{ extensions = @($defaultExt[$Lang]); command = 'npx biome lint --no-errors-on-unmatched {files}' } }
-      $opts['oxlint'] = [ordered]@{ extensions = @($defaultExt[$Lang]); command = 'npx oxlint {files}' }
-      $defaultId = if ($biomeDefault) { 'biome' } else { 'eslint' }
+      $defaultId = if ($Tools -contains 'oxlint') { 'oxlint' } elseif ($Tools -contains 'biome') { 'biome' } else { 'eslint' }
+      $opts['eslint'] = if ($defaultId -eq 'eslint') { $null } else { [ordered]@{ extensions = @($defaultExt[$Lang]); command = 'npx --no-install eslint {files}' } }
+      $opts['biome'] = if ($defaultId -eq 'biome') { $null } else { [ordered]@{ extensions = @($defaultExt[$Lang]); command = 'npx biome lint --no-errors-on-unmatched {files}' } }
+      $opts['oxlint'] = if ($defaultId -eq 'oxlint') { $null } else { [ordered]@{ extensions = @($defaultExt[$Lang]); command = $oxlintCmd } }
     }
     'py' {
       $opts['ruff'] = $null

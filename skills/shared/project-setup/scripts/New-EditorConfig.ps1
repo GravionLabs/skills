@@ -90,11 +90,13 @@ function Get-TsFormatter([string]$Key) {
       $c = Read-Jsonc $cfg
       if ($c.ContainsKey('format') -and $c.format -is [System.Collections.IDictionary] -and $c.format.ContainsKey($Key)) {
         $cmd = ($c.format[$Key] | ConvertTo-Json -Depth 5 -Compress)
+        if ($cmd -match 'oxfmt') { return 'oxc' }
         if ($cmd -match 'biome') { return 'biome' }
         if ($cmd -match 'prettier') { return 'prettier' }
       }
     } catch { $notes.Add('.agents/config.json is not valid JSON, formatter taken from the detected tools') }
   }
+  if ($tools -contains 'oxfmt') { return 'oxc' }
   if ($tools -contains 'biome') { return 'biome' }
   'prettier'
 }

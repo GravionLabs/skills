@@ -5,7 +5,7 @@
   Prints the plan as JSON. Without -Apply nothing is written.
   .gitattributes: created from templates/gitattributes when missing; an existing file gets only the missing lines appended (shown in the plan as `missing`).
   .gitignore: per detected language the entries of templates/gitignore/<lang>.gitignore (ts, ng and js share `ts`) that are not yet in the file, under a `# <lang> (project-setup)` header.
-  Hook: a repository with only ts/ng/js languages delegates to the skill setup-biome-husky (ng or a prettier config: setup-prettier-eslint-husky);
+  Hook: a repository with only ts/ng/js languages delegates to the skill setup-oxc-husky (plain TS and Angular);
   any repository with another language gets one lefthook.yml for all its languages. An existing .husky/ or lefthook.yml is reported and left unchanged.
   A missing lefthook is reported with its install hint, never installed.
 .PARAMETER ProjectRoot
@@ -132,9 +132,8 @@ function Get-HookPlan([string[]]$Keys) {
   }
   $pureTs = @($Keys | Where-Object { @('ts', 'ng') -notcontains $_ }).Count -eq 0
   if ($pureTs) {
-    $prettier = @(Get-ChildItem -LiteralPath $root -Force -File -ErrorAction SilentlyContinue | Where-Object { $_.Name -like '.prettierrc*' -or $_.Name -like 'prettier.config.*' }).Count -gt 0
-    $skill = if (($Keys -contains 'ng') -or $prettier) { 'setup-prettier-eslint-husky' } else { 'setup-biome-husky' }
-    return [ordered]@{ action = 'delegate'; tool = 'husky'; skill = $skill; warnings = @() }
+    # one setup skill for plain TS and Angular (ADR 0006)
+    return [ordered]@{ action = 'delegate'; tool = 'husky'; skill = 'setup-oxc-husky'; warnings = @() }
   }
   $warnings = @()
   if (-not (Test-Tool 'lefthook')) {

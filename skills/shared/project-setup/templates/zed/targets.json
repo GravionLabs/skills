@@ -5,5 +5,5 @@
   "py": { "language": "Python", "formatter": { "language_server": { "name": "ruff" } } },
   "rust": { "language": "Rust", "formatter": { "language_server": { "name": "rust-analyzer" } } },
   "go": { "language": "Go", "formatter": { "language_server": { "name": "gopls" } } },
-  "formatters": { "biome": { "language_server": { "name": "biome" } }, "prettier": "prettier" }
+  "formatters": { "oxc": { "external": { "command": "npx", "arguments": ["--no-install", "oxfmt", "--stdin-filepath", "{buffer_path}"] } }, "biome": { "language_server": { "name": "biome" } }, "prettier": "prettier" }
 }

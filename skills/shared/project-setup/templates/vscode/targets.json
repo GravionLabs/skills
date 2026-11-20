@@ -5,6 +5,6 @@
   "py": { "languageIds": ["python"], "formatter": "charliermarsh.ruff", "extensions": ["ms-python.python", "charliermarsh.ruff"], "build": null, "test": "pytest" },
   "rust": { "languageIds": ["rust"], "formatter": "rust-lang.rust-analyzer", "extensions": ["rust-lang.rust-analyzer", "vadimcn.vscode-lldb"], "build": "cargo build", "test": "cargo test" },
   "go": { "languageIds": ["go"], "formatter": "golang.go", "extensions": ["golang.go"], "build": "go build ./...", "test": "go test ./..." },
-  "formatters": { "biome": ["biomejs.biome"], "prettier": ["esbenp.prettier-vscode", "dbaeumer.vscode-eslint"] },
+  "formatters": { "oxc": ["oxc.oxc-vscode", "dbaeumer.vscode-eslint"], "biome": ["biomejs.biome"], "prettier": ["esbenp.prettier-vscode", "dbaeumer.vscode-eslint"] },
   "frameworksWithoutTarget": ["tauri", "react", "next", "vue", "svelte"]
 }
