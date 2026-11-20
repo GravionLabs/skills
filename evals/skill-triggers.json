@@ -297,5 +297,13 @@
       "Record this decision as an ADR and supersede ADR 0020 in part"
     ],
     "shouldNotTrigger": ["Update the spec of the BFF", "Plan Feature #64 into PBIs"]
+  },
+  {
+    "skill": "ratchet",
+    "shouldTrigger": [
+      "Add a ratchet for the eslint no-explicit-any rule with a baseline of the existing violations",
+      "Grandfather the current violations of this lint rule so that new ones fail the check"
+    ],
+    "shouldNotTrigger": ["Format the changed files", "Write an ADR for the new queue"]
   }
 ]

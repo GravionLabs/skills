@@ -22,7 +22,8 @@
         "./skills/shared/diagnose",
         "./skills/shared/implementation",
         "./skills/shared/lessons",
-        "./skills/shared/project-setup"
+        "./skills/shared/project-setup",
+        "./skills/shared/ratchet"
       ]
     },
     {
