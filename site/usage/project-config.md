@@ -105,6 +105,12 @@ For a desktop app (Tauri) the template says to install the RC next to the stable
 }
 ```
 
+- `checks`: a list of cheap static repository checks (ratchets that measure line counts, test patterns or doc paths in seconds). An entry has `command` (string or array, run in order), optional `name` and `fast` (`true`: `implementation` runs it before the targeted tests and after every fix; without `fast` the entry is only listed). A red fast check is fixed and rerun on its own, before any test. The full suite then runs once per pull request and again after a fix round only when the fix touched code outside the files the fast checks and targeted tests cover. `deliver` workers follow the same rule.
+
+```json
+{ "checks": [{ "name": "ratchets", "command": "pnpm ratchets", "fast": true }] }
+```
+
 - `test`: `false` skips every test run (`skipped: disabled`), or a map keyed by language. An entry has `command` (string or array, run in order, the first non-zero exit stops) and optional `targeted` (one string with `{files}`, the test files of a commit's changed paths). Precedence: this key, then `scripts.test` of `package.json` (ts, ng), then the default of the detected tool (vitest `npx vitest run`, jest `npx jest`, `uv run pytest`, `cargo test`, `go test ./...`, `dotnet test`); without any of them the run fails instead of guessing. `Invoke-Tests.ps1` of the `implementation` skill runs it; `implementation` and the `<lang>-test` skills point to it.
 
 ```json
