@@ -69,6 +69,7 @@ Run `pnpm check:changed` once when the work is done (the gate of this stack; `im
 
 - New standalone component → read `references/component.md`
 - New NgRx Signal Store for feature state → read `references/signal-store.md`
+- Enforce style tokens (no raw colors or font sizes) with Stylelint → read `references/style-lint.md`
 
 ## Related Skills
 
