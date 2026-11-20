@@ -20,12 +20,14 @@ appendFileSync(
     hasSessionTokenVariable: 'DELIVER_SESSION_TOKEN' in process.env,
   })}\n`,
 );
-if (scenario.hangs) {
+// per session (by index): { exit, noPull, hangs } overrides the scenario-wide fields for that session
+const own = scenario.plan?.[index] ?? {};
+if (own.hangs ?? scenario.hangs) {
   // a session that never ends: only the loop's stop request ends it
   console.log('working');
   setInterval(() => {}, 1000);
 } else {
-  if (!scenario.noPull) writeFileSync(path.join(dir, `pr-${id}`), '');
+  if (!(own.noPull ?? scenario.noPull)) writeFileSync(path.join(dir, `pr-${id}`), '');
   const final = scenario.blocked
     ? `result: blocked ${scenario.blocked}`
     : `result: pr https://example.test/pull/${100 + Number(id)}`;
@@ -35,6 +37,6 @@ if (scenario.hangs) {
     setTimeout(() => {}, 60_000);
   } else {
     console.log(final);
-    process.exit(scenario.exits?.[index] ?? 0);
+    process.exit(own.exit ?? scenario.exits?.[index] ?? 0);
   }
 }

@@ -62,6 +62,8 @@ type Session = {
   turns: number;
   costUsd: number;
   peakContext: number;
+  /** The loop killed the session at the session timeout. */
+  timedOut?: boolean;
   /** The reason of a final `result: blocked <reason>` line of the session. */
   blocked?: string;
 };
@@ -84,6 +86,8 @@ const attempt = (cmd: string, args: string[], cwd?: string): string | undefined 
 // Tests only: the length of one second of waiting, so a test does not wait for real.
 const TICK_MS = Number(process.env.DELIVER_TICK_MS ?? 1000);
 const sleep = (seconds: number) => new Promise((done) => setTimeout(done, seconds * TICK_MS));
+// Tests only: the session timeout in milliseconds instead of --session-minutes.
+const SESSION_MS_OVERRIDE = Number(process.env.DELIVER_SESSION_MS) || undefined;
 /** The message of a failed command: its stderr, else the error itself, first line only. */
 const firstLine = (error: unknown): string =>
   String((error as { stderr?: string }).stderr || (error as Error).message || error)
@@ -381,7 +385,13 @@ async function startSession(item: Item, cwd: string, file: string): Promise<Sess
       stdio: ['ignore', 'pipe', 'inherit'],
       env,
     });
-    const timer = setTimeout(() => killTree(child), SESSION_MINUTES * 60_000);
+    const timer = setTimeout(
+      () => {
+        session.timedOut = true;
+        killTree(child);
+      },
+      SESSION_MS_OVERRIDE ?? SESSION_MINUTES * 60_000,
+    );
     const stop = () => killTree(child);
     stopSession = stop;
     // a session that scheduled a wakeup prints its final result and then stays alive until the wakeup fires:
@@ -421,6 +431,56 @@ async function startSession(item: Item, cwd: string, file: string): Promise<Sess
 }
 
 const CLOSED = 'pull request closed';
+
+// Harness failures (exit ≠ 0, no pull request, no timeout kill): wait 5, 15, 60 minutes, the third in a row ends the run.
+const HARNESS_WAITS_MINUTES = [5, 15, 60];
+const HARNESS_FAILED = 'harness failed';
+let harnessFailures = 0;
+let harnessDead: { count: number; exit: number | null } | undefined;
+// a session timeout gets one more session per PBI and run, the second sets the PBI aside
+const timeouts = new Map<number, number>();
+
+/** Starts sessions for the item until one ends normally. Returns a reason when the item is to be set aside. */
+async function runSession(
+  item: Item,
+  worktree: string,
+  sessions: Session[],
+): Promise<{ session: Session; reason?: string }> {
+  for (;;) {
+    const session = await startSession(
+      item,
+      worktree,
+      path.join(runDir, `${item.id}-${sessions.length + 1}.jsonl`),
+    );
+    sessions.push(session);
+    if (stopped) return { session };
+    if (session.timedOut) {
+      const count = (timeouts.get(item.id) ?? 0) + 1;
+      timeouts.set(item.id, count);
+      if (count >= 2) return { session, reason: 'session timeout' };
+      log(`#${item.id} session timeout (${SESSION_MINUTES} min), one more session`, 'warn');
+      continue;
+    }
+    if (session.exit === 0) {
+      harnessFailures = 0;
+      return { session };
+    }
+    // a pull request means the session did its work: the normal rules for a failed session apply
+    if (tracker.pullOf(item)) return { session };
+    harnessFailures += 1;
+    if (harnessFailures >= HARNESS_WAITS_MINUTES.length) {
+      harnessDead = { count: harnessFailures, exit: session.exit };
+      return { session, reason: HARNESS_FAILED };
+    }
+    const minutes = HARNESS_WAITS_MINUTES[harnessFailures - 1];
+    log(
+      `#${item.id} harness failed (exit ${session.exit}, ${harnessFailures} in a row): waits ${minutes} min, then a fresh session`,
+      'warn',
+    );
+    for (let half = 0; half < minutes * 2 && !stopped; half++) await sleep(30);
+    if (stopped) return { session };
+  }
+}
 
 /**
  * Tracker calls block the event loop: a stop request that came in meanwhile is only read in the poll phase.
@@ -524,12 +584,8 @@ async function deliver(item: Item): Promise<{ reason?: string; pull?: Pull }> {
     }
   }
   for (let round = 1; round <= 2; round++) {
-    const session = await startSession(
-      item,
-      worktree,
-      path.join(runDir, `${item.id}-${round}.jsonl`),
-    );
-    sessions.push(session);
+    const ran = await runSession(item, worktree, sessions);
+    const session = ran.session;
     reason = undefined;
     pull = tracker.pullOf(item);
     const settle = () => {
@@ -537,6 +593,7 @@ async function deliver(item: Item): Promise<{ reason?: string; pull?: Pull }> {
     };
     // a stopped or failed session never leads to a merge, also when a pull request is open
     if (stopped) reason = 'stopped';
+    else if (ran.reason) reason = ran.reason;
     else if (session.exit !== 0) reason = `session failed (exit ${session.exit})`;
     // the session asked a question: a pull request of an earlier run is not its answer
     else if (tracker.needsDecision(item)) reason = 'needs-decision';
@@ -869,6 +926,7 @@ try {
       );
     }
     emit('progress', { done: merged.length, total, label: 'PBIs' });
+    if (harnessDead) break;
   }
 } catch (error) {
   emit('run.finished', { outcome: 'failed', text: firstLine(error).slice(0, 300) }, 'danger');
@@ -984,19 +1042,23 @@ const clean =
   handedOver.size === 0 &&
   waiting.length === 0;
 // done, blocked (a red base, an issue set aside, an error) or waiting for a handed-over pull request
-const status = clean
-  ? 'done'
-  : !baseBlocked && !releaseError && aside.size === 0 && handedOver.size > 0
-    ? 'waiting-for-handed-over'
-    : 'blocked';
+const status = harnessDead
+  ? 'failed'
+  : clean
+    ? 'done'
+    : !baseBlocked && !releaseError && aside.size === 0 && handedOver.size > 0
+      ? 'waiting-for-handed-over'
+      : 'blocked';
 if (!stopped) {
   say(
     status === 'done'
       ? 'done'
-      : status === 'blocked'
-        ? 'blocked'
-        : 'waiting for a handed-over PR: merge it, then run /deliver again',
-    status === 'done' ? 'ok' : status === 'blocked' ? 'bad' : 'warn',
+      : status === 'failed'
+        ? `failed: the harness failed ${harnessDead?.count} times in a row, last exit code ${harnessDead?.exit}`
+        : status === 'blocked'
+          ? 'blocked'
+          : 'waiting for a handed-over PR: merge it, then run /deliver again',
+    status === 'done' ? 'ok' : status === 'blocked' || status === 'failed' ? 'bad' : 'warn',
   );
 }
 appendFileSync(
@@ -1019,4 +1081,14 @@ emit(
   },
   stopped ? 'neutral' : clean ? 'success' : 'warning',
 );
-process.exit(stopped ? 130 : clean ? 0 : status === 'waiting-for-handed-over' ? 3 : 2);
+process.exit(
+  stopped
+    ? 130
+    : clean
+      ? 0
+      : status === 'failed'
+        ? 5
+        : status === 'waiting-for-handed-over'
+          ? 3
+          : 2,
+);
