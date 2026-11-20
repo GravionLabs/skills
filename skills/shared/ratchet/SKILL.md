@@ -39,6 +39,7 @@ Exit 2 on a usage error or a missing baseline.
 - `templates/check-lint-suppressions-ratchet.mts`: count baseline `path` → number of `eslint-disable`, `oxlint-disable`, `biome-ignore`, Rust `#[allow(` and `#[expect(`, C# `#pragma warning disable`. Where `eslint-suppressions.json` (ESLint bulk suppressions) exists, ESLint is skipped: that file is the native baseline, keep it shrinking with `eslint --prune-suppressions`.
 - `templates/check-ts-any-ratchet.mts`: count baseline `path` → number of `: any`, `as any`, `<any>`, `@ts-nocheck` and `@ts-ignore` per `.ts`, `.tsx`, `.mts` file; comments and strings are not scanned (the two directives count at the start of a comment).
 - `templates/check-skipped-tests-ratchet.mts`: count baseline `path` → number of `it.skip`, `test.skip`, `describe.skip`, `xit`, `xdescribe`, `it.todo`, Rust `#[ignore]`, .NET `[Fact(Skip`/`[Theory(Skip`, Python `@pytest.mark.skip` and `@unittest.skip` per `.ts`/`.js`, `.rs`, `.cs`, `.py` file.
+- `templates/check-job-timeout-ratchet.mts`: entry baseline `<workflow file>#<job id>` for every job in `.github/workflows/*.yml` without `timeout-minutes`; a job with `uses:` (reusable workflow) is exempt.
 
 ## Flags
 
