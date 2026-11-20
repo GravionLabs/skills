@@ -51,7 +51,8 @@
     "implementation",
     "lessons",
     "project-setup",
-    "ratchet"
+    "ratchet",
+    "ui-styleguide"
   ],
   "skill-tooling": [
     "skill-audit",
