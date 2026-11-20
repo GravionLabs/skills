@@ -5,8 +5,8 @@ on:
     branches: [main, 'release/**']
   pull_request:
     branches: [main, 'release/**']
-    # The types of the pr-checks job (body, label and draft changes rerun the readiness check). The build and test jobs
-    # run only for opened, synchronize, reopened and labeled, as before; the others skip them (see the `if:` below).
+    # The types of the pr-checks job (body, label and draft changes rerun the readiness check). Every job runs for every
+    # type: a skipped code check would let "PR checks passed" of such an event go green before the tests of the head finish.
     types: [opened, edited, synchronize, reopened, labeled, unlabeled, ready_for_review]
   workflow_dispatch:
 
@@ -38,7 +38,6 @@ jobs:
 
   build-test:
     name: Build & Test
-    if: github.event_name != 'pull_request' || contains(fromJSON('["opened","synchronize","reopened","labeled"]'), github.event.action)
     runs-on: ubuntu-latest
     # Local equivalent: pnpm run check; keep CI checks separate for individual job logs.
     permissions:
@@ -94,7 +93,6 @@ jobs:
   # GravionLabs/ci/node/test@v1 is not used: its artifact and check names are fixed.
   test-shard:
     name: Test (${{ matrix.shard }}/4)
-    if: github.event_name != 'pull_request' || contains(fromJSON('["opened","synchronize","reopened","labeled"]'), github.event.action)
     runs-on: ubuntu-latest
     permissions:
       contents: read
@@ -143,7 +141,6 @@ jobs:
   # The loop of deliver runs on Windows too (#689): its tests on windows-latest. Part of "PR checks passed" like every job.
   test-windows:
     name: Test deliver (windows)
-    if: github.event_name != 'pull_request' || contains(fromJSON('["opened","synchronize","reopened","labeled"]'), github.event.action)
     runs-on: windows-latest
     permissions:
       contents: read
@@ -172,7 +169,7 @@ jobs:
       - name: Test
         run: pnpm exec vitest run test/skills/delivery/deliver.test.ts
 
-  # Aggregate job "Test": green only when all four shards succeeded (skipped, for a pull request event without code change, counts as green).
+  # Aggregate job "Test": green only when all four shards succeeded (a skipped shard is not green).
   # The github-actions reporter annotates failures.
   test:
     name: Test
@@ -186,7 +183,7 @@ jobs:
         env:
           RESULT: ${{ needs.test-shard.result }}
         run: |
-          if [ "$RESULT" != "success" ] && [ "$RESULT" != "skipped" ]; then
+          if [ "$RESULT" != "success" ]; then
             echo "Test shards finished with result: $RESULT (all four shards must succeed)"
             exit 1
           fi
@@ -243,7 +240,7 @@ jobs:
           recreate-branch: release/next
 
   # The one required check of the rulesets on main and release. Green when no needed job failed or was cancelled;
-  # skipped is accepted (jobs that do not run for the event, the release outside main). `if: always()` runs it after a failure too.
+  # skipped is accepted only for jobs that never run for the event (determine-version, release outside main, pr-checks outside a PR). `if: always()` runs it after a failure too.
   pr-checks-passed:
     name: PR checks passed
     runs-on: ubuntu-latest
