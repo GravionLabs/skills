@@ -348,6 +348,17 @@
     "shouldNotTrigger": ["Add a UI style guide to this project", "Summarize the open pull requests"]
   },
   {
+    "skill": "poimen-lead",
+    "shouldTrigger": [
+      "I run in poimen. Split this refactor across three worker agents, one worktree each, wait for them and collect their reports.",
+      "Use the poimen MCP tools to start workers for these independent tasks and wait for their results."
+    ],
+    "shouldNotTrigger": [
+      "Rename the config key in this Rust crate and update its tests",
+      "Write release notes for the last milestone"
+    ]
+  },
+  {
     "skill": "secret-scan",
     "shouldTrigger": [
       "Add gitleaks to this repository and scan for committed secrets",
