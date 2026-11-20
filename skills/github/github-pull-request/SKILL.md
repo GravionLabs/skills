@@ -40,8 +40,14 @@ Create a PR from the current branch. No dialogue — tool calls only. On Claude 
 
    <the build/test/lint commands actually run and their result, one sentence>
 
+   ## Suggested AGENTS.md additions
+
+   - <the trap; why it is not obvious; where it was hit>
+
    Closes #<issue_number>
    ```
+
+   `## Suggested AGENTS.md additions` is optional: omit it when empty (not in release mode). One line per entry: the trap, why it is not obvious, where it was hit. A person decides by the admission rule of the `agents-md` skill; the agent never edits `AGENTS.md` for it.
 
    Release mode: body per `references/release-mode.md`; the footer is `Closes #<feature_number>` only when passed, else none, and `not_delivered` does not apply.
    `not_delivered` non-empty: add `## Not delivered` (one bullet per item, its follow-up `#<n>` when known) before the footer and end with `Refs #<issue_number>` instead of `Closes`, so the release leaves the issue open.
