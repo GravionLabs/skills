@@ -18,7 +18,9 @@ describe('two-stage verify rule (#447, #771)', () => {
     expect(implementation).toMatch(/targeted tests pass/);
     expect(implementation).toMatch(/never the full suite/);
     expect(implementation).toMatch(/one full run before the pull request/);
-    expect(implementation).toMatch(/again after the last fix round/);
+    expect(implementation).toMatch(
+      /after a fix round again only when the fix touched code outside/,
+    );
     expect(implementation).toMatch(/Never commit red/);
     expect(implementation).not.toMatch(/Final-Verify/);
   });
@@ -35,7 +37,7 @@ describe('two-stage verify rule (#447, #771)', () => {
     const step = standalone.split('\n').find((l) => l.startsWith('9. '))!;
     expect(step).toContain('Verify per `implementation`');
     expect(step).toMatch(/ONE full build \+ test suite run/);
-    expect(step).toMatch(/after the last fix round/);
+    expect(step).toMatch(/again after a fix round only when the fix touched code outside/);
     expect(step).toMatch(/never commit red/);
     expect(step).not.toMatch(/never the full suite/);
   });
