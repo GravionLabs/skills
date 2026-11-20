@@ -43,6 +43,7 @@
   ],
   "shared": [
     "adr",
+    "agents-md",
     "ast-grep-rules",
     "check-prerequisites",
     "code-review",

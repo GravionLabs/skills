@@ -36,3 +36,8 @@ code-review: docs/styleguide/ux-review-rubric.md
 
 # docs/STYLEGUIDE.md is the style guide of the target repository, named in the messages of the stylelint template, not a file of the skill
 ng-implementation: docs/STYLEGUIDE.md
+# docs/agents-md-refs/ holds the reference files in the target repository, not in the skill
+agents-md: docs/agents-md-refs/
+agents-md: docs/agents-md-refs/<topic>.md
+agents-md: docs/agents-md-refs/migrations.md
+agents-md: docs/agents-md-refs/release.md

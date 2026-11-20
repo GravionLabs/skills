@@ -325,5 +325,13 @@
       "Record the decision to use Postgres as an ADR",
       "Fix the failing login test"
     ]
+  },
+  {
+    "skill": "agents-md",
+    "shouldTrigger": [
+      "Our AGENTS.md is too big, slim it down",
+      "Write an AGENTS.md for this repository"
+    ],
+    "shouldNotTrigger": ["Add a UI style guide to this project", "Summarize the open pull requests"]
   }
 ]
