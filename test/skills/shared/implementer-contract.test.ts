@@ -13,6 +13,8 @@ const done = {
   filesChanged: ['src/a.ts'],
   testsRun: 'pnpm test: 3 passed',
   notes: [],
+  risk: { level: 'low', what: 'tests only', backout: 'revert the commit' },
+  visual_proof: { na: 'no UI change' },
 };
 
 describe('implementer.schema.json', () => {
@@ -34,6 +36,10 @@ describe('implementer.schema.json', () => {
     ).toBe(true);
   });
 
+  it('accepts a result with before and after proof', () => {
+    expect(validate({ ...done, visual_proof: { before: 'a.png', after: 'b.png' } })).toBe(true);
+  });
+
   it.each([
     ['unknown status', { ...done, status: 'ok' }],
     ['missing testsRun', { ...done, testsRun: undefined }],
@@ -42,6 +48,11 @@ describe('implementer.schema.json', () => {
     ['done without files', { ...done, filesChanged: [] }],
     ['blocked without reason', { ...done, status: 'blocked', commit: null, notes: [] }],
     ['commit not a sha', { ...done, commit: 'HEAD' }],
+    ['missing risk', { ...done, risk: undefined }],
+    ['missing visual_proof', { ...done, visual_proof: undefined }],
+    ['unknown risk level', { ...done, risk: { ...done.risk, level: 'extreme' } }],
+    ['risk without backout', { ...done, risk: { level: 'low', what: 'x' } }],
+    ['proof with only before', { ...done, visual_proof: { before: 'a.png' } }],
   ])('rejects %s', (_n, v) => {
     expect(validate(JSON.parse(JSON.stringify(v)))).toBe(false);
   });
@@ -64,9 +75,14 @@ describe('runner-contract.md', () => {
     for (const k of Object.keys(schema.properties)) expect(ref).toContain(`\`${k}\``);
   });
 
-  it('keeps the language dispatch and names no state path', () => {
+  it('names the proof directory and the rule never committed', () => {
+    expect(ref).toContain('.agents/proof/<branch>/');
+    expect(ref).toMatch(/never committed or staged/);
+  });
+
+  it('keeps the language dispatch and names no other state path', () => {
     expect(ref).toContain('<lang>-implementation');
-    expect(ref).not.toMatch(/\.agents|\.dromos|<state>/);
+    expect(ref.replace('.agents/proof/<branch>/', '')).not.toMatch(/\.agents|\.dromos|<state>/);
     expect(read('SKILL.md')).toMatch(/Language dispatch[\s\S]*detect-techstack/);
   });
 
