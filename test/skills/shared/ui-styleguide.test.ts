@@ -15,7 +15,7 @@ const SECTIONS = [
   'Cross-platform',
   'When this guide is silent',
 ];
-const DEEP_DIVES = ['color.md', 'components.md', 'ux-rules.md'];
+const DEEP_DIVES = ['color.md', 'components.md', 'ux-rules.md', 'ux-review-rubric.md'];
 
 describe('ui-styleguide', () => {
   it('SKILL.md is at most 100 lines', () => {
@@ -48,6 +48,22 @@ describe('ui-styleguide', () => {
         new RegExp(`^- Read \\[styleguide/${d}\\]\\(styleguide/${d}\\) when `, 'm'),
       );
     });
+  });
+
+  it('ux-review-rubric.md prescribes the five output headings in a fixed order', () => {
+    const rubric = read('templates/styleguide/ux-review-rubric.md');
+    const headings = [
+      'Top fixes',
+      'Friction notes',
+      'Suggested changes',
+      'Keyboard and speed check',
+      'Follow-up states (loading, empty, error, partial)',
+    ];
+    const positions = headings.map((h) =>
+      rubric.search(new RegExp(`^### ${h.replace(/[()]/g, '\\$&')}$`, 'm')),
+    );
+    expect(positions.every((i) => i >= 0)).toBe(true);
+    expect([...positions].sort((a, b) => a - b)).toEqual(positions);
   });
 
   it('agents-styleguide.md holds the binding paragraph', () => {

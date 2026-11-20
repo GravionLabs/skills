@@ -39,6 +39,7 @@ Binding for every UI change. Read the whole file first; read a deep-dive file on
 - A destructive action asks for confirmation or can be undone.
 - An empty, loading and error state exists for every data view.
 - Read [styleguide/ux-rules.md](styleguide/ux-rules.md) when you add a flow, a form, a dialog or an error message.
+- Read [styleguide/ux-review-rubric.md](styleguide/ux-review-rubric.md) when reviewing a UI change.
 
 ## Cross-platform
 

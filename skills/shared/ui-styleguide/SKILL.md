@@ -27,5 +27,5 @@ Gives a project a short core style guide and deep-dive files that an agent reads
 ## Templates
 
 - `templates/STYLEGUIDE.md`: core file, eight sections, each deep-dive linked with its reading condition.
-- `templates/styleguide/color.md`, `components.md`, `ux-rules.md`: deep dives.
+- `templates/styleguide/color.md`, `components.md`, `ux-rules.md`, `ux-review-rubric.md` (review checklist with a fixed output format): deep dives.
 - `templates/agents-styleguide.md`: the binding `AGENTS.md` paragraph.
