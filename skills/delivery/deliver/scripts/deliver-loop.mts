@@ -18,6 +18,7 @@ import { createInterface } from 'node:readline';
 import { parseArgs } from 'node:util';
 import { appSettings, tokenSource as makeSource } from './app-token.mts';
 import { type Emit, openEvents } from './events.mts';
+import { programStatus } from './program-status.mts';
 import { HARNESSES } from './harness.mts';
 import { adoptLegacyEnv, unknownConfigKeys } from './legacy.mts';
 import { killTree, launch, promptPath } from './process.mts';
@@ -643,7 +644,42 @@ if (opt['dry-run']) {
 
 mkdirSync(runDir, { recursive: true });
 logFile = path.join(path.dirname(runDir), 'loop.log');
-emit = openEvents(process.env.AGENT_EVENTS_DIR ?? path.join(commonDir, '.agents', 'events'), runId);
+const writeEvent = openEvents(
+  process.env.AGENT_EVENTS_DIR ?? path.join(commonDir, '.agents', 'events'),
+  runId,
+);
+// OSC 7501 to the controlling terminal (ADR 0007): the events stay the source for displays
+const report = programStatus();
+const statusTitle = opt.milestone ?? `issues ${opt.issues}`;
+let blockedShown = false;
+emit = (type, body, tone) => {
+  writeEvent(type, body, tone);
+  if (type === 'run.started') {
+    report({ state: 'working', title: statusTitle });
+  } else if (type === 'attention' && body?.needsYou) {
+    blockedShown = true;
+    report({
+      state: 'blocked',
+      kind: 'question',
+      title: statusTitle,
+      msg: String(body.text ?? ''),
+    });
+  } else if (type === 'task.started' && blockedShown) {
+    blockedShown = false;
+    report({ state: 'working', title: statusTitle });
+  } else if (type === 'run.finished') {
+    const outcome = body?.outcome;
+    report(
+      outcome === 'cancelled'
+        ? { state: 'idle', title: statusTitle }
+        : {
+            state: outcome === 'succeeded' ? 'done' : 'error',
+            title: statusTitle,
+            msg: String(body?.text ?? ''),
+          },
+    );
+  }
+};
 log(`run ${runId} in ${tracker.repo}, results: ${path.join(runDir, 'results.jsonl')}`, 'dim');
 if (cutNote) log(cutNote, 'info');
 if (!TOKEN_SOURCE) {
