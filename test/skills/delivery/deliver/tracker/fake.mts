@@ -25,6 +25,10 @@ type Scenario = {
   needsDecision?: boolean;
   /** Every gate() call blocks this long, as a slow call of a real tracker does. */
   gateBlockMs?: number;
+  /** Every gate() call sends the stop request (SIGINT) to the loop from inside the call, as a Ctrl-C during a slow call. */
+  stopInGate?: boolean;
+  /** Every changedFiles() call sends the stop request, as stopInGate does for gate(). */
+  stopInChangedFiles?: boolean;
   /** A merged item stays listed (and keeps blocking) for this many items() calls, as a tracker that closes late. */
   closeAfterCalls?: number;
   /** Open release-test issues of the milestone. */
@@ -118,6 +122,11 @@ export function create(): Tracker {
       if (scenario.gateBlockMs) {
         Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, scenario.gateBlockMs);
       }
+      if (scenario.stopInGate) {
+        process.kill(process.pid, 'SIGINT');
+        // the kernel delivers a signal to its own process asynchronously: wait until the handler has queued it
+        Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, 200);
+      }
       const gates = scenario.gates ?? [{ state: 'ready', reported: true, head: 'abc123' }];
       const gate = gates[Math.min(gateCalls, gates.length - 1)];
       gateCalls += 1;
@@ -152,6 +161,10 @@ export function create(): Tracker {
       };
     },
     changedFiles(): string[] {
+      if (scenario.stopInChangedFiles) {
+        process.kill(process.pid, 'SIGINT');
+        Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, 200);
+      }
       fileReads += 1;
       if (fileReads <= (scenario.filesFailures ?? 0)) throw new Error('HTTP 500');
       const reads = fileReads - (scenario.filesFailures ?? 0);
