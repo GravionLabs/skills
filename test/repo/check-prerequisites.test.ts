@@ -126,4 +126,31 @@ describe.skipIf(!hasPwsh || process.platform === 'win32')('Check-Prerequisites.p
       expect(r.code).toBe(0);
     });
   });
+
+  describe('gitleaks with .gitleaks.toml', () => {
+    it('fails and names gitleaks with an install hint when .gitleaks.toml exists and it is missing', async () => {
+      fs.writeFileSync(path.join(proj, '.gitleaks.toml'), '[extend]\nuseDefault = true\n');
+      const r = await run(full);
+      expect(r.code).toBe(1);
+      expect(r.out).toContain('gitleaks');
+      expect(r.out).toContain('Gitleaks.Gitleaks');
+    });
+
+    it('passes without .gitleaks.toml and does not mention gitleaks', async () => {
+      const r = await run(full);
+      expect(r.code).toBe(0);
+      expect(r.out).not.toContain('gitleaks');
+    });
+
+    it('passes with .gitleaks.toml when gitleaks is installed', async () => {
+      fs.writeFileSync(path.join(proj, '.gitleaks.toml'), '[extend]\nuseDefault = true\n');
+      const withTool = path.join(dir, 'with-gitleaks');
+      linkTools(withTool, ['git', 'node', 'npm', 'uname', 'sh']);
+      fs.writeFileSync(path.join(withTool, 'gitleaks'), '#!/bin/sh\necho "8.0.0"\n', {
+        mode: 0o755,
+      });
+      const r = await run(withTool);
+      expect(r.code).toBe(0);
+    });
+  });
 });
