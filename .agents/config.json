@@ -2,5 +2,17 @@
   "deliver": {
     "notifications": false
   },
-  "gate": "pnpm check:changed"
+  "gate": "pnpm check:changed",
+  "checks": [
+    {
+      "name": "ast-grep scan",
+      "command": "ast-grep scan",
+      "fast": true
+    },
+    {
+      "name": "ast-grep test",
+      "command": "ast-grep test",
+      "fast": true
+    }
+  ]
 }

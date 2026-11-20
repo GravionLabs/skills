@@ -1,0 +1,7 @@
+id: no-polling-loop-in-tests
+valid:
+  - await vi.waitFor(() => expect(ready).toBe(true))
+  - for (const item of items) { check(item) }
+invalid:
+  - while (!ready) { await tick() }
+  - setInterval(() => check(), 100)

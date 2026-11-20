@@ -11,6 +11,7 @@ const schema = JSON.parse(
 );
 const validate = new Ajv({ allErrors: true }).compile(schema);
 const hasPwsh = spawnSync('pwsh', ['-NoProfile', '-Command', '1']).status === 0;
+// timeout: the tests start pwsh, which needs more than the 5 s default on a loaded machine
 vi.setConfig({ testTimeout: 30000, hookTimeout: 30000 });
 
 const SHA = 'b18a36c0f1e2d3c4b5a69788796a5b4c3d2e1f00';
