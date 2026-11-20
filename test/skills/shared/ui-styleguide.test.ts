@@ -72,4 +72,11 @@ describe('ui-styleguide', () => {
     expect(p).toMatch(/binding/);
     expect(p).toMatch(/deviation needs a reason in the PR/);
   });
+
+  it('fill.md is linked from SKILL.md, names the eight sections and forbids invention', () => {
+    expect(read('SKILL.md')).toContain('references/fill.md');
+    const fill = read('references/fill.md');
+    for (const s of SECTIONS) expect(fill).toContain(s);
+    expect(fill).toMatch(/Nothing is invented/);
+  });
 });
