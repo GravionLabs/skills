@@ -55,3 +55,15 @@ A pass is cached by the hash of the changed files plus the base ref. An unchange
 | Rust                | `cargo check-changed` |
 
 The language implementation skills name these.
+
+## Claude Code Stop hook
+
+`templates/claude-gate-hook.json` is a `Stop` hook that runs the gate (through `scripts/Invoke-Gate.ps1`) when the agent stops. It replaces a husky pre-commit hook for agent sessions. `Stop`, not `PostToolUse`: the gate runs once when the work is done, not after every edit.
+
+- A red gate exits with code 2 and prints the gate output to stderr; Claude Code feeds it back to the agent, which fixes it.
+- The hook input carries `stop_hook_active`; when it is `true` the stop was already blocked once, so the hook exits 0 and does not block again (no endless loop).
+- Without a `gate` key `Invoke-Gate.ps1` skips and the hook passes.
+
+Merge it by hand into `.claude/settings.json`: add the `Stop` entry to the `hooks` object, keep existing `Stop` entries, and adjust the script path when the skill is installed elsewhere (global: `~/.claude/skills/implementation/scripts/Invoke-Gate.ps1`). `.claude/` is a protected path (`deliver` does not merge changes to it), so the merge is a manual step, never done by a skill or a delivery session.
+
+Copilot CLI and OpenCode have no equivalent hook; there the agent runs the gate itself, as `AGENTS.md` tells it (`templates/agents-checks.md`).

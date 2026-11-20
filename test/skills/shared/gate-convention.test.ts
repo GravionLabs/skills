@@ -55,3 +55,32 @@ describe('gate convention', () => {
     expect(read('site/usage/project-config.md')).toContain('- `gate`:');
   });
 });
+
+describe('claude gate hook template', () => {
+  const raw = read(`${impl}/templates/claude-gate-hook.json`);
+  const hook = JSON.parse(raw);
+  const command: string = hook.hooks.Stop[0].hooks[0].command;
+  it('is a Stop hook command and not PostToolUse', () => {
+    expect(hook.hooks.PostToolUse).toBeUndefined();
+    expect(hook.hooks.Stop[0].hooks[0].type).toBe('command');
+    expect(command).toContain('Invoke-Gate.ps1');
+  });
+  it('guards against a second block and blocks with exit 2 on stderr', () => {
+    expect(command).toContain('stop_hook_active');
+    expect(command).toMatch(/exit 0/);
+    expect(command).toContain('>&2');
+    expect(command).toContain('exit 2');
+  });
+  it('is documented in gate.md', () => {
+    const gate = read(`${impl}/references/gate.md`);
+    for (const t of [
+      'claude-gate-hook.json',
+      'stop_hook_active',
+      '.claude/settings.json',
+      'Copilot',
+      'OpenCode',
+      'protected path',
+    ])
+      expect(gate).toContain(t);
+  });
+});
