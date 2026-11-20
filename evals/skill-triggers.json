@@ -346,5 +346,16 @@
       "Write an AGENTS.md for this repository"
     ],
     "shouldNotTrigger": ["Add a UI style guide to this project", "Summarize the open pull requests"]
+  },
+  {
+    "skill": "secret-scan",
+    "shouldTrigger": [
+      "Add gitleaks to this repository and scan for committed secrets",
+      "Allowlist this gitleaks finding with a reason"
+    ],
+    "shouldNotTrigger": [
+      "Add an ast-grep rule that bans console.log",
+      "Write a changelog for the next release"
+    ]
   }
 ]
