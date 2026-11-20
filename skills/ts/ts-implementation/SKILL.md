@@ -32,6 +32,10 @@ description: 'TypeScript implementation and test rules (Vitest) extending `imple
 
 Runner config, test file naming, mocking and coverage live in `ts-test`.
 
+## Gate
+
+Run `pnpm check:changed` once when the work is done (the gate of this stack; `implementation` runs it through `Invoke-Gate.ps1`): `../../shared/implementation/references/gate.md`.
+
 ## Review rules
 
 - 🔴 Lint run (`Format-Changed.ps1 -Lint -Language ts`, oxlint, ESLint or Biome) exits non-zero: error-level findings; 🟡 warning-level findings
