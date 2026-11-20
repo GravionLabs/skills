@@ -1,0 +1,23 @@
+# Runs the ratchets of the repository on every pull request. Copy to .github/workflows/ratchet.yml.
+# Expects the runner at scripts/ratchets/run-ratchets.mts (copy it from the ratchet skill, next to the
+# check-*-ratchet.mts scripts). Node >= 22.18 runs .mts files without a build.
+name: Ratchet
+
+on:
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  ratchet:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - name: Run ratchets
+        run: node scripts/ratchets/run-ratchets.mts
