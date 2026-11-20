@@ -1,6 +1,6 @@
 # ADR 0006: oxlint and oxfmt are the lint and format standard
 
-- Status: Proposed
+- Status: Accepted (2026-11-20)
 - Date: 2026-11-20
 - Issues: #769, #763
 
