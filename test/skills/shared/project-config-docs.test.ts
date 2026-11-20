@@ -32,7 +32,7 @@ describe('site/usage/project-config.md', () => {
     const s = read('skills/shared/implementation/SKILL.md');
     expect(s).toMatch(/^- \[ \] Build passes .*never the full suite\)$/m);
     expect(s).toMatch(
-      /^- \[ \] Full suite: one full run before the pull request, and again after the last fix round$/m,
+      /^- \[ \] Full suite: one full run before the pull request; after a fix round again only when the fix touched code outside the files the fast checks and targeted tests cover/m,
     );
   });
   it('skills link the override doc by full URL, not a relative site/ path', () => {

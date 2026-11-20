@@ -51,6 +51,8 @@ type Scenario = {
   blocked?: string;
   earlierPull?: boolean;
   lingers?: boolean;
+  hangs?: boolean;
+  plan?: { exit?: number; noPull?: boolean; hangs?: boolean }[];
   closeAfterCalls?: number;
   releaseTests?: number[];
   base?: string[];
@@ -350,6 +352,22 @@ describe('deliver loop', () => {
     expect(out.results[0]).toMatchObject({ outcome: 'aside', reason: 'red: ci' });
   });
 
+  it('ends a loop interrupted with Ctrl+C during a hanging session as stopped', async () => {
+    const out = await loop(
+      { items: [{ id: 53, title: '[PBI] feat: hangs' }], hangs: true },
+      { whenStdout: (stdout, stop) => stdout.includes('working') && stop() },
+    );
+    expect(out.status).toBe(130);
+    expect(out.merges).toEqual([]);
+    expect(out.results[0]).toMatchObject({ outcome: 'stopped' });
+    expect(out.final).toMatchObject({ run: 'finished' });
+    const finished = out.events.filter((e) => e.type === 'run.finished');
+    expect(finished).toHaveLength(1);
+    expect(finished[0]).toMatchObject({ outcome: 'cancelled' });
+    expect(finished[0]?.reason).toBeUndefined();
+    expect(JSON.stringify(finished[0])).not.toMatch(/no progress|failed/);
+  }, 20_000);
+
   it('does not merge after a stop request during the check wait', async () => {
     const out = await loop(
       {
@@ -616,6 +634,57 @@ describe('deliver loop', () => {
     expect(out.status).toBe(2);
     expect(out.results[0]?.reason).toBe('session ended without a pull request');
   });
+
+  it('retries a harness failure with a fresh session and merges', async () => {
+    const out = await loop(
+      {
+        items: [{ id: 92, title: '[PBI] feat: flaky' }],
+        plan: [{ exit: 1, noPull: true }],
+      },
+      { env: { DELIVER_TICK_MS: '0.01' } },
+    );
+    expect(out.status).toBe(0);
+    expect(out.sessions).toHaveLength(2);
+    expect(out.merges).toHaveLength(1);
+    expect(out.log).toMatch(/harness failed \(exit 1, 1 in a row\): waits 5 min/);
+  });
+
+  it('ends the run failed with exit 5 at the third harness failure in a row, across PBIs', async () => {
+    const fail = { exit: 7, noPull: true };
+    const out = await loop(
+      {
+        items: [
+          { id: 93, title: '[PBI] feat: a' },
+          { id: 94, title: '[PBI] feat: b' },
+        ],
+        plan: [fail, { exit: 0 }, fail, fail, fail],
+      },
+      { env: { DELIVER_TICK_MS: '0.01' } },
+    );
+    expect(out.status).toBe(5);
+    expect(out.sessions).toHaveLength(5);
+    expect(out.log.trim().split('\n').at(-1)).toMatch(
+      /failed: the harness failed 3 times in a row, last exit code 7/,
+    );
+    expect(out.final).toMatchObject({ status: 'failed' });
+  });
+
+  it('gives a session timeout one more session and sets the PBI aside at the second', async () => {
+    const env = { DELIVER_SESSION_MS: '250' };
+    const once = await loop(
+      { items: [{ id: 95, title: '[PBI] feat: slow' }], plan: [{ hangs: true }] },
+      { env },
+    );
+    expect(once.status).toBe(0);
+    expect(once.sessions).toHaveLength(2);
+    const twice = await loop(
+      { items: [{ id: 96, title: '[PBI] feat: slower' }], hangs: true },
+      { env },
+    );
+    expect(twice.status).toBe(2);
+    expect(twice.sessions).toHaveLength(2);
+    expect(twice.results[0]).toMatchObject({ outcome: 'aside', reason: 'session timeout' });
+  }, 20_000);
 
   it('counts an issue that was set aside in the progress bar of the next one', async () => {
     const out = await loop({

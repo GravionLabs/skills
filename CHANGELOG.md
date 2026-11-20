@@ -5,6 +5,12 @@ Versioning follows [Semantic Versioning](https://semver.org/).
 
 ---
 
+## [Unreleased]
+
+### Bug Fixes
+- **statusline**: Removed the subagent status line: Claude Code 2.1.323 removed the `subagentStatusLine` setting. The installer no longer writes it, removes our own entry of an older version, and `subagent-statusline.mjs` is gone (#745)
+
+
 ## [5.2.0] — 2026-11-20
 
 ### Bug Fixes

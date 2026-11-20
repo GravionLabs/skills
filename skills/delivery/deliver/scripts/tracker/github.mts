@@ -1,5 +1,6 @@
 // GitHub tracker: issues, sub-issue dependencies, pull requests and checks through the gh CLI.
 import { execFileSync } from 'node:child_process';
+import { existsSync } from 'node:fs';
 import type { BaseState, Gate, Item, Pull, Subject, Tracker, TrackerContext } from '../tracker.mts';
 
 const HOLD = ['needs-decision', 'needs-refinement', 'interactive', 'release-test'];
@@ -109,12 +110,50 @@ export function mergeMethodFor(base: string, defaultBranch: string): 'merge' | '
   return base === defaultBranch ? 'merge' : 'squash';
 }
 
-export function create({ cwd, base, selection, trustAuthors }: TrackerContext): Tracker {
-  // an argument that is an object is an environment added to the process: the token of the session
-  const gh = (...input: (string | Record<string, string>)[]): string => {
-    const env = input.find((a): a is Record<string, string> => typeof a === 'object');
-    const args = input.filter((a): a is string => typeof a === 'string');
-    return execFileSync('gh', args, {
+/** At most this many rate-limit waits in a row (primary and secondary together); the next error is thrown. */
+export const RATE_LIMIT_WAITS = 3;
+/** Seconds of the consecutive waits of a secondary limit: `gh` does not print `Retry-After` on an error. */
+export const SECONDARY_BACKOFF = [60, 120, 300];
+/** The longest wait for a primary limit, in seconds. */
+const MAX_PRIMARY_WAIT = 3600;
+
+/** A failed `gh` call that says it hit a rate limit (primary or secondary). */
+export const isRateLimit = (text: string): boolean =>
+  /rate limit|abuse detection|HTTP 429/i.test(text);
+
+/** Seconds until the reset of an exhausted limit in the answer of `gh api rate_limit`; undefined when none is exhausted. */
+export function primaryWait(answer: string, nowSeconds: number): number | undefined {
+  try {
+    const resources = Object.values(JSON.parse(answer).resources ?? {}) as {
+      remaining: number;
+      reset: number;
+    }[];
+    const resets = resources.filter((r) => r.remaining === 0).map((r) => r.reset);
+    if (resets.length === 0) return undefined;
+    return Math.min(MAX_PRIMARY_WAIT, Math.max(1, Math.ceil(Math.max(...resets) - nowSeconds)));
+  } catch {
+    return undefined;
+  }
+}
+
+const tickMs = (): number => Number(process.env.DELIVER_TICK_MS ?? 1000);
+// a blocking sleep: the tracker is synchronous, so a signal handler does not run during a wait (the `stop` file does)
+const pause = (ms: number): void => {
+  Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, ms);
+};
+
+export function create({
+  cwd,
+  base,
+  selection,
+  trustAuthors,
+  stopFile,
+  onStop,
+  onExhausted,
+  log,
+}: TrackerContext): Tracker {
+  const run = (args: string[], env?: Record<string, string>): string =>
+    execFileSync('gh', args, {
       cwd,
       ...(env ? { env: { ...process.env, ...env } } : {}),
       encoding: 'utf8',
@@ -122,6 +161,52 @@ export function create({ cwd, base, selection, trustAuthors }: TrackerContext): 
       // the default of 1 MB is too small for the lists of a large repository
       maxBuffer: 256 * 1024 * 1024,
     }).trim();
+  let waitsInARow = 0;
+  let secondaryInARow = 0;
+  /** Waits `seconds` (times DELIVER_TICK_MS) in slices of one second; false when the stop request ended it. */
+  const wait = (seconds: number): boolean => {
+    for (let second = 0; second < seconds; second++) {
+      if (stopFile && existsSync(stopFile)) return false;
+      pause(tickMs());
+    }
+    return !(stopFile && existsSync(stopFile));
+  };
+  // an argument that is an object is an environment added to the process: the token of the session
+  const gh = (...input: (string | Record<string, string>)[]): string => {
+    const env = input.find((a): a is Record<string, string> => typeof a === 'object');
+    const args = input.filter((a): a is string => typeof a === 'string');
+    for (;;) {
+      try {
+        const out = run(args, env);
+        waitsInARow = 0;
+        secondaryInARow = 0;
+        return out;
+      } catch (error) {
+        const e = error as { stderr?: string; message?: string };
+        // stderr only: the message of the error repeats the arguments (an issue title may say "rate limit")
+        if (!isRateLimit(e.stderr ?? '')) throw error;
+        if (waitsInARow >= RATE_LIMIT_WAITS) {
+          onExhausted?.(error as Error);
+          throw error;
+        }
+        waitsInARow++;
+        let seconds: number | undefined;
+        try {
+          seconds = primaryWait(run(['api', 'rate_limit'], env), Date.now() / 1000);
+        } catch {
+          // unreadable: treated like a secondary limit
+        }
+        const kind = seconds === undefined ? 'secondary' : 'primary';
+        seconds ??= SECONDARY_BACKOFF[Math.min(secondaryInARow++, SECONDARY_BACKOFF.length - 1)];
+        log?.(
+          `gh hit a ${kind} rate limit: waits ${seconds} s (${waitsInARow} of ${RATE_LIMIT_WAITS})`,
+        );
+        if (!wait(seconds)) {
+          onStop?.();
+          throw new Error('stopped during a rate-limit wait');
+        }
+      }
+    }
   };
   const api = <T,>(route: string): T => JSON.parse(gh('api', route));
   const list = <T,>(route: string): T[] =>
