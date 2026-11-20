@@ -14,6 +14,8 @@ Paths are relative to this skill's directory. Node >= 22.18 runs the helper (`.m
 
 ## Add a ratchet
 
+Order: a native baseline of the linter or architecture tool first, an own ratchet script second (`references/native-baselines.md`: ESLint, dependency-cruiser, ArchUnitNET, stale-entry snippet).
+
 1. Write a command that prints the current violations: entry kind, one key per line; count kind, `key<TAB>count` per line.
 2. Create the baseline once: `<command> | node scripts/baseline.mts --baseline <file> --kind entry --init`.
 3. Run the check in CI: `<command> | node scripts/baseline.mts --baseline <file> --kind entry`.
