@@ -64,12 +64,11 @@
     },
     {
       "name": "ts",
-      "description": "TypeScript and Node.js: implementation conventions and review rules, Vitest testing, project scaffolding, Biome or ESLint/Prettier with Husky, pnpm workflow, MCP server generator.",
+      "description": "TypeScript and Node.js: implementation conventions and review rules, Vitest testing, project scaffolding, oxlint/oxfmt with Husky, pnpm workflow, MCP server generator.",
       "source": "./",
       "strict": false,
       "skills": [
-        "./skills/ts/setup-biome-husky",
-        "./skills/ts/setup-prettier-eslint-husky",
+        "./skills/ts/setup-oxc-husky",
         "./skills/ts/ts-create-project",
         "./skills/ts/ts-implementation",
         "./skills/ts/ts-mcp-server-generator",

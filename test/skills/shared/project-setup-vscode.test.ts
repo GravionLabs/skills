@@ -85,7 +85,9 @@ describe.skipIf(!hasPwsh)('New-EditorConfig.ps1', () => {
   });
 
   it('an oxfmt project uses the oxc extension, eslint stays recommended (ADR 0006)', async () => {
-    await run({ languages: ['ts'], tools: ['biome', 'oxfmt'], frameworks: ['angular'] }, ['-Apply']);
+    await run({ languages: ['ts'], tools: ['biome', 'oxfmt'], frameworks: ['angular'] }, [
+      '-Apply',
+    ]);
     expect(readJson('.vscode/settings.json')['[html]']['editor.defaultFormatter']).toBe(
       'oxc.oxc-vscode',
     );

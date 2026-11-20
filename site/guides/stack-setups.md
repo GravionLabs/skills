@@ -43,16 +43,15 @@ The same pattern works with `ts`, `py` and `ng`: `<lang>-create-project` or `ng-
 /skills-manage ng   # Angular only; brings angular/skills (angular-developer)
 ```
 
-| Goal                                   | Prompt                                                 | Skill                                              |
-| :------------------------------------- | :----------------------------------------------------- | :------------------------------------------------- |
-| Migrate from npm to pnpm               | "Switch this project to pnpm."                         | `ts-pnpm-workflow`                                 |
-| Pre-commit linting, plain TS (Biome)   | "Set up linting and formatting with pre-commit hooks." | `setup-biome-husky`                                |
-| Pre-commit linting, Angular (Prettier) | "Set up linting and formatting with pre-commit hooks." | `setup-prettier-eslint-husky`                      |
-| New Angular workspace                  | "Create an Angular app named shop with Vitest."        | `ng-create-project`                                |
-| Standalone component                   | "Add a product-list component under features/catalog." | `ng-implementation` (`references/component.md`)    |
-| NgRx Signal Store                      | "Create a signal store for the cart."                  | `ng-implementation` (`references/signal-store.md`) |
-| AG Grid Enterprise                     | "Add a grid with row grouping and Excel export."       | `ng-ag-grid`                                       |
-| MCP server                             | "Generate an MCP server with a search tool."           | `ts-mcp-server-generator`                          |
+| Goal                                               | Prompt                                                 | Skill                                              |
+| :------------------------------------------------- | :----------------------------------------------------- | :------------------------------------------------- |
+| Migrate from npm to pnpm                           | "Switch this project to pnpm."                         | `ts-pnpm-workflow`                                 |
+| Pre-commit linting, TS and Angular (oxlint, oxfmt) | "Set up linting and formatting with pre-commit hooks." | `setup-oxc-husky`                                  |
+| New Angular workspace                              | "Create an Angular app named shop with Vitest."        | `ng-create-project`                                |
+| Standalone component                               | "Add a product-list component under features/catalog." | `ng-implementation` (`references/component.md`)    |
+| NgRx Signal Store                                  | "Create a signal store for the cart."                  | `ng-implementation` (`references/signal-store.md`) |
+| AG Grid Enterprise                                 | "Add a grid with row grouping and Excel export."       | `ng-ag-grid`                                       |
+| MCP server                                         | "Generate an MCP server with a search tool."           | `ts-mcp-server-generator`                          |
 
 ## Verify a change
 

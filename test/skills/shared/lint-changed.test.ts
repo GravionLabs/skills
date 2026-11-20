@@ -96,7 +96,13 @@ describe.skipIf(!hasPwsh || process.platform === 'win32')('Format-Changed.ps1 -L
   // ADR 0006: .oxlintrc.json wins over a leftover biome.json; ng keeps eslint for the .html templates
   it.each([
     ['ts', ['npx --no-install oxlint --no-error-on-unmatched-pattern a.ts']],
-    ['ng', ['npx --no-install oxlint --no-error-on-unmatched-pattern a.ts', 'npx --no-install eslint c.html']],
+    [
+      'ng',
+      [
+        'npx --no-install oxlint --no-error-on-unmatched-pattern a.ts',
+        'npx --no-install eslint c.html',
+      ],
+    ],
   ])('an oxc project lints %s with oxlint', async (lang, cmds) => {
     const r = await go(repo.oxc, ['-Lint', '-Language', lang]);
     expect(r.status).toBe(0);

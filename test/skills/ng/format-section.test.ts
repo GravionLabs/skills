@@ -27,8 +27,9 @@ describe('ng-implementation ## Format', () => {
     expect(calls[0]).not.toContain('-Command');
     expect(calls[0]).toContain('references/format.md');
   });
-  it('stays within 5 lines and 100 lines of skill', () => {
-    expect(lines.length).toBeLessThanOrEqual(5);
+  // 6 while the Biome and the oxc line both exist; back to 5 when the last Biome repository is migrated (ADR 0006)
+  it('stays within 6 lines and 100 lines of skill', () => {
+    expect(lines.length).toBeLessThanOrEqual(6);
     expect(skill.split('\n').length).toBeLessThanOrEqual(100);
   });
   it('no longer repeats the shared override text', () => {

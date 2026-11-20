@@ -54,11 +54,15 @@ const defaults = (lang: string, biome: boolean, mode: Mode): string[] =>
 
 // an oxc project (ADR 0006): the oxfmt and oxlint step lines, plus the eslint step on .html of ng
 const oxcLine = (tool: string) =>
-  script.split('\n').find((l) => l.includes(`= @{ Tool = '${tool}'`) || l.includes(`+= @{ Tool = '${tool}'`)) ?? '';
+  script
+    .split('\n')
+    .find((l) => l.includes(`= @{ Tool = '${tool}'`) || l.includes(`+= @{ Tool = '${tool}'`)) ?? '';
 const oxcSteps = (lang: string): string[] => [
   oxcLine('oxfmt'),
   oxcLine('oxlint'),
-  ...(lang === 'ng' ? [script.split('\n').find((l) => l.includes("$defaults['ng'] += @{ Tool = 'eslint'")) ?? ''] : []),
+  ...(lang === 'ng'
+    ? [script.split('\n').find((l) => l.includes("$defaults['ng'] += @{ Tool = 'eslint'")) ?? '']
+    : []),
 ];
 
 describe('## Format sections match the Format-Changed.ps1 defaults', () => {
