@@ -30,6 +30,7 @@ A pass is cached by the hash of the changed files plus the base ref. An unchange
 ## Use
 
 - Run it once when the work is done (not after every edit; the fast `checks` cover the loop).
+- `scripts/Invoke-Gate.ps1` reads the `gate` key, runs the command in the repository root, prints its output and returns its exit code; without `gate` it prints `skipped: no gate configured` and exits 0; `-WhatIf` prints the command. Skills call it instead of parsing the config.
 - Never skip it and never commit with `--no-verify`.
 - Run it in the foreground with a timeout; a timeout is a failure, not a pass.
 
