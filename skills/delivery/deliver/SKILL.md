@@ -18,6 +18,8 @@ Input: `/deliver <nr> [--base <branch>] [--issue-file <path>]`. `<base>` is the 
 4. Review: a subagent with a fresh context reviews `git diff origin/<base>...HEAD` against the acceptance criteria and returns only blocking findings and unmet criteria. Run it in the foreground and wait for it; never schedule a wakeup or a cron job (`ScheduleWakeup`, `CronCreate`): the process must end when the work is done. A harness without subagents (Copilot CLI): review the diff yourself in a separate pass, after you re-read the acceptance criteria and without looking at your own reasoning, and say "reviewed without a subagent" in the notes. Fix them and review again, at most 2 fix rounds.
 5. Open the pull request into `<base>`:
    - Title: the issue title without its `[Level]` prefix, then ` (#<nr>)`. Its type must match the commits (a `feat` commit needs a `feat` title).
+   - Create it with `github-pull-request` and pass it `risk` and `visual_proof` from the implementer result (`implementation`, `references/runner-contract.md`), so `## Risk` and `## Visual proof` are filled; never invent them.
+   - Write the implementer result as JSON to the file in `DELIVER_RESULT_FILE` when that variable is set (the loop reads `risk.level` from it).
    - Body: what changed, the test result, the notes of the review, a line `Closes #<nr>`, and, when the environment variable `DELIVER_RUN` is set, a line `Run: <value>`.
 6. End here. The caller merges.
 
@@ -38,6 +40,8 @@ To bring `<base>` into your branch (a conflict, or a branch that is only behind)
 `node <skill-dir>/scripts/deliver-loop.mts --milestone M016` (or `--issues 12,15`) runs this skill once per ready issue in a fresh session and merges each pull request before the next issue starts (a merge commit into the default branch, squash into every other base). `--dry-run` prints the order and starts nothing.
 
 Settings, all optional, in `.agents/config.json` under `deliver` (the flag of the same name wins): `base` (the base branch; default: `release/next` with `--milestone`, else the default branch), `tracker` (`scripts/tracker/<name>.mts`, default `github`; the contract is `scripts/tracker.mts`), `harness` (the name of the agent CLI, `claude` (default) or `copilot`; the loop builds the command itself in `scripts/harness.mts`, a repository cannot set it), `protectedPaths` (a pull request that changes one of them is not merged by the loop; default: `.github/`, `.claude/`, the directory of the project config and the package manifests).
+
+The loop reads `risk.level` from the file of `DELIVER_RESULT_FILE` and writes it as `risk` into the `results.jsonl` line of the issue and after the merged issue in the report; an issue of level `high` is listed first under "needs you". A missing or invalid result leaves `risk` out.
 
 The old names `DELIVER_MIN_*` are read as `DELIVER_*` for one more release, with a warning. Keys of `deliver` that the loop does not know (`roles`, `loopThreshold`, `parallel`, `sessionTimeoutMinutes`) are ignored with one warning line.
 
