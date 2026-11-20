@@ -29,6 +29,7 @@ oxlint, oxfmt and oxlint-tsgolint are pinned to exact versions (`$Versions` in t
    ```
 
    It installs the packages with pnpm or npm (detected from the lockfile / `packageManager` field) at exact versions, copies the configs unless they exist, initializes Husky, adds `lint-staged` and the `lint`, `lint:fix`, `format`, `format:check` scripts (existing scripts are kept and reported), and writes the IDE settings (VS Code: `oxc.oxc-vscode`).
+
 4. Migrating a project: see `## Migration`.
 5. Format the project once: `npx oxfmt`; commit that alone and put its hash into `.git-blame-ignore-revs`.
 6. Verify: `pnpm lint` and `pnpm format:check` (npm: `npm run …`).

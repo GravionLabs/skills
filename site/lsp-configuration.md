@@ -7,6 +7,7 @@ This repository is configured with **Language Server Protocol (LSP) servers** fo
 ## What are LSP Servers?
 
 LSP servers provide language-specific features such as:
+
 - **Go to Definition**: Jump to where a symbol is defined
 - **Find References**: Locate all uses of a symbol
 - **Rename**: Safely rename symbols across your entire project
@@ -113,6 +114,7 @@ Download from [OmniSharp releases](https://github.com/OmniSharp/omnisharp-roslyn
 ## Automatic Startup
 
 Once installed, LSP servers are **automatically started** by Copilot CLI when you:
+
 1. Use a skill in a project with the relevant language
 2. Trust the project directory
 
@@ -132,11 +134,13 @@ LSP servers enhance Copilot skills by:
 ### Example Use Cases
 
 When you run an Angular skill in a TypeScript project:
+
 - Copilot can accurately find component definitions
 - Type information helps with precise code generation
 - Refactoring suggestions are based on actual type analysis
 
 When you run a Python skill:
+
 - Go-to-definition works accurately even with complex imports
 - Copilot understands the actual type information
 - Renaming operations update all references reliably
@@ -182,6 +186,7 @@ copilot /context
 ### Server Command Not Found
 
 If Copilot CLI says a server command is not found:
+
 1. Install the server (see Installation section above)
 2. Restart your terminal
 3. Restart Copilot CLI

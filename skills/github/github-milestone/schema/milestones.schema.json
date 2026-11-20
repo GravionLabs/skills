@@ -38,10 +38,17 @@
         "milestone": {
           "type": "object",
           "required": ["number", "title", "state"],
-          "properties": { "number": { "type": "integer" }, "title": { "type": "string" }, "state": { "enum": ["open", "closed"] } }
+          "properties": {
+            "number": { "type": "integer" },
+            "title": { "type": "string" },
+            "state": { "enum": ["open", "closed"] }
+          }
         },
         "baseUrl": { "type": "string", "description": "https://github.com/<owner>/<repo>." },
-        "nextMilestone": { "type": ["string", "null"], "description": "Title of the next open milestone, null when there is none." },
+        "nextMilestone": {
+          "type": ["string", "null"],
+          "description": "Title of the next open milestone, null when there is none."
+        },
         "issues": {
           "type": "array",
           "description": "Issues of the milestone for -State, number ascending, pull requests excluded.",
@@ -52,7 +59,10 @@
               "number": { "type": "integer" },
               "title": { "type": "string" },
               "state": { "enum": ["open", "closed"] },
-              "closed_at": { "type": ["string", "null"], "description": "ISO 8601 close time, null while open." },
+              "closed_at": {
+                "type": ["string", "null"],
+                "description": "ISO 8601 close time, null while open."
+              },
               "body": { "type": ["string", "null"] },
               "labels": { "type": "array", "items": { "type": "string" } },
               "assignees": { "type": "array", "items": { "type": "string" } },
@@ -62,7 +72,10 @@
                 "items": {
                   "type": "object",
                   "required": ["number"],
-                  "properties": { "number": { "type": "integer" }, "repository": { "type": "string" } }
+                  "properties": {
+                    "number": { "type": "integer" },
+                    "repository": { "type": "string" }
+                  }
                 }
               }
             }
@@ -76,9 +89,18 @@
       "type": "object",
       "required": ["closed", "milestone", "moved", "openIssues"],
       "properties": {
-        "version": { "type": "string", "description": "Only for M<n> closed by this run: the x.y.z of the new title M<n> [<Topic>] (x.y.z)." },
-        "closed": { "type": "boolean", "description": "true: this run closed the milestone. false: it was already closed, or open issues remain (see openIssues)." },
-        "milestone": { "$ref": "#/$defs/milestoneRef", "description": "title is the new M<n> [<Topic>] (x.y.z) once renamed." },
+        "version": {
+          "type": "string",
+          "description": "Only for M<n> closed by this run: the x.y.z of the new title M<n> [<Topic>] (x.y.z)."
+        },
+        "closed": {
+          "type": "boolean",
+          "description": "true: this run closed the milestone. false: it was already closed, or open issues remain (see openIssues)."
+        },
+        "milestone": {
+          "$ref": "#/$defs/milestoneRef",
+          "description": "title is the new M<n> [<Topic>] (x.y.z) once renamed."
+        },
         "moved": {
           "type": "array",
           "description": "Open issues moved to -MoveTo before closing.",
@@ -99,7 +121,10 @@
       "properties": {
         "renamed": { "const": true },
         "previousTitle": { "type": "string" },
-        "milestone": { "$ref": "#/$defs/milestoneRef", "description": "title is the new title (-To)." }
+        "milestone": {
+          "$ref": "#/$defs/milestoneRef",
+          "description": "title is the new title (-To)."
+        }
       },
       "additionalProperties": false
     },
@@ -109,7 +134,14 @@
       "required": ["dryRun", "milestone", "assigned", "warnings"],
       "properties": {
         "dryRun": { "type": "boolean", "description": "true: nothing was written." },
-        "milestone": { "oneOf": [{ "$ref": "#/$defs/milestoneRef" }, { "$ref": "#/$defs/missingRef" }, { "type": "null" }], "description": "The target; null for assign none; missingRef only on -DryRun against a milestone that does not exist yet (it would be created)." },
+        "milestone": {
+          "oneOf": [
+            { "$ref": "#/$defs/milestoneRef" },
+            { "$ref": "#/$defs/missingRef" },
+            { "type": "null" }
+          ],
+          "description": "The target; null for assign none; missingRef only on -DryRun against a milestone that does not exist yet (it would be created)."
+        },
         "assigned": {
           "type": "array",
           "items": {
@@ -117,8 +149,14 @@
             "required": ["number", "previous", "milestone", "status"],
             "properties": {
               "number": { "type": "integer" },
-              "previous": { "type": ["string", "null"], "description": "Milestone title before, null when none." },
-              "milestone": { "type": ["string", "null"], "description": "Milestone title after, null when cleared." },
+              "previous": {
+                "type": ["string", "null"],
+                "description": "Milestone title before, null when none."
+              },
+              "milestone": {
+                "type": ["string", "null"],
+                "description": "Milestone title after, null when cleared."
+              },
               "status": { "enum": ["set", "unchanged"] }
             },
             "additionalProperties": false
@@ -157,7 +195,11 @@
           "items": {
             "type": "object",
             "required": ["number", "from", "to"],
-            "properties": { "number": { "type": "integer" }, "from": { "type": "string" }, "to": { "type": "string" } }
+            "properties": {
+              "number": { "type": "integer" },
+              "from": { "type": "string" },
+              "to": { "type": "string" }
+            }
           }
         },
         "references": {
@@ -166,11 +208,21 @@
           "items": {
             "type": "object",
             "required": ["where", "name", "hint"],
-            "properties": { "where": { "type": "string" }, "name": { "type": "string" }, "hint": { "type": "string" } }
+            "properties": {
+              "where": { "type": "string" },
+              "name": { "type": "string" },
+              "hint": { "type": "string" }
+            }
           }
         },
-        "milestone": { "$ref": "#/$defs/milestoneRef", "description": "The created M<n>; absent on a dry run." },
-        "releaseTest": { "$ref": "#/$defs/releaseTest", "description": "Only with release.test in .agents/config.json and without -NoReleaseTest." }
+        "milestone": {
+          "$ref": "#/$defs/milestoneRef",
+          "description": "The created M<n>; absent on a dry run."
+        },
+        "releaseTest": {
+          "$ref": "#/$defs/releaseTest",
+          "description": "Only with release.test in .agents/config.json and without -NoReleaseTest."
+        }
       },
       "additionalProperties": false
     },
@@ -185,7 +237,11 @@
       "properties": {
         "allRepos": { "const": true },
         "dryRun": { "type": "boolean" },
-        "repos": { "type": "array", "description": "One result per repository with milestones.", "items": { "$ref": "#/$defs/renumber" } }
+        "repos": {
+          "type": "array",
+          "description": "One result per repository with milestones.",
+          "items": { "$ref": "#/$defs/renumber" }
+        }
       },
       "additionalProperties": false
     },
@@ -194,7 +250,10 @@
       "type": "object",
       "required": ["created", "milestone"],
       "properties": {
-        "created": { "type": "boolean", "description": "false: a milestone with that title existed and was left as is." },
+        "created": {
+          "type": "boolean",
+          "description": "false: a milestone with that title existed and was left as is."
+        },
         "milestone": {
           "type": "object",
           "required": ["number", "title", "state", "url"],
@@ -205,7 +264,10 @@
             "url": { "type": ["string", "null"] }
           }
         },
-        "releaseTest": { "$ref": "#/$defs/releaseTest", "description": "Only with release.test in .agents/config.json and without -NoReleaseTest." }
+        "releaseTest": {
+          "$ref": "#/$defs/releaseTest",
+          "description": "Only with release.test in .agents/config.json and without -NoReleaseTest."
+        }
       },
       "additionalProperties": false
     }
@@ -217,15 +279,26 @@
       "required": ["repo", "renumbered", "dryRun", "error", "renames", "skipped", "summary"],
       "properties": {
         "repo": { "type": "string" },
-        "renumbered": { "type": "boolean", "description": "true once the renames were written; false on a dry run or an error." },
+        "renumbered": {
+          "type": "boolean",
+          "description": "true once the renames were written; false on a dry run or an error."
+        },
         "dryRun": { "type": "boolean" },
-        "error": { "type": ["string", "null"], "description": "A clash (title already exists, two milestones become the same title): nothing was written, exit 1." },
+        "error": {
+          "type": ["string", "null"],
+          "description": "A clash (title already exists, two milestones become the same title): nothing was written, exit 1."
+        },
         "renames": {
           "type": "array",
           "items": {
             "type": "object",
             "required": ["number", "state", "old", "new"],
-            "properties": { "number": { "type": "integer" }, "state": { "enum": ["open", "closed"] }, "old": { "type": "string" }, "new": { "type": "string" } },
+            "properties": {
+              "number": { "type": "integer" },
+              "state": { "enum": ["open", "closed"] },
+              "old": { "type": "string" },
+              "new": { "type": "string" }
+            },
             "additionalProperties": false
           }
         },
@@ -235,7 +308,12 @@
           "items": {
             "type": "object",
             "required": ["number", "state", "title", "reason"],
-            "properties": { "number": { "type": "integer" }, "state": { "enum": ["open", "closed"] }, "title": { "type": "string" }, "reason": { "type": "string" } },
+            "properties": {
+              "number": { "type": "integer" },
+              "state": { "enum": ["open", "closed"] },
+              "title": { "type": "string" },
+              "reason": { "type": "string" }
+            },
             "additionalProperties": false
           }
         },
@@ -248,7 +326,10 @@
             "renames": { "type": "integer" },
             "unchanged": { "type": "integer", "description": "Numbered and already padded." },
             "skipped": { "type": "integer" },
-            "other": { "type": "integer", "description": "Legacy x.y.z and other titles, untouched." }
+            "other": {
+              "type": "integer",
+              "description": "Legacy x.y.z and other titles, untouched."
+            }
           },
           "additionalProperties": false
         }
@@ -259,7 +340,10 @@
       "type": "object",
       "required": ["created", "number", "url"],
       "properties": {
-        "created": { "type": "boolean", "description": "false: a release-test issue already existed in the milestone." },
+        "created": {
+          "type": "boolean",
+          "description": "false: a release-test issue already existed in the milestone."
+        },
         "number": { "type": "integer" },
         "url": { "type": ["string", "null"] }
       },
@@ -295,7 +379,17 @@
     "tag": { "type": ["string", "null"], "description": "Highest v<x.y.z> tag, null without one." },
     "summary": {
       "type": "object",
-      "required": ["number", "title", "state", "dueOn", "open", "closed", "progress", "tagged", "url"],
+      "required": [
+        "number",
+        "title",
+        "state",
+        "dueOn",
+        "open",
+        "closed",
+        "progress",
+        "tagged",
+        "url"
+      ],
       "properties": {
         "number": { "type": "integer" },
         "title": { "type": "string" },
@@ -303,8 +397,16 @@
         "dueOn": { "type": ["string", "null"] },
         "open": { "type": "integer", "minimum": 0 },
         "closed": { "type": "integer", "minimum": 0 },
-        "progress": { "type": "integer", "minimum": 0, "maximum": 100, "description": "closed / (open + closed) in %, 0 when empty." },
-        "tagged": { "type": "boolean", "description": "The tag v<version> exists: version of the parentheses in M<n> [<Topic>] (x.y.z), the title for legacy x.y.z; false for M<n> without version." },
+        "progress": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 100,
+          "description": "closed / (open + closed) in %, 0 when empty."
+        },
+        "tagged": {
+          "type": "boolean",
+          "description": "The tag v<version> exists: version of the parentheses in M<n> [<Topic>] (x.y.z), the title for legacy x.y.z; false for M<n> without version."
+        },
         "url": { "type": ["string", "null"] }
       }
     },
@@ -324,7 +426,10 @@
             "properties": {
               "number": { "type": "integer" },
               "title": { "type": "string" },
-              "repository": { "type": "string", "description": "owner/repo, only when the blocker is in another repository than the blocked issue." }
+              "repository": {
+                "type": "string",
+                "description": "owner/repo, only when the blocker is in another repository than the blocked issue."
+              }
             }
           }
         }
@@ -350,7 +455,15 @@
                 "items": {
                   "type": "object",
                   "required": ["number", "title", "milestone"],
-                  "properties": { "number": { "type": "integer" }, "title": { "type": "string" }, "milestone": { "type": "string" }, "repository": { "type": "string", "description": "owner/repo of a sub-issue from another repository." } }
+                  "properties": {
+                    "number": { "type": "integer" },
+                    "title": { "type": "string" },
+                    "milestone": { "type": "string" },
+                    "repository": {
+                      "type": "string",
+                      "description": "owner/repo of a sub-issue from another repository."
+                    }
+                  }
                 }
               }
             },

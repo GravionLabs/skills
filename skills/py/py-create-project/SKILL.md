@@ -25,6 +25,7 @@ Scaffold a Python project with a production-ready baseline using `uv`. Paths to 
    ```
 
    It runs `uv init`, applies the template `pyproject.toml` (ruff + pytest config, registered test markers), creates `src/<package>/__init__.py` and `tests/conftest.py`, then runs `uv sync`.
+
 3. **CI:** copy `templates/.github/workflows/ci.yml` into the project. It calls the `GravionLabs/ci` reusable Python workflow; if the project publishes, confirm the `PYPI_TOKEN` secret is configured.
 4. **Verify:**
 
@@ -33,6 +34,7 @@ Scaffold a Python project with a production-ready baseline using `uv`. Paths to 
    uv run pytest         # tests pass
    uv build              # package builds (library/app)
    ```
+
 5. **Next steps:** add dependencies with `uv add <package>`; uv flag reference in `py-implementation/references/uv-cli.md`
 
 Parameters: `-ProjectName` (required), `-ProjectType` (library/app/workspace), `-OutputDirectory`, `-Upgrade` (resolve latest compatible versions)

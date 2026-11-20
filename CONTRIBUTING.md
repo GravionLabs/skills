@@ -35,6 +35,7 @@ The repo uses pnpm (`pnpm-lock.yaml`) only.
    ```
 
    Tests of skill content and scripts live in `test/skills/<group>/`, repository checks in `test/repo/`, shared helpers in `test/helpers/`. `pnpm test` runs Vitest, `pnpm run test:ci` adds coverage (CI), a single file runs with `pnpm vitest run <path>`.
+
 5. Update the group `description` in `.claude-plugin/marketplace.json` when the group scope changed, and the group table in AGENTS.md and README.md.
 6. Open a PR with a conventional-commit title (`feat(py): …`, `fix(github): …`). The changelog is generated from commit messages with git-cliff.
 
