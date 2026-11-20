@@ -49,6 +49,10 @@ A file may hold several rules separated by `---`; each needs its own test.
 - a rule test with the same `id` exists in a `testDir` of `sgconfig.yml`;
 - the YAML reading is line-based (top-level `id` and `message`, plain, quoted, `>` and `|` scalars); it does not evaluate the rule.
 
+## Starter rules
+
+Check them from the skill directory: `ast-grep test --config templates/sgconfig.starter.yml` and `node scripts/check-rules.mts --config templates/sgconfig.starter.yml --allow-placeholder`. Snapshots live in `templates/rule-tests/__snapshots__/` (copy them too). The rules use `language: Tsx` and `languageGlobs` of the starter config maps `*.ts`, `*.mts`, `*.cts` to it, so one rule covers all three; `files` limits them to `*.test.*` and `*.spec.*`. The reason comment sits on the line above the statement; a trailing comment does not count.
+
 ## Pitfalls
 
 - Do not call `sg`; use `ast-grep`.

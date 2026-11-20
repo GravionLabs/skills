@@ -1,0 +1,42 @@
+id: no-skip-without-reason
+snapshots:
+  "// TODO later\nit.skip('works', () => {})\n":
+    labels:
+    - source: it.skip('works', () => {})
+      style: primary
+      start: 14
+      end: 40
+    - source: it.skip('works', () => {})
+      style: secondary
+      start: 14
+      end: 40
+  "describe.skip('suite', () => {})":
+    labels:
+    - source: describe.skip('suite', () => {})
+      style: primary
+      start: 0
+      end: 32
+    - source: describe.skip('suite', () => {})
+      style: secondary
+      start: 0
+      end: 32
+  "it.skip('works', () => {})":
+    labels:
+    - source: it.skip('works', () => {})
+      style: primary
+      start: 0
+      end: 26
+    - source: it.skip('works', () => {})
+      style: secondary
+      start: 0
+      end: 26
+  "test.skip('works', () => {})":
+    labels:
+    - source: test.skip('works', () => {})
+      style: primary
+      start: 0
+      end: 28
+    - source: test.skip('works', () => {})
+      style: secondary
+      start: 0
+      end: 28

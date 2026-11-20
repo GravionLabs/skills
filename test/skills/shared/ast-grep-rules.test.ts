@@ -133,3 +133,39 @@ describe('ast-grep-rules skill files', () => {
       expect(fs.readFileSync(path.join(root, f), 'utf8')).toContain('`ast-grep-rules`');
   });
 });
+
+describe('ast-grep-rules starter rules for TypeScript tests', () => {
+  const tpl = path.join(skill, 'templates');
+  const config = path.join(tpl, 'sgconfig.starter.yml');
+  const ids = [
+    'no-real-time-wait-in-tests',
+    'no-polling-loop-in-tests',
+    'no-skip-without-reason',
+    'no-timeout-without-reason',
+  ];
+  const hasAstGrep = spawnSync('ast-grep', ['--version'], { encoding: 'utf8' }).status === 0;
+
+  it.each(ids)('%s has a rule and a rule test with a valid and an invalid case', (id) => {
+    const rule = fs.readFileSync(path.join(tpl, 'rules', `${id}.yml`), 'utf8');
+    expect(rule).toContain(`id: ${id}`);
+    expect(rule).toContain('language: Tsx');
+    const t = fs.readFileSync(path.join(tpl, 'rule-tests', `${id}-test.yml`), 'utf8');
+    expect(t).toContain(`id: ${id}`);
+    expect(t).toMatch(/^valid:/m);
+    expect(t).toMatch(/^invalid:/m);
+  });
+
+  it('check-rules accepts the #<nr> placeholder only with --allow-placeholder', () => {
+    const run = (...a: string[]) =>
+      spawnSync(process.execPath, [SCRIPT, '--config', config, ...a], { encoding: 'utf8' });
+    expect(run().status).toBe(1);
+    expect(run('--allow-placeholder')).toMatchObject({ status: 0, stderr: '' });
+  });
+
+  it.skipIf(!hasAstGrep)('ast-grep test passes on the starter rules', () => {
+    const r = spawnSync('ast-grep', ['test', '--config', config], { encoding: 'utf8' });
+    expect(r.status, `${r.stdout}${r.stderr}`).toBe(0);
+  });
+  if (!hasAstGrep)
+    console.warn('ast-grep is not installed: ast-grep test on the templates skipped');
+});

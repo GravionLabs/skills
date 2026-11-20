@@ -1,0 +1,14 @@
+id: no-polling-loop-in-tests
+snapshots:
+  "setInterval(() => check(), 100)":
+    labels:
+    - source: setInterval(() => check(), 100)
+      style: primary
+      start: 0
+      end: 31
+  "while (!ready) { await tick() }":
+    labels:
+    - source: while (!ready) { await tick() }
+      style: primary
+      start: 0
+      end: 31

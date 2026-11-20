@@ -1,0 +1,32 @@
+id: no-timeout-without-reason
+snapshots:
+  "// slow\nit('works', () => {}, { timeout: 30000 })\n":
+    labels:
+    - source: "timeout: 30000"
+      style: primary
+      start: 32
+      end: 46
+    - source: timeout
+      style: secondary
+      start: 32
+      end: 39
+  "it('works', () => {}, { timeout: 30000 })":
+    labels:
+    - source: "timeout: 30000"
+      style: primary
+      start: 24
+      end: 38
+    - source: timeout
+      style: secondary
+      start: 24
+      end: 31
+  "vi.setConfig({ testTimeout: 30000 })":
+    labels:
+    - source: "testTimeout: 30000"
+      style: primary
+      start: 15
+      end: 33
+    - source: testTimeout
+      style: secondary
+      start: 15
+      end: 26
