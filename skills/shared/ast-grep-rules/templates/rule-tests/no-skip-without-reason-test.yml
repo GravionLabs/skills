@@ -1,0 +1,13 @@
+id: no-skip-without-reason
+valid:
+  - it('works', () => {})
+  - |
+    // quarantine: flaky on CI, tracked in #123
+    it.skip('works', () => {})
+invalid:
+  - it.skip('works', () => {})
+  - test.skip('works', () => {})
+  - describe.skip('suite', () => {})
+  - |
+    // TODO later
+    it.skip('works', () => {})

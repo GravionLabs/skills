@@ -1,6 +1,7 @@
 // Checks the ast-grep rules of a repository: every rule has a message with a reason ("Why:"), a
 // replacement ("Instead:") and the issue or PR that caused it ("See #123"), and a rule test of the
-// same id. Usage: node check-rules.mts [--config <sgconfig.yml>]  (default: sgconfig.yml)
+// same id. Usage: node check-rules.mts [--config <sgconfig.yml>] [--allow-placeholder]
+// (default config: sgconfig.yml). --allow-placeholder accepts "See #<nr>" and is for the templates only.
 // Exit 0 ok, 1 violations, 2 usage error. Node >= 22.18 (erasable TypeScript, no dependencies).
 import { existsSync, readdirSync, readFileSync, statSync } from 'node:fs';
 import { dirname, join, resolve } from 'node:path';
@@ -63,16 +64,17 @@ function listAfter(text: string, key: string): string[] {
   return out;
 }
 
-export function messageProblems(message: string): string[] {
+export function messageProblems(message: string, allowPlaceholder = false): string[] {
   const missing: string[] = [];
   if (!/\bWhy:\s*\S/.test(message)) missing.push('a reason ("Why: …")');
   if (!/\bInstead:\s*\S/.test(message)) missing.push('a replacement ("Instead: …")');
-  if (!/(?:See|Fixes|Refs?)\s+(?:\S+)?#\d+/.test(message))
+  const issue = allowPlaceholder ? /#(?:\d+|<nr>)/ : /#\d+/;
+  if (!new RegExp(`(?:See|Fixes|Refs?)\\s+(?:\\S+)?${issue.source}`).test(message))
     missing.push('an issue or PR ("See #123")');
   return missing;
 }
 
-export function check(configPath: string): string[] {
+export function check(configPath: string, allowPlaceholder = false): string[] {
   const config = resolve(configPath);
   if (!existsSync(config)) throw new Error(`sgconfig not found: ${configPath}`);
   const base = dirname(config);
@@ -95,7 +97,7 @@ export function check(configPath: string): string[] {
       for (const d of parseDocs(readFileSync(f, 'utf8'))) {
         if (!d.id) continue;
         const where = `${f}: rule ${d.id}`;
-        const missing = messageProblems(d.message ?? '');
+        const missing = messageProblems(d.message ?? '', allowPlaceholder);
         if (missing.length)
           problems.push(
             `${where}: message lacks ${missing.join(', ')}. Form: "Why: …. Instead: …. See #123."`,
@@ -108,13 +110,15 @@ export function check(configPath: string): string[] {
 
 if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) {
   const args = process.argv.slice(2);
-  const i = args.indexOf('--config');
-  if (args.length && (i < 0 || !args[i + 1] || args.length !== 2)) {
-    console.error('usage: node check-rules.mts [--config <sgconfig.yml>]');
+  const allowPlaceholder = args.includes('--allow-placeholder');
+  const rest = args.filter((a) => a !== '--allow-placeholder');
+  const i = rest.indexOf('--config');
+  if (rest.length && (i < 0 || !rest[i + 1] || rest.length !== 2)) {
+    console.error('usage: node check-rules.mts [--config <sgconfig.yml>] [--allow-placeholder]');
     process.exit(2);
   }
   try {
-    const problems = check(i >= 0 ? args[i + 1] : 'sgconfig.yml');
+    const problems = check(i >= 0 ? rest[i + 1] : 'sgconfig.yml', allowPlaceholder);
     if (problems.length) {
       console.error(problems.join('\n'));
       process.exit(1);

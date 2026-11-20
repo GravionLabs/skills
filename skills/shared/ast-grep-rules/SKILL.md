@@ -40,4 +40,8 @@ Wire the three commands as `checks` entries of `.agents/config.json` with `fast:
 - `ast-grep test`
 - `node scripts/ast-grep-rules/check-rules.mts` (copy of this skill's script)
 
+## Starter set
+
+`templates/rules/` and `templates/rule-tests/` hold four TypeScript test rules (`.ts`, `.tsx`, `.mts` test and spec files): real-time waits, polling loops, a skip without `// quarantine: <reason>`, a timeout without `// timeout: <reason>`. Copy what the repository needs; replace `#<nr>` with its own incident (the placeholder passes `check-rules.mts` only with `--allow-placeholder`, used on `templates/sgconfig.starter.yml`).
+
 Details, rule syntax pointers and pitfalls: `references/rules.md`.

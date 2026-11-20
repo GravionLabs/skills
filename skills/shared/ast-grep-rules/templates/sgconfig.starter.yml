@@ -1,0 +1,11 @@
+# Config of the starter rules: ast-grep test --config templates/sgconfig.starter.yml (from the skill directory).
+# Copy rules/ and rule-tests/ into ast-grep/ of the repository and use templates/sgconfig.yml there.
+ruleDirs:
+  - rules
+testConfigs:
+  - testDir: rule-tests
+languageGlobs:
+  Tsx:
+    - '*.ts'
+    - '*.mts'
+    - '*.cts'
