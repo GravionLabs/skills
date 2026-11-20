@@ -33,11 +33,13 @@ describe('github tracker rate-limit wait', () => {
   const setup = async (failures: number, exhausted: boolean, extra: object = {}) => {
     writeFileSync(path.join(dir, 'scenario.json'), JSON.stringify({ failures, exhausted }));
     const fake = createFakeGh(dir, handler);
-    process.env = {
+    // set the keys on the real process.env (a replaced object is not what a worker's child processes inherit everywhere)
+    const env = {
       ...fake.env(saved),
       SCENARIO: path.join(dir, 'scenario.json'),
       DELIVER_TICK_MS: '5',
     };
+    for (const [k, v] of Object.entries(env)) if (v !== undefined) vi.stubEnv(k, v);
     const mod = await import(GITHUB);
     const logs: string[] = [];
     const stops: number[] = [];
@@ -61,7 +63,7 @@ describe('github tracker rate-limit wait', () => {
     stopFile = path.join(dir, 'run', 'stop');
   });
   afterEach(() => {
-    process.env = saved;
+    vi.unstubAllEnvs();
     vi.restoreAllMocks();
   });
 
