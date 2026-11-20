@@ -112,7 +112,7 @@ The launcher finds the installed `deliver` skill (project first, then your home)
 
 ## Resume and feedback
 
-State lives in GitHub (issue, branch, pull request, checks). After a crash, a closed terminal or a stop, run the same command again: closed issues are not selected, an existing pull request goes straight to its checks. A session that ends `needs-decision` or `blocked` is set aside for the rest of the run and listed at the end with its reason. Answer in the issue, remove the label (`gh issue edit 43 --remove-label needs-decision`) and run again. A pull request that changes protected paths is no failure: it is listed under `needs you` (yellow) with its URL; merge it yourself, then run the same command again. The run still ends with exit code 2.
+State lives in GitHub (issue, branch, pull request, checks). After a crash, a closed terminal or a stop, run the same command again: closed issues are not selected, an existing pull request goes straight to its checks. A session that ends `needs-decision` or `blocked` is set aside for the rest of the run and listed at the end with its reason. Answer in the issue, remove the label (`gh issue edit 43 --remove-label needs-decision`) and run again. A pull request that changes protected paths is no failure: it is listed under `needs you` (yellow) with its URL; merge it yourself, then run `/deliver` again (or the same command). PBIs that are `blocked_by` a handed-over PBI cannot run until then: the report lists them per pull request (`waiting for the handed-over pull request of #N`), the last line reads `waiting for a handed-over PR`, `results.jsonl` ends with `{"run":"finished","status":"waiting-for-handed-over",…}` and the exit code is 3 (`done` is 0, `blocked` is 2).
 
 ## Progress events
 

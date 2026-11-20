@@ -72,6 +72,7 @@ type Outcome = {
     hasSessionTokenVariable: boolean;
   }[];
   results: { issue: number; outcome: string; reason?: string }[];
+  final?: Record<string, unknown>;
   events: { type: string; outcome?: string; reason?: string; needsYou?: boolean }[];
   log: string;
 };
@@ -171,7 +172,10 @@ function loop(
         ).length,
         calls: lines<{ call: string }>(path.join(dir, 'calls.jsonl')).map((call) => call.call),
         sessions: lines(path.join(dir, 'sessions.jsonl')),
-        results: results ? lines(results) : [],
+        results: results
+          ? lines<{ issue?: number }>(results).filter((r) => r.issue !== undefined)
+          : [],
+        final: results ? lines<Record<string, unknown>>(results).find((r) => r.run) : undefined,
         events: existsSync(events) ? lines(path.join(events, readdirSync(events)[0] ?? '')) : [],
         log: results
           ? readFileSync(path.join(path.dirname(path.dirname(results)), 'loop.log'), 'utf8')
@@ -318,7 +322,7 @@ describe('deliver loop', () => {
       type: 'run.finished',
       outcome: 'failed',
       reason: 'incomplete',
-      text: 'merged 0, set aside 1, waiting 0',
+      text: 'blocked: merged 0, set aside 1, waiting 0',
     });
     // not merged: the worktree may hold work that is not pushed
     expect(existsSync(path.join(root, 'repo-wt-21'))).toBe(true);
@@ -376,7 +380,7 @@ describe('deliver loop', () => {
       items: [{ id: 62, title: '[PBI] feat: pushed later' }],
       filesLater: ['src/a.ts', '.github/workflows/x.yml'],
     });
-    expect(out.status).toBe(2);
+    expect(out.status).toBe(3);
     expect(out.sessions).toHaveLength(1);
     expect(out.merges).toEqual([]);
     expect(out.results[0]?.reason).toBe(
@@ -394,7 +398,7 @@ describe('deliver loop', () => {
       items: [{ id: 600 + count, title: '[PBI] feat: path' }],
       files: [file],
     });
-    expect(out.status).toBe(2);
+    expect(out.status).toBe(3);
     expect(out.merges).toEqual([]);
   });
 
@@ -445,7 +449,7 @@ describe('deliver loop', () => {
       items: [{ id: 61, title: '[PBI] ci: workflow' }],
       files: ['src/a.ts', '.github/workflows/ci.yml', 'packages/x/package.json'],
     });
-    expect(out.status).toBe(2);
+    expect(out.status).toBe(3);
     expect(out.sessions).toHaveLength(1);
     expect(out.merges).toEqual([]);
     expect(out.results[0]?.reason).toBe(
@@ -503,12 +507,35 @@ describe('deliver loop', () => {
     expect(out.log).toContain('Dependency review fails');
   });
 
+  it('names the PBIs that wait for a handed-over pull request', async () => {
+    const out = await loop({
+      items: [
+        { id: 81, title: '[PBI] ci: workflow' },
+        { id: 82, title: '[PBI] feat: after it', blockedBy: [81] },
+        { id: 83, title: '[PBI] feat: also after it', blockedBy: [81] },
+      ],
+      files: ['.github/workflows/ci.yml'],
+    });
+    expect(out.status).toBe(3);
+    expect(out.stdout).toMatch(
+      /waiting for the handed-over pull request of #81 \(2\):\n {2}#82 blocked by #81\n {2}#83 blocked by #81/,
+    );
+    expect(out.stdout).toContain('waiting for a handed-over PR: merge it, then run /deliver again');
+    expect(out.stdout).not.toMatch(/^blocked$/m);
+    expect(out.final).toMatchObject({
+      run: 'finished',
+      status: 'waiting-for-handed-over',
+      handedOver: [81],
+      waitingFor: { '81': ['#82 blocked by #81', '#83 blocked by #81'] },
+    });
+  });
+
   it('lists a hand-over by rule under needs you, a failure under set aside', async () => {
     const handed = await loop({
       items: [{ id: 62, title: '[PBI] ci: workflow' }],
       files: ['.github/workflows/ci.yml'],
     });
-    expect(handed.status).toBe(2);
+    expect(handed.status).toBe(3);
     expect(handed.stdout).toMatch(/set aside \(0\):/);
     expect(handed.stdout).toMatch(
       /needs you \(1\):\n {2}#62 changes protected paths \(\.github\/workflows\/ci\.yml\), \S+/,

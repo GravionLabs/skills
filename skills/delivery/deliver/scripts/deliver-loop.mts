@@ -881,6 +881,15 @@ if (complete) {
 }
 
 needsYou = [...[...handedOver].map(([nr, why]) => `#${nr} ${why}`), ...needsYou];
+// the open PBIs that wait for a handed-over pull request: their blockers name its issue
+const waitingFor = new Map<number, string[]>();
+for (const nr of handedOver.keys()) {
+  const dependents = waiting.filter((line) => {
+    const blockers = /^#\d+ blocked by (.*)$/.exec(line)?.[1]?.split(', ') ?? [];
+    return blockers.some((ref) => ref === `#${nr}` || ref === `${tracker.repo}#${nr}`);
+  });
+  if (dependents.length) waitingFor.set(nr, dependents);
+}
 say('');
 say(
   `merged (${merged.length}):${merged.map((line) => `\n  ${line}`).join('')}`,
@@ -913,9 +922,15 @@ if (baseBlocked) {
     'warning',
   );
 }
+for (const [nr, dependents] of waitingFor) {
+  say(
+    `waiting for the handed-over pull request of #${nr} (${dependents.length}):${dependents.map((line) => `\n  ${line}`).join('')}`,
+    'warn',
+  );
+}
 if (handedOver.size) {
   say(
-    'next step: merge the pull request above yourself, then start the loop again with the same arguments',
+    'next step: merge the pull request above yourself, then run /deliver again or start the loop again with the same arguments',
     'warn',
   );
 }
@@ -925,6 +940,31 @@ const clean =
   aside.size === 0 &&
   handedOver.size === 0 &&
   waiting.length === 0;
+// done, blocked (a red base, an issue set aside, an error) or waiting for a handed-over pull request
+const status = clean
+  ? 'done'
+  : !baseBlocked && !releaseError && aside.size === 0 && handedOver.size > 0
+    ? 'waiting-for-handed-over'
+    : 'blocked';
+if (!stopped) {
+  say(
+    status === 'done'
+      ? 'done'
+      : status === 'blocked'
+        ? 'blocked'
+        : 'waiting for a handed-over PR: merge it, then run /deliver again',
+    status === 'done' ? 'ok' : status === 'blocked' ? 'bad' : 'warn',
+  );
+}
+appendFileSync(
+  path.join(runDir, 'results.jsonl'),
+  `${JSON.stringify({
+    run: 'finished',
+    status,
+    handedOver: [...handedOver.keys()],
+    waitingFor: Object.fromEntries(waitingFor),
+  })}\n`,
+);
 // An incomplete run (issues set aside or waiting) is no success: the agent-events format has no
 // other outcome for it than `failed`; the counts are in the text.
 emit(
@@ -932,8 +972,8 @@ emit(
   {
     outcome: stopped ? 'cancelled' : clean ? 'succeeded' : 'failed',
     ...(stopped || clean ? {} : { reason: 'incomplete' }),
-    text: `merged ${merged.length}, set aside ${aside.size}, waiting ${waiting.length}${needsYou.length ? `, needs you ${needsYou.length}` : ''}`,
+    text: `${status}: merged ${merged.length}, set aside ${aside.size}, waiting ${waiting.length}${needsYou.length ? `, needs you ${needsYou.length}` : ''}`,
   },
   stopped ? 'neutral' : clean ? 'success' : 'warning',
 );
-process.exit(stopped ? 130 : clean ? 0 : 2);
+process.exit(stopped ? 130 : clean ? 0 : status === 'waiting-for-handed-over' ? 3 : 2);
