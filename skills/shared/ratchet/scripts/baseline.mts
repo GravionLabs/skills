@@ -2,7 +2,7 @@
 // can only shrink. Entry baseline: sorted violation keys, one per line. Count baseline: JSON object
 // key → number. Current violations come from stdin (entry: one key per line; count: `key<TAB>count`
 // per line) or from `--current <file>`.
-import { existsSync, readFileSync, writeFileSync } from 'node:fs';
+import { existsSync, readFileSync, realpathSync, writeFileSync } from 'node:fs';
 import { pathToFileURL } from 'node:url';
 
 export type Kind = 'entry' | 'count';
@@ -165,6 +165,6 @@ export function main(argv: string[], stdin: () => string): number {
   }
 }
 
-if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) {
+if (process.argv[1] && import.meta.url === pathToFileURL(realpathSync(process.argv[1])).href) {
   process.exitCode = main(process.argv.slice(2), () => readFileSync(0, 'utf8'));
 }

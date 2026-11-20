@@ -19,3 +19,6 @@ skills-manage: ng-ag-grid-developer
 github-project: project-url
 # deliver-loop is the launcher command that Install-LoopShim.ps1 writes, not a skill
 skills-manage: deliver-loop
+
+# scripts/ratchets is the default ratchet directory of the target repository, not a folder of the skill
+ratchet: scripts/ratchets
