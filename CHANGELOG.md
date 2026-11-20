@@ -5,10 +5,24 @@ Versioning follows [Semantic Versioning](https://semver.org/).
 
 ---
 
-## [Unreleased]
+## [5.3.0] — 2026-11-20
 
 ### Bug Fixes
-- **statusline**: Removed the subagent status line: Claude Code 2.1.323 removed the `subagentStatusLine` setting. The installer no longer writes it, removes our own entry of an older version, and `subagent-statusline.mjs` is gone (#745)
+- **ts**: Setup-oxc-husky flags long inline styles as inline declarations (#790) (#791)
+- **statusline**: Context-statusline installs a subagent line that Claude Code removed in 2.1.323 (#745) (#792)
+- **deliver**: A rate-limit wait does not use up a retry, a secondary limit waits longer (#682) (#796)
+- **shared**: Implementation runs fast static checks first and limits the full-suite rerun (#794) (#797)
+
+
+### Features
+- **deliver**: Report the loop state with OSC 7501 (#581) (#787)
+- **deliver**: The TypeScript loop applies the harness failure and session timeout rules (#681) (#795)
+
+
+## [5.2.1] — 2026-11-20
+
+### Documentation
+- Update CHANGELOG.md for v5.2.1 [skip ci]
 
 
 ## [5.2.0] — 2026-11-20
