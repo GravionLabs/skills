@@ -6,6 +6,9 @@
 .DESCRIPTION
     Verifies that required tools are installed: PowerShell, Git, Node.js, npm.
     Optionally checks for optional tools (gh, curl, jq, yq, ast-grep, python).
+    ast-grep is required, even without -Full, when the git toplevel (or the working
+    directory) has an sgconfig.yml. The binary is `ast-grep`, never `sg` (on Linux
+    `sg` is the shadow-utils command).
     Can auto-install missing tools using platform-specific package managers.
 
 .PARAMETER Full
@@ -93,7 +96,7 @@ function Install-Tool {
         } elseif ($OS_MacOS) {
             & brew install $installer.brew
         } elseif ($OS_Linux) {
-            & sudo apt-get install -y $installer.apt 2>/dev/null || & sudo dnf install -y $installer.dnf 2>/dev/null
+            if ($installer.npm) { & npm install -g $installer.npm } else { & sudo apt-get install -y $installer.apt 2>/dev/null || & sudo dnf install -y $installer.dnf 2>/dev/null }
         }
         
         # Verify installation
@@ -154,6 +157,26 @@ if (Test-Tool 'npm') {
     $results.missing += 'npm'
 }
 
+# ===== ast-grep: required where sgconfig.yml exists =====
+$astGrepRequired = $false
+$repoRoot = $null
+if (Test-Tool 'git') {
+    $repoRoot = (git rev-parse --show-toplevel 2>$null | Select-Object -First 1)
+}
+foreach ($root in @($repoRoot, (Get-Location).Path)) {
+    if ($root -and (Test-Path -LiteralPath (Join-Path $root 'sgconfig.yml'))) { $astGrepRequired = $true; break }
+}
+if ($astGrepRequired) {
+    if (Test-Tool 'ast-grep') {
+        $results.runtime['ast-grep'] = "✓ $(Get-ToolVersion 'ast-grep')"
+        Write-Host "  ✓ ast-grep (sgconfig.yml found): $(Get-ToolVersion 'ast-grep')" -ForegroundColor Green
+    } else {
+        $results.runtime['ast-grep'] = "✗ NOT FOUND"
+        Write-Host "  ✗ ast-grep (required, sgconfig.yml found): NOT FOUND" -ForegroundColor Red
+        $results.missing += 'ast-grep'
+    }
+}
+
 # ===== OPTIONAL Prerequisites =====
 if ($Full) {
     Write-Host "`n=== OPTIONAL Prerequisites ===" -ForegroundColor Cyan
@@ -168,6 +191,7 @@ if ($Full) {
     )
     
     foreach ($tool in $optionalTools) {
+        if ($astGrepRequired -and $tool -eq 'ast-grep') { continue }
         if (Test-Tool $tool) {
             $version = Get-ToolVersion $tool
             $results.optional[$tool] = "✓ $version"
@@ -191,6 +215,7 @@ if ($results.missing.Count -eq 0) {
         'Git'        = @{ windows = 'winget install Git.Git';              macos = 'brew install git';        linux = 'sudo apt-get install git' }
         'Node.js'    = @{ windows = 'winget install OpenJS.NodeJS';        macos = 'brew install node';       linux = 'sudo apt-get install nodejs' }
         'npm'        = @{ windows = 'included with Node.js';               macos = 'brew install node';       linux = 'sudo apt-get install npm' }
+        'ast-grep'   = @{ windows = 'winget install ast-grep.ast-grep';    macos = 'brew install ast-grep';   linux = 'npm install -g @ast-grep/cli' }
     }
 
     $installers = @{
@@ -198,6 +223,7 @@ if ($results.missing.Count -eq 0) {
         'Git'        = @{ winget = 'Git.Git';              brew = 'git';        apt = 'git';        dnf = 'git' }
         'Node.js'    = @{ winget = 'OpenJS.NodeJS';        brew = 'node';       apt = 'nodejs';     dnf = 'nodejs' }
         'npm'        = @{ winget = 'OpenJS.NodeJS';        brew = 'node';       apt = 'npm';        dnf = 'npm' }
+        'ast-grep'   = @{ winget = 'ast-grep.ast-grep';    brew = 'ast-grep';   npm = '@ast-grep/cli' }
     }
 
     Write-Host "✗ Missing Prerequisites" -ForegroundColor Red

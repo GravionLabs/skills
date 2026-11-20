@@ -7,7 +7,8 @@ Verify the environment for the GravionLabs skills. Paths to `scripts/` are relat
 
 - Run `pnpm run check` to execute the local build, formatting, manifest, skill-report, and test checks.
 - **Core/runtime** (always): PowerShell 7+, Git, Node.js, npm
-- **Optional** (`-Full`): `gh`, `curl`, `jq`, `yq`, `ast-grep`, Python 3.
+- **Required with `sgconfig.yml`** (git toplevel or working directory, even without `-Full`): `ast-grep`; a missing one exits 1 and `-AutoInstall` installs it. The binary is `ast-grep`, never `sg` (shadow-utils on Linux).
+- **Optional** (`-Full`): `gh`, `curl`, `jq`, `yq`, `ast-grep` (without `sgconfig.yml`), Python 3.
 
 ```powershell
 pwsh scripts/Check-Prerequisites.ps1 [-Full] [-AutoInstall]
