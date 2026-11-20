@@ -8,7 +8,7 @@ const skill = 'ts/setup-oxc-husky';
 
 describe('oxc setup (ADR 0006, #770)', () => {
   it('the formatter template matches the hub conventions', () => {
-    expect(json(`${skill}/templates/.oxfmtrc.json`)).toMatchObject({
+    expect(json(`${skill}/templates/.oxfmtrc.json.template`)).toMatchObject({
       printWidth: 100,
       tabWidth: 2,
       useTabs: false,
@@ -21,8 +21,8 @@ describe('oxc setup (ADR 0006, #770)', () => {
 
   it('both lint templates are type-aware; Angular loads the angular-eslint JS plugin', () => {
     for (const v of ['plain-ts', 'angular'])
-      expect(json(`${skill}/templates/${v}/.oxlintrc.json`).options.typeAware).toBe(true);
-    const ng = json(`${skill}/templates/angular/.oxlintrc.json`);
+      expect(json(`${skill}/templates/${v}/.oxlintrc.json.template`).options.typeAware).toBe(true);
+    const ng = json(`${skill}/templates/angular/.oxlintrc.json.template`);
     expect(ng.jsPlugins).toEqual(['@angular-eslint/eslint-plugin']);
     expect(ng.rules['@angular-eslint/component-max-inline-declarations']).toEqual([
       'error',

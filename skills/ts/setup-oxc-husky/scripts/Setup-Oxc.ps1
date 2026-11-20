@@ -24,6 +24,7 @@ param(
 $ErrorActionPreference = 'Stop'
 $TemplatesDir = Join-Path $PSScriptRoot '../templates'
 
+# templates carry a .template suffix: a nested .oxlintrc.json / .oxfmtrc.json would be picked up by oxc in this repository
 # exact versions: JS plugins are alpha (ADR 0006); raise them together, each older than the release-age delay
 $Versions = [ordered]@{ 'oxlint' = '1.93.0'; 'oxfmt' = '0.78.0'; 'oxlint-tsgolint' = '7.0.2007' }
 
@@ -35,8 +36,8 @@ $packages = @($Versions.GetEnumerator() | ForEach-Object { "$($_.Key)@$($_.Value
 if ($angular) { $packages += @('eslint', 'angular-eslint', 'typescript-eslint', '@angular-eslint/eslint-plugin') }
 
 $files = [ordered]@{
-  '.oxfmtrc.json'  = Join-Path $TemplatesDir '.oxfmtrc.json'
-  '.oxlintrc.json' = Join-Path $TemplatesDir "$variant/.oxlintrc.json"
+  '.oxfmtrc.json'  = Join-Path $TemplatesDir '.oxfmtrc.json.template'
+  '.oxlintrc.json' = Join-Path $TemplatesDir "$variant/.oxlintrc.json.template"
 }
 if ($angular) {
   $files['eslint.config.mjs'] = Join-Path $TemplatesDir 'angular/eslint.config.mjs'
