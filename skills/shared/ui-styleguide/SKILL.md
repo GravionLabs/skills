@@ -17,6 +17,7 @@ Gives a project a short core style guide and deep-dive files that an agent reads
 3. Fill every `<placeholder>` from the project: the token file, the real components, the real rules. Drop a deep-dive file and its link when the project has nothing to say there.
 4. Add the paragraph of `templates/agents-styleguide.md` to the project's `AGENTS.md`.
 5. Keep the core file at ≤ 100 lines; move detail into a deep-dive file.
+6. For an existing UI repository, follow `references/fill.md` to derive the first guide from its tokens and components.
 
 ## Design rules
 
