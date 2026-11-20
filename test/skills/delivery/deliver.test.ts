@@ -51,6 +51,7 @@ type Scenario = {
   blocked?: string;
   earlierPull?: boolean;
   lingers?: boolean;
+  hangs?: boolean;
   closeAfterCalls?: number;
   releaseTests?: number[];
   base?: string[];
@@ -349,6 +350,22 @@ describe('deliver loop', () => {
     expect(out.merges).toEqual([]);
     expect(out.results[0]).toMatchObject({ outcome: 'aside', reason: 'red: ci' });
   });
+
+  it('ends a loop interrupted with Ctrl+C during a hanging session as stopped', async () => {
+    const out = await loop(
+      { items: [{ id: 53, title: '[PBI] feat: hangs' }], hangs: true },
+      { whenStdout: (stdout, stop) => stdout.includes('working') && stop() },
+    );
+    expect(out.status).toBe(130);
+    expect(out.merges).toEqual([]);
+    expect(out.results[0]).toMatchObject({ outcome: 'stopped' });
+    expect(out.final).toMatchObject({ run: 'finished' });
+    const finished = out.events.filter((e) => e.type === 'run.finished');
+    expect(finished).toHaveLength(1);
+    expect(finished[0]).toMatchObject({ outcome: 'cancelled' });
+    expect(finished[0]?.reason).toBeUndefined();
+    expect(JSON.stringify(finished[0])).not.toMatch(/no progress|failed/);
+  }, 20_000);
 
   it('does not merge after a stop request during the check wait', async () => {
     const out = await loop(
