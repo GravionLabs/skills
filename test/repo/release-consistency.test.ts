@@ -12,9 +12,11 @@ const walk = (dir: string): string[] =>
   });
 
 describe('removed names are gone from skills and AGENTS.md', () => {
-  const files = [...walk(path.join(root, 'skills')), path.join(root, 'AGENTS.md')].filter(
-    (f) => !/\.(png|jpg|ico|zip)$/.test(f),
-  );
+  const files = [
+    ...walk(path.join(root, 'skills')),
+    ...walk(path.join(root, 'docs/agents-md-refs')),
+    path.join(root, 'AGENTS.md'),
+  ].filter((f) => !/\.(png|jpg|ico|zip)$/.test(f));
   const content = (f: string) => fs.readFileSync(f, 'utf-8');
   it.each([
     'verify-project',
