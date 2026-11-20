@@ -98,4 +98,32 @@ describe.skipIf(!hasPwsh || process.platform === 'win32')('Check-Prerequisites.p
       expect(r.out).toContain('ast-grep');
     });
   });
+
+  describe('actionlint, zizmor and shellcheck with .github/workflows/', () => {
+    it('fails and names the three tools when .github/workflows exists and they are missing', async () => {
+      fs.mkdirSync(path.join(proj, '.github/workflows'), { recursive: true });
+      const r = await run(full);
+      expect(r.code).toBe(1);
+      for (const tool of ['actionlint', 'zizmor', 'shellcheck']) expect(r.out).toContain(tool);
+    });
+
+    it('passes without .github/workflows and does not mention them', async () => {
+      const r = await run(full);
+      expect(r.code).toBe(0);
+      for (const tool of ['actionlint', 'zizmor', 'shellcheck']) expect(r.out).not.toContain(tool);
+    });
+
+    it('passes with .github/workflows when all three are installed', async () => {
+      fs.mkdirSync(path.join(proj, '.github/workflows'), { recursive: true });
+      const withTools = path.join(dir, 'with-workflow-tools');
+      linkTools(withTools, ['git', 'node', 'npm', 'uname', 'sh']);
+      for (const tool of ['actionlint', 'zizmor', 'shellcheck']) {
+        fs.writeFileSync(path.join(withTools, tool), `#!/bin/sh\necho "${tool} 0.0.0"\n`, {
+          mode: 0o755,
+        });
+      }
+      const r = await run(withTools);
+      expect(r.code).toBe(0);
+    });
+  });
 });
