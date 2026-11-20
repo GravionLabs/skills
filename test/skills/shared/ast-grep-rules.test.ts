@@ -169,3 +169,41 @@ describe('ast-grep-rules starter rules for TypeScript tests', () => {
   if (!hasAstGrep)
     console.warn('ast-grep is not installed: ast-grep test on the templates skipped');
 });
+
+describe('ast-grep-rules opt-in anti-slop rules', () => {
+  const opt = path.join(skill, 'templates/optional');
+  const config = path.join(opt, 'sgconfig.yml');
+  const ids = [
+    'no-module-mock-outside-tests',
+    'no-widen-then-assert',
+    'no-reduce-copy-accumulator',
+  ];
+  const hasAstGrep = spawnSync('ast-grep', ['--version'], { encoding: 'utf8' }).status === 0;
+
+  it.each(ids)('%s has a rule, a rule test and is listed in SKILL.md and rules.md', (id) => {
+    const rule = fs.readFileSync(path.join(opt, 'rules', `${id}.yml`), 'utf8');
+    expect(rule).toContain(`id: ${id}`);
+    const t = fs.readFileSync(path.join(opt, 'rule-tests', `${id}-test.yml`), 'utf8');
+    expect(t).toMatch(/^valid:/m);
+    expect(t).toMatch(/^invalid:/m);
+    expect(fs.readFileSync(path.join(skill, 'SKILL.md'), 'utf8')).toContain(`\`${id}\``);
+    expect(fs.readFileSync(path.join(skill, 'references/rules.md'), 'utf8')).toContain(id);
+  });
+
+  it('none is part of the starter set', () => {
+    for (const id of ids)
+      expect(fs.existsSync(path.join(skill, 'templates/rules', `${id}.yml`))).toBe(false);
+  });
+
+  it('check-rules accepts the optional rules with --allow-placeholder', () => {
+    const r = spawnSync(process.execPath, [SCRIPT, '--config', config, '--allow-placeholder'], {
+      encoding: 'utf8',
+    });
+    expect(r).toMatchObject({ status: 0, stderr: '' });
+  });
+
+  it.skipIf(!hasAstGrep)('ast-grep test passes on the optional rules', () => {
+    const r = spawnSync('ast-grep', ['test', '--config', config], { encoding: 'utf8' });
+    expect(r.status, `${r.stdout}${r.stderr}`).toBe(0);
+  });
+});

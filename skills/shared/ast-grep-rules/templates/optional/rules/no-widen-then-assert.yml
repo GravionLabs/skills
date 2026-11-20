@@ -1,0 +1,12 @@
+# Opt-in rule. Replace #<nr> with the issue of your own incident before use.
+id: no-widen-then-assert
+language: Tsx
+severity: error
+message: 'Why: asserting on a value cast to any or unknown proves nothing, the compiler no longer checks the shape the test claims. Instead: build the value with its real type (a factory or a typed fixture) and assert on it. See #<nr>.'
+files:
+  - '**/*.test.{ts,tsx,mts}'
+  - '**/*.spec.{ts,tsx,mts}'
+rule:
+  any:
+    - pattern: expect($X as any)
+    - pattern: expect($X as unknown as $T)

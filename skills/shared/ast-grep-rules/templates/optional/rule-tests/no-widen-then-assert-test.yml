@@ -1,0 +1,7 @@
+id: no-widen-then-assert
+valid:
+  - expect(result).toEqual(1)
+  - expect(value as Foo).toBe(x)
+invalid:
+  - expect(value as any).toBe(x)
+  - expect(value as unknown as Foo).toEqual(x)
