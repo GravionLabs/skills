@@ -35,6 +35,7 @@ Exit 2 on a usage error or a missing baseline.
 
 - `templates/check-file-size-ratchet.mts`: source files above 500 lines (`MAX_LINES`), baseline `path:lines`; lock and generated files excluded.
 - `templates/check-lint-suppressions-ratchet.mts`: count baseline `path` → number of `eslint-disable`, `oxlint-disable`, `biome-ignore`, Rust `#[allow(` and `#[expect(`, C# `#pragma warning disable`. Where `eslint-suppressions.json` (ESLint bulk suppressions) exists, ESLint is skipped: that file is the native baseline, keep it shrinking with `eslint --prune-suppressions`.
+- `templates/check-ts-any-ratchet.mts`: count baseline `path` → number of `: any`, `as any`, `<any>`, `@ts-nocheck` and `@ts-ignore` per `.ts`, `.tsx`, `.mts` file; comments and strings are not scanned (the two directives count at the start of a comment).
 
 ## Flags
 
