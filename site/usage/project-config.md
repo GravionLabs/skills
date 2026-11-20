@@ -13,7 +13,7 @@ The `deliver` loop reads four keys of `deliver`, all optional; the command-line 
 - `base`: the base branch of the pull requests, default `release/next` with `--milestone`, else the default branch.
 - `tracker`: the tracker, `scripts/tracker/<name>.mts` in the `deliver` skill, default `github`.
 - `harness`: the agent CLI, `claude` (default) or `copilot`. A name only: a command from the repository would let a change decide what the loop runs.
-- `protectedPaths`: a pull request that changes one of these paths is not merged by the loop. `dir/` is a directory at the root, anything else a file name anywhere. Default: `.github/`, `.agents/`, `.claude/`, `package.json`, `pnpm-workspace.yaml`, `Cargo.toml`, `pyproject.toml`, `go.mod`, `Directory.Packages.props`. The list replaces the default.
+- `protectedPaths`: a pull request that changes one of these paths is not merged by the loop. `dir/` is a directory at the root, anything else a file name anywhere. Default: `.github/`, `.agents/`, `.claude/`, `package.json`, `pnpm-workspace.yaml`, `Cargo.toml`, `pyproject.toml`, `go.mod`, `Directory.Packages.props`. The list replaces the default; the default lives in `protected-paths.json` of the `deliver` skill, which `planner` reads too (it cuts such changes into their own `interactive` PBI).
 
 ```json
 { "deliver": { "base": "main", "protectedPaths": [".github/", ".agents/", "package.json"] } }

@@ -13,6 +13,7 @@ import {
   writeFileSync,
 } from 'node:fs';
 import path from 'node:path';
+import { fileURLToPath } from 'node:url';
 import { createInterface } from 'node:readline';
 import { parseArgs } from 'node:util';
 import { appSettings, tokenSource as makeSource } from './app-token.mts';
@@ -191,17 +192,15 @@ if (process.env.DELIVER_TRACKER_DIR && inside(process.env.DELIVER_TRACKER_DIR)) 
 }
 // A pull request that changes one of these is never merged by the loop: a person looks at it first.
 // `dir/` is a directory at the root, anything else a file name anywhere. deliver.protectedPaths replaces the list.
-const PROTECTED: string[] = config.deliver?.protectedPaths ?? [
-  '.github/',
-  '.agents/',
-  '.claude/',
-  'package.json',
-  'pnpm-workspace.yaml',
-  'Cargo.toml',
-  'pyproject.toml',
-  'go.mod',
-  'Directory.Packages.props',
-];
+// The default list is `protected-paths.json` next to the skill (`planner` reads the same file).
+const PROTECTED: string[] =
+  config.deliver?.protectedPaths ??
+  JSON.parse(
+    readFileSync(
+      path.join(path.dirname(fileURLToPath(import.meta.url)), '../protected-paths.json'),
+      'utf8',
+    ),
+  );
 // Without regard to case (a checkout on macOS or Windows writes `.Claude/` into `.claude/`), and a file named
 // like a protected directory counts too (a symlink `.claude`).
 const protectedHits = (files: string[]): string[] =>
