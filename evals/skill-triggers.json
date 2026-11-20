@@ -354,8 +354,8 @@
       "Use the poimen MCP tools to start workers for these independent tasks and wait for their results."
     ],
     "shouldNotTrigger": [
-      "Add a new endpoint for listing orders",
-      "Review my changes for style issues"
+      "Rename the config key in this Rust crate and update its tests",
+      "Write release notes for the last milestone"
     ]
   }
 ]
