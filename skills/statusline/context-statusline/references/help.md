@@ -9,20 +9,19 @@ Runs `pwsh scripts/Install-Statusline.ps1` with the given parameters. Without ar
 ## Arguments and flags
 
 - `-Client claude|copilot|all`: client to configure (default `claude`). Copilot CLI gets the status line and, unless `-NoContextWarning`, the `postToolUse` context warning hook.
-- `-Force`: replace a `statusLine` / `subagentStatusLine` you set yourself.
+- `-Force`: replace a `statusLine` you set yourself.
 - `-NoContextWarning`: do not register the context warning hook.
-- `-Uninstall`: remove only the entries of this skill (status lines, hook, copies of older versions).
+- `-Uninstall`: remove only the entries of this skill (status line, hook, copies of older versions).
 - `-WhatIf`: show what would change, write nothing.
 - `help` (or `--help`, `-h`): print this text.
 
 What you get:
 
 - Status line (`statusline.mjs`): `user@host:dir`, model, `ctx:<pct>% (<used>k/<size>k)`, `(git branch)`, `5h:<pct>% 7d:<pct>%`. Null or missing fields are skipped.
-- Subagent line (`subagent-statusline.mjs`, Claude Code only): one row per subagent with type, model, `ctx:<pct>%` and label.
 
 - Context warning hook (`context-warning.sh`, bash): `UserPromptSubmit` on Claude Code, `postToolUse` on Copilot CLI. At `CONTEXT_WARN_TOKENS` (default 150000) the user sees a hint and the model is told to hand off and `/clear` (or `/compact`); the next warning needs `CONTEXT_WARN_STEP` (default 100000) more tokens. `CONTEXT_WARN_DEBUG=1` prints notes on stderr.
 
-Requires Node >= 22 and PowerShell 7+. Both scripts run on every refresh: no network, always exit 0.
+Requires Node >= 22 and PowerShell 7+. The script runs on every refresh: no network, always exit 0.
 
 ## Examples
 

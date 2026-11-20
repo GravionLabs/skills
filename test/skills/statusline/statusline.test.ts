@@ -9,7 +9,6 @@ const posix = process.platform !== 'win32';
 
 const DIR = path.resolve(__dirname, '../../../skills/statusline/context-statusline/scripts');
 const STATUS = path.join(DIR, 'statusline.mjs');
-const SUB = path.join(DIR, 'subagent-statusline.mjs');
 const INSTALLER = path.join(DIR, 'Install-Statusline.ps1');
 // eslint-disable-next-line no-control-regex
 const strip = (s: string) => s.replace(/\x1b\[[0-9;]*m/g, '');
@@ -207,130 +206,13 @@ describe('statusline.mjs', () => {
   });
 });
 
-describe('subagent-statusline.mjs', () => {
-  const rows = (stdout: string) =>
-    stdout
-      .trim()
-      .split('\n')
-      .map((l) => JSON.parse(l));
-  const task = (o: Record<string, unknown>) => ({
-    id: 't1',
-    agentType: 'explorer',
-    label: 'scan',
-    ...o,
-  });
-  // one process renders all tasks: one row per task, in order
-  const contents = (tasks: unknown[]) =>
-    rows(run(SUB, JSON.stringify({ tasks })).stdout).map((r) => r.content as string);
-
-  it('prints one JSON line per task with agent, model, percent, tokens and label', () => {
-    const r = run(
-      SUB,
-      JSON.stringify({
-        columns: 80,
-        tasks: [
-          task({
-            model: 'claude-haiku-4-5-20251001',
-            tokenCount: 36000,
-            contextWindowSize: 200000,
-          }),
-          task({
-            id: 't2',
-            agentType: 'planner',
-            model: 'opus',
-            tokenCount: 100000,
-            contextWindowSize: 200000,
-            label: 'plan it',
-          }),
-        ],
-      }),
-    );
-    expect(r.status).toBe(0);
-    const [a, b] = rows(r.stdout);
-    expect(a.id).toBe('t1');
-    expect(strip(a.content)).toBe('explorer haiku-4-5 ctx:18% (36k/200k) · scan');
-    expect(strip(b.content)).toBe('planner opus ctx:50% (100k/200k) · plan it');
-  });
-
-  it('colours by tokens: yellow from min(50%, 250k), red from min(80%, 500k)', () => {
-    const cases: [number, number, string][] = [
-      [10000, 200000, '32'],
-      [99999, 200000, '32'],
-      [100000, 200000, '33'],
-      [159999, 200000, '33'],
-      [160000, 200000, '31'],
-      [249999, 1000000, '32'],
-      [250000, 1000000, '33'],
-      [499999, 1000000, '33'],
-      [500000, 1000000, '31'],
-    ];
-    const out = contents(
-      cases.map(([n, size]) => task({ tokenCount: n, contextWindowSize: size })),
-    );
-    expect(out).toHaveLength(cases.length);
-    for (const [i, [, , code]] of cases.entries()) expect(out[i]).toContain(`\x1b[${code}mctx:`);
-  });
-
-  it('formats tokens as k and M (999499 -> 999k, 999500 -> 1M, 1500000 -> 1.5M, a 1M window -> 1M)', () => {
-    const out = contents([
-      task({ tokenCount: 999499, contextWindowSize: 2000000 }),
-      task({ tokenCount: 999500, contextWindowSize: 2000000 }),
-      task({ tokenCount: 1500000, contextWindowSize: 2000000 }),
-      task({ tokenCount: 250000, contextWindowSize: 1000000 }),
-    ]).map(strip);
-    expect(out[0]).toContain('(999k/2M)');
-    expect(out[1]).toContain('(1M/2M)');
-    expect(out[2]).toContain('(1.5M/2M)');
-    expect(out[3]).toBe('explorer ctx:25% (250k/1M) · scan');
-  });
-
-  it('shows only the token count when contextWindowSize is missing or zero', () => {
-    const out = contents(
-      [undefined, 0, null].map((size) => task({ tokenCount: 12400, contextWindowSize: size })),
-    );
-    expect(out.map(strip)).toEqual(Array(3).fill('explorer 12k · scan'));
-  });
-
-  it('uses defaults for missing fields (name, description, no tokens)', () => {
-    const [named, bare] = rows(
-      run(
-        SUB,
-        JSON.stringify({ tasks: [{ id: 7, name: 'bob', description: 'desc' }, { id: 'x' }] }),
-      ).stdout,
-    );
-    expect(named.id).toBe(7);
-    expect(strip(named.content)).toBe('bob 0k · desc');
-    expect(strip(bare.content)).toBe('agent 0k · ');
-  });
-
-  it('skips malformed tasks', () => {
-    const r = run(SUB, JSON.stringify({ tasks: [null, 5, 'x', {}, task({})] }));
-    expect(rows(r.stdout)).toHaveLength(1);
-  });
-
-  // parse error, no tasks key, tasks not an array, an empty task list
-  it.each(['', 'null', '{"tasks":"x"}', '{"tasks":[]}'])(
-    'prints nothing and exits 0 on stdin %j',
-    (stdin) => {
-      const r = run(SUB, stdin);
-      expect(r.status).toBe(0);
-      expect(r.stdout).toBe('');
-    },
-  );
-});
-
 /** Command path as the installer writes it: quoted when it contains whitespace, else as is (absolute outside HOME). */
 const cmdPath = (dir: string) => (/\s/.test(dir) ? `"${dir}"` : dir);
 /** Copies the skill scripts to <root>/<client dir>/skills/context-statusline/scripts and returns the installer path there. */
 const deploy = (root: string, clientDir: string) => {
   const dst = path.join(root, clientDir, 'skills', 'context-statusline', 'scripts');
   fs.mkdirSync(dst, { recursive: true });
-  for (const f of [
-    'statusline.mjs',
-    'subagent-statusline.mjs',
-    'context-warning.sh',
-    'Install-Statusline.ps1',
-  ])
+  for (const f of ['statusline.mjs', 'context-warning.sh', 'Install-Statusline.ps1'])
     fs.copyFileSync(path.join(DIR, f), path.join(dst, f));
   return path.join(dst, 'Install-Statusline.ps1');
 };
@@ -402,7 +284,6 @@ describe.skipIf(!hasPwsh || !posix)('Install-Statusline.ps1', () => {
       expect(r.status).toBe(0);
       expect(read()).toEqual({
         statusLine: ours('statusline.mjs'),
-        subagentStatusLine: ours('subagent-statusline.mjs'),
         hooks: hook(),
       });
       expect(fs.existsSync(oldCopy)).toBe(false);
@@ -417,10 +298,6 @@ describe.skipIf(!hasPwsh || !posix)('Install-Statusline.ps1', () => {
         statusLine: {
           type: 'command',
           command: 'node ~/.claude/skills/context-statusline/scripts/statusline.mjs',
-        },
-        subagentStatusLine: {
-          type: 'command',
-          command: 'node ~/.claude/skills/context-statusline/scripts/subagent-statusline.mjs',
         },
         hooks: hook('bash ~/.claude/skills/context-statusline/scripts/context-warning.sh'),
       });
@@ -443,7 +320,7 @@ describe.skipIf(!hasPwsh || !posix)('Install-Statusline.ps1', () => {
       fs.writeFileSync(settings, orig);
       expect((await install()).status).toBe(0);
       const s = read();
-      expect(Object.keys(s)).toEqual(['model', 'env', 'hooks', 'statusLine', 'subagentStatusLine']);
+      expect(Object.keys(s)).toEqual(['model', 'env', 'hooks', 'statusLine']);
       expect(s.env).toEqual({ A: 'ü' });
       expect(backups()).toHaveLength(1);
       expect(fs.readFileSync(path.join(path.dirname(settings), backups()[0]), 'utf8')).toBe(orig);
@@ -476,11 +353,32 @@ describe.skipIf(!hasPwsh || !posix)('Install-Statusline.ps1', () => {
       expect(read()).toEqual({
         statusLine: ours('statusline.mjs'),
         x: 1,
-        subagentStatusLine: ours('subagent-statusline.mjs'),
         hooks: hook(),
       });
       expect(fs.existsSync(oldCopy)).toBe(false);
       expect((await install()).stdout).toContain('Up to date');
+    });
+
+    it('removes our own subagentStatusLine of an older version on install, keeps a foreign one', async () => {
+      fs.writeFileSync(
+        settings,
+        JSON.stringify({ subagentStatusLine: ours('subagent-statusline.mjs') }),
+      );
+      expect((await install()).status).toBe(0);
+      expect(read().subagentStatusLine).toBeUndefined();
+      expect(read().statusLine).toEqual(ours('statusline.mjs'));
+      const foreign = { type: 'command', command: 'bash ~/mine.sh' };
+      fs.writeFileSync(settings, JSON.stringify({ subagentStatusLine: foreign }));
+      expect((await install()).status).toBe(0);
+      expect(read().subagentStatusLine).toEqual(foreign);
+      expect((await install('-Uninstall')).status).toBe(0);
+      expect(read().subagentStatusLine).toEqual(foreign);
+    });
+
+    it('never writes subagentStatusLine and ships no subagent script', async () => {
+      expect((await install()).status).toBe(0);
+      expect(read().subagentStatusLine).toBeUndefined();
+      expect(fs.existsSync(path.join(DIR, 'subagent-statusline.mjs'))).toBe(false);
     });
 
     it('refuses a foreign statusLine without -Force, replaces it with -Force', async () => {
@@ -498,7 +396,6 @@ describe.skipIf(!hasPwsh || !posix)('Install-Statusline.ps1', () => {
       expect(read()).toEqual({
         statusLine: ours('statusline.mjs'),
         x: 1,
-        subagentStatusLine: ours('subagent-statusline.mjs'),
         hooks: hook(),
       });
     });
@@ -531,11 +428,10 @@ describe.skipIf(!hasPwsh || !posix)('Install-Statusline.ps1', () => {
       expect(read().hooks).toEqual(hook());
     });
 
-    it('-NoContextWarning installs the status lines without the hook', async () => {
+    it('-NoContextWarning installs the status line without the hook', async () => {
       expect((await install('-NoContextWarning')).status).toBe(0);
       expect(read()).toEqual({
         statusLine: ours('statusline.mjs'),
-        subagentStatusLine: ours('subagent-statusline.mjs'),
       });
     });
 
@@ -574,7 +470,6 @@ describe.skipIf(!hasPwsh || !posix)('Install-Statusline.ps1', () => {
       expect(read()).toEqual({ keep: true });
       expect(fs.existsSync(oldCopy)).toBe(false);
       expect(fs.existsSync(STATUS)).toBe(true);
-      expect(fs.existsSync(SUB)).toBe(true);
     });
 
     it('-Uninstall removes entries of an older version', async () => {
@@ -743,10 +638,6 @@ describe.skipIf(!hasPwsh || !posix)('Install-Statusline.ps1', () => {
       expect(r.status).toBe(0);
       expect(read(path.join(home, '.claude'))).toEqual({
         statusLine: { type: 'command', command: `node ${cmdPath(DIR)}/statusline.mjs` },
-        subagentStatusLine: {
-          type: 'command',
-          command: `node ${cmdPath(DIR)}/subagent-statusline.mjs`,
-        },
         hooks: {
           UserPromptSubmit: [
             {
@@ -815,7 +706,6 @@ describe.skipIf(!hasPwsh || !posix)(
       const a = scripts('.agents').slice(1, -1);
       expect(read('.claude')).toEqual({
         statusLine: { type: 'command', command: `node "${c}"/statusline.mjs` },
-        subagentStatusLine: { type: 'command', command: `node "${c}"/subagent-statusline.mjs` },
         hooks: {
           UserPromptSubmit: [
             { hooks: [{ type: 'command', command: `bash "${c}"/context-warning.sh`, timeout: 5 }] },
