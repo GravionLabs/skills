@@ -9,6 +9,7 @@
     "format:check": "oxfmt --check && oxlint",
     "check": "pnpm run format:check && node scripts/check-marketplace.mjs && pwsh skills/skill-tooling/skill-slim/scripts/Get-SkillReport.ps1 -Root . -FailOnDangling && pnpm run lint:ps && pnpm test",
     "check:marketplace": "node scripts/check-marketplace.mjs",
+    "check:changed": "node scripts/check-changed.mts",
     "test": "vitest run",
     "test:ci": "vitest run",
     "test:watch": "vitest",

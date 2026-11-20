@@ -1,5 +1,6 @@
 {
   "deliver": {
     "notifications": false
-  }
+  },
+  "gate": "pnpm check:changed"
 }
