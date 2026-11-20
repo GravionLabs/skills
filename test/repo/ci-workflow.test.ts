@@ -53,7 +53,7 @@ describe('ci.yml test jobs', () => {
     const check = steps('test').find((s) => s.run?.includes('exit 1'));
     expect(check?.env?.['RESULT']).toBe('${{ needs.test-shard.result }}');
     expect(check?.run).toContain('"$RESULT" != "success"');
-    expect(check?.run).toContain('"$RESULT" != "skipped"');
+    expect(check?.run).not.toContain('skipped');
   });
 
   it('does not use the fixed-name node/test action in any job', () => {
@@ -152,9 +152,10 @@ describe('ci.yml aggregate required check', () => {
     expect(text.indexOf('"PR checks passed"')).toBeLessThan(text.indexOf('\njobs:'));
   });
 
-  it('skips build and test jobs for the pr-checks-only event types', () => {
+  // #898: a skipped code check would let the aggregate of an edited or labeled event go green before the tests finish.
+  it('runs build and test jobs for every pull request event type', () => {
     for (const job of ['build-test', 'test-shard', 'test-windows']) {
-      expect(wf.jobs[job].if).toContain('"opened","synchronize","reopened","labeled"');
+      expect(wf.jobs[job].if).toBeUndefined();
     }
   });
 });
