@@ -52,7 +52,25 @@ const defaults = (lang: string, biome: boolean, mode: Mode): string[] =>
     stepCommands(s, mode),
   );
 
+// an oxc project (ADR 0006): the oxfmt and oxlint step lines, plus the eslint step on .html of ng
+const oxcLine = (tool: string) =>
+  script.split('\n').find((l) => l.includes(`= @{ Tool = '${tool}'`) || l.includes(`+= @{ Tool = '${tool}'`)) ?? '';
+const oxcSteps = (lang: string): string[] => [
+  oxcLine('oxfmt'),
+  oxcLine('oxlint'),
+  ...(lang === 'ng' ? [script.split('\n').find((l) => l.includes("$defaults['ng'] += @{ Tool = 'eslint'")) ?? ''] : []),
+];
+
 describe('## Format sections match the Format-Changed.ps1 defaults', () => {
+  it.each(['ts', 'ng'])('%s: the oxc project line equals the oxc steps', (lang) => {
+    const all = commands(line(lang, 'oxc project'));
+    const steps = oxcSteps(lang);
+    expect(steps.every((s) => s)).toBe(true);
+    const format = steps.flatMap((s) => stepCommands(s, 'Format'));
+    const check = steps.flatMap((s) => stepCommands(s, 'Check'));
+    expect(all).toEqual([...format, ...check]);
+  });
+
   it('reads a defaults table from the script', () => {
     expect(Object.keys(plainSteps).sort()).toEqual([...LANGS].sort());
     expect(biomeLangs).toEqual(['ts', 'ng']);

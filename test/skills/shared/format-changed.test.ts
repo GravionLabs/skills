@@ -22,6 +22,7 @@ describe.skipIf(!hasPwsh || process.platform === 'win32')('Format-Changed.ps1', 
     langs: '',
     biome: '',
     mdbiome: '',
+    oxc: '',
     clean: '',
     work: '',
     cfg: '',
@@ -118,6 +119,12 @@ describe.skipIf(!hasPwsh || process.platform === 'win32')('Format-Changed.ps1', 
       ['a.html', 'b.ts', 'c.json', 'g.jsx', 'h.css', 'n.md'],
     );
     repo.mdbiome = mkRepo('mdbiome', ['biome.json'], ['n.md', 'ci.yml', 'v.yaml']);
+    // an oxc project (ADR 0006) with a leftover biome.json: oxfmt and oxlint win, ng lints its .html with eslint
+    repo.oxc = mkRepo(
+      'oxc',
+      ['.oxfmtrc.json', '.oxlintrc.json', 'biome.json'],
+      ['a.html', 'b.ts', 'c.json', 'd.scss', 'n.md'],
+    );
     repo.clean = mkRepo('clean', ['base.ts'], ['n.md']);
     // branch feat has c.ts committed since main; the working tree has every kind of change
     repo.work = mkRepo('work', ['base.ts', 'gone.ts', 'staged.ts'], []);
@@ -205,6 +212,21 @@ describe.skipIf(!hasPwsh || process.platform === 'win32')('Format-Changed.ps1', 
       ['npx biome check --write --no-errors-on-unmatched a.html b.ts c.json g.jsx h.css n.md'],
       ['npx biome check --no-errors-on-unmatched a.html b.ts c.json g.jsx h.css n.md'],
     ],
+    [
+      'ng',
+      'oxc',
+      5,
+      [
+        'npx --no-install oxfmt --no-error-on-unmatched-pattern a.html b.ts c.json d.scss n.md',
+        'npx --no-install oxlint --fix --no-error-on-unmatched-pattern b.ts',
+        'npx --no-install eslint --fix a.html',
+      ],
+      [
+        'npx --no-install oxfmt --check --no-error-on-unmatched-pattern a.html b.ts c.json d.scss n.md',
+        'npx --no-install oxlint --no-error-on-unmatched-pattern b.ts',
+        'npx --no-install eslint a.html',
+      ],
+    ],
   ] as const;
   it.each(defaults)('default %s (%s repo) runs its format commands', async (lang, r, n, format) => {
     const f = await go(repo[r], ['-Language', lang]);
@@ -226,7 +248,7 @@ describe.skipIf(!hasPwsh || process.platform === 'win32')('Format-Changed.ps1', 
     expect(g).toMatchObject({ status: 0, stdout: 'skipped: no changed files\n' });
     expect(callLines()).toEqual([]);
   });
-  it.each(defaults.filter(([lang]) => lang === 'ts'))(
+  it.each(defaults.filter(([lang, r]) => lang === 'ts' || r === 'oxc'))(
     'default %s (%s repo) -Check runs its check commands',
     async (lang, r, n, _format, check) => {
       const c = await go(repo[r], ['-Language', lang, '-Check']);
