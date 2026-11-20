@@ -44,6 +44,14 @@ When the file is over budget or a section is only needed for some tasks:
 3. Replace it in `AGENTS.md` with one line under `## Read before`: `before <changing X>, read <file>`.
 4. Count again until the file is within the budget.
 
+## Check
+
+```powershell
+node scripts/check-agents-md.mts [repo] [--budget <n>] [--json]
+```
+
+Prints `<path>: <characters> / 8000` per `AGENTS.md` (root and nested). Exit 1 for a file over the budget, a file under `docs/agents-md-refs/` that no `AGENTS.md` names, a reference without a reading condition and a named file that is missing.
+
 ## References
 
 - `references/budget.md`: why characters, how to count, what to do at the limit.
