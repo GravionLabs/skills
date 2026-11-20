@@ -16,6 +16,7 @@
       "strict": false,
       "skills": [
         "./skills/shared/adr",
+        "./skills/shared/agents-md",
         "./skills/shared/ast-grep-rules",
         "./skills/shared/check-prerequisites",
         "./skills/shared/code-review",
