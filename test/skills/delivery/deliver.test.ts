@@ -288,6 +288,10 @@ describe('deliver loop', () => {
       'run.finished',
     ]);
     expect(out.events.at(-1)?.outcome).toBe('succeeded');
+    // the bar after each start line (NO_COLOR: plain text); the second issue is the last one
+    expect(out.stdout).toMatch(/#11 start: .*\n.* \[█+░+\] 1 of 2\n/);
+    expect(out.stdout).toMatch(/#12 start: .*\n.* \[█{20}\] 2 of 2\n/);
+    expect(out.stdout).not.toContain('\x1b');
     // merged: the worktree of the issue is gone
     expect(existsSync(path.join(root, 'repo-wt-11'))).toBe(false);
   });
@@ -611,6 +615,18 @@ describe('deliver loop', () => {
     const out = await loop({ items: [{ id: 91, title: '[PBI] feat: nothing' }], noPull: true });
     expect(out.status).toBe(2);
     expect(out.results[0]?.reason).toBe('session ended without a pull request');
+  });
+
+  it('counts an issue that was set aside in the progress bar of the next one', async () => {
+    const out = await loop({
+      items: [
+        { id: 92, title: '[PBI] feat: first' },
+        { id: 93, title: '[PBI] feat: second' },
+      ],
+      noPull: true,
+    });
+    expect(out.stdout).toMatch(/#92 start: .*\n.* \[█+░+\] 1 of 2\n/);
+    expect(out.stdout).toMatch(/#93 start: .*\n.* \[█{20}\] 2 of 2\n/);
   });
 
   it('starts no session for an issue whose pull request is already merged', async () => {
