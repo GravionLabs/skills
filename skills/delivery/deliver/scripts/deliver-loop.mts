@@ -440,8 +440,11 @@ async function merge(pull: Pull): Promise<string | undefined> {
     if (gate.state === 'red') return `red: ${gate.detail}`;
     // checks register a moment after the pull request opens: nothing reported is not green yet
     if (gate.state === 'ready' && (gate.reported || Date.now() - start > 90_000)) {
-      // the tracker calls block: a stop request that came in meanwhile is only seen after a turn of the event loop
-      await new Promise((turn) => setTimeout(turn, 0));
+      // the tracker calls block: a stop request that came in meanwhile is only read in the poll phase of the event loop.
+      // A timer runs before the poll phase, and from a poll callback the check phase follows without a new poll:
+      // two setImmediate turns always include one full poll.
+      await new Promise((turn) => setImmediate(turn));
+      await new Promise((turn) => setImmediate(turn));
       if (stopped) break;
       // the files of the commit that is merged, not of the one the session left: a later push is checked too.
       // The merge names gate.head, so a push after this read is refused by the tracker.
