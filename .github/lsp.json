@@ -4,11 +4,7 @@
       "name": "typescript",
       "languages": ["typescript", "javascript", "typescriptreact", "javascriptreact"],
       "command": "node",
-      "args": [
-        "--require",
-        "typescript-language-server/lib/cli",
-        "--stdio"
-      ],
+      "args": ["--require", "typescript-language-server/lib/cli", "--stdio"],
       "initializationOptions": {
         "preferences": {
           "quotePreference": "single",

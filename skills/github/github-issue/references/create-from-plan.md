@@ -22,6 +22,8 @@ blocked-by links. Link calls and their gotchas: `sub-issues.md`.
 
 There is no `task` level: no `[Task]` issue is created.
 
+Each entry of `items[].labels` is added with one more `--label` (`interactive`: create the label with `gh label create` when the repository lacks it).
+
 The body is used as given; its first line is already `Parent …: #N` (none for a split of an issue without parent).
 
 A split of a PBI or Bug (`input_type` `pbi` or `bug`): `p1` is not created, it replaces the title and body of `parent_issue` (`gh issue edit <parent_issue> --title "<its level prefix> <title>" --body-file -`, `$created['p1'] = <parent_issue>`); the other items are created as `[PBI]`s.

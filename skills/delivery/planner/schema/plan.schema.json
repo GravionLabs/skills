@@ -2,14 +2,31 @@
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "title": "planner plan.json",
   "type": "object",
-  "required": ["phase", "status", "parent_issue", "input_type", "level", "depth", "items", "questions", "assumptions", "summary"],
+  "required": [
+    "phase",
+    "status",
+    "parent_issue",
+    "input_type",
+    "level",
+    "depth",
+    "items",
+    "questions",
+    "assumptions",
+    "summary"
+  ],
   "additionalProperties": false,
   "allOf": [
     {
-      "if": { "properties": { "input_type": { "const": "objective" } }, "required": ["input_type"] },
+      "if": {
+        "properties": { "input_type": { "const": "objective" } },
+        "required": ["input_type"]
+      },
       "then": {
         "required": ["parent_repo"],
-        "properties": { "level": { "const": "feature" }, "items": { "items": { "required": ["repo"] } } }
+        "properties": {
+          "level": { "const": "feature" },
+          "items": { "items": { "required": ["repo"] } }
+        }
       }
     }
   ],
@@ -39,7 +56,10 @@
               "oneOf": [
                 { "type": "string", "pattern": "^p[0-9]+$" },
                 { "type": "integer", "minimum": 1 },
-                { "type": "string", "pattern": "^[A-Za-z0-9][A-Za-z0-9-]*/[A-Za-z0-9._-]+#[1-9][0-9]*$" }
+                {
+                  "type": "string",
+                  "pattern": "^[A-Za-z0-9][A-Za-z0-9-]*/[A-Za-z0-9._-]+#[1-9][0-9]*$"
+                }
               ]
             }
           },
@@ -47,10 +67,14 @@
           "requires": {
             "type": "array",
             "uniqueItems": true,
-            "items": { "type": "string", "pattern": "^[A-Za-z0-9][A-Za-z0-9-]*/[A-Za-z0-9._-]+@M[0-9]{3}(\\.[1-9])? (released|rc)$" }
+            "items": {
+              "type": "string",
+              "pattern": "^[A-Za-z0-9][A-Za-z0-9-]*/[A-Za-z0-9._-]+@M[0-9]{3}(\\.[1-9])? (released|rc)$"
+            }
           },
           "files": { "type": "array", "items": { "type": "string" } },
-          "skills": { "type": "array", "items": { "type": "string" } }
+          "skills": { "type": "array", "items": { "type": "string" } },
+          "labels": { "type": "array", "items": { "type": "string" } }
         }
       }
     },
@@ -63,7 +87,12 @@
         "properties": {
           "id": { "type": "string", "pattern": "^q[0-9]+$" },
           "question": { "type": "string", "minLength": 1 },
-          "options": { "type": "array", "minItems": 2, "uniqueItems": true, "items": { "type": "string" } },
+          "options": {
+            "type": "array",
+            "minItems": 2,
+            "uniqueItems": true,
+            "items": { "type": "string" }
+          },
           "recommended": { "type": "string" },
           "why": { "type": "string", "minLength": 1 },
           "blocks": { "type": "array", "items": { "type": "string", "pattern": "^p[0-9]+$" } }

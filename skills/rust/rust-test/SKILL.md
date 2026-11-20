@@ -31,6 +31,7 @@ The project's test command: the `test` key of `.agents/config.json`, run by `imp
 - Only when `detect-techstack` reports `frameworks: ["tauri"]`: keep command logic in pure functions and test those; `tauri::test` (mock runtime) is optional for the command wiring; delegate the frontend to `ts-test`
 
 Reference files (load when needed):
+
 - `references/mocking-and-properties.md` - `mockall` traits, async tests, `proptest`
 
 ## Gotchas

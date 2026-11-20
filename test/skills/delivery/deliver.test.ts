@@ -43,6 +43,8 @@ type Scenario = {
   required?: string[];
   needsDecision?: boolean;
   gateBlockMs?: number;
+  stopInGate?: boolean;
+  stopInChangedFiles?: boolean;
   exits?: number[];
   noPull?: boolean;
   filesFailures?: number;
@@ -70,6 +72,7 @@ type Outcome = {
     hasSessionTokenVariable: boolean;
   }[];
   results: { issue: number; outcome: string; reason?: string }[];
+  final?: Record<string, unknown>;
   events: { type: string; outcome?: string; reason?: string; needsYou?: boolean }[];
   log: string;
 };
@@ -169,7 +172,10 @@ function loop(
         ).length,
         calls: lines<{ call: string }>(path.join(dir, 'calls.jsonl')).map((call) => call.call),
         sessions: lines(path.join(dir, 'sessions.jsonl')),
-        results: results ? lines(results) : [],
+        results: results
+          ? lines<{ issue?: number }>(results).filter((r) => r.issue !== undefined)
+          : [],
+        final: results ? lines<Record<string, unknown>>(results).find((r) => r.run) : undefined,
         events: existsSync(events) ? lines(path.join(events, readdirSync(events)[0] ?? '')) : [],
         log: results
           ? readFileSync(path.join(path.dirname(path.dirname(results)), 'loop.log'), 'utf8')
@@ -282,6 +288,10 @@ describe('deliver loop', () => {
       'run.finished',
     ]);
     expect(out.events.at(-1)?.outcome).toBe('succeeded');
+    // the bar after each start line (NO_COLOR: plain text); the second issue is the last one
+    expect(out.stdout).toMatch(/#11 start: .*\n.* \[█+░+\] 1 of 2\n/);
+    expect(out.stdout).toMatch(/#12 start: .*\n.* \[█{20}\] 2 of 2\n/);
+    expect(out.stdout).not.toContain('\x1b');
     // merged: the worktree of the issue is gone
     expect(existsSync(path.join(root, 'repo-wt-11'))).toBe(false);
   });
@@ -316,7 +326,7 @@ describe('deliver loop', () => {
       type: 'run.finished',
       outcome: 'failed',
       reason: 'incomplete',
-      text: 'merged 0, set aside 1, waiting 0',
+      text: 'blocked: merged 0, set aside 1, waiting 0',
     });
     // not merged: the worktree may hold work that is not pushed
     expect(existsSync(path.join(root, 'repo-wt-21'))).toBe(true);
@@ -354,11 +364,16 @@ describe('deliver loop', () => {
     expect(out.events.at(-1)).toMatchObject({ type: 'run.finished', outcome: 'cancelled' });
   });
 
-  it('does not merge when the stop request arrives during a tracker call that then reports ready', async () => {
-    const out = await loop(
-      { items: [{ id: 52, title: '[PBI] feat: stopped late' }], gateBlockMs: 1500 },
-      { whenStdout: (stdout, stop) => stdout.includes('waits for checks') && stop() },
-    );
+  // SIGINT cannot be sent to a process on Windows; there the stop file is only read every 500 ms
+  it.skipIf(process.platform === 'win32').each([
+    ['gate', { stopInGate: true }],
+    ['the read of the changed files', { stopInChangedFiles: true }],
+  ] as const)('does not merge when the stop request arrives during %s', async (_name, stop) => {
+    // the fake tracker sends the stop request inside the call: no timing window in the test
+    const out = await loop({
+      items: [{ id: 52, title: '[PBI] feat: stopped late' }],
+      ...stop,
+    });
     expect(out.status).toBe(130);
     expect(out.merges).toEqual([]);
     expect(out.results[0]).toMatchObject({ outcome: 'stopped' });
@@ -369,7 +384,7 @@ describe('deliver loop', () => {
       items: [{ id: 62, title: '[PBI] feat: pushed later' }],
       filesLater: ['src/a.ts', '.github/workflows/x.yml'],
     });
-    expect(out.status).toBe(2);
+    expect(out.status).toBe(3);
     expect(out.sessions).toHaveLength(1);
     expect(out.merges).toEqual([]);
     expect(out.results[0]?.reason).toBe(
@@ -387,7 +402,7 @@ describe('deliver loop', () => {
       items: [{ id: 600 + count, title: '[PBI] feat: path' }],
       files: [file],
     });
-    expect(out.status).toBe(2);
+    expect(out.status).toBe(3);
     expect(out.merges).toEqual([]);
   });
 
@@ -438,7 +453,7 @@ describe('deliver loop', () => {
       items: [{ id: 61, title: '[PBI] ci: workflow' }],
       files: ['src/a.ts', '.github/workflows/ci.yml', 'packages/x/package.json'],
     });
-    expect(out.status).toBe(2);
+    expect(out.status).toBe(3);
     expect(out.sessions).toHaveLength(1);
     expect(out.merges).toEqual([]);
     expect(out.results[0]?.reason).toBe(
@@ -496,12 +511,35 @@ describe('deliver loop', () => {
     expect(out.log).toContain('Dependency review fails');
   });
 
+  it('names the PBIs that wait for a handed-over pull request', async () => {
+    const out = await loop({
+      items: [
+        { id: 81, title: '[PBI] ci: workflow' },
+        { id: 82, title: '[PBI] feat: after it', blockedBy: [81] },
+        { id: 83, title: '[PBI] feat: also after it', blockedBy: [81] },
+      ],
+      files: ['.github/workflows/ci.yml'],
+    });
+    expect(out.status).toBe(3);
+    expect(out.stdout).toMatch(
+      /waiting for the handed-over pull request of #81 \(2\):\n {2}#82 blocked by #81\n {2}#83 blocked by #81/,
+    );
+    expect(out.stdout).toContain('waiting for a handed-over PR: merge it, then run /deliver again');
+    expect(out.stdout).not.toMatch(/^blocked$/m);
+    expect(out.final).toMatchObject({
+      run: 'finished',
+      status: 'waiting-for-handed-over',
+      handedOver: [81],
+      waitingFor: { '81': ['#82 blocked by #81', '#83 blocked by #81'] },
+    });
+  });
+
   it('lists a hand-over by rule under needs you, a failure under set aside', async () => {
     const handed = await loop({
       items: [{ id: 62, title: '[PBI] ci: workflow' }],
       files: ['.github/workflows/ci.yml'],
     });
-    expect(handed.status).toBe(2);
+    expect(handed.status).toBe(3);
     expect(handed.stdout).toMatch(/set aside \(0\):/);
     expect(handed.stdout).toMatch(
       /needs you \(1\):\n {2}#62 changes protected paths \(\.github\/workflows\/ci\.yml\), \S+/,
@@ -577,6 +615,18 @@ describe('deliver loop', () => {
     const out = await loop({ items: [{ id: 91, title: '[PBI] feat: nothing' }], noPull: true });
     expect(out.status).toBe(2);
     expect(out.results[0]?.reason).toBe('session ended without a pull request');
+  });
+
+  it('counts an issue that was set aside in the progress bar of the next one', async () => {
+    const out = await loop({
+      items: [
+        { id: 92, title: '[PBI] feat: first' },
+        { id: 93, title: '[PBI] feat: second' },
+      ],
+      noPull: true,
+    });
+    expect(out.stdout).toMatch(/#92 start: .*\n.* \[█+░+\] 1 of 2\n/);
+    expect(out.stdout).toMatch(/#93 start: .*\n.* \[█{20}\] 2 of 2\n/);
   });
 
   it('starts no session for an issue whose pull request is already merged', async () => {

@@ -188,9 +188,7 @@ describe('compareToBaseline', () => {
 
   it('flags a drop greater than 5 points but not exactly 5', () => {
     const mk = (hits: number) =>
-      summarize([
-        ...Array.from({ length: 20 }, (_, i) => rec('a', 'positive', i < hits ? ['a'] : [])),
-      ]);
+      summarize(Array.from({ length: 20 }, (_, i) => rec('a', 'positive', i < hits ? ['a'] : [])));
     expect(compareToBaseline(mk(19), mk(20))).toEqual([]); // 95 vs 100 = 5 points
     expect(compareToBaseline(mk(18), mk(20))).toEqual([
       'overall: trigger rate fell 100% -> 90%',

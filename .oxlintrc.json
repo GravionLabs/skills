@@ -1,0 +1,51 @@
+// oxlint config of this repository (ADR 0006, #771). Rules mapped from the former biome.json; every rule that is
+// off or lowered names its reason.
+{
+  "$schema": "./node_modules/oxlint/configuration_schema.json",
+  "plugins": ["typescript", "unicorn", "oxc", "vitest", "node"],
+  "categories": { "correctness": "error" },
+  "options": { "typeAware": true },
+  "ignorePatterns": [
+    "**/dist",
+    "**/node_modules",
+    "**/coverage",
+    "test/skills/delivery/agent-events",
+    "site/.vitepress/cache",
+    "site/.vitepress/dist",
+    ".worktrees",
+    ".work",
+    // templates and assets are copied into other projects as they are
+    "skills/**/templates/**",
+    "skills/**/assets/**"
+  ],
+  "rules": {
+    "typescript/no-explicit-any": "warn",
+    "typescript/no-non-null-assertion": "warn",
+    "typescript/consistent-type-imports": "warn",
+    "typescript/prefer-optional-chain": "warn",
+    "no-template-curly-in-string": "warn",
+    "prefer-template": "warn",
+    "unicorn/prefer-node-protocol": "warn",
+    "dot-notation": "warn",
+    "vitest/no-focused-tests": "error",
+    "no-control-regex": "warn",
+    "no-cond-assign": "warn",
+    "array-callback-return": "warn",
+    "no-unused-vars": "warn",
+    // vitest's expect takes an optional message as second argument
+    "vitest/valid-expect": ["error", { "maxArgs": 2 }],
+    // the help tests assert through test/helpers/skill-help.ts; warn: the environment-guard tests assert only when
+    // the guard applies (CI, pwsh present, a row that has both lines)
+    "vitest/expect-expect": ["warn", { "assertFunctionNames": ["expect", "expectSkillHelp"] }],
+    // false positive: does not see it.skipIf(...)(name, fn) as a test block
+    "vitest/no-standalone-expect": "off",
+    // deliberate: environment guards (CI, pwsh present) and it.each rows that only apply to some inputs
+    "vitest/no-conditional-expect": "off",
+    // the missing-file message differs per platform
+    "vitest/require-to-throw-message": "off",
+    // new type-aware findings, mostly on loosely typed test data: warnings until they are reviewed
+    "typescript/restrict-template-expressions": "warn",
+    "typescript/no-base-to-string": "warn",
+    "typescript/require-array-sort-compare": "warn"
+  }
+}

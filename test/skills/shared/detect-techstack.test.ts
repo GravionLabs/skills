@@ -72,6 +72,8 @@ describe.skipIf(!hasPwsh)('Detect-TechStack.ps1', () => {
     write('biome.jsonc', '{}');
     write('eslint.config.mjs');
     write('.prettierrc.json');
+    write('.oxlintrc.json', '{}');
+    write('.oxfmtrc.jsonc', '{}');
     write('jest.config.js');
     write('pytest.ini');
     write('vitest.config.ts');
@@ -80,6 +82,8 @@ describe.skipIf(!hasPwsh)('Detect-TechStack.ps1', () => {
       'biome',
       'eslint',
       'prettier',
+      'oxlint',
+      'oxfmt',
       'jest',
       'pytest',
       'cargo',

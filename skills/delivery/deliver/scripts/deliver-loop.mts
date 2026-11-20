@@ -13,6 +13,7 @@ import {
   writeFileSync,
 } from 'node:fs';
 import path from 'node:path';
+import { fileURLToPath } from 'node:url';
 import { createInterface } from 'node:readline';
 import { parseArgs } from 'node:util';
 import { appSettings, tokenSource as makeSource } from './app-token.mts';
@@ -20,6 +21,7 @@ import { type Emit, openEvents } from './events.mts';
 import { HARNESSES } from './harness.mts';
 import { adoptLegacyEnv, unknownConfigKeys } from './legacy.mts';
 import { killTree, launch, promptPath } from './process.mts';
+import { progressLine } from './progress-bar.mts';
 import { type BaseState, type Gate, type Item, type Pull, loadTracker } from './tracker.mts';
 
 // before anything reads the environment; the warnings are printed once the log exists
@@ -191,17 +193,15 @@ if (process.env.DELIVER_TRACKER_DIR && inside(process.env.DELIVER_TRACKER_DIR)) 
 }
 // A pull request that changes one of these is never merged by the loop: a person looks at it first.
 // `dir/` is a directory at the root, anything else a file name anywhere. deliver.protectedPaths replaces the list.
-const PROTECTED: string[] = config.deliver?.protectedPaths ?? [
-  '.github/',
-  '.agents/',
-  '.claude/',
-  'package.json',
-  'pnpm-workspace.yaml',
-  'Cargo.toml',
-  'pyproject.toml',
-  'go.mod',
-  'Directory.Packages.props',
-];
+// The default list is `protected-paths.json` next to the skill (`planner` reads the same file).
+const PROTECTED: string[] =
+  config.deliver?.protectedPaths ??
+  JSON.parse(
+    readFileSync(
+      path.join(path.dirname(fileURLToPath(import.meta.url)), '../protected-paths.json'),
+      'utf8',
+    ),
+  );
 // Without regard to case (a checkout on macOS or Windows writes `.Claude/` into `.claude/`), and a file named
 // like a protected directory counts too (a symlink `.claude`).
 const protectedHits = (files: string[]): string[] =>
@@ -421,6 +421,16 @@ async function startSession(item: Item, cwd: string, file: string): Promise<Sess
 
 const CLOSED = 'pull request closed';
 
+/**
+ * Tracker calls block the event loop: a stop request that came in meanwhile is only read in the poll phase.
+ * A timer runs before the poll phase, and from a poll callback the check phase follows without a new poll:
+ * two setImmediate turns always include one full poll.
+ */
+async function seeStop(): Promise<void> {
+  await new Promise((turn) => setImmediate(turn));
+  await new Promise((turn) => setImmediate(turn));
+}
+
 /** Waits for the gate and merges. Returns nothing when merged, else the reason. */
 async function merge(pull: Pull): Promise<string | undefined> {
   const start = Date.now();
@@ -440,13 +450,15 @@ async function merge(pull: Pull): Promise<string | undefined> {
     if (gate.state === 'red') return `red: ${gate.detail}`;
     // checks register a moment after the pull request opens: nothing reported is not green yet
     if (gate.state === 'ready' && (gate.reported || Date.now() - start > 90_000)) {
-      // the tracker calls block: a stop request that came in meanwhile is only seen after a turn of the event loop
-      await new Promise((turn) => setTimeout(turn, 0));
+      await seeStop();
       if (stopped) break;
       // the files of the commit that is merged, not of the one the session left: a later push is checked too.
       // The merge names gate.head, so a push after this read is refused by the tracker.
       const handsOff = await guard(pull);
       if (handsOff) return handsOff;
+      // the read of the files blocks too: a stop request that came in during it must be seen before the merge
+      await seeStop();
+      if (stopped) break;
       try {
         tracker.merge(pull, gate.head);
         return undefined;
@@ -759,6 +771,12 @@ try {
     }
     if (!next) break;
     log(`#${next.id} start: ${next.title} (${open.length} open)`, 'info');
+    // x: the issues finished or set aside so far, plus this one; the log file is read at a fixed width
+    const begun = merged.length + aside.size + handedOver.size + 1;
+    log(
+      progressLine(begun, total, process.stdout.isTTY ? (process.stdout.columns ?? 80) : 80),
+      'info',
+    );
     emit('task.started', { task: `issue-${next.id}`, subject: tracker.itemSubject(next) });
     // a failing tracker or git call sets the issue aside, it does not end the run
     const { reason, pull } = await deliver(next).catch(
@@ -870,6 +888,15 @@ if (complete) {
 }
 
 needsYou = [...[...handedOver].map(([nr, why]) => `#${nr} ${why}`), ...needsYou];
+// the open PBIs that wait for a handed-over pull request: their blockers name its issue
+const waitingFor = new Map<number, string[]>();
+for (const nr of handedOver.keys()) {
+  const dependents = waiting.filter((line) => {
+    const blockers = /^#\d+ blocked by (.*)$/.exec(line)?.[1]?.split(', ') ?? [];
+    return blockers.some((ref) => ref === `#${nr}` || ref === `${tracker.repo}#${nr}`);
+  });
+  if (dependents.length) waitingFor.set(nr, dependents);
+}
 say('');
 say(
   `merged (${merged.length}):${merged.map((line) => `\n  ${line}`).join('')}`,
@@ -902,9 +929,15 @@ if (baseBlocked) {
     'warning',
   );
 }
+for (const [nr, dependents] of waitingFor) {
+  say(
+    `waiting for the handed-over pull request of #${nr} (${dependents.length}):${dependents.map((line) => `\n  ${line}`).join('')}`,
+    'warn',
+  );
+}
 if (handedOver.size) {
   say(
-    'next step: merge the pull request above yourself, then start the loop again with the same arguments',
+    'next step: merge the pull request above yourself, then run /deliver again or start the loop again with the same arguments',
     'warn',
   );
 }
@@ -914,6 +947,31 @@ const clean =
   aside.size === 0 &&
   handedOver.size === 0 &&
   waiting.length === 0;
+// done, blocked (a red base, an issue set aside, an error) or waiting for a handed-over pull request
+const status = clean
+  ? 'done'
+  : !baseBlocked && !releaseError && aside.size === 0 && handedOver.size > 0
+    ? 'waiting-for-handed-over'
+    : 'blocked';
+if (!stopped) {
+  say(
+    status === 'done'
+      ? 'done'
+      : status === 'blocked'
+        ? 'blocked'
+        : 'waiting for a handed-over PR: merge it, then run /deliver again',
+    status === 'done' ? 'ok' : status === 'blocked' ? 'bad' : 'warn',
+  );
+}
+appendFileSync(
+  path.join(runDir, 'results.jsonl'),
+  `${JSON.stringify({
+    run: 'finished',
+    status,
+    handedOver: [...handedOver.keys()],
+    waitingFor: Object.fromEntries(waitingFor),
+  })}\n`,
+);
 // An incomplete run (issues set aside or waiting) is no success: the agent-events format has no
 // other outcome for it than `failed`; the counts are in the text.
 emit(
@@ -921,8 +979,8 @@ emit(
   {
     outcome: stopped ? 'cancelled' : clean ? 'succeeded' : 'failed',
     ...(stopped || clean ? {} : { reason: 'incomplete' }),
-    text: `merged ${merged.length}, set aside ${aside.size}, waiting ${waiting.length}${needsYou.length ? `, needs you ${needsYou.length}` : ''}`,
+    text: `${status}: merged ${merged.length}, set aside ${aside.size}, waiting ${waiting.length}${needsYou.length ? `, needs you ${needsYou.length}` : ''}`,
   },
   stopped ? 'neutral' : clean ? 'success' : 'warning',
 );
-process.exit(stopped ? 130 : clean ? 0 : 2);
+process.exit(stopped ? 130 : clean ? 0 : status === 'waiting-for-handed-over' ? 3 : 2);

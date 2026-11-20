@@ -84,6 +84,18 @@ describe.skipIf(!hasPwsh)('New-EditorConfig.ps1', () => {
     expect(names).toEqual(['Debug dev server (dev)', 'Debug Vitest']);
   });
 
+  it('an oxfmt project uses the oxc extension, eslint stays recommended (ADR 0006)', async () => {
+    await run({ languages: ['ts'], tools: ['biome', 'oxfmt'], frameworks: ['angular'] }, [
+      '-Apply',
+    ]);
+    expect(readJson('.vscode/settings.json')['[html]']['editor.defaultFormatter']).toBe(
+      'oxc.oxc-vscode',
+    );
+    expect(readJson('.vscode/extensions.json').recommendations).toEqual(
+      expect.arrayContaining(['oxc.oxc-vscode', 'dbaeumer.vscode-eslint']),
+    );
+  });
+
   it('ng defaults to prettier and eslint', async () => {
     write('package.json', JSON.stringify({ scripts: { start: 'ng serve' } }));
     await run({ languages: ['ts'], frameworks: ['angular'] }, ['-Apply']);

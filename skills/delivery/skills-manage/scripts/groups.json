@@ -60,8 +60,7 @@
     "context-statusline"
   ],
   "ts": [
-    "setup-biome-husky",
-    "setup-prettier-eslint-husky",
+    "setup-oxc-husky",
     "ts-create-project",
     "ts-implementation",
     "ts-mcp-server-generator",

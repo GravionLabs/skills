@@ -5,7 +5,7 @@ From a milestone to a release on `main`: cut `release/next`, collect the work in
 ::: tip Prerequisites
 - `gh auth status` works, a clean `git status`, run from the repository root.
 - The ruleset on `release/next` below. It is the hard gate that `/deliver` checks for.
-  :::
+:::
 
 ## The path
 

@@ -57,7 +57,7 @@ describe('Set-IssueMilestones.ps1 sub-numbers', () => {
       expect(out.created).toEqual([]);
       expect(out.results.map((x: any) => x.milestone)).toEqual(['M1.1 Topic (0.2.0)', 'M1 Base']);
     } finally {
-      await worker.close();
+      worker.close();
     }
   });
 });
