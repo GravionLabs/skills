@@ -30,3 +30,6 @@ ast-grep-rules: scripts/ast-grep-rules/
 # docs/STYLEGUIDE.md and docs/styleguide/ are the target repository files the templates create, not files of the skill
 ui-styleguide: docs/STYLEGUIDE.md
 ui-styleguide: docs/styleguide/
+# docs/STYLEGUIDE.md and docs/styleguide/ux-review-rubric.md are target repository files the UX review reads, not files of the skill
+code-review: docs/STYLEGUIDE.md
+code-review: docs/styleguide/ux-review-rubric.md

@@ -152,7 +152,8 @@
     "skill": "code-review",
     "shouldTrigger": [
       "Review this code and rate findings by severity",
-      "Do a code review of the files I changed against the language rules"
+      "Do a code review of the files I changed against the language rules",
+      "Review my diff: it changes login.component.ts and login.component.html, check the UX too"
     ],
     "shouldNotTrigger": [
       "Run a parallel multi-dimension review of PR #77",
