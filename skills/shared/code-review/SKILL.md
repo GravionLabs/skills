@@ -14,8 +14,9 @@ Read-only: report findings, never edit.
 5. Review the diff against the acceptance criteria (when given), those rules, correctness, security and test coverage; apply the `-test` rules to the test files of the diff. A rule's severity prefix maps as for implementation rules: red is blocking, yellow and green are notes
 6. `.agents/config.json` has `governance`: load `references/governance.md` (ADR and spec rules) and add its findings
 7. Rule proposal: `ast-grep-rules` installed and a blocking finding repeats (matches an approved lesson, or the same class in two reviews): add the note `propose ast-grep rule` per `references/rule-proposal.md`; never write the rule. Not installed: as before
-8. Sort each finding: **blocking** or **note**
-9. Do not recommend patterns or abstractions that add complexity without a concrete need
+8. UI diff: the diff has a UI file (`.html`, `.css`, `.scss`, `.tsx`, `.jsx`, `.vue`, `.svelte`, `*.component.ts`): load `references/ux-review.md`; no UI file: do not load it
+9. Sort each finding: **blocking** or **note**
+10. Do not recommend patterns or abstractions that add complexity without a concrete need
 
 ## Blocking
 
