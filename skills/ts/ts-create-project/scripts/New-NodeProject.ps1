@@ -40,6 +40,9 @@ foreach ($f in $files) {
   Copy-Item (Join-Path $TemplatesDir $f) (Join-Path $TargetDir $f)
 }
 Copy-Item (Join-Path $TemplatesDir 'src/index.ts') (Join-Path $TargetDir 'src/index.ts')
+if ($PackageManager -eq 'pnpm') {
+  Copy-Item (Join-Path $TemplatesDir 'pnpm-workspace.yaml') (Join-Path $TargetDir 'pnpm-workspace.yaml')
+}
 
 # Patch package name
 $safeName = $ProjectName.ToLower() -replace '[^a-z0-9@/.-]', '-'
