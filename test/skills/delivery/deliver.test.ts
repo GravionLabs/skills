@@ -47,6 +47,7 @@ type Scenario = {
   stopInChangedFiles?: boolean;
   exits?: number[];
   noPull?: boolean;
+  risks?: Record<number, string>;
   filesFailures?: number;
   blocked?: string;
   earlierPull?: boolean;
@@ -73,7 +74,7 @@ type Outcome = {
     ghToken: string | null;
     hasSessionTokenVariable: boolean;
   }[];
-  results: { issue: number; outcome: string; reason?: string }[];
+  results: { issue: number; outcome: string; reason?: string; risk?: string }[];
   final?: Record<string, unknown>;
   events: { type: string; outcome?: string; reason?: string; needsYou?: boolean }[];
   log: string;
@@ -575,6 +576,21 @@ describe('deliver loop', () => {
     expect(failed.stdout).toMatch(/set aside \(1\):\n {2}#63 session failed/);
     expect(failed.stdout).toMatch(/needs you \(0\):/);
     expect(failed.stdout).not.toContain('next step: merge');
+  });
+
+  it('writes the risk level of the implementer result into results.jsonl and the report', async () => {
+    const out = await loop({
+      items: [
+        { id: 91, title: '[PBI] feat: medium' },
+        { id: 92, title: '[PBI] feat: high' },
+        { id: 93, title: '[PBI] feat: no result' },
+      ],
+      risks: { 91: 'medium', 92: 'high' },
+    });
+    expect(out.status).toBe(0);
+    expect(out.results.map((r) => r.risk)).toEqual(['medium', 'high', undefined]);
+    expect(out.stdout).toMatch(/#91 \S+ \(risk medium\)/);
+    expect(out.stdout).toMatch(/needs you \(1\):\n {2}#92 risk high/);
   });
 
   it('refuses a base branch without required checks unless the flag allows it', async () => {

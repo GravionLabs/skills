@@ -27,6 +27,13 @@ if (own.hangs ?? scenario.hangs) {
   console.log('working');
   setInterval(() => {}, 1000);
 } else {
+  // the implementer result of the scenario (risk by issue id), written where the loop says
+  const level = scenario.risks?.[id];
+  if (level && process.env.DELIVER_RESULT_FILE)
+    writeFileSync(
+      process.env.DELIVER_RESULT_FILE,
+      JSON.stringify({ status: 'done', risk: { level, what: 'x', backout: 'revert' } }),
+    );
   if (!(own.noPull ?? scenario.noPull)) writeFileSync(path.join(dir, `pr-${id}`), '');
   const final = scenario.blocked
     ? `result: blocked ${scenario.blocked}`
