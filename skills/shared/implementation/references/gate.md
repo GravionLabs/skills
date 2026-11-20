@@ -35,7 +35,7 @@ A pass is cached by the hash of the changed files plus the base ref. An unchange
 
 ## Form per stack
 
-- TypeScript: a `.mts` template per repository (see the runner PBI of the ratchet skill), wired as `pnpm check:changed`.
+- TypeScript: copy `templates/check-changed.mts` to the repository's own scripts folder (Node >= 22.18), wired as `pnpm check:changed`. It runs the steps above with oxfmt/biome/prettier, oxlint/biome/eslint, `tsc --noEmit`, `vitest related` (jest `--findRelatedTests`) with `--maxWorkers`, then the `checks` entries; success is one line, a failed step prints its full output only. No pass cache yet.
 - Other stacks get no script from these skills; wire the commands below as a repository script, a `just` recipe or a `cargo` alias named `check:changed`.
 
 | Language | Format                              | Lint                                          | Typecheck / build               | Tests                    |
