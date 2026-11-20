@@ -42,14 +42,14 @@ oxlint, oxfmt and oxlint-tsgolint are pinned to exact versions (`$Versions` in t
 
 ## Templates
 
-| File                        | Purpose                                                                                                                               |
-| --------------------------- | ------------------------------------------------------------------------------------------------------------------------------------- |
-| `.oxfmtrc.json.template`             | Width 100, 2 spaces, single quotes, semicolons, trailing commas `all`, LF; lockfiles and `CHANGELOG.md` ignored                       |
-| `plain-ts/.oxlintrc.json.template`   | typescript, unicorn, oxc, node, vitest plugins; correctness as errors; type-aware                                                     |
-| `angular/.oxlintrc.json.template`    | As plain TS plus `@angular-eslint/eslint-plugin` (selector prefix, outputs, lifecycle, standalone, no inline templates outside specs) |
-| `angular/eslint.config.mjs` | Template rules and accessibility rules on `**/*.html`                                                                                 |
-| `angular/lint-probe/`       | `probe.ts`, `probe.html` and `check.mjs` (the regression check of the JS plugin and the template rules)                               |
-| `.husky/pre-commit`         | Runs `npx lint-staged` on commit                                                                                                      |
+| File                               | Purpose                                                                                                                               |
+| ---------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------- |
+| `.oxfmtrc.json.template`           | Width 100, 2 spaces, single quotes, semicolons, trailing commas `all`, LF; lockfiles and `CHANGELOG.md` ignored                       |
+| `plain-ts/.oxlintrc.json.template` | typescript, unicorn, oxc, node, vitest plugins; correctness as errors; type-aware                                                     |
+| `angular/.oxlintrc.json.template`  | As plain TS plus `@angular-eslint/eslint-plugin` (selector prefix, outputs, lifecycle, standalone, no inline templates outside specs) |
+| `angular/eslint.config.mjs`        | Template rules and accessibility rules on `**/*.html`                                                                                 |
+| `angular/lint-probe/`              | `probe.ts`, `probe.html` and `check.mjs` (the regression check of the JS plugin and the template rules)                               |
+| `.husky/pre-commit`                | Runs `npx lint-staged` on commit                                                                                                      |
 
 ## Constraints
 
