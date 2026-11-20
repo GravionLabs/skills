@@ -50,6 +50,13 @@
         }
       ]
     },
+    "checks": {
+      "description": "Cheap static repository checks (ratchets, line counts, doc paths). implementation runs the ones with fast: true before the targeted tests and after every fix.",
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/checkEntry"
+      }
+    },
     "governance": {
       "description": "Architecture decisions and specs; read by adr, github-issue, planner, implementation, code-review, deliver, detect-techstack and the CI checks adr and spec of GravionLabs/ci.",
       "type": "object",
@@ -194,6 +201,25 @@
           }
         }
       ]
+    },
+    "checkEntry": {
+      "type": "object",
+      "required": ["command"],
+      "additionalProperties": false,
+      "properties": {
+        "name": {
+          "type": "string",
+          "minLength": 1
+        },
+        "command": {
+          "$ref": "#/$defs/commands"
+        },
+        "fast": {
+          "description": "true: runs before the targeted tests and after every fix (default false: the entry is only listed).",
+          "type": "boolean",
+          "default": false
+        }
+      }
     },
     "lintEntry": {
       "type": "object",

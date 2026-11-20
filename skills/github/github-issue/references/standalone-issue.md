@@ -23,7 +23,7 @@ Applies to: **PBI**, **Bug**, **Feature** (no PBIs). A legacy `[Task]` sub-issue
 
 ## Phase 3 — Verify + PR
 
-9. Verify per `implementation`: targeted tests per commit, ONE full build + test suite run before the review, and again after the last fix round. Fix failures; never commit red.
+9. Verify per `implementation`: targeted tests per commit, the fast `checks` of `.agents/config.json` before the tests and after every fix, ONE full build + test suite run before the review, and again after a fix round only when the fix touched code outside what the fast checks and targeted tests cover. Fix failures; never commit red.
 10. Run the `code-review` skill once on `git diff origin/<base>...HEAD`; fix every blocking finding before the pull request.
 11. Push: `git push -u origin HEAD`
 12. Create the PR with the `github-pull-request` skill (`base_branch: <base>`); the skill owns title and footer
