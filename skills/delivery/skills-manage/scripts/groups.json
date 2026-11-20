@@ -43,6 +43,7 @@
   ],
   "shared": [
     "adr",
+    "ast-grep-rules",
     "check-prerequisites",
     "code-review",
     "detect-techstack",

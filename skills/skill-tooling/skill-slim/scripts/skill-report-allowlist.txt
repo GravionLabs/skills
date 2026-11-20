@@ -22,3 +22,8 @@ skills-manage: deliver-loop
 
 # scripts/ratchets is the default ratchet directory of the target repository, not a folder of the skill
 ratchet: scripts/ratchets
+# ast-grep is the binary (not a skill); the name is a prefix of the skill ast-grep-rules
+ast-grep-rules: ast-grep
+check-prerequisites: ast-grep
+# scripts/ast-grep-rules/ is the folder in the target repository where the script is copied, not a path of the skill
+ast-grep-rules: scripts/ast-grep-rules/

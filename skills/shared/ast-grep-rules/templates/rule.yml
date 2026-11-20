@@ -1,0 +1,7 @@
+# One rule per file: ast-grep/rules/<id>.yml, with ast-grep/rule-tests/<id>-test.yml next to it.
+id: no-example-call
+language: TypeScript
+severity: error
+message: 'Why: <what went wrong, one sentence>. Instead: <the replacement>. See #123.'
+rule:
+  pattern: exampleCall($$$ARGS)
