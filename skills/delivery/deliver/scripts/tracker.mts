@@ -43,6 +43,12 @@ export type TrackerContext = {
   selection: Selection;
   /** Deliver items of any author. Default: only authors with write access, whose text nobody else can change. */
   trustAuthors: boolean;
+  /** The `stop` file of the run folder: a rate-limit wait ends when it exists. */
+  stopFile?: string;
+  /** Called when a wait saw the stop request (the tracker call blocks, so the loop cannot see it itself). */
+  onStop?: () => void;
+  /** Progress lines of a rate-limit wait. */
+  log?: (text: string) => void;
 };
 
 export interface Tracker {

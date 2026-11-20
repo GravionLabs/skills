@@ -259,15 +259,18 @@ try {
 }
 const FIXED_TOKEN = app ? undefined : process.env.DELIVER_SESSION_TOKEN;
 const TOKEN_SOURCE = app ? 'GitHub App' : FIXED_TOKEN ? 'DELIVER_SESSION_TOKEN' : undefined;
+const runId = `${new Date().toISOString().replace(/[-:]/g, '').slice(0, 15)}-${process.pid}`;
+const runDir = path.join(commonDir, 'deliver', runId);
 const tracker = await loadTracker(opt.tracker ?? config.deliver?.tracker ?? 'github', {
   cwd: root,
   base: BASE,
   selection: { milestone: opt.milestone, issues: opt.issues?.split(',').map((nr) => nr.trim()) },
   trustAuthors: opt['trust-authors'],
+  stopFile: path.join(runDir, 'stop'),
+  onStop: requestStop,
+  log: (text) => log(text, 'warn'),
 }).catch((error) => fail(`tracker: ${firstLine(error)}`, 64));
 const tokenSource = app ? makeSource(app, tracker.repo, SESSION_MINUTES * 60_000) : undefined;
-const runId = `${new Date().toISOString().replace(/[-:]/g, '').slice(0, 15)}-${process.pid}`;
-const runDir = path.join(commonDir, 'deliver', runId);
 let emit: Emit = () => {};
 
 /** One line of the stream-json of Claude Code, as far as the loop reads it. */
