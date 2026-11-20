@@ -21,6 +21,7 @@ import { type Emit, openEvents } from './events.mts';
 import { HARNESSES } from './harness.mts';
 import { adoptLegacyEnv, unknownConfigKeys } from './legacy.mts';
 import { killTree, launch, promptPath } from './process.mts';
+import { progressLine } from './progress-bar.mts';
 import { type BaseState, type Gate, type Item, type Pull, loadTracker } from './tracker.mts';
 
 // before anything reads the environment; the warnings are printed once the log exists
@@ -770,6 +771,12 @@ try {
     }
     if (!next) break;
     log(`#${next.id} start: ${next.title} (${open.length} open)`, 'info');
+    // x: the issues finished or set aside so far, plus this one; the log file is read at a fixed width
+    const begun = merged.length + aside.size + handedOver.size + 1;
+    log(
+      progressLine(begun, total, process.stdout.isTTY ? (process.stdout.columns ?? 80) : 80),
+      'info',
+    );
     emit('task.started', { task: `issue-${next.id}`, subject: tracker.itemSubject(next) });
     // a failing tracker or git call sets the issue aside, it does not end the run
     const { reason, pull } = await deliver(next).catch(
