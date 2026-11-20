@@ -4,8 +4,10 @@ on:
   push:
     branches: [main, 'release/**']
   pull_request:
-    branches: [main, release/next]
-    types: [opened, synchronize, reopened, labeled]
+    branches: [main, 'release/**']
+    # The types of the pr-checks job (body, label and draft changes rerun the readiness check). The build and test jobs
+    # run only for opened, synchronize, reopened and labeled, as before; the others skip them (see the `if:` below).
+    types: [opened, edited, synchronize, reopened, labeled, unlabeled, ready_for_review]
   workflow_dispatch:
 
 permissions:
@@ -13,11 +15,30 @@ permissions:
   pull-requests: write
   contents: read
 
-# Required checks of the ruleset on release/next: "Build & Test" and "Test".
+# Required check of the rulesets on main and release: "PR checks passed" (the last job, needs every other job).
+# Add, rename or remove a job here without a ruleset change; list it in `needs` of "PR checks passed".
 # Nothing is generated into the repository: site/skill-list.md is built in the working tree for the site only.
 jobs:
+  # Readiness, title, adr and spec checks of the reusable workflow pr-checks.yml of GravionLabs/ci, all inputs at their defaults.
+  # - readiness (#71): the PR body closes an issue (Closes|Fixes|Resolves #n, require-issue: true) and each closed issue is
+  #   ready (no needs-decision or needs-refinement label, no open "blocked by" issue). Release PRs from release/** are exempt.
+  # - title (#102): the PR title is a Conventional Commit and agrees with the commits (feat commit -> feat title, breaking
+  #   commit -> "!"), because the squash merge into release/next takes the PR title and the version bump reads it.
+  # - adr and spec: skipped green, the repository has no governance key in .agents/config.json.
+  # No secrets, no checkout: it reads the PR and the issues through the API with the GITHUB_TOKEN. The job grants the union of
+  # what the jobs of pr-checks.yml request (readiness, adr, spec, title, retarget): GitHub validates the permissions of every
+  # called job at startup, skipped ones included, so less ends in startup_failure.
+  pr-checks:
+    if: github.event_name == 'pull_request'
+    permissions:
+      contents: read
+      issues: read
+      pull-requests: write # the retarget job of ci pr-checks since v1.14.0 (ci#232)
+    uses: GravionLabs/ci/.github/workflows/pr-checks.yml@v1
+
   build-test:
     name: Build & Test
+    if: github.event_name != 'pull_request' || contains(fromJSON('["opened","synchronize","reopened","labeled"]'), github.event.action)
     runs-on: ubuntu-latest
     # Local equivalent: pnpm run check; keep CI checks separate for individual job logs.
     permissions:
@@ -73,6 +94,7 @@ jobs:
   # GravionLabs/ci/node/test@v1 is not used: its artifact and check names are fixed.
   test-shard:
     name: Test (${{ matrix.shard }}/4)
+    if: github.event_name != 'pull_request' || contains(fromJSON('["opened","synchronize","reopened","labeled"]'), github.event.action)
     runs-on: ubuntu-latest
     permissions:
       contents: read
@@ -118,9 +140,10 @@ jobs:
           path: test-results/
           if-no-files-found: ignore
 
-  # The loop of deliver runs on Windows too (#689): its tests on windows-latest. Not a required check.
+  # The loop of deliver runs on Windows too (#689): its tests on windows-latest. Part of "PR checks passed" like every job.
   test-windows:
     name: Test deliver (windows)
+    if: github.event_name != 'pull_request' || contains(fromJSON('["opened","synchronize","reopened","labeled"]'), github.event.action)
     runs-on: windows-latest
     permissions:
       contents: read
@@ -149,7 +172,8 @@ jobs:
       - name: Test
         run: pnpm exec vitest run test/skills/delivery/deliver.test.ts
 
-  # Aggregate check "Test": green only when all four shards succeeded. The github-actions reporter annotates failures.
+  # Aggregate job "Test": green only when all four shards succeeded (skipped, for a pull request event without code change, counts as green).
+  # The github-actions reporter annotates failures.
   test:
     name: Test
     runs-on: ubuntu-latest
@@ -162,7 +186,7 @@ jobs:
         env:
           RESULT: ${{ needs.test-shard.result }}
         run: |
-          if [ "$RESULT" != "success" ]; then
+          if [ "$RESULT" != "success" ] && [ "$RESULT" != "skipped" ]; then
             echo "Test shards finished with result: $RESULT (all four shards must succeed)"
             exit 1
           fi
@@ -217,3 +241,29 @@ jobs:
           update-changelog: 'true'
           # Merging the release PR deletes release/next (delete_branch_on_merge); recreated here at the released commit.
           recreate-branch: release/next
+
+  # The one required check of the rulesets on main and release. Green when no needed job failed or was cancelled;
+  # skipped is accepted (jobs that do not run for the event, the release outside main). `if: always()` runs it after a failure too.
+  pr-checks-passed:
+    name: PR checks passed
+    runs-on: ubuntu-latest
+    if: always()
+    needs:
+      - pr-checks
+      - build-test
+      - test-shard
+      - test-windows
+      - test
+      - determine-version
+      - release
+    permissions: {}
+    steps:
+      - name: Require every job to succeed or be skipped
+        env:
+          NEEDS: ${{ toJSON(needs) }}
+        run: |
+          echo "$NEEDS" | jq -r 'to_entries[] | "\(.key): \(.value.result)"'
+          if ! echo "$NEEDS" | jq -e 'all(.[]; .result == "success" or .result == "skipped")' > /dev/null; then
+            echo "A needed job failed or was cancelled"
+            exit 1
+          fi
