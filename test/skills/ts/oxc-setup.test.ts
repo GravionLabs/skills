@@ -26,7 +26,8 @@ describe('oxc setup (ADR 0006, #770)', () => {
     expect(ng.jsPlugins).toEqual(['@angular-eslint/eslint-plugin']);
     expect(ng.rules['@angular-eslint/component-max-inline-declarations']).toEqual([
       'error',
-      { template: 0 },
+      // only inline templates are errors; the default limits for styles (3) and animations (15) are lifted (#790)
+      { template: 0, styles: 1000, animations: 1000 },
     ]);
     expect(ng.ignorePatterns).toContain('lint-probe/**');
   });

@@ -26,7 +26,7 @@
     "@angular-eslint/prefer-standalone": "error",
     "@angular-eslint/use-pipe-transform-interface": "error",
     "@angular-eslint/use-lifecycle-interface": "warn",
-    "@angular-eslint/component-max-inline-declarations": ["error", { "template": 0 }],
+    "@angular-eslint/component-max-inline-declarations": ["error", { "template": 0, "styles": 1000, "animations": 1000 }],
     "@angular-eslint/component-selector": ["error", { "type": "element", "prefix": "app", "style": "kebab-case" }],
     "@angular-eslint/directive-selector": ["error", { "type": "attribute", "prefix": "app", "style": "camelCase" }]
   },
