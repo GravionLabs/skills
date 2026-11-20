@@ -25,6 +25,7 @@ Test behavior through the public interface, never internals; expected values com
 - [ ] Changed files linted: `scripts/Format-Changed.ps1 -Lint` runs the linter of the language on them (`references/lint.md`); a `lint.<lang>` entry in `.agents/config.json` overrides it (`"lint": false` disables); findings are fixed before the commit
 - [ ] `governance.specMap` in `.agents/config.json`: spec updated with the code, new service gets a spec (`references/specs.md`)
 - [ ] Workflows reference `GravionLabs/ci` at the major tag `@v<major>` (today `@v1`), never `@main` or a commit SHA; third-party actions stay SHA-pinned where the repository requires it
+- [ ] Result carries `risk` and `visual_proof`; a visible change gets before and after screenshots under `.agents/proof/<branch>/`, never committed (`references/runner-contract.md`)
 - [ ] Never commit red
 - [ ] No debug output left in code
 

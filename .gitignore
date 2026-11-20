@@ -24,6 +24,8 @@ Thumbs.db
 !.claude/settings.json
 # skills installed into this repository
 .agents/skills/
+# visual proof screenshots of the implementer, never committed
+.agents/proof/
 skills-lock.json
 
 # JetBrains IDEs - share run configurations
