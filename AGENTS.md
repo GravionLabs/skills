@@ -28,7 +28,7 @@ Groups: `shared`, `delivery`, `github`, `dotnet`, `ts`, `py`, `rust`, `go`, `ng`
 
 - Before changing `skills/shared/` (check-prerequisites, implementation, detect-techstack, diagnose, code-review, lessons, project-setup, adr, ratchet, ast-grep-rules, ui-styleguide, agents-md), read `docs/agents-md-refs/shared.md` (what each skill of the `shared` group does and its constraints).
 - Before changing `skills/delivery/` (planner, deliver, grill-me, retro, roadmap, skills-manage), read `docs/agents-md-refs/delivery.md` (what each skill of the `delivery` group does and its constraints).
-- Before changing `skills/github/` (github-issue, github-pull-request, github-release, github-milestone, github-pages, github-project), read `docs/agents-md-refs/github.md` (what each skill of the `github` group does and its constraints).
+- Before changing `skills/github/` (github-issue, github-pull-request, github-release, github-milestone, github-pages, github-project, github-workflow-lint), read `docs/agents-md-refs/github.md` (what each skill of the `github` group does and its constraints).
 - Before changing `skills/dotnet/`, read `docs/agents-md-refs/dotnet.md` (what each skill of the `dotnet` group does and its constraints).
 - Before changing `skills/ts/`, read `docs/agents-md-refs/ts.md` (what each skill of the `ts` group does and its constraints).
 - Before changing `skills/py/`, read `docs/agents-md-refs/py.md` (what each skill of the `py` group does and its constraints).
