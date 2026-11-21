@@ -1,5 +1,5 @@
 import path from 'node:path';
-import { describe, expect, it } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 
 const mod = path.resolve(__dirname, '../../../skills/delivery/deliver/scripts/program-status.mts');
 const { encodeStatus, programStatus } = (await import(
@@ -71,5 +71,73 @@ describe('programStatus', () => {
       state: 'working',
     });
     expect(written).toEqual([]);
+  });
+
+  describe('heartbeat', () => {
+    afterEach(() => vi.useRealTimers());
+    const start = (env: NodeJS.ProcessEnv = {}) => {
+      vi.useFakeTimers();
+      const written: string[] = [];
+      const report = programStatus(env, () => (data) => written.push(data));
+      return { written, report };
+    };
+
+    it('repeats working every 5 minutes', () => {
+      const { written, report } = start();
+      report({ state: 'working', title: 'M1' });
+      vi.advanceTimersByTime(299_000);
+      expect(written).toHaveLength(1);
+      vi.advanceTimersByTime(1000);
+      expect(written).toHaveLength(2);
+      vi.advanceTimersByTime(300_000);
+      expect(written).toHaveLength(3);
+      expect(new Set(written).size).toBe(1);
+    });
+
+    it('keeps a blocked question visible and repeats the latest report only', () => {
+      const { written, report } = start();
+      report({ state: 'working' });
+      report({ state: 'blocked', kind: 'question', msg: 'ok?' });
+      vi.advanceTimersByTime(300_000);
+      expect(written.at(-1)).toBe(encodeStatus({ state: 'blocked', kind: 'question', msg: 'ok?' }));
+      expect(written).toHaveLength(3);
+    });
+
+    it.each(['done', 'error', 'idle', 'clear'] as const)('stops at %s', (state) => {
+      const { written, report } = start();
+      report({ state: 'working' });
+      report({ state });
+      vi.advanceTimersByTime(3_600_000);
+      expect(written).toHaveLength(2);
+    });
+
+    it('can be shortened by DELIVER_HEARTBEAT_SECONDS', () => {
+      const { written, report } = start({ DELIVER_HEARTBEAT_SECONDS: '10' });
+      report({ state: 'working' });
+      vi.advanceTimersByTime(10_000);
+      expect(written).toHaveLength(2);
+    });
+
+    it('writes nothing with DELIVER_PROGRAM_STATUS=0 or without a terminal', () => {
+      vi.useFakeTimers();
+      const written: string[] = [];
+      programStatus(
+        { DELIVER_PROGRAM_STATUS: '0' },
+        () => (d) => written.push(d),
+      )({
+        state: 'working',
+      });
+      programStatus({}, () => undefined)({ state: 'working' });
+      vi.advanceTimersByTime(3_600_000);
+      expect(written).toEqual([]);
+    });
+
+    it('does not keep the process alive', () => {
+      const { report } = start();
+      report({ state: 'working' });
+      expect(vi.getTimerCount()).toBe(1);
+      expect(() => report({ state: 'done' })).not.toThrow();
+      expect(vi.getTimerCount()).toBe(0);
+    });
   });
 });
