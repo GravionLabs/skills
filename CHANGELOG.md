@@ -5,6 +5,12 @@ Versioning follows [Semantic Versioning](https://semver.org/).
 
 ---
 
+## [5.4.1] — 2026-11-21
+
+### Bug Fixes
+- **ci**: The release job gets 30 minutes (#909) (#910)
+
+
 ## [5.4.0] — 2026-11-21
 
 ### Bug Fixes
@@ -19,6 +25,7 @@ Versioning follows [Semantic Versioning](https://semver.org/).
 - Language implementation skills name the gate (#810) (#863)
 - Derive a first style guide from an existing UI repository (#822) (#873)
 - .agents/proof/ is gitignored in this repository and named in after-install (#832) (#883)
+- Update CHANGELOG.md for v5.4.0 [skip ci]
 
 
 ### Features
