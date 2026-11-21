@@ -40,6 +40,8 @@ jobs:
 
 function repoWith(workflow?: string): string {
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'wflint-'));
+  // actionlint looks for the project root (a .git entry) above the workflows
+  spawnSync('git', ['init', '-q', dir]);
   if (workflow !== undefined) {
     fs.mkdirSync(path.join(dir, '.github/workflows'), { recursive: true });
     fs.writeFileSync(path.join(dir, '.github/workflows/ci.yml'), workflow);
@@ -92,6 +94,12 @@ describe('github-workflow-lint skill', () => {
   describe.skipIf(!toolsInstalled)('with the tools installed', () => {
     it('a clean workflow passes silently', () => {
       const r = lint(repoWith(CLEAN));
+      expect(r.stdout).toBe('');
+      expect(r.status).toBe(0);
+    });
+
+    it('a set GH_TOKEN does not reach zizmor (an empty token would abort it)', () => {
+      const r = lint(repoWith(CLEAN), { ...process.env, GH_TOKEN: 'ghp_test' });
       expect(r.stdout).toBe('');
       expect(r.status).toBe(0);
     });

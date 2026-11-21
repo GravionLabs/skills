@@ -42,10 +42,15 @@ try {
     $saved = @{}
     foreach ($v in 'GH_TOKEN', 'GITHUB_TOKEN', 'ZIZMOR_GITHUB_TOKEN') {
         $saved[$v] = [Environment]::GetEnvironmentVariable($v)
-        [Environment]::SetEnvironmentVariable($v, $null)
+        # Remove-Item, not SetEnvironmentVariable($null): on Linux that leaves an empty variable and zizmor rejects an empty token
+        Remove-Item -LiteralPath "env:$v" -ErrorAction SilentlyContinue
     }
     try { $out = & zizmor --offline --format=github --config $config .github/workflows 2>&1 }
-    finally { foreach ($v in $saved.Keys) { [Environment]::SetEnvironmentVariable($v, $saved[$v]) } }
+    finally {
+        foreach ($v in $saved.Keys) {
+            if ($null -ne $saved[$v]) { [Environment]::SetEnvironmentVariable($v, $saved[$v]) }
+        }
+    }
     if ($LASTEXITCODE -ne 0) { $failed = $true; $out | ForEach-Object { Write-Output "$_" } }
 }
 finally { Pop-Location }

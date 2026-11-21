@@ -2,5 +2,12 @@
   "deliver": {
     "notifications": false
   },
-  "gate": "pnpm check:changed"
+  "gate": "pnpm check:changed",
+  "checks": [
+    {
+      "name": "workflow-lint",
+      "command": "pwsh skills/github/github-workflow-lint/scripts/Invoke-WorkflowLint.ps1",
+      "fast": true
+    }
+  ]
 }

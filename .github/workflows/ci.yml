@@ -47,6 +47,8 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+        with:
+          persist-credentials: false
 
       # node/setup has no node-version-file input: the version comes from .nvmrc
       - name: Read the Node version
@@ -106,6 +108,7 @@ jobs:
       - name: Checkout
         uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
         with:
+          persist-credentials: false
           fetch-depth: 0
 
       # node/setup has no node-version-file input: the version comes from .nvmrc
@@ -150,6 +153,7 @@ jobs:
       - name: Checkout
         uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
         with:
+          persist-credentials: false
           fetch-depth: 0
 
       - name: Read the Node version
@@ -200,6 +204,7 @@ jobs:
       - name: Checkout
         uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
         with:
+          persist-credentials: false
           fetch-depth: 0
 
       # Conventional Commit bump (input conventional-commits, default true since GravionLabs/ci v1.4.0, ci#107)
@@ -222,7 +227,7 @@ jobs:
       issues: write
       pull-requests: read
     steps:
-      - name: Checkout
+      - name: Checkout # zizmor: ignore[artipacked] the gh-release step below pushes the changelog commit and recreates release/next with these credentials
         uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
         with:
           fetch-depth: 0
