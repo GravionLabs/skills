@@ -39,6 +39,7 @@ jobs:
   build-test:
     name: Build & Test
     runs-on: ubuntu-latest
+    timeout-minutes: 10
     # Local equivalent: pnpm run check; keep CI checks separate for individual job logs.
     permissions:
       contents: read
@@ -96,6 +97,7 @@ jobs:
   test-shard:
     name: Test (${{ matrix.shard }}/4)
     runs-on: ubuntu-latest
+    timeout-minutes: 10
     permissions:
       contents: read
     strategy:
@@ -145,6 +147,7 @@ jobs:
   test-windows:
     name: Test deliver (windows)
     runs-on: windows-latest
+    timeout-minutes: 10
     permissions:
       contents: read
     env:
@@ -178,6 +181,7 @@ jobs:
   test:
     name: Test
     runs-on: ubuntu-latest
+    timeout-minutes: 5
     needs: test-shard
     if: always()
     permissions:
@@ -195,6 +199,7 @@ jobs:
   determine-version:
     name: Determine Version
     runs-on: ubuntu-latest
+    timeout-minutes: 5
     if: github.ref == 'refs/heads/main' && (github.event_name == 'push' || github.event_name == 'workflow_dispatch')
     permissions:
       contents: read
@@ -218,6 +223,7 @@ jobs:
   release:
     name: Release
     runs-on: ubuntu-latest
+    timeout-minutes: 10
     needs:
       - determine-version
       - build-test
@@ -249,6 +255,7 @@ jobs:
   pr-checks-passed:
     name: PR checks passed
     runs-on: ubuntu-latest
+    timeout-minutes: 5
     if: always()
     needs:
       - pr-checks

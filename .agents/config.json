@@ -5,6 +5,16 @@
   "gate": "pnpm check:changed",
   "checks": [
     {
+      "name": "ast-grep scan",
+      "command": "pnpm exec ast-grep scan",
+      "fast": true
+    },
+    {
+      "name": "ast-grep test",
+      "command": "pnpm exec ast-grep test",
+      "fast": true
+    },
+    {
       "name": "workflow-lint",
       "command": "pwsh skills/github/github-workflow-lint/scripts/Invoke-WorkflowLint.ps1",
       "fast": true

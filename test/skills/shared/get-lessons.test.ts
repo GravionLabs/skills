@@ -6,6 +6,7 @@ import { PwshWorker } from '../../helpers/pwsh-worker';
 
 const SCRIPT = path.resolve(__dirname, '../../../skills/shared/lessons/scripts/Get-Lessons.ps1');
 const hasPwsh = spawnSync('pwsh', ['-NoProfile', '-Command', '1']).status === 0;
+// timeout: the tests start pwsh, which needs more than the 5 s default on a loaded machine
 vi.setConfig({ testTimeout: 30000, hookTimeout: 30000 });
 
 type Lesson = { id?: string; scope?: string; status?: string; evidence?: string; body: string };
