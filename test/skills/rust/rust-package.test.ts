@@ -130,6 +130,41 @@ describe('rust group', () => {
     });
   });
 
+  describe('cargo-deny template', () => {
+    const dir = 'skills/rust/rust-implementation';
+
+    it('deny.toml has the four sections and the required keys', () => {
+      const text = read(`${dir}/templates/deny.toml`);
+      for (const t of ['graph', 'advisories', 'licenses', 'bans', 'sources'])
+        expect(text).toMatch(new RegExp(`^\\[${t}\\]$`, 'm'));
+      expect(text).toMatch(/^all-features = true$/m);
+      expect(text).toMatch(/^version = 2$/m);
+      expect(text).toMatch(/^wildcards = "deny"$/m);
+      expect(text).toMatch(/^allow-wildcard-paths = true$/m);
+      expect(text).toMatch(/^unknown-registry = "deny"$/m);
+      expect(text).toMatch(/^unknown-git = "deny"$/m);
+    });
+
+    it('every ignore example has a reason and an expiry', () => {
+      const files = ['templates/deny.toml', 'references/tauri.md', 'references/deny.md'];
+      let count = 0;
+      for (const f of files)
+        for (const m of read(`${dir}/${f}`).matchAll(/\{ id = "RUSTSEC[^}]*\}/g)) {
+          count++;
+          expect(m[0], m[0]).toMatch(/reason = "[^"]+"/);
+          expect(m[0], m[0]).toMatch(/expiry = "[^"]+"/);
+        }
+      expect(count).toBeGreaterThanOrEqual(3);
+    });
+
+    it('is linked from SKILL.md; deny.md names the network need; tauri.md the exit', () => {
+      expect(read(`${dir}/SKILL.md`)).toContain('`references/deny.md`');
+      expect(read(`${dir}/SKILL.md`)).toContain('`templates/deny.toml`');
+      expect(read(`${dir}/references/deny.md`)).toMatch(/needs the network/);
+      expect(read(`${dir}/references/tauri.md`)).toContain('when Tauri moves to GTK 4');
+    });
+  });
+
   describe('Tauri conventions', () => {
     const impl = () => read('skills/rust/rust-implementation/SKILL.md');
     const ref = () => read('skills/rust/rust-implementation/references/tauri.md');
