@@ -19,4 +19,10 @@ describe('workflow job timeouts', () => {
     }
     expect(missing).toEqual([]);
   });
+
+  // v5.4.0: a timeout of 10 minutes cancelled the release job (10 to 12 minutes long) after the tag was created
+  it('gives the release job of ci.yml at least 20 minutes', () => {
+    const wf = parse(fs.readFileSync(path.join(dir, 'ci.yml'), 'utf-8'));
+    expect(wf.jobs.release['timeout-minutes']).toBeGreaterThanOrEqual(20);
+  });
 });
