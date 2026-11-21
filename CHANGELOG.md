@@ -5,6 +5,68 @@ Versioning follows [Semantic Versioning](https://semver.org/).
 
 ---
 
+## [5.4.0] — 2026-11-21
+
+### Bug Fixes
+- **ci**: PR checks passed no longer goes green while the tests of the head run (#898) (#899)
+- **ci**: Migrate the dependency dashboard keys of renovate.json5 (#904) (#905)
+- **deliver**: Oxlint no longer reports NodeJS.Timeout in deliver-loop.mts (#902) (#906)
+- Pnpm run typecheck is green and part of pnpm run check and CI (#895) (#907)
+
+
+### Documentation
+- Native baselines and the stale-entry wrapper for the ratchet skill (#804) (#857)
+- Language implementation skills name the gate (#810) (#863)
+- Derive a first style guide from an existing UI repository (#822) (#873)
+- .agents/proof/ is gitignored in this repository and named in after-install (#832) (#883)
+
+
+### Features
+- Ratchet skill with baseline helper (entry and count baselines) (#798) (#850)
+- Ratchet runner that discovers and runs the ratchet scripts (#799) (#852)
+- File-size ratchet (#800) (#853)
+- Lint-suppression ratchet (#801) (#854)
+- Any and ts-nocheck ratchet (#802) (#855)
+- Skipped-tests ratchet (#803) (#856)
+- CI job template for the ratchet runner (#805) (#858)
+- Gate convention, gate config key and AGENTS.md wording (#806) (#859)
+- Check-changed.mts runs the checks a change needs (#807) (#860)
+- Check-changed pass cache and --base (#808) (#861)
+- Implementation and deliver call the gate (#809) (#862)
+- Claude Code Stop hook template that runs the gate (#811) (#864)
+- Ast-grep-rules skill with layout, message rule and rule check (#813) (#865)
+- Ast-grep starter rules for tests (TypeScript) (#814) (#866)
+- Opt-in anti-slop ast-grep rules (#815) (#867)
+- Check-prerequisites requires ast-grep where sgconfig.yml exists (#816) (#868)
+- Code-review proposes an ast-grep rule for a repeated finding (#817) (#869)
+- Ui-styleguide skill with STYLEGUIDE.md template and deep-dive templates (#819) (#870)
+- UX review rubric template with a fixed output format (#820) (#871)
+- Code-review loads the UX rubric for UI diffs (#821) (#872)
+- Stylelint template that enforces tokens in Angular repositories (#823) (#874)
+- Agents-md skill with target structure, size budget and admission rule (#824) (#875)
+- Check-agents-md.mts reports a file over budget and reference files without a reading condition (#825) (#876)
+- Ratchet on the size of AGENTS.md (#826) (#877)
+- Pull request description carries Suggested AGENTS.md additions (#828) (#879)
+- Pull request body carries Risk and Visual proof sections (#829) (#880)
+- Implementer result carries risk and visual proof (#830) (#881)
+- Deliver passes risk and visual proof to the pull request and reports the risk level (#831) (#882)
+- Job-timeout ratchet for GitHub Actions workflows (#835) (#885)
+- Github-workflow-lint skill runs actionlint and zizmor (#838) (#886)
+- Check-prerequisites installs actionlint, zizmor and shellcheck (#839) (#887)
+- CI job template that runs the workflow lint (#840) (#888)
+- Secret-scan skill with gitleaks config and allowlist rule (#842) (#890)
+- Check-prerequisites installs gitleaks where .gitleaks.toml exists (#843) (#891)
+- Ts-create-project and ts-pnpm-workflow set minimumReleaseAge (#833) (#884)
+- Check that a pnpm repository sets minimumReleaseAge (#834) (#892)
+- This repository gets check:changed (#812) (#896)
+- **delivery**: Poimen-lead skill for the start, wait, read, report loop (#889)
+- This repository runs ast-grep scan and test in its checks (#818) (#900)
+
+
+### Refactoring
+- This repository's AGENTS.md within the budget, details in reference files (#827) (#878)
+
+
 ## [5.3.0] — 2026-11-20
 
 ### Bug Fixes
@@ -12,6 +74,10 @@ Versioning follows [Semantic Versioning](https://semver.org/).
 - **statusline**: Context-statusline installs a subagent line that Claude Code removed in 2.1.323 (#745) (#792)
 - **deliver**: A rate-limit wait does not use up a retry, a secondary limit waits longer (#682) (#796)
 - **shared**: Implementation runs fast static checks first and limits the full-suite rerun (#794) (#797)
+
+
+### Documentation
+- Update CHANGELOG.md for v5.3.0 [skip ci]
 
 
 ### Features
