@@ -421,7 +421,7 @@ async function startSession(item: Item, cwd: string, file: string): Promise<Sess
     stopSession = stop;
     // a session that scheduled a wakeup prints its final result and then stays alive until the wakeup fires:
     // once the final `result:` line is in and nothing follows for a moment, the loop ends the process itself
-    let grace: NodeJS.Timeout | undefined;
+    let grace: ReturnType<typeof setTimeout> | undefined;
     let finished = false;
     createInterface({ input: child.stdout! }).on('line', (line) => {
       out.write(`${line}\n`);
