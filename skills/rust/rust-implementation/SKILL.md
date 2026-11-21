@@ -7,7 +7,7 @@ description: 'Rust implementation rules (clippy, rustfmt) extending `implementat
 
 - **Build**: `cargo build` (check fast with `cargo check`)
 - **Lint**: `cargo clippy --all-targets --all-features -- -D warnings` is mandatory; fix warnings, never silence them blindly
-- **Lint set**: `[workspace.lints]` from `templates/workspace-lints.toml`, suppressions as `#[expect(…, reason)]`, `templates/clippy.toml`: read `references/lints.md`
+- **Lint set**: `[workspace.lints]` from `templates/workspace-lints.toml`, suppressions as `#[expect(…, reason)]`, `templates/clippy.toml`: read `references/lints.md`; migrate `allow` to `expect` with `pwsh scripts/Convert-AllowToExpect.ps1 -Path <dir> [-WhatIf]`
 - **Dependency policy**: `templates/deny.toml` for cargo-deny (advisories, licenses, bans, sources; ignores need reason and expiry): read `references/deny.md`
 - **Modules, errors, unsafe, async**: read `references/conventions.md` (relative to this skill's directory)
 - **Tauri**: only when `detect-techstack` reports `frameworks: ["tauri"]`, read `references/tauri.md`
