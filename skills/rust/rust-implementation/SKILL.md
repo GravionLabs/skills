@@ -7,6 +7,7 @@ description: 'Rust implementation rules (clippy, rustfmt) extending `implementat
 
 - **Build**: `cargo build` (check fast with `cargo check`)
 - **Lint**: `cargo clippy --all-targets --all-features -- -D warnings` is mandatory; fix warnings, never silence them blindly
+- **Lint set**: `[workspace.lints]` from `templates/workspace-lints.toml`, suppressions as `#[expect(…, reason)]`, `templates/clippy.toml`: read `references/lints.md`
 - **Modules, errors, unsafe, async**: read `references/conventions.md` (relative to this skill's directory)
 - **Tauri**: only when `detect-techstack` reports `frameworks: ["tauri"]`, read `references/tauri.md`
 
@@ -41,7 +42,7 @@ Run `cargo check-changed` once when the work is done (the gate of this stack; `i
 - 🔴 `unwrap()`/`expect()`/`panic!` on fallible input in non-test code; blocking calls inside `async` code
 - 🔴 Hardcoded secrets; SQL built by string formatting
 - 🟡 `anyhow` in a library's public API, or stringly-typed errors instead of `thiserror`
-- 🟡 `#[allow(clippy::...)]` without a justifying comment; clippy or rustfmt not clean
+- 🟡 `#[allow(...)]` instead of `#[expect(..., reason = "…")]`; clippy or rustfmt not clean
 - 🟡 Needless `.clone()`, `String`/`Vec<T>` parameters where `&str`/`&[T]` suffice
 - 🟢 Missing `Debug` derive or doc comment on public items
 - Tests follow `rust-test`
