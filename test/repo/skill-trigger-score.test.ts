@@ -12,8 +12,15 @@ import {
   checkThresholds,
   compareToBaseline,
   score,
-  type RunRecord,
 } from '../../scripts/skill-trigger-score.mjs';
+
+// the script is plain JavaScript and exports no type: the record shape its input check expects
+type RunRecord = {
+  skill: string;
+  kind: 'positive' | 'negative';
+  prompt: string;
+  invoked: string[];
+};
 
 const tmpDirs: string[] = [];
 afterEach(() => {

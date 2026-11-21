@@ -33,6 +33,10 @@ description: 'Python implementation and test rules (pytest) extending `implement
 
 Load `py-test` for runner config, marks, naming, mocking and coverage.
 
+## Gate
+
+Run `just check-changed` once when the work is done (the gate of this stack; `implementation` runs it through `Invoke-Gate.ps1`): `../../shared/implementation/references/gate.md`.
+
 ## Review rules
 
 - 🔴 Lint run (`Format-Changed.ps1 -Lint -Language py`, ruff) exits non-zero: error-level findings; 🟡 warning-level findings

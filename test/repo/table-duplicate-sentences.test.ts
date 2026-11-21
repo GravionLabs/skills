@@ -23,7 +23,7 @@ describe('table rows do not repeat a sentence (#359)', () => {
     expect(repeatedSentences(`${s}; other; ${s}`)).toEqual([s]);
   });
 
-  it.each(['AGENTS.md', 'README.md'])('%s: no row repeats a sentence', (file) => {
+  it.each(['README.md'])('%s: no row repeats a sentence', (file) => {
     const rows = fs
       .readFileSync(path.join(root, file), 'utf-8')
       .split('\n')

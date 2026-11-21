@@ -15,8 +15,11 @@ jobs:
   validate:
     name: Validate the configuration
     runs-on: ubuntu-24.04
+    timeout-minutes: 5
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+        with:
+          persist-credentials: false
 
       # node/setup has no node-version-file input: the version comes from .nvmrc
       - name: Read the Node version

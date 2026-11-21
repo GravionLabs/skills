@@ -1,0 +1,19 @@
+# Starter rule (TypeScript tests). Replace #<nr> with the issue of your own incident before use.
+# A skip is allowed with the comment `// quarantine: <reason> #<issue>` on the line above.
+id: no-skip-without-reason
+language: Tsx
+severity: error
+message: 'Why: a skipped test without a reason is forgotten and the check it gave is lost. Instead: fix or delete the test, or quarantine it with a comment `// quarantine: <reason> #<issue>` above it. See #<nr>.'
+files:
+  - '**/*.test.{ts,tsx,mts}'
+  - '**/*.spec.{ts,tsx,mts}'
+rule:
+  kind: expression_statement
+  has:
+    kind: call_expression
+    pattern: $SUITE.skip($$$ARGS)
+  not:
+    follows:
+      kind: comment
+      regex: '^//\s*quarantine:\s*\S'
+      stopBy: neighbor

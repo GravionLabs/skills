@@ -1,0 +1,5 @@
+# ast-grep project config. Run with `ast-grep` (never `sg`: on Linux `sg` is the shadow-utils command).
+ruleDirs:
+  - ast-grep/rules
+testConfigs:
+  - testDir: ast-grep/rule-tests

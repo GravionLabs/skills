@@ -3,6 +3,7 @@
     "deliver",
     "grill-me",
     "planner",
+    "poimen-lead",
     "retro",
     "roadmap",
     "skills-manage"
@@ -20,7 +21,8 @@
     "github-pages",
     "github-project",
     "github-pull-request",
-    "github-release"
+    "github-release",
+    "github-workflow-lint"
   ],
   "go": [
     "go-implementation",
@@ -43,13 +45,18 @@
   ],
   "shared": [
     "adr",
+    "agents-md",
+    "ast-grep-rules",
     "check-prerequisites",
     "code-review",
     "detect-techstack",
     "diagnose",
     "implementation",
     "lessons",
-    "project-setup"
+    "project-setup",
+    "ratchet",
+    "secret-scan",
+    "ui-styleguide"
   ],
   "skill-tooling": [
     "skill-audit",

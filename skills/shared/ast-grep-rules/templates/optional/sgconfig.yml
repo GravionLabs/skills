@@ -1,0 +1,11 @@
+# Config of the opt-in rules: ast-grep test --config templates/optional/sgconfig.yml (from the skill directory).
+# Copy the rule and its rule test you want into ast-grep/rules and ast-grep/rule-tests of the repository.
+ruleDirs:
+  - rules
+testConfigs:
+  - testDir: rule-tests
+languageGlobs:
+  Tsx:
+    - '*.ts'
+    - '*.mts'
+    - '*.cts'

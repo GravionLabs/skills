@@ -35,6 +35,8 @@ const skill = path.resolve(__dirname, '../../../skills/delivery/deliver');
 const loopScript = path.join(skill, 'scripts/deliver-loop.mts');
 const helpers = path.resolve(__dirname, 'deliver');
 
+type Result = { issue: number; outcome: string; reason?: string; risk?: string };
+
 type Scenario = {
   items: { id: number; title: string; blockedBy?: number[] }[];
   gates?: unknown[];
@@ -47,6 +49,7 @@ type Scenario = {
   stopInChangedFiles?: boolean;
   exits?: number[];
   noPull?: boolean;
+  risks?: Record<number, string>;
   filesFailures?: number;
   blocked?: string;
   earlierPull?: boolean;
@@ -55,6 +58,7 @@ type Scenario = {
   plan?: { exit?: number; noPull?: boolean; hangs?: boolean }[];
   closeAfterCalls?: number;
   releaseTests?: number[];
+  releaseCommits?: number;
   base?: string[];
   mergedBefore?: number[];
   mergedDuring?: number[];
@@ -73,7 +77,7 @@ type Outcome = {
     ghToken: string | null;
     hasSessionTokenVariable: boolean;
   }[];
-  results: { issue: number; outcome: string; reason?: string }[];
+  results: Result[];
   final?: Record<string, unknown>;
   events: { type: string; outcome?: string; reason?: string; needsYou?: boolean }[];
   log: string;
@@ -175,7 +179,9 @@ function loop(
         calls: lines<{ call: string }>(path.join(dir, 'calls.jsonl')).map((call) => call.call),
         sessions: lines(path.join(dir, 'sessions.jsonl')),
         results: results
-          ? lines<{ issue?: number }>(results).filter((r) => r.issue !== undefined)
+          ? lines<Result | { issue?: undefined }>(results).filter(
+              (r): r is Result => r.issue !== undefined,
+            )
           : [],
         final: results ? lines<Record<string, unknown>>(results).find((r) => r.run) : undefined,
         events: existsSync(events) ? lines(path.join(events, readdirSync(events)[0] ?? '')) : [],
@@ -575,6 +581,21 @@ describe('deliver loop', () => {
     expect(failed.stdout).toMatch(/set aside \(1\):\n {2}#63 session failed/);
     expect(failed.stdout).toMatch(/needs you \(0\):/);
     expect(failed.stdout).not.toContain('next step: merge');
+  });
+
+  it('writes the risk level of the implementer result into results.jsonl and the report', async () => {
+    const out = await loop({
+      items: [
+        { id: 91, title: '[PBI] feat: medium' },
+        { id: 92, title: '[PBI] feat: high' },
+        { id: 93, title: '[PBI] feat: no result' },
+      ],
+      risks: { 91: 'medium', 92: 'high' },
+    });
+    expect(out.status).toBe(0);
+    expect(out.results.map((r) => r.risk)).toEqual(['medium', 'high', undefined]);
+    expect(out.stdout).toMatch(/#91 \S+ \(risk medium\)/);
+    expect(out.stdout).toMatch(/needs you \(1\):\n {2}#92 risk high/);
   });
 
   it('refuses a base branch without required checks unless the flag allows it', async () => {

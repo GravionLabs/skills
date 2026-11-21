@@ -49,6 +49,10 @@ Match the project's existing convention. New Angular 20+ projects follow the CLI
 
 Load `ng-test` for TestBed setup, signal testing, mocking and async patterns.
 
+## Gate
+
+Run `pnpm check:changed` once when the work is done (the gate of this stack; `implementation` runs it through `Invoke-Gate.ps1`): `../../shared/implementation/references/gate.md`.
+
 ## Review rules
 
 - 🔴 Lint run (`Format-Changed.ps1 -Lint -Language ng`, oxlint + ESLint on `.html`, or ESLint) exits non-zero: error-level findings; 🟡 warning-level findings
@@ -65,6 +69,7 @@ Load `ng-test` for TestBed setup, signal testing, mocking and async patterns.
 
 - New standalone component → read `references/component.md`
 - New NgRx Signal Store for feature state → read `references/signal-store.md`
+- Enforce style tokens (no raw colors or font sizes) with Stylelint → read `references/style-lint.md`
 
 ## Related Skills
 

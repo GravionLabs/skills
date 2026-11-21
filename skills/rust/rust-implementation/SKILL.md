@@ -30,6 +30,10 @@ description: 'Rust implementation rules (clippy, rustfmt) extending `implementat
 
 Load `rust-test` for runner, layout, mocking and property tests.
 
+## Gate
+
+Run `cargo check-changed` once when the work is done (the gate of this stack; `implementation` runs it through `Invoke-Gate.ps1`): `../../shared/implementation/references/gate.md`.
+
 ## Review rules
 
 - 🔴 Lint run (`Format-Changed.ps1 -Lint -Language rust`, clippy) exits non-zero: error-level findings; 🟡 warning-level findings

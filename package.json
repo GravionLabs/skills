@@ -7,8 +7,9 @@
     "generate": "node scripts/generate-skill-list.mjs",
     "format": "oxfmt",
     "format:check": "oxfmt --check && oxlint",
-    "check": "pnpm run format:check && node scripts/check-marketplace.mjs && pwsh skills/skill-tooling/skill-slim/scripts/Get-SkillReport.ps1 -Root . -FailOnDangling && pnpm run lint:ps && pnpm test",
+    "check": "pnpm run format:check && node scripts/check-marketplace.mjs && pwsh skills/skill-tooling/skill-slim/scripts/Get-SkillReport.ps1 -Root . -FailOnDangling && pnpm run lint:ps && pnpm run typecheck && pnpm test",
     "check:marketplace": "node scripts/check-marketplace.mjs",
+    "check:changed": "node scripts/check-changed.mts",
     "test": "vitest run",
     "test:ci": "vitest run",
     "test:watch": "vitest",
@@ -20,6 +21,7 @@
     "yaml": "^2.8.3"
   },
   "devDependencies": {
+    "@ast-grep/cli": "^0.51.2",
     "@types/node": "^26.0.0",
     "@vitest/coverage-v8": "^4.1.2",
     "ajv": "^8.20.0",

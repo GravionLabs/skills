@@ -1,0 +1,9 @@
+id: no-module-mock-outside-tests
+valid:
+  - vi.fn()
+  - jest.fn()
+  - mock('x')
+invalid:
+  - vi.mock('./clock')
+  - |
+    jest.mock('./clock', () => ({ now: () => 1 }))

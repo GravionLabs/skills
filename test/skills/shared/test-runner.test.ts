@@ -11,6 +11,7 @@ const validate = new Ajv2020({ allErrors: true, strict: false }).compile(
   JSON.parse(fs.readFileSync(path.join(IMPL, 'schema/config.schema.json'), 'utf8')),
 );
 const hasPwsh = spawnSync('pwsh', ['-NoProfile', '-Command', '1']).status === 0;
+// timeout: the tests start pwsh, which needs more than the 5 s default on a loaded machine
 vi.setConfig({ testTimeout: 30000, hookTimeout: 30000 });
 
 // #507: the `test` key of .agents/config.json

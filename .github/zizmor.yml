@@ -1,0 +1,14 @@
+# zizmor policy (copy to .github/zizmor.yml). Our own reusable workflows may be pinned to a ref
+# (@v1, as `implementation` demands); every other action must be pinned to a commit SHA.
+rules:
+  unpinned-uses:
+    config:
+      policies:
+        'GravionLabs/ci/*': ref-pin
+        '*': hash-pin
+  # renovate.yml: the app token is for a dedicated Renovate app; its installation permissions are the ones Renovate needs.
+  # Narrowing them with permission-* inputs needs a review of every Renovate feature in use (not part of #841).
+  # The ignore is by file, not by line: the supply-chain test requires the `uses:` line to end with the version comment.
+  github-app:
+    ignore:
+      - renovate.yml

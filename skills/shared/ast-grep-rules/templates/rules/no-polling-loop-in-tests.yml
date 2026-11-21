@@ -1,0 +1,12 @@
+# Starter rule (TypeScript tests). Replace #<nr> with the issue of your own incident before use.
+id: no-polling-loop-in-tests
+language: Tsx
+severity: error
+message: 'Why: a loop or interval that waits for a state has no bound and hangs or flakes when the state never comes. Instead: await the event or promise, or use the framework wait (vi.waitFor, waitFor, expect.poll) with its timeout. See #<nr>.'
+files:
+  - '**/*.test.{ts,tsx,mts}'
+  - '**/*.spec.{ts,tsx,mts}'
+rule:
+  any:
+    - pattern: while ($COND) { $$$BODY }
+    - pattern: setInterval($$$ARGS)

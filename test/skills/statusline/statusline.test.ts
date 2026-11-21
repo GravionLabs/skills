@@ -271,6 +271,8 @@ describe.skipIf(!hasPwsh || !posix)('Install-Statusline.ps1', () => {
     const ours = (f: string) => ({ type: 'command', command: `node ${cmdPath(DIR)}/${f}` });
     const hookCmd = `bash ${cmdPath(DIR)}/context-warning.sh`;
     const hook = (command = hookCmd) => ({
+      // not a test timeout: the hook timeout in seconds that Claude Code reads from settings.json
+      // ast-grep-ignore: no-timeout-without-reason
       UserPromptSubmit: [{ hooks: [{ type: 'command', command, timeout: 5 }] }],
     });
     const old = (f: string) => ({
@@ -642,6 +644,8 @@ describe.skipIf(!hasPwsh || !posix)('Install-Statusline.ps1', () => {
           UserPromptSubmit: [
             {
               hooks: [
+                // not a test timeout: the hook timeout in seconds that Claude Code reads from settings.json
+                // ast-grep-ignore: no-timeout-without-reason
                 { type: 'command', command: `bash ${cmdPath(DIR)}/context-warning.sh`, timeout: 5 },
               ],
             },
@@ -708,6 +712,8 @@ describe.skipIf(!hasPwsh || !posix)(
         statusLine: { type: 'command', command: `node "${c}"/statusline.mjs` },
         hooks: {
           UserPromptSubmit: [
+            // not a test timeout: the hook timeout in seconds that Claude Code reads from settings.json
+            // ast-grep-ignore: no-timeout-without-reason
             { hooks: [{ type: 'command', command: `bash "${c}"/context-warning.sh`, timeout: 5 }] },
           ],
         },
@@ -732,6 +738,8 @@ describe.skipIf(!hasPwsh || !posix)(
             UserPromptSubmit: [
               {
                 hooks: [
+                  // not a test timeout: the hook timeout in seconds that Claude Code reads from settings.json
+                  // ast-grep-ignore: no-timeout-without-reason
                   { type: 'command', command: `bash ${tilde}/context-warning.sh`, timeout: 5 },
                 ],
               },

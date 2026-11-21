@@ -111,6 +111,12 @@ For a desktop app (Tauri) the template says to install the RC next to the stable
 { "checks": [{ "name": "ratchets", "command": "pnpm ratchets", "fast": true }] }
 ```
 
+- `gate`: the command of the gate `check:changed` (a string), or `false` for no gate. It formats, lints, typechecks and tests the changed files and runs the ratchets; a pass is cached. Convention, output rules and the commands for .NET, Rust and Python: `references/gate.md` of the `implementation` skill; the `AGENTS.md` wording: `templates/agents-checks.md`.
+
+```json
+{ "gate": "pnpm check:changed" }
+```
+
 - `test`: `false` skips every test run (`skipped: disabled`), or a map keyed by language. An entry has `command` (string or array, run in order, the first non-zero exit stops) and optional `targeted` (one string with `{files}`, the test files of a commit's changed paths). Precedence: this key, then `scripts.test` of `package.json` (ts, ng), then the default of the detected tool (vitest `npx vitest run`, jest `npx jest`, `uv run pytest`, `cargo test`, `go test ./...`, `dotnet test`); without any of them the run fails instead of guessing. `Invoke-Tests.ps1` of the `implementation` skill runs it; `implementation` and the `<lang>-test` skills point to it.
 
 ```json

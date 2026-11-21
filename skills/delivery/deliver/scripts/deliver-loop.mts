@@ -10,6 +10,7 @@ import {
   mkdirSync,
   readFileSync,
   realpathSync,
+  rmSync,
   writeFileSync,
 } from 'node:fs';
 import path from 'node:path';
@@ -357,6 +358,19 @@ function render(line: string, session: Session): void {
   }
 }
 
+const RISK_LEVELS = ['low', 'medium', 'high'];
+const risks = new Map<number, string>();
+/** The implementer result the session writes (`risk.level`); the session never reports anything else to the loop. */
+const resultFile = (item: Item) => path.join(runDir, `${item.id}.result.json`);
+function riskOf(item: Item): string | undefined {
+  try {
+    const level = JSON.parse(readFileSync(resultFile(item), 'utf8'))?.risk?.level;
+    return RISK_LEVELS.includes(level) ? level : undefined;
+  } catch {
+    return undefined;
+  }
+}
+
 async function startSession(item: Item, cwd: string, file: string): Promise<Session> {
   // the session works from this text, not from what the tracker shows when it runs
   const issueFile = path.join(runDir, `${item.id}.issue.md`);
@@ -374,6 +388,7 @@ async function startSession(item: Item, cwd: string, file: string): Promise<Sess
     CLAUDE_CODE_PRINT_BG_WAIT_CEILING_MS: '0',
     ...process.env,
     DELIVER_RUN: runId,
+    DELIVER_RESULT_FILE: resultFile(item),
     ...(token ? tracker.sessionEnv(token) : {}),
   };
   // the session gets the token, never the way to mint one
@@ -385,6 +400,8 @@ async function startSession(item: Item, cwd: string, file: string): Promise<Sess
     'DELIVER_APP_API_URL',
   ])
     delete env[name];
+  // a result of an earlier session is not the result of this one
+  rmSync(resultFile(item), { force: true });
   const session: Session = { exit: null, turns: 0, costUsd: 0, peakContext: 0 };
   const out = createWriteStream(file);
   return new Promise((done) => {
@@ -404,7 +421,7 @@ async function startSession(item: Item, cwd: string, file: string): Promise<Sess
     stopSession = stop;
     // a session that scheduled a wakeup prints its final result and then stays alive until the wakeup fires:
     // once the final `result:` line is in and nothing follows for a moment, the loop ends the process itself
-    let grace: NodeJS.Timeout | undefined;
+    let grace: ReturnType<typeof setTimeout> | undefined;
     let finished = false;
     createInterface({ input: child.stdout! }).on('line', (line) => {
       out.write(`${line}\n`);
@@ -646,11 +663,14 @@ async function deliver(item: Item): Promise<{ reason?: string; pull?: Pull }> {
     // not merged: the worktree may hold work that is not pushed
     log(`#${item.id} worktree kept: ${worktree}`, 'warn');
   }
+  const risk = riskOf(item);
+  if (risk) risks.set(item.id, risk);
   appendFileSync(
     path.join(runDir, 'results.jsonl'),
     `${JSON.stringify({
       issue: item.id,
       title: item.title,
+      risk,
       outcome: !reason ? 'merged' : reason === 'stopped' ? 'stopped' : 'aside',
       reason,
       pr: pull?.url,
@@ -884,7 +904,9 @@ try {
       (error): { reason?: string; pull?: Pull } => ({ reason: `error: ${firstLine(error)}` }),
     );
     if (!reason) {
-      merged.push(`#${next.id} ${pull?.url}`);
+      merged.push(
+        `#${next.id} ${pull?.url}${risks.has(next.id) ? ` (risk ${risks.get(next.id)})` : ''}`,
+      );
       log(`#${next.id} merged: ${pull?.url}`, 'ok');
       emit(
         'task.finished',
@@ -989,7 +1011,11 @@ if (complete) {
   }
 }
 
-needsYou = [...[...handedOver].map(([nr, why]) => `#${nr} ${why}`), ...needsYou];
+// an issue of level high is listed first: a person looks at it before the rest
+const highRisk = [...risks]
+  .filter(([, level]) => level === 'high')
+  .map(([nr]) => `#${nr} risk high`);
+needsYou = [...highRisk, ...[...handedOver].map(([nr, why]) => `#${nr} ${why}`), ...needsYou];
 // the open PBIs that wait for a handed-over pull request: their blockers name its issue
 const waitingFor = new Map<number, string[]>();
 for (const nr of handedOver.keys()) {

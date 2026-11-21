@@ -1,0 +1,14 @@
+# Opt-in rule. Replace #<nr> with the issue of your own incident before use.
+id: no-reduce-copy-accumulator
+language: Tsx
+severity: error
+message: 'Why: copying the accumulator on every step makes reduce quadratic in the input size. Instead: build the result with a loop or Object.fromEntries/map, or mutate a local accumulator. See #<nr>.'
+rule:
+  kind: call_expression
+  pattern: $SRC.reduce($FN, $$$REST)
+  has:
+    field: arguments
+    stopBy: end
+    any:
+      - pattern: '{ ...$ACC, $$$ }'
+      - pattern: '[...$ACC, $$$]'

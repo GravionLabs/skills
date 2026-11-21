@@ -16,13 +16,18 @@
       "strict": false,
       "skills": [
         "./skills/shared/adr",
+        "./skills/shared/agents-md",
+        "./skills/shared/ast-grep-rules",
         "./skills/shared/check-prerequisites",
         "./skills/shared/code-review",
         "./skills/shared/detect-techstack",
         "./skills/shared/diagnose",
         "./skills/shared/implementation",
         "./skills/shared/lessons",
-        "./skills/shared/project-setup"
+        "./skills/shared/project-setup",
+        "./skills/shared/ratchet",
+        "./skills/shared/secret-scan",
+        "./skills/shared/ui-styleguide"
       ]
     },
     {
@@ -36,7 +41,8 @@
         "./skills/github/github-pages",
         "./skills/github/github-project",
         "./skills/github/github-pull-request",
-        "./skills/github/github-release"
+        "./skills/github/github-release",
+        "./skills/github/github-workflow-lint"
       ]
     },
     {
@@ -48,6 +54,7 @@
         "./skills/delivery/deliver",
         "./skills/delivery/grill-me",
         "./skills/delivery/planner",
+        "./skills/delivery/poimen-lead",
         "./skills/delivery/retro",
         "./skills/delivery/roadmap",
         "./skills/delivery/skills-manage"

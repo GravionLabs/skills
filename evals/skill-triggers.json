@@ -152,7 +152,8 @@
     "skill": "code-review",
     "shouldTrigger": [
       "Review this code and rate findings by severity",
-      "Do a code review of the files I changed against the language rules"
+      "Do a code review of the files I changed against the language rules",
+      "Review my diff: it changes login.component.ts and login.component.html, check the UX too"
     ],
     "shouldNotTrigger": [
       "Run a parallel multi-dimension review of PR #77",
@@ -237,7 +238,9 @@
     "skill": "github-pull-request",
     "shouldTrigger": [
       "Create a PR for the current branch",
-      "Open a pull request linked to issue #266"
+      "Open a pull request linked to issue #266",
+      "Create a PR for the button color change in the settings page with before and after screenshots",
+      "Create a PR for the refactor of the parser and state its risk and that there is no visual proof"
     ],
     "shouldNotTrigger": [
       "Finish the release with the release PR and changelog",
@@ -264,6 +267,17 @@
     "shouldNotTrigger": [
       "Tag and publish the next version of the package",
       "Create a PR for the docs change of issue #12"
+    ]
+  },
+  {
+    "skill": "github-workflow-lint",
+    "shouldTrigger": [
+      "Lint the GitHub Actions workflows before I push",
+      "Check .github/workflows for broken expressions and security issues"
+    ],
+    "shouldNotTrigger": [
+      "Set up GitHub Pages for this repository",
+      "Write the changelog for the next release"
     ]
   },
   {
@@ -297,5 +311,62 @@
       "Record this decision as an ADR and supersede ADR 0020 in part"
     ],
     "shouldNotTrigger": ["Update the spec of the BFF", "Plan Feature #64 into PBIs"]
+  },
+  {
+    "skill": "ratchet",
+    "shouldTrigger": [
+      "Add a ratchet for the eslint no-explicit-any rule with a baseline of the existing violations",
+      "Grandfather the current violations of this lint rule so that new ones fail the check"
+    ],
+    "shouldNotTrigger": ["Format the changed files", "Write an ADR for the new queue"]
+  },
+  {
+    "skill": "ast-grep-rules",
+    "shouldTrigger": [
+      "Add an ast-grep rule that bans console.log after the incident in #412",
+      "Check that every ast-grep rule has a message and a rule test"
+    ],
+    "shouldNotTrigger": ["Add a ratchet for skipped tests", "Rename the variable in this function"]
+  },
+  {
+    "skill": "ui-styleguide",
+    "shouldTrigger": [
+      "Add a UI style guide to this project so agents stop drifting from our design",
+      "Create docs/STYLEGUIDE.md with deep-dive files for color and components"
+    ],
+    "shouldNotTrigger": [
+      "Record the decision to use Postgres as an ADR",
+      "Fix the failing login test"
+    ]
+  },
+  {
+    "skill": "agents-md",
+    "shouldTrigger": [
+      "Our AGENTS.md is too big, slim it down",
+      "Write an AGENTS.md for this repository"
+    ],
+    "shouldNotTrigger": ["Add a UI style guide to this project", "Summarize the open pull requests"]
+  },
+  {
+    "skill": "poimen-lead",
+    "shouldTrigger": [
+      "I run in poimen. Split this refactor across three worker agents, one worktree each, wait for them and collect their reports.",
+      "Use the poimen MCP tools to start workers for these independent tasks and wait for their results."
+    ],
+    "shouldNotTrigger": [
+      "Rename the config key in this Rust crate and update its tests",
+      "Write release notes for the last milestone"
+    ]
+  },
+  {
+    "skill": "secret-scan",
+    "shouldTrigger": [
+      "Add gitleaks to this repository and scan for committed secrets",
+      "Allowlist this gitleaks finding with a reason"
+    ],
+    "shouldNotTrigger": [
+      "Add an ast-grep rule that bans console.log",
+      "Write a changelog for the next release"
+    ]
   }
 ]

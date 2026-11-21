@@ -39,7 +39,7 @@ The repo uses pnpm (`pnpm-lock.yaml`) only.
 5. Update the group `description` in `.claude-plugin/marketplace.json` when the group scope changed, and the group table in AGENTS.md and README.md.
 6. Open a PR with a conventional-commit title (`feat(py): …`, `fix(github): …`). The changelog is generated from commit messages with git-cliff.
 
-   Every PR closes an issue (`Closes #n` in the body), also docs, roadmap and sync PRs; only release PRs from `release/**` are exempt. The required check `PR checks` (`.github/workflows/pr-checks.yml`, readiness job of GravionLabs/ci) fails a PR that closes no issue or closes one labelled `needs-decision` or `needs-refinement` or blocked by an open issue. Open an issue first when there is none.
+   Every PR closes an issue (`Closes #n` in the body), also docs, roadmap and sync PRs; only release PRs from `release/**` are exempt. The `pr-checks` job of `.github/workflows/ci.yml` (readiness job of GravionLabs/ci, part of the required check `PR checks passed`) fails a PR that closes no issue or closes one labelled `needs-decision` or `needs-refinement` or blocked by an open issue. Open an issue first when there is none.
 
 ## Dogfooding: project skills
 

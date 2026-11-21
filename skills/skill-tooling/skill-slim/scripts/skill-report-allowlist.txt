@@ -19,3 +19,25 @@ skills-manage: ng-ag-grid-developer
 github-project: project-url
 # deliver-loop is the launcher command that Install-LoopShim.ps1 writes, not a skill
 skills-manage: deliver-loop
+
+# scripts/ratchets is the default ratchet directory of the target repository, not a folder of the skill
+ratchet: scripts/ratchets
+# ast-grep is the binary (not a skill); the name is a prefix of the skill ast-grep-rules
+ast-grep-rules: ast-grep
+check-prerequisites: ast-grep
+# scripts/ast-grep-rules/ is the folder in the target repository where the script is copied, not a path of the skill
+ast-grep-rules: scripts/ast-grep-rules/
+# docs/STYLEGUIDE.md and docs/styleguide/ are the target repository files the templates create, not files of the skill
+ui-styleguide: docs/STYLEGUIDE.md
+ui-styleguide: docs/styleguide/
+# docs/STYLEGUIDE.md and docs/styleguide/ux-review-rubric.md are target repository files the UX review reads, not files of the skill
+code-review: docs/STYLEGUIDE.md
+code-review: docs/styleguide/ux-review-rubric.md
+
+# docs/STYLEGUIDE.md is the style guide of the target repository, named in the messages of the stylelint template, not a file of the skill
+ng-implementation: docs/STYLEGUIDE.md
+# docs/agents-md-refs/ holds the reference files in the target repository, not in the skill
+agents-md: docs/agents-md-refs/
+agents-md: docs/agents-md-refs/<topic>.md
+agents-md: docs/agents-md-refs/migrations.md
+agents-md: docs/agents-md-refs/release.md

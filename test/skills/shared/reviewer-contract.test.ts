@@ -106,3 +106,68 @@ describe('governance rules of code-review', () => {
     expect(rules).toContain('no spec change needed: <that spec>');
   });
 });
+
+describe('rule proposal', () => {
+  const shared = path.resolve(__dirname, '../../../skills/shared');
+  const skill = read('SKILL.md');
+  const proposal = read('references/rule-proposal.md');
+  const contract = fs.readFileSync(path.join(shared, 'lessons/references/contract.md'), 'utf-8');
+
+  it('code-review names the proposal and links the skill and reference', () => {
+    expect(skill).toContain('propose ast-grep rule');
+    expect(skill).toContain('references/rule-proposal.md');
+    expect(skill).toContain('ast-grep-rules');
+    expect(skill.split('\n').length).toBeLessThanOrEqual(100);
+    expect(proposal).toContain('propose ast-grep rule');
+    expect(proposal).toContain('ast-grep-rules');
+    expect(proposal).toMatch(/Why: .* Instead: .* See #/);
+  });
+
+  it('the lessons contract documents the rule pointer', () => {
+    expect(contract).toContain('rule: <rule id>');
+    expect(contract).toContain('ast-grep-rules');
+    expect(contract).toMatch(/candidate to retire/);
+  });
+
+  it('keeps the reviewer result schema unchanged', () => {
+    expect(Object.keys(schema.properties).sort()).toEqual(['blocking', 'notes']);
+  });
+});
+
+describe('UX review of a UI diff', () => {
+  const ref = read('references/ux-review.md');
+  const skill = read('SKILL.md');
+  const exts = ['.html', '.css', '.scss', '.tsx', '.jsx', '.vue', '.svelte', '*.component.ts'];
+
+  it('SKILL.md step and reference name the extensions, the reference and the rubric path', () => {
+    for (const e of exts) {
+      expect(skill).toContain('`' + e + '`');
+      expect(ref).toContain('`' + e + '`');
+    }
+    expect(skill).toContain('references/ux-review.md');
+    expect(ref).toContain('docs/styleguide/ux-review-rubric.md');
+    expect(ref).toContain('ui-styleguide');
+    expect(skill.split('\n').length).toBeLessThanOrEqual(100);
+  });
+
+  it('the reference lists the five rubric headings under Notes', () => {
+    for (const h of [
+      'Top fixes',
+      'Friction notes',
+      'Suggested changes',
+      'Keyboard and speed check',
+      'Follow-up states (loading, empty, error, partial)',
+    ]) {
+      expect(ref).toContain('### ' + h);
+    }
+    expect(ref).toContain('## Notes');
+  });
+
+  it('the eval case for a UI diff exists', () => {
+    const evals = JSON.parse(
+      fs.readFileSync(path.resolve(__dirname, '../../../evals/skill-triggers.json'), 'utf-8'),
+    );
+    const cr = evals.find((e: { skill: string }) => e.skill === 'code-review');
+    expect(cr.shouldTrigger.some((q: string) => /component\.ts/.test(q))).toBe(true);
+  });
+});
