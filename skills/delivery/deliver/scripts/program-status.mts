@@ -66,7 +66,14 @@ export function openTerminal(platform: string = process.platform): Writer | unde
   }
 }
 
-/** The descriptor stays open for the life of the loop. */
+/** Half of the 10 minutes after which a terminal without a signal counts as silent. */
+export const HEARTBEAT_SECONDS = 300;
+
+/**
+ * The descriptor stays open for the life of the loop. While the state is `working` or `blocked` the last
+ * report is repeated every `DELIVER_HEARTBEAT_SECONDS` (default 300) so a long task is not mistaken for a
+ * silent terminal. The timer is unref'ed; any other state stops it.
+ */
 export function programStatus(
   env: NodeJS.ProcessEnv = process.env,
   open: () => Writer | undefined = openTerminal,
@@ -74,5 +81,17 @@ export function programStatus(
   if (env.DELIVER_PROGRAM_STATUS === '0') return () => {};
   const write = open();
   if (!write) return () => {};
-  return (report) => write(encodeStatus(report));
+  const seconds = Number(env.DELIVER_HEARTBEAT_SECONDS);
+  const interval = (Number.isFinite(seconds) && seconds > 0 ? seconds : HEARTBEAT_SECONDS) * 1000;
+  let timer: ReturnType<typeof setInterval> | undefined;
+  return (report) => {
+    const sequence = encodeStatus(report);
+    write(sequence);
+    if (timer) clearInterval(timer);
+    timer = undefined;
+    if (report.state === 'working' || report.state === 'blocked') {
+      timer = setInterval(() => write(sequence), interval);
+      timer.unref();
+    }
+  };
 }
