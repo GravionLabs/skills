@@ -5,10 +5,20 @@ Versioning follows [Semantic Versioning](https://semver.org/).
 
 ---
 
+## [5.5.0] — 2026-11-21
+
+### Features
+- **deliver**: The loop repeats its OSC 7501 status as a heartbeat (#912) (#913)
+
+
 ## [5.4.1] — 2026-11-21
 
 ### Bug Fixes
 - **ci**: The release job gets 30 minutes (#909) (#910)
+
+
+### Documentation
+- Update CHANGELOG.md for v5.4.1 [skip ci]
 
 
 ## [5.4.0] — 2026-11-21
