@@ -9,7 +9,7 @@ name: Issues
 on:
   issues:
     types: [opened, reopened, transferred, edited, labeled, unlabeled, closed]
-  pull_request_target:
+  pull_request_target: # zizmor: ignore[dangerous-triggers] needed so Dependabot and fork PRs reach the project (secrets); issues.yml never checks out PR code
     types: [opened, reopened, closed, ready_for_review]
 
 permissions: {}

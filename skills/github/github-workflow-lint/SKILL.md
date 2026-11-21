@@ -29,7 +29,7 @@ In a repository with workflows add a fast check to `.agents/config.json`, run by
   "checks": [
     {
       "name": "workflow-lint",
-      "run": "pwsh <skill-dir>/scripts/Invoke-WorkflowLint.ps1",
+      "command": "pwsh <skill-dir>/scripts/Invoke-WorkflowLint.ps1",
       "fast": true
     }
   ]
