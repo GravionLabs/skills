@@ -39,12 +39,12 @@ A pass is cached by the hash of the changed files plus the base ref. An unchange
 - TypeScript: copy `templates/check-changed.mts` to the repository's own scripts folder (Node >= 22.18), wired as `pnpm check:changed`. It runs the steps above with oxfmt/biome/prettier, oxlint/biome/eslint, `tsc --noEmit`, `vitest related` (jest `--findRelatedTests`) with `--maxWorkers`, then the `checks` entries; success is one line, a failed step prints its full output only. A pass is cached under `<git-common-dir>/check-changed/` (key: content of the changed files, base commit, step list; a hit prints `cached pass`); `--base=<ref>` sets the base (default: `base` of `.agents/config.json`, else `origin/HEAD`), `--no-cache` ignores the cache.
 - Other stacks get no script from these skills; wire the commands below as a repository script, a `just` recipe or a `cargo` alias named `check:changed`.
 
-| Language | Format                              | Lint                                          | Typecheck / build               | Tests                    |
-| :------- | :---------------------------------- | :-------------------------------------------- | :------------------------------ | :----------------------- |
-| .NET     | `dotnet format --verify-no-changes` | `dotnet format analyzers --verify-no-changes` | `dotnet build --no-restore`     | `dotnet test --no-build` |
-| Rust     | `cargo fmt --check`                 | `cargo clippy -- -D warnings`                 | `cargo check` (clippy compiles) | `cargo test`             |
-| Python   | `ruff format --check`               | `ruff check`                                  | `pyright` or `mypy`             | `pytest`                 |
-| Go       | `gofmt -l .`                        | `golangci-lint run`                           | `go build ./...`                | `go test ./...`          |
+| Language | Format                              | Lint                                                                                                     | Typecheck / build               | Tests                    |
+| :------- | :---------------------------------- | :------------------------------------------------------------------------------------------------------- | :------------------------------ | :----------------------- |
+| .NET     | `dotnet format --verify-no-changes` | `dotnet format analyzers --verify-no-changes`                                                            | `dotnet build --no-restore`     | `dotnet test --no-build` |
+| Rust     | `cargo fmt --check`                 | `cargo clippy --all-targets --all-features -- -D warnings`, `cargo deny check` (when `deny.toml` exists) | `cargo check` (clippy compiles) | `cargo test`             |
+| Python   | `ruff format --check`               | `ruff check`                                                                                             | `pyright` or `mypy`             | `pytest`                 |
+| Go       | `gofmt -l .`                        | `golangci-lint run`                                                                                      | `go build ./...`                | `go test ./...`          |
 
 ## Command per stack
 
@@ -55,6 +55,8 @@ A pass is cached by the hash of the changed files plus the base ref. An unchange
 | Rust                | `cargo check-changed` |
 
 The language implementation skills name these.
+
+Rust: after the migration of `allow` to `expect`, every suppression is an `#[expect(` and the lint-suppressions ratchet (`check-lint-suppressions-ratchet.mts`) counts them as it counts `#[allow(`.
 
 ## Claude Code Stop hook
 
