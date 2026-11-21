@@ -36,7 +36,13 @@ describe('ng-implementation stylelint template', () => {
     existsSync(path.resolve(__dirname, '../../../node_modules/stylelint/package.json')) &&
     existsSync(path.resolve(__dirname, '../../../node_modules/stylelint-config-standard-scss'));
   it.runIf(stylelintInstalled)('rejects raw values and accepts tokens', async () => {
-    const { default: stylelint } = await import('stylelint');
+    // stylelint is installed in the consumer repository, not here: the module name is a variable so tsc does not resolve it
+    const moduleName = 'stylelint';
+    const { default: stylelint } = (await import(moduleName)) as {
+      default: {
+        lint(options: object): Promise<{ results: { warnings: unknown[] }[] }>;
+      };
+    };
     const config = (await import(templatePath)).default;
     const lint = async (code: string, codeFilename: string) =>
       (await stylelint.lint({ code, codeFilename, config, configBasedir: root })).results[0]

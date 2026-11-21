@@ -82,6 +82,9 @@ jobs:
       - name: Analyze PowerShell scripts
         run: pnpm run lint:ps
 
+      - name: Typecheck the tests
+        run: pnpm run typecheck
+
       # site/skill-list.md is gitignored; generate it in the working tree only so the site build resolves its links.
       - name: Generate docs for site build
         run: pnpm run generate
