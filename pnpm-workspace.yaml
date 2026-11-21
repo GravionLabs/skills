@@ -16,6 +16,7 @@ publicHoistPattern:
   - '@braintree/sanitize-url'
 
 allowBuilds:
+  '@ast-grep/cli': true
   esbuild: true
   puppeteer: true
 

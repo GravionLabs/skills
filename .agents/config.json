@@ -6,12 +6,12 @@
   "checks": [
     {
       "name": "ast-grep scan",
-      "command": "ast-grep scan",
+      "command": "pnpm exec ast-grep scan",
       "fast": true
     },
     {
       "name": "ast-grep test",
-      "command": "ast-grep test",
+      "command": "pnpm exec ast-grep test",
       "fast": true
     }
   ]
