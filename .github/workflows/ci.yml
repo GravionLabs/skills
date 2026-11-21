@@ -226,7 +226,9 @@ jobs:
   release:
     name: Release
     runs-on: ubuntu-latest
-    timeout-minutes: 10
+    # the release job takes 10 to 12 minutes on main (v5.3.0: 718 s); a timeout of 10 cancelled it after the tag and skipped
+    # closing the milestone and recreating release/next (v5.4.0)
+    timeout-minutes: 30
     needs:
       - determine-version
       - build-test
