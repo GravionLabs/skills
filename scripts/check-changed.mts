@@ -113,9 +113,9 @@ export function steps(files: string[]): Step[] {
   out.push({
     name: 'typecheck',
     run: () => {
-      // Off in this repository for now: `pnpm run typecheck` (`tsc -p test --noEmit`, the root tsconfig.json has no
-      // inputs) is red on release/next and not part of `pnpm run check`. Turn it on once the errors are fixed.
-      return undefined;
+      // `tsc -p test --noEmit` is the typecheck of this repository (`pnpm run typecheck`): the root tsconfig.json has no inputs
+      if (!lintFiles.length || !existsSync('test/tsconfig.json') || !bin('tsc')) return undefined;
+      return exec('tsc', ['-p', 'test', '--noEmit']);
     },
   });
   out.push({

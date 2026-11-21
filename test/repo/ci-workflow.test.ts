@@ -96,11 +96,15 @@ describe('ci.yml checks', () => {
       'node scripts/check-marketplace.mjs',
       'pwsh skills/skill-tooling/skill-slim/scripts/Get-SkillReport.ps1 -Root . -FailOnDangling',
       'pnpm run lint:ps',
+      'pnpm run typecheck',
       'pnpm test',
     ]);
     expect(checkCommands).toContain(marketplace?.run);
     expect(checkCommands).toContain(`pwsh ${report?.run?.replace(/^\.\//, '')}`);
     expect(checkCommands).toContain(formatting?.run);
+
+    const typecheck = steps('build-test').find((s) => s.run === 'pnpm run typecheck');
+    expect(checkCommands).toContain(typecheck?.run);
 
     const analysis = steps('build-test').find((s) => s.run === 'pnpm run lint:ps');
     const analyzerInstall = steps('build-test').find((s) =>

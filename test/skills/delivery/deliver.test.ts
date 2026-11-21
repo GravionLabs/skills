@@ -35,6 +35,8 @@ const skill = path.resolve(__dirname, '../../../skills/delivery/deliver');
 const loopScript = path.join(skill, 'scripts/deliver-loop.mts');
 const helpers = path.resolve(__dirname, 'deliver');
 
+type Result = { issue: number; outcome: string; reason?: string; risk?: string };
+
 type Scenario = {
   items: { id: number; title: string; blockedBy?: number[] }[];
   gates?: unknown[];
@@ -56,6 +58,7 @@ type Scenario = {
   plan?: { exit?: number; noPull?: boolean; hangs?: boolean }[];
   closeAfterCalls?: number;
   releaseTests?: number[];
+  releaseCommits?: number;
   base?: string[];
   mergedBefore?: number[];
   mergedDuring?: number[];
@@ -74,7 +77,7 @@ type Outcome = {
     ghToken: string | null;
     hasSessionTokenVariable: boolean;
   }[];
-  results: { issue: number; outcome: string; reason?: string; risk?: string }[];
+  results: Result[];
   final?: Record<string, unknown>;
   events: { type: string; outcome?: string; reason?: string; needsYou?: boolean }[];
   log: string;
@@ -176,7 +179,9 @@ function loop(
         calls: lines<{ call: string }>(path.join(dir, 'calls.jsonl')).map((call) => call.call),
         sessions: lines(path.join(dir, 'sessions.jsonl')),
         results: results
-          ? lines<{ issue?: number }>(results).filter((r) => r.issue !== undefined)
+          ? lines<Result | { issue?: undefined }>(results).filter(
+              (r): r is Result => r.issue !== undefined,
+            )
           : [],
         final: results ? lines<Record<string, unknown>>(results).find((r) => r.run) : undefined,
         events: existsSync(events) ? lines(path.join(events, readdirSync(events)[0] ?? '')) : [],
