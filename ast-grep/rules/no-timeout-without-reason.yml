@@ -1,0 +1,23 @@
+# Starter rule (TypeScript tests) of the ast-grep-rules skill, adopted in #818.
+# A timeout is allowed with the comment `// timeout: <reason>` on the line above.
+id: no-timeout-without-reason
+language: Tsx
+severity: error
+message: 'Why: a raised or custom timeout hides a slow test and nobody knows when it can go. Instead: make the test fast, or keep the timeout with a comment `// timeout: <reason>` above it. See #747.'
+files:
+  - '**/*.test.{ts,tsx,mts}'
+  - '**/*.spec.{ts,tsx,mts}'
+rule:
+  kind: pair
+  has:
+    field: key
+    regex: '^(timeout|testTimeout)$'
+  not:
+    inside:
+      stopBy:
+        kind: expression_statement
+      kind: expression_statement
+      follows:
+        kind: comment
+        regex: '^//\s*timeout:\s*\S'
+        stopBy: neighbor

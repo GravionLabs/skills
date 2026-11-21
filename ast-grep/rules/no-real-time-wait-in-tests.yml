@@ -1,0 +1,16 @@
+# Starter rule (TypeScript tests) of the ast-grep-rules skill, adopted in #818.
+id: no-real-time-wait-in-tests
+language: Tsx
+severity: error
+message: 'Why: a real-time wait makes the test slow and flaky on a loaded machine. Instead: use fake timers (vi.useFakeTimers, jest.useFakeTimers) or wait for the condition itself. See #747.'
+files:
+  - '**/*.test.{ts,tsx,mts}'
+  - '**/*.spec.{ts,tsx,mts}'
+rule:
+  any:
+    - pattern: setTimeout($FN, $MS)
+    - pattern: sleep($MS)
+    - pattern: delay($MS)
+constraints:
+  MS:
+    kind: number

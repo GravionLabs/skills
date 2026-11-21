@@ -1,0 +1,20 @@
+id: no-real-time-wait-in-tests
+snapshots:
+  'await new Promise((resolve) => setTimeout(resolve, 50))':
+    labels:
+      - source: setTimeout(resolve, 50)
+        style: primary
+        start: 31
+        end: 54
+  await sleep(1000):
+    labels:
+      - source: sleep(1000)
+        style: primary
+        start: 6
+        end: 17
+  'setTimeout(() => cb(), 500)':
+    labels:
+      - source: setTimeout(() => cb(), 500)
+        style: primary
+        start: 0
+        end: 27

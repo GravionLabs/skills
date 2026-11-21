@@ -1,0 +1,10 @@
+id: no-real-time-wait-in-tests
+valid:
+  - vi.advanceTimersByTime(1000)
+  - await vi.waitFor(() => expect(done).toBe(true))
+  - setTimeout(() => cb(), delay)
+  - await sleep(ms)
+invalid:
+  - setTimeout(() => cb(), 500)
+  - await sleep(1000)
+  - await new Promise((resolve) => setTimeout(resolve, 50))
