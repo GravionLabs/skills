@@ -12,6 +12,7 @@ permissions:
 jobs:
   copilot-review:
     runs-on: ubuntu-latest
+    timeout-minutes: 5
     steps:
       - name: Request Copilot Review
         uses: actions/github-script@f28e40c7f34bde8b3046d885e986cb6290c5673b # v7.1.0
