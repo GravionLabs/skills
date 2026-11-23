@@ -220,14 +220,90 @@ const protectedHits = (files: string[]): string[] =>
         : name === guarded || path.posix.basename(name) === guarded;
     });
   });
+// A `package.json` whose difference is only in these keys is no hit. A fixed list: a repository cannot widen it.
+const DEPENDENCY_KEYS = [
+  'dependencies',
+  'devDependencies',
+  'peerDependencies',
+  'optionalDependencies',
+];
+const sameJson = (a: unknown, b: unknown) =>
+  JSON.stringify(sortKeys(a)) === JSON.stringify(sortKeys(b));
+function sortKeys(value: unknown): unknown {
+  if (Array.isArray(value)) return value.map(sortKeys);
+  if (value && typeof value === 'object') {
+    return Object.fromEntries(
+      Object.entries(value as Record<string, unknown>)
+        .sort(([x], [y]) => (x < y ? -1 : x > y ? 1 : 0))
+        .map(([k, v]) => [k, sortKeys(v)]),
+    );
+  }
+  return value;
+}
+/**
+ * The keys outside the dependency maps in which `package.json` differs between the merge base and `head`;
+ * `undefined` when unknown (added, deleted, renamed, not JSON), then the file is a plain hit.
+ * Throws when a read fails: the caller treats that as unknown too.
+ */
+function packageJsonKeys(file: string, refs: { base: string; head: string }): string[] | undefined {
+  const before = tracker.fileAt(refs.base, file);
+  const after = tracker.fileAt(refs.head, file);
+  if (before === undefined || after === undefined) return undefined;
+  let a: unknown;
+  let b: unknown;
+  try {
+    a = JSON.parse(before);
+    b = JSON.parse(after);
+  } catch {
+    return undefined;
+  }
+  const isObject = (v: unknown): v is Record<string, unknown> =>
+    !!v && typeof v === 'object' && !Array.isArray(v);
+  if (!isObject(a) || !isObject(b)) return undefined;
+  return [...new Set([...Object.keys(a), ...Object.keys(b)])]
+    .filter((key) => !DEPENDENCY_KEYS.includes(key) && !sameJson(a[key], b[key]))
+    .sort();
+}
+/** The protected hits, a `package.json` that differs only in its dependency maps dropped, the others named with their keys. */
+function judgeHits(pull: Pull, files: string[], head?: string): string[] {
+  const hits = protectedHits(files);
+  if (!hits.some((file) => path.posix.basename(file.toLowerCase()) === 'package.json')) return hits;
+  let refs: { base: string; head: string } | undefined;
+  try {
+    refs = tracker.compareRefs(pull, head);
+  } catch {
+    return hits;
+  }
+  const out: string[] = [];
+  for (const file of hits) {
+    // the case-folded name matches `package.json`; the file itself is read under its own name
+    const lower = file.toLowerCase();
+    const inDirectory = PROTECTED.some(
+      (entry) => entry.endsWith('/') && lower.startsWith(entry.toLowerCase()),
+    );
+    if (inDirectory || path.posix.basename(lower) !== 'package.json') {
+      out.push(file);
+      continue;
+    }
+    let keys: string[] | undefined;
+    try {
+      keys = packageJsonKeys(file, refs);
+    } catch {
+      keys = undefined;
+    }
+    if (keys === undefined) out.push(file);
+    else if (keys.length > 0) out.push(`${file}: ${keys.join(', ')}`);
+  }
+  return out;
+}
 /** Why the loop does not merge the pull request as it is now, else nothing. A person decides then, no repair session. */
 const HANDS_OFF = ', merge it yourself';
 const GUARD_READS = 3;
-async function guard(pull: Pull): Promise<string | undefined> {
+async function guard(pull: Pull, head?: string): Promise<string | undefined> {
   let hits: string[] = [];
   for (let read = 1; ; read++) {
     try {
-      hits = protectedHits(tracker.changedFiles(pull));
+      hits = judgeHits(pull, tracker.changedFiles(pull), head);
       break;
     } catch (error) {
       // a read that fails once (server load, rate limit) is asked again, as the gate is
@@ -580,7 +656,7 @@ async function merge(pull: Pull): Promise<string | undefined> {
       if (stopped) break;
       // the files of the commit that is merged, not of the one the session left: a later push is checked too.
       // The merge names gate.head, so a push after this read is refused by the tracker.
-      const handsOff = await guard(pull);
+      const handsOff = await guard(pull, gate.head);
       if (handsOff) return handsOff;
       // the read of the files blocks too: a stop request that came in during it must be seen before the merge
       await seeStop();

@@ -548,6 +548,39 @@ export function create({
         .filter(Boolean);
     },
 
+    compareRefs(pull: Pull, head?: string): { base: string; head: string } {
+      const record = JSON.parse(gh('api', `repos/${repo}/pulls/${pull.id}`)) as {
+        base: { ref: string };
+        head: { sha: string };
+      };
+      const sha = head ?? record.head.sha;
+      const base = gh(
+        'api',
+        `repos/${repo}/compare/${encodeURIComponent(record.base.ref)}...${sha}`,
+        '--jq',
+        '.merge_base_commit.sha',
+      );
+      if (!base) throw new Error('no merge base');
+      return { base, head: sha };
+    },
+
+    fileAt(sha: string, file: string): string | undefined {
+      try {
+        const out = gh(
+          'api',
+          `repos/${repo}/contents/${file.split('/').map(encodeURIComponent).join('/')}?ref=${sha}`,
+          '--jq',
+          'if type == "object" and .type == "file" then .content else "" end',
+        );
+        if (!out) throw new Error(`${file} is not a file`);
+        return Buffer.from(out, 'base64').toString('utf8');
+      } catch (error) {
+        // only a missing file is an answer; the status is on stderr
+        if (/HTTP 404/.test((error as { stderr?: string }).stderr ?? '')) return undefined;
+        throw error;
+      }
+    },
+
     defaultBranch(): string {
       return gh('repo', 'view', '--json', 'defaultBranchRef', '-q', '.defaultBranchRef.name');
     },

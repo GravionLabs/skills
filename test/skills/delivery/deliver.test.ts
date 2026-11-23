@@ -53,6 +53,7 @@ type Scenario = {
   noPull?: boolean;
   risks?: Record<number, string>;
   filesFailures?: number;
+  packageJson?: { base?: string; head?: string };
   blocked?: string;
   earlierPull?: boolean;
   twoPulls?: number[];
@@ -473,6 +474,59 @@ describe('deliver loop', () => {
     expect(refusal({ DELIVER_HARNESS: JSON.stringify(['node', path.join(repo, 'x.mjs')]) })).toBe(
       '64 DELIVER_HARNESS must not name a file inside the repository',
     );
+  });
+
+  describe('package.json (#967)', () => {
+    const pkg = (o: object) => JSON.stringify(o);
+    const base = { name: 'x', scripts: { test: 'vitest' }, dependencies: { a: '1' } };
+    const run = (head?: string, baseText: string | null = pkg(base), files = ['package.json']) =>
+      loop({
+        items: [{ id: 63, title: '[PBI] feat: dependency' }],
+        files,
+        packageJson: { base: baseText ?? undefined, head },
+      });
+    it('merges a change of the dependency maps only', async () => {
+      const out = await run(
+        pkg({
+          dependencies: { b: '2' },
+          name: 'x',
+          scripts: { test: 'vitest' },
+          devDependencies: { c: '3' },
+        }),
+      );
+      expect(out.merges).toHaveLength(1);
+    });
+    it.each([
+      [
+        'a postinstall script',
+        { ...base, scripts: { ...base.scripts, postinstall: 'x' } },
+        'scripts',
+      ],
+      ['packageManager', { ...base, packageManager: 'pnpm@10' }, 'packageManager'],
+    ])('hands over %s', async (_name, head, key) => {
+      const out = await run(pkg(head));
+      expect(out.merges).toEqual([]);
+      expect(out.results[0]?.reason).toBe(
+        `changes protected paths (package.json: ${key}), merge it yourself`,
+      );
+    });
+    it('names scripts when dependencies change too', async () => {
+      const out = await run(pkg({ ...base, dependencies: { a: '2' }, scripts: {} }));
+      expect(out.results[0]?.reason).toBe(
+        'changes protected paths (package.json: scripts), merge it yourself',
+      );
+    });
+    it.each([
+      ['invalid JSON', '{ nope', pkg(base)],
+      ['an added file', pkg(base), null],
+      ['a deleted file', undefined, pkg(base)],
+    ])('hands over %s', async (_name, head, before) => {
+      const out = await run(head, before);
+      expect(out.merges).toEqual([]);
+      expect(out.results[0]?.reason).toBe(
+        'changes protected paths (package.json), merge it yourself',
+      );
+    });
   });
 
   it('sets a pull request aside that changes a protected path', async () => {
