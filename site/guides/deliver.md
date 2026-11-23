@@ -21,6 +21,8 @@ The session reads the issue, branches `<type>/<nr>-<slug>` from `origin/<base>`,
 
 An existing branch is continued, and an open pull request is repaired (red check, conflict with the base) instead of recreated.
 
+A conflict in a lockfile is not merged by hand: the session resolves the manifest first (both sides' changes), takes the lockfile of the base (`git checkout --theirs`), regenerates it (`pnpm install`, `npm install`, `cargo update --workspace`, `uv lock`, `go mod tidy`, else the command of `AGENTS.md`), commits the merge and runs the verify commands again.
+
 ## The loop
 
 ```mermaid
