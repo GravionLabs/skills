@@ -5,6 +5,25 @@ Versioning follows [Semantic Versioning](https://semver.org/).
 
 ---
 
+## [5.7.0] — 2026-11-23
+
+### Documentation
+- **site**: Evaluate mattpocock/skills on the frameworks page (#950) (#963)
+
+
+### Features
+- **vault**: The vault skills inbox, clip, summarize, meeting, decision, weekly review, recipe (#924) (#940)
+- **school**: The school skills as group school (#926) (#942)
+- **vault**: Vault-setup with the profiles PARA and school and an update of the core rules (#925) (#943)
+- **skills-manage**: The groups vault and school (#927) (#944)
+
+
+## [5.6.2] — 2026-11-23
+
+### Documentation
+- Update CHANGELOG.md for v5.6.2 [skip ci]
+
+
 ## [5.6.1] — 2026-11-23
 
 ### Documentation
