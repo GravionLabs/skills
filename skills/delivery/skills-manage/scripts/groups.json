@@ -73,5 +73,14 @@
     "ts-mcp-server-generator",
     "ts-pnpm-workflow",
     "ts-test"
+  ],
+  "vault": [
+    "vault-clip",
+    "vault-decision",
+    "vault-inbox",
+    "vault-meeting",
+    "vault-recipe",
+    "vault-summarize",
+    "vault-weekly-review"
   ]
 }

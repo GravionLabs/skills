@@ -12,7 +12,7 @@ Detects the stack of the project (or uses the named groups), shows a dry run, as
 ## Arguments and flags
 
 - `dry-run`: print the proposal and the commands only, install nothing (`-DryRun`)
-- `<group>...`: skip detection and install these groups: `shared`, `github`, `delivery`, `statusline`, `ts`, `py`, `ng`, `dotnet`, `rust`, `go`; anything else exits 1
+- `<group>...`: skip detection and install these groups: `shared`, `github`, `delivery`, `statusline`, `ts`, `py`, `ng`, `dotnet`, `rust`, `go`, `vault`; anything else exits 1
 - `core`: preset with `shared`, `github`, `delivery`, `statusline`, no stack skills
 - `all`: preset with every group except `skill-tooling`
 - `-g`: install user-wide instead of into the project (`-Global`)

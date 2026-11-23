@@ -21,7 +21,7 @@
   npx output goes to stderr, so stdout is pure JSON.
 
 .PARAMETER Groups
-  Comma-separated groups or presets: shared, github, delivery, statusline, ts, py, ng, dotnet, rust, go,
+  Comma-separated groups or presets: shared, github, delivery, statusline, ts, py, ng, dotnet, rust, go, vault,
   core, all. Skips detection.
 
 .PARAMETER Global
