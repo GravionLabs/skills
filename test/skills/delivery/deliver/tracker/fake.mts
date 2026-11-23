@@ -138,6 +138,8 @@ export function create(): Tracker {
       const gate = gates[Math.min(gateCalls, gates.length - 1)];
       gateCalls += 1;
       if (gate === 'throw') throw new Error('network down');
+      // merged by a person: the item closes like after a merge of the loop
+      if (gate.state === 'merged') merged.add(itemOf(pull));
       return gate;
     },
     merge(pull: Pull, head: string): void {

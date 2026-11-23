@@ -144,6 +144,8 @@ function loop(
         '--tracker',
         'fake',
         ...(options.milestone ? ['--milestone', 'M001'] : ['--issues', issues]),
+        // no wait for handed-over pull requests unless a test asks for one
+        ...(options.args?.includes('--handover-minutes') ? [] : ['--handover-minutes', '0']),
         ...(options.args ?? []),
       ],
       { cwd: repo, env, stdio: ['ignore', 'pipe', 'pipe'] },
@@ -707,6 +709,112 @@ describe('deliver loop', () => {
       status: 'waiting-for-handed-over',
       handedOver: [81],
       waitingFor: { '81': ['#82 blocked by #81', '#83 blocked by #81'] },
+    });
+  });
+
+  describe('waiting for handed-over pull requests', () => {
+    const HANDED = { files: ['.github/workflows/ci.yml'] };
+    const wait = ['--handover-minutes', '5'];
+
+    it('starts the blocked issue after a person merged the pull request', async () => {
+      const out = await loop(
+        {
+          items: [
+            { id: 181, title: '[PBI] ci: workflow' },
+            { id: 182, title: '[PBI] feat: after it', blockedBy: [181] },
+          ],
+          ...HANDED,
+          gates: [READY, READY, { state: 'pending', reported: true }, { state: 'merged' }, READY],
+          filesLater: ['src/a.ts'],
+        },
+        { args: wait },
+      );
+      expect(out.status).toBe(0);
+      expect(out.sessions.map((s) => s.id)).toEqual([181, 182]);
+      expect(out.merges.map((m) => m.pull)).toEqual([282]);
+      expect(out.results.map((r) => [r.issue, r.outcome])).toEqual([
+        [181, 'aside'],
+        [181, 'merged'],
+        [182, 'merged'],
+      ]);
+      expect(out.stdout).toMatch(/merged \(2\):\n {2}#181 \S+\n {2}#182/);
+      expect(out.stdout).toMatch(/set aside \(0\):/);
+      expect(out.events.filter((e) => e.type === 'attention')).toHaveLength(2);
+    });
+
+    it('ends with exit 3 when the time is over', async () => {
+      const out = await loop(
+        {
+          items: [{ id: 183, title: '[PBI] ci: workflow' }],
+          ...HANDED,
+          gates: [READY, { state: 'pending', reported: true }],
+        },
+        { args: wait },
+      );
+      expect(out.status).toBe(3);
+      expect(out.stdout).toContain('waiting for handed-over pull requests');
+      expect(out.stdout).toContain(
+        'waiting for a handed-over PR: merge it, then run /deliver again',
+      );
+      expect(out.final).toMatchObject({ status: 'waiting-for-handed-over', handedOver: [183] });
+    });
+
+    it('sets a closed pull request aside', async () => {
+      const out = await loop(
+        {
+          items: [{ id: 184, title: '[PBI] ci: workflow' }],
+          ...HANDED,
+          gates: [READY, READY, { state: 'closed' }],
+        },
+        { args: wait },
+      );
+      expect(out.status).toBe(2);
+      expect(out.stdout).toMatch(/set aside \(1\):\n {2}#184 closed by a person/);
+    });
+
+    it('ends the wait at once on a stop request', async () => {
+      const out = await loop(
+        {
+          items: [{ id: 185, title: '[PBI] ci: workflow' }],
+          ...HANDED,
+          gates: [READY, { state: 'pending', reported: true }],
+        },
+        {
+          args: ['--handover-minutes', '120'],
+          whenStdout: (text, stop) => {
+            if (text.includes('waiting for handed-over pull requests')) stop();
+          },
+        },
+      );
+      expect(out.status).toBe(130);
+    });
+
+    it('repairs a conflict that appears during the wait once, then waits on', async () => {
+      const conflict = { state: 'conflict', detail: 'conflicts with main' };
+      const out = await loop(
+        {
+          items: [{ id: 186, title: '[PBI] ci: workflow' }],
+          ...HANDED,
+          gates: [
+            READY,
+            READY,
+            conflict,
+            conflict,
+            { state: 'pending', reported: true },
+            { state: 'merged' },
+          ],
+        },
+        { args: wait },
+      );
+      expect(out.status).toBe(0);
+      expect(out.sessions.map((s) => s.id)).toEqual([186, 186]);
+      expect(out.log).toContain('conflict repaired');
+    });
+
+    it('ends at once with exit 3 when the wait is turned off', async () => {
+      const out = await loop({ items: [{ id: 187, title: '[PBI] ci: workflow' }], ...HANDED });
+      expect(out.status).toBe(3);
+      expect(out.stdout).not.toContain('waiting for handed-over pull requests');
     });
   });
 
