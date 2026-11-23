@@ -13,6 +13,10 @@ Versioning follows [Semantic Versioning](https://semver.org/).
 - **deliver**: An incomplete run reports done with a warning, not error, over OSC 7501 (#921) (#937)
 
 
+### Documentation
+- Update CHANGELOG.md for v5.6.0 [skip ci]
+
+
 ### Features
 - CI job template that scans the pull request range with gitleaks (#844) (#915)
 - Rust-implementation common lint set and clippy.toml template (#846) (#917)
