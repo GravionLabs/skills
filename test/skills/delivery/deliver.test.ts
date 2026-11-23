@@ -517,6 +517,78 @@ describe('deliver loop', () => {
     expect(out.results[0]?.reason).toBe('changes protected paths (Cargo.toml), merge it yourself');
   });
 
+  describe('conflict of a handed-over pull request', () => {
+    const CONFLICT = { state: 'conflict', detail: 'conflicts with release/next' };
+    const repairs = (out: Outcome) => out.sessions.length;
+
+    it('runs one repair session for an earlier protected pull request, then hands it over', async () => {
+      const out = await loop({
+        items: [{ id: 91, title: '[PBI] feat: conflicting pull' }],
+        files: ['Cargo.toml'],
+        earlierPull: true,
+        gates: [CONFLICT, READY],
+      });
+      expect(repairs(out)).toBe(1);
+      expect(out.sessions[0]?.prompt).toContain('/deliver 91');
+      expect(out.merges).toEqual([]);
+      expect(out.results[0]?.reason).toBe(
+        'conflict repaired, changes protected paths (Cargo.toml), merge it yourself',
+      );
+      expect(out.log).toContain('conflict repaired');
+    });
+
+    it('runs no session without a conflict', async () => {
+      const out = await loop({
+        items: [{ id: 92, title: '[PBI] feat: clean protected pull' }],
+        files: ['Cargo.toml'],
+        earlierPull: true,
+        gates: [READY],
+      });
+      expect(repairs(out)).toBe(0);
+      expect(out.results[0]?.reason).toBe(
+        'changes protected paths (Cargo.toml), merge it yourself',
+      );
+    });
+
+    it('hands it over with the failure reason when the repair leaves the conflict', async () => {
+      const out = await loop({
+        items: [{ id: 93, title: '[PBI] feat: stubborn conflict' }],
+        files: ['Cargo.toml'],
+        earlierPull: true,
+        gates: [CONFLICT],
+      });
+      expect(repairs(out)).toBe(1);
+      expect(out.merges).toEqual([]);
+      expect(out.results[0]?.reason).toBe(
+        'conflict not repaired: conflicts with release/next, changes protected paths (Cargo.toml), merge it yourself',
+      );
+    });
+
+    it('runs no session for two open pull requests', async () => {
+      const out = await loop({
+        items: [{ id: 94, title: '[PBI] feat: two conflicting pulls' }],
+        earlierPull: true,
+        twoPulls: [94],
+        gates: [CONFLICT],
+      });
+      expect(repairs(out)).toBe(0);
+      expect(out.results[0]?.reason).toContain('more than one open pull request');
+    });
+
+    it('repairs a conflict that a pull request handed over after its session got by the end of the run', async () => {
+      const out = await loop({
+        items: [{ id: 95, title: '[PBI] feat: conflict at the end' }],
+        files: ['Cargo.toml'],
+        gates: [CONFLICT, READY],
+      });
+      expect(repairs(out)).toBe(2);
+      expect(out.merges).toEqual([]);
+      expect(out.results[0]?.reason).toBe(
+        'conflict repaired, changes protected paths (Cargo.toml), merge it yourself',
+      );
+    });
+  });
+
   it('starts a session for an open pull request without a protected path', async () => {
     const out = await loop({
       items: [{ id: 74, title: '[PBI] feat: earlier clean pull' }],

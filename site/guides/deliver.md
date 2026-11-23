@@ -84,6 +84,7 @@ Other keys (`roles`, `loopThreshold`, `parallel`, `sessionTimeoutMinutes`) are i
 - **A base without required checks.** Nothing would guard the merge. Add a ruleset with required checks, or pass `--allow-no-required-checks`. Exit 3.
 - **Issues of authors without write access.** Anyone can open an issue, and its text becomes the task of an agent. Such an issue is listed as waiting (`author has no write access`); `--trust-authors` delivers it.
 - **Pull requests that change protected paths.** The loop does not merge a pull request that touches `.github/`, `.agents/`, `.claude/` or a package manifest (a workflow or an agent setting would let a change run with more rights). It says why and leaves the merge to you. `deliver.protectedPaths` replaces the list.
+- **A handed-over pull request with a conflict.** A pull request the loop hands over (protected paths) must be mergeable by you. When its gate says `conflict`, the loop runs one repair session first (`/deliver <nr>` continues the pull request and merges the base into it): before any other session for an earlier pull request, and before the run ends for every pull request handed over in this run. At most one session per pull request and run; two open pull requests of one issue get none. The loop never merges it. The log and `results.jsonl` say `conflict repaired, …` or `conflict not repaired: …`, and the pull request is handed over as before.
 - **A merge before the checks have reported.** The loop merges only when every required check has reported and passed, with your own login.
 
 ## The session token
