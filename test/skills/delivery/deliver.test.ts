@@ -29,6 +29,7 @@ import { HARNESSES } from '../../../skills/delivery/deliver/scripts/harness.mts'
 import {
   checkVerdict,
   mergedPullSince,
+  closesIssue,
   openPullsOf,
 } from '../../../skills/delivery/deliver/scripts/tracker/github.mts';
 
@@ -1099,12 +1100,19 @@ describe('deliver loop', () => {
 });
 
 describe('mergedPullSince of the GitHub tracker', () => {
-  const pr = (number: number, ref: string, merged_at: string | null, full_name = 'o/r') => ({
+  const pr = (
+    number: number,
+    ref: string,
+    merged_at: string | null,
+    full_name = 'o/r',
+    body = 'Closes #7',
+  ) => ({
     number,
     title: 't',
     html_url: `u${number}`,
     head: { ref, repo: { full_name } },
     merged_at,
+    body,
   });
   const since = '2026-11-10T00:00:00Z';
 
@@ -1127,6 +1135,35 @@ describe('mergedPullSince of the GitHub tracker', () => {
       pr(4, 'feat/7-x', '2026-11-16T11:00:00Z', 'fork/r'),
     ];
     expect(mergedPullSince(records, 'o/r', 7, since)).toBeUndefined();
+  });
+});
+
+describe('a merged pull request that does not close the issue', () => {
+  const rec = (body: string | null) => ({
+    number: 43,
+    title: 'docs: adr (#7)',
+    html_url: 'u43',
+    head: { ref: 'docs/7-adr', repo: { full_name: 'o/r' } },
+    merged_at: '2026-11-16T11:00:00Z',
+    body,
+  });
+  const since = '2026-11-10T00:00:00Z';
+
+  it('is no delivery of the issue', () => {
+    expect(mergedPullSince([rec('ADR for #7')], 'o/r', 7, since)).toBeUndefined();
+    expect(mergedPullSince([rec(null)], 'o/r', 7, since)).toBeUndefined();
+  });
+
+  it('is a delivery with a closing keyword or a closing reference', () => {
+    expect(mergedPullSince([rec('Closes #7')], 'o/r', 7, since)?.number).toBe(43);
+    expect(mergedPullSince([rec('no keyword')], 'o/r', 7, since, () => true)?.number).toBe(43);
+  });
+
+  it('reads closing keywords exactly', () => {
+    expect(closesIssue('fixes #7.', 7)).toBe(true);
+    expect(closesIssue('Resolved: #7', 7)).toBe(true);
+    expect(closesIssue('Closes #70', 7)).toBe(false);
+    expect(closesIssue('see #7', 7)).toBe(false);
   });
 });
 

@@ -72,7 +72,8 @@ export interface Tracker {
   pullOf(item: Item): Pull | undefined;
   /**
    * A pull request of the item that is already merged into the base branch, merged after the item was last
-   * opened (a reopened item with an old merged pull request is still work). The item is delivered.
+   * opened (a reopened item with an old merged pull request is still work), and that closes the item (a closing
+   * keyword or a closing reference; a merged pull request that does not, such as an ADR step, is no delivery). The item is delivered.
    */
   mergedPullOf(item: Item): Pull | undefined;
   gate(pull: Pull): Gate;
