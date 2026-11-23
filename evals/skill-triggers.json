@@ -368,5 +368,67 @@
       "Add an ast-grep rule that bans console.log",
       "Write a changelog for the next release"
     ]
+  },
+  {
+    "skill": "vault-inbox",
+    "shouldTrigger": [
+      "Process my vault inbox and file the notes",
+      "I captured photos and PDFs in the inbox, sort them into the vault"
+    ],
+    "shouldNotTrigger": ["Save this recipe from a URL", "Write a weekly review"]
+  },
+  {
+    "skill": "vault-clip",
+    "shouldTrigger": [
+      "Clip this web page into my vault as a verbatim copy",
+      "Save the full text of https://example.com/article as a clipping"
+    ],
+    "shouldNotTrigger": ["Summarize this article in three sentences", "Process my inbox"]
+  },
+  {
+    "skill": "vault-summarize",
+    "shouldTrigger": [
+      "Summarize this PDF into a note in my vault",
+      "Write a structured summary note of this web page"
+    ],
+    "shouldNotTrigger": ["Clip this page verbatim", "Write a decision record"]
+  },
+  {
+    "skill": "vault-meeting",
+    "shouldTrigger": [
+      "Turn my raw meeting notes into a meeting note with action items",
+      "Here is the transcript of today's meeting, write the meeting note"
+    ],
+    "shouldNotTrigger": ["Write a decision record for the database choice", "Review my week"]
+  },
+  {
+    "skill": "vault-decision",
+    "shouldTrigger": [
+      "Write a decision record for choosing Postgres over MySQL in my vault",
+      "Record this decision with options and consequences as a note"
+    ],
+    "shouldNotTrigger": ["Write a meeting note", "Write an ADR in the repository docs/adr"]
+  },
+  {
+    "skill": "vault-weekly-review",
+    "shouldTrigger": [
+      "Do my weekly review from the journal and project notes",
+      "Plan next week from my vault notes"
+    ],
+    "shouldNotTrigger": [
+      "File the photos from my inbox folder into the vault",
+      "Summarize this note"
+    ]
+  },
+  {
+    "skill": "vault-recipe",
+    "shouldTrigger": [
+      "Save this recipe from a URL as a note in my vault",
+      "Store the recipe on this cookbook photo with ingredients and steps"
+    ],
+    "shouldNotTrigger": [
+      "Clip this web page verbatim",
+      "Write the minutes of yesterday's team meeting"
+    ]
   }
 ]
