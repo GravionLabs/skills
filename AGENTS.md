@@ -24,7 +24,7 @@ docs/                          # internal documents only (adr/, spikes/), not pu
 
 ## Groups and skills
 
-Groups: `shared`, `delivery`, `github`, `dotnet`, `ts`, `py`, `rust`, `go`, `ng`, `skill-tooling`, `statusline`. The per-group descriptions of the skills live in reference files; read the one of the group you change (also to learn whether a skill already exists):
+Groups: `shared`, `delivery`, `github`, `dotnet`, `ts`, `py`, `rust`, `go`, `ng`, `skill-tooling`, `statusline`, `vault`, `school`. The per-group descriptions of the skills live in reference files; read the one of the group you change (also to learn whether a skill already exists):
 
 - Before changing `skills/shared/` (check-prerequisites, implementation, detect-techstack, diagnose, code-review, lessons, project-setup, adr, ratchet, ast-grep-rules, ui-styleguide, agents-md, secret-scan), read `docs/agents-md-refs/shared.md` (what each skill of the `shared` group does and its constraints).
 - Before changing `skills/delivery/` (poimen-lead, planner, deliver, grill-me, retro, roadmap, skills-manage), read `docs/agents-md-refs/delivery.md` (what each skill of the `delivery` group does and its constraints).
@@ -36,6 +36,8 @@ Groups: `shared`, `delivery`, `github`, `dotnet`, `ts`, `py`, `rust`, `go`, `ng`
 - Before changing `skills/go/`, read `docs/agents-md-refs/go.md` (what each skill of the `go` group does and its constraints).
 - Before changing `skills/ng/`, read `docs/agents-md-refs/ng.md` (what each skill of the `ng` group does and its constraints).
 - Before changing `skills/skill-tooling/`, read `docs/agents-md-refs/skill-tooling.md` (what each skill of the `skill-tooling` group does and its constraints).
+- Before changing `skills/vault/`, read `docs/agents-md-refs/vault.md` (what each skill of the `vault` group does and its constraints).
+- Before changing `skills/school/`, read `docs/agents-md-refs/school.md` (what each skill of the `school` group does and its constraints).
 - Before changing `skills/statusline/`, read `docs/agents-md-refs/statusline.md` (what each skill of the `statusline` group does and its constraints).
 
 Presets of `skills-manage`: `core` (`shared`, `github`, `delivery`, `statusline`, no stack skills) and `all` (every group except `skill-tooling`).

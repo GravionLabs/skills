@@ -1,0 +1,183 @@
+import * as fs from 'fs';
+import * as os from 'os';
+import * as path from 'path';
+import { PwshWorker } from '../../helpers/pwsh-worker';
+
+const root = path.resolve(__dirname, '../../..');
+const dir = path.join(root, 'skills/vault/vault-setup');
+const script = path.join(dir, 'scripts/Invoke-VaultSetup.ps1');
+const START = '<!-- vault-core:start -->';
+const END = '<!-- vault-core:end -->';
+
+describe('vault-setup (#925)', () => {
+  let worker: PwshWorker;
+  let tmp: string;
+  let n = 0;
+  const vault = (files: Record<string, string> = {}) => {
+    const v = path.join(tmp, `v${n++}`);
+    fs.mkdirSync(v, { recursive: true });
+    for (const [f, c] of Object.entries(files)) {
+      fs.mkdirSync(path.dirname(path.join(v, f)), { recursive: true });
+      fs.writeFileSync(path.join(v, f), c);
+    }
+    return v;
+  };
+  const run = (v: string, ...args: string[]) =>
+    worker.run([...args, '-Vault', v, '-SkipInstall'], { cwd: tmp });
+  const cfg = (v: string) =>
+    JSON.parse(fs.readFileSync(path.join(v, '.nixe/config.json'), 'utf-8'));
+  const claude = (v: string) => fs.readFileSync(path.join(v, 'CLAUDE.md'), 'utf-8');
+
+  beforeAll(() => {
+    tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'vault-setup-'));
+    worker = new PwshWorker(script);
+  });
+  afterAll(() => {
+    worker.close();
+    fs.rmSync(tmp, { recursive: true, force: true });
+  });
+
+  it('SKILL.md documents the commands', () => {
+    const s = fs.readFileSync(path.join(dir, 'SKILL.md'), 'utf-8');
+    expect(s).toMatch(/^---\nname: vault-setup\n/);
+    expect(s.trimEnd().split('\n').length).toBeLessThanOrEqual(100);
+    for (const k of [
+      'npx skills add',
+      'npx skills check',
+      'role -List',
+      'role -Remove',
+      'No commit',
+    ])
+      expect(s).toContain(k);
+  });
+
+  it('core block holds the role rule', () => {
+    const c = fs.readFileSync(path.join(dir, 'assets/core/CLAUDE-core.md'), 'utf-8');
+    expect(c).toContain('file notes only into a folder with a role');
+  });
+
+  it('sets up a school vault in en', async () => {
+    const v = vault();
+    const r = await run(v, 'setup', 'school');
+    expect(r.status).toBe(0);
+    const c = cfg(v);
+    expect(c.language).toBe('en');
+    expect(c.folders.exams).toBe('Exams');
+    expect(c.files.profile).toBe('Profile.md');
+    for (const f of ['Exams', 'Subjects', 'Sources', 'Inbox', 'Templates/Exam.md', 'Profile.md'])
+      expect(fs.existsSync(path.join(v, f))).toBe(true);
+    const md = claude(v);
+    expect(md).toContain(START);
+    expect(md).toContain('## Vault-specific rules');
+    expect(md).toContain('School vault');
+  });
+
+  it('sets up a school vault in de', async () => {
+    const v = vault();
+    const r = await run(v, 'setup', 'school', '-Language', 'de');
+    expect(r.status).toBe(0);
+    expect(cfg(v).language).toBe('de');
+    for (const f of ['Klausuren', 'Vorlagen/Prüfung.md', 'Profil.md', '00 Inbox'])
+      expect(fs.existsSync(path.join(v, f))).toBe(true);
+    expect(claude(v)).toContain('Schul-Vault');
+  });
+
+  it('sets up PARA in de with templates', async () => {
+    const v = vault();
+    expect((await run(v, 'setup', 'para', '-Language', 'de')).status).toBe(0);
+    for (const f of ['Posteingang', 'Projekte', 'Vorlagen/Rezept.md', 'Vorlagen/Besprechung.md'])
+      expect(fs.existsSync(path.join(v, f))).toBe(true);
+    expect(claude(v)).toContain('PARA-Vault');
+  });
+
+  it('falls back to English folder names for another language with a notice', async () => {
+    const v = vault();
+    const r = await run(v, 'setup', 'para', '-Language', 'fr');
+    expect(r.status).toBe(0);
+    expect(cfg(v).language).toBe('fr');
+    expect(cfg(v).folders.inbox).toBe('Inbox');
+    expect(r.stdout + r.stderr).toContain('fr');
+  });
+
+  it('keeps existing folders and never overwrites a note', async () => {
+    const v = vault({
+      '.nixe/config.json': JSON.stringify({ folders: { inbox: 'Eingang' } }),
+      'Profile.md': 'mine',
+      'CLAUDE.md': `# Mine\n\n## Vault-specific rules\n\nown rule\n`,
+    });
+    expect((await run(v, 'setup', 'school')).status).toBe(0);
+    expect(cfg(v).folders.inbox).toBe('Eingang');
+    expect(cfg(v).folders.exams).toBe('Exams');
+    expect(fs.readFileSync(path.join(v, 'Profile.md'), 'utf-8')).toBe('mine');
+    expect(claude(v)).toContain('own rule');
+    expect(claude(v)).toContain(START);
+    // a second run changes nothing
+    const before = claude(v);
+    expect((await run(v, 'setup', 'school')).status).toBe(0);
+    expect(claude(v)).toBe(before);
+  });
+
+  describe('core block (update)', () => {
+    it('inserts a missing block and keeps the text', async () => {
+      const v = vault({ 'CLAUDE.md': '# Mine\n\n## Vault-specific rules\n\nown rule\n' });
+      const r = await run(v, 'update');
+      expect(r.status).toBe(0);
+      expect(r.stdout).toContain('inserted');
+      const md = claude(v);
+      expect(md).toContain(START);
+      expect(md.indexOf(START)).toBeLessThan(md.indexOf('## Vault-specific rules'));
+      expect(md).toContain('own rule');
+    });
+
+    it('replaces a changed block, keeps the own section, then reports unchanged', async () => {
+      const v = vault({
+        'CLAUDE.md': `# V\n\n${START}\nold rules\n${END}\n\n## Vault-specific rules\n\nown rule\n`,
+      });
+      const r = await run(v, 'update');
+      expect(r.stdout).toContain('replaced');
+      const md = claude(v);
+      expect(md).not.toContain('old rules');
+      expect(md).toContain('file notes only into a folder with a role');
+      expect(md).toContain('own rule');
+      expect((await run(v, 'update')).stdout).toContain('unchanged');
+    });
+
+    it('creates CLAUDE.md when it is missing', async () => {
+      const v = vault();
+      expect((await run(v, 'update')).stdout).toContain('created');
+      expect(claude(v)).toContain('## Vault-specific rules');
+    });
+  });
+
+  describe('role', () => {
+    it('sets, lists and removes a role', async () => {
+      const v = vault();
+      expect((await run(v, 'role', 'recipes', 'Areas/Cook', 'Recipes')).status).toBe(0);
+      expect(cfg(v).folders.recipes).toEqual({ path: 'Areas/Cook', description: 'Recipes' });
+      expect(fs.existsSync(path.join(v, 'Areas/Cook'))).toBe(true);
+      expect((await run(v, 'role', 'inbox', 'In')).status).toBe(0);
+      expect(cfg(v).folders.inbox).toBe('In');
+      const l = await run(v, 'role', '-List');
+      expect(l.stdout).toContain('recipes');
+      expect((await run(v, 'role', '-Remove', 'recipes')).status).toBe(0);
+      expect(cfg(v).folders.recipes).toBeUndefined();
+    });
+
+    it.each([
+      ['own role without description', ['role', 'recipes', 'R']],
+      ['path outside the vault', ['role', 'inbox', '../x']],
+      ['absolute path', ['role', 'inbox', '/tmp/x']],
+      ['invalid name', ['role', 'Bad Name', 'x', 'd']],
+    ])('rejects %s', async (_n, args) => {
+      const v = vault();
+      expect((await run(v, ...args)).status).not.toBe(0);
+    });
+
+    it('rejects a second role for one folder and removing an unknown role', async () => {
+      const v = vault();
+      expect((await run(v, 'role', 'notes', 'N', 'Notes')).status).toBe(0);
+      expect((await run(v, 'role', 'other', 'n', 'Other')).status).not.toBe(0);
+      expect((await run(v, 'role', '-Remove', 'nope')).status).not.toBe(0);
+    });
+  });
+});

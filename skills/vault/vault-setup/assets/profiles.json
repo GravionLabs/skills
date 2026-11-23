@@ -1,0 +1,8 @@
+{
+  "para": {
+    "skills": ["vault-setup", "vault-inbox", "vault-clip", "vault-summarize", "vault-meeting", "vault-decision", "vault-weekly-review", "vault-recipe"]
+  },
+  "school": {
+    "skills": ["vault-setup", "vault-inbox", "school-summary", "school-timeline", "school-exercises", "school-flashcards", "school-exam"]
+  }
+}

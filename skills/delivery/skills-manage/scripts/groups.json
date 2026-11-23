@@ -43,6 +43,13 @@
     "rust-implementation",
     "rust-test"
   ],
+  "school": [
+    "school-exam",
+    "school-exercises",
+    "school-flashcards",
+    "school-summary",
+    "school-timeline"
+  ],
   "shared": [
     "adr",
     "agents-md",
@@ -73,5 +80,15 @@
     "ts-mcp-server-generator",
     "ts-pnpm-workflow",
     "ts-test"
+  ],
+  "vault": [
+    "vault-clip",
+    "vault-decision",
+    "vault-inbox",
+    "vault-meeting",
+    "vault-recipe",
+    "vault-setup",
+    "vault-summarize",
+    "vault-weekly-review"
   ]
 }

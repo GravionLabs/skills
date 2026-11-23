@@ -14,7 +14,7 @@ metadata:
 
 ## Slash usage
 
-`/skills-manage` (detect and propose), `/skills-manage ts py` (named groups, no detection), `/skills-manage core -g` (user-wide), `/skills-manage dry-run ...` (print the commands only), `/skills-manage update [-g]` (update installed skills, then propose new group members). Mapping: `dry-run` is `-DryRun`, `-g` is `-Global`, remaining words are `-Groups` (comma-separated on the command line: `-Groups ts,py`). Valid: `shared`, `github`, `delivery`, `statusline`, `ts`, `py`, `ng`, `dotnet`, `rust`, `go` and the presets `core`, `all`; anything else makes the script exit 1. What each group brings: [groups](references/groups.md).
+`/skills-manage` (detect and propose), `/skills-manage ts py` (named groups, no detection), `/skills-manage core -g` (user-wide), `/skills-manage dry-run ...` (print the commands only), `/skills-manage update [-g]` (update installed skills, then propose new group members). Mapping: `dry-run` is `-DryRun`, `-g` is `-Global`, remaining words are `-Groups` (comma-separated on the command line: `-Groups ts,py`). Valid: `shared`, `github`, `delivery`, `statusline`, `ts`, `py`, `ng`, `dotnet`, `rust`, `go`, `vault`, `school` and the presets `core`, `all`; anything else makes the script exit 1. A notes vault (`.nixe/` or `.obsidian/`, no build file) is proposed `vault`, and `school` when `Profile.md` exists. What each group brings: [groups](references/groups.md).
 
 ## Steps
 

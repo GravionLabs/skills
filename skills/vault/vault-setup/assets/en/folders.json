@@ -1,0 +1,15 @@
+{
+  "language": "en",
+  "folders": {
+    "inbox": "Inbox",
+    "journal": "Journal",
+    "templates": "Templates",
+    "attachments": "Attachments",
+    "projects": "Projects",
+    "areas": "Areas",
+    "resources": "Resources",
+    "archive": "Archive",
+    "clippings": "Resources/Clippings"
+  },
+  "templates": { "folder": "Templates" }
+}

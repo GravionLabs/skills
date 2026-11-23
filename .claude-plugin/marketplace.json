@@ -149,6 +149,35 @@
         "./skills/skill-tooling/skill-slim",
         "./skills/skill-tooling/skill-write"
       ]
+    },
+    {
+      "name": "vault",
+      "description": "Skills for a Markdown notes vault (Obsidian or Nixe): inbox, clip, summarize, meeting, decision, weekly review, recipe, setup (PARA or school profile, folder roles, update of the core rules). Folders are found through the roles in .nixe/config.json, notes are written in the vault's language.",
+      "source": "./",
+      "strict": false,
+      "skills": [
+        "./skills/vault/vault-clip",
+        "./skills/vault/vault-decision",
+        "./skills/vault/vault-inbox",
+        "./skills/vault/vault-meeting",
+        "./skills/vault/vault-recipe",
+        "./skills/vault/vault-setup",
+        "./skills/vault/vault-summarize",
+        "./skills/vault/vault-weekly-review"
+      ]
+    },
+    {
+      "name": "school",
+      "description": "Skills for a school vault (Obsidian or Nixe): summary, timeline, exercises, flashcards and exam preparation from the transcribed class material of a pupil. Folders are found through the roles in .nixe/config.json, notes are written in the vault's language; profile assets for English and German vaults.",
+      "source": "./",
+      "strict": false,
+      "skills": [
+        "./skills/school/school-exam",
+        "./skills/school/school-exercises",
+        "./skills/school/school-flashcards",
+        "./skills/school/school-summary",
+        "./skills/school/school-timeline"
+      ]
     }
   ]
 }

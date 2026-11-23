@@ -368,5 +368,118 @@
       "Add an ast-grep rule that bans console.log",
       "Write a changelog for the next release"
     ]
+  },
+  {
+    "skill": "vault-inbox",
+    "shouldTrigger": [
+      "Process my vault inbox and file the notes",
+      "I captured photos and PDFs in the inbox, sort them into the vault"
+    ],
+    "shouldNotTrigger": ["Save this recipe from a URL", "Write a weekly review"]
+  },
+  {
+    "skill": "vault-clip",
+    "shouldTrigger": [
+      "Clip this web page into my vault as a verbatim copy",
+      "Save the full text of https://example.com/article as a clipping"
+    ],
+    "shouldNotTrigger": ["Summarize this article in three sentences", "Process my inbox"]
+  },
+  {
+    "skill": "vault-summarize",
+    "shouldTrigger": [
+      "Summarize this PDF into a note in my vault",
+      "Write a structured summary note of this web page"
+    ],
+    "shouldNotTrigger": ["Clip this page verbatim", "Write a decision record"]
+  },
+  {
+    "skill": "vault-meeting",
+    "shouldTrigger": [
+      "Turn my raw meeting notes into a meeting note with action items",
+      "Here is the transcript of today's meeting, write the meeting note"
+    ],
+    "shouldNotTrigger": ["Write a decision record for the database choice", "Review my week"]
+  },
+  {
+    "skill": "vault-decision",
+    "shouldTrigger": [
+      "Write a decision record for choosing Postgres over MySQL in my vault",
+      "Record this decision with options and consequences as a note"
+    ],
+    "shouldNotTrigger": ["Write a meeting note", "Write an ADR in the repository docs/adr"]
+  },
+  {
+    "skill": "vault-weekly-review",
+    "shouldTrigger": [
+      "Do my weekly review from the journal and project notes",
+      "Plan next week from my vault notes"
+    ],
+    "shouldNotTrigger": [
+      "File the photos from my inbox folder into the vault",
+      "Summarize this note"
+    ]
+  },
+  {
+    "skill": "vault-recipe",
+    "shouldTrigger": [
+      "Save this recipe from a URL as a note in my vault",
+      "Store the recipe on this cookbook photo with ingredients and steps"
+    ],
+    "shouldNotTrigger": [
+      "Clip this web page verbatim",
+      "Write the minutes of yesterday's team meeting"
+    ]
+  },
+  {
+    "skill": "vault-setup",
+    "shouldTrigger": [
+      "Set up my notes vault as a school vault in German",
+      "Add a folder role recipes to my vault and update the vault core rules"
+    ],
+    "shouldNotTrigger": [
+      "Save this recipe from a URL as a note",
+      "Write the minutes of today's meeting"
+    ]
+  },
+  {
+    "skill": "school-summary",
+    "shouldTrigger": [
+      "Summarize the topic Weimar Republic for my history exam from my school notes",
+      "Write a study summary of this school topic"
+    ],
+    "shouldNotTrigger": ["Create flashcards for the topic", "Summarize this PDF into a note"]
+  },
+  {
+    "skill": "school-timeline",
+    "shouldTrigger": [
+      "Make a timeline of the French Revolution for school",
+      "Create a Mermaid timeline of this history topic from my class notes"
+    ],
+    "shouldNotTrigger": ["Write a study summary of the topic", "Create an exam study plan"]
+  },
+  {
+    "skill": "school-exercises",
+    "shouldTrigger": [
+      "Create practice exercises with solutions for the topic fractions",
+      "I want to quiz myself on this school topic, make exercises"
+    ],
+    "shouldNotTrigger": ["Create flashcards for vocabulary", "Write a mock exam for Friday"]
+  },
+  {
+    "skill": "school-flashcards",
+    "shouldTrigger": [
+      "Make flashcards for the French vocabulary of unit 3 in Spaced Repetition format",
+      "Create flashcards of this school topic"
+    ],
+    "shouldNotTrigger": ["Create exercises with solutions", "Summarize the topic"]
+  },
+  {
+    "skill": "school-exam",
+    "shouldTrigger": [
+      "I have a maths exam on 12 December, prepare a study plan and a mock exam",
+      "Create an exam note and a mock exam for my history test"
+    ],
+    "shouldNotTrigger": ["Create flashcards for my vocabulary list", "Write a summary of the topic"]
   }
 ]
