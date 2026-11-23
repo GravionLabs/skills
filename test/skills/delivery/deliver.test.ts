@@ -714,7 +714,9 @@ describe('deliver loop', () => {
 
   describe('waiting for handed-over pull requests', () => {
     const HANDED = { files: ['.github/workflows/ci.yml'] };
-    const wait = ['--handover-minutes', '5'];
+    // the wait is wall clock (minutes x DELIVER_TICK_MS x 60 ms): wide enough for a slow runner
+    const wait = ['--handover-minutes', '120'];
+    const short = ['--handover-minutes', '5'];
 
     it('starts the blocked issue after a person merged the pull request', async () => {
       const out = await loop(
@@ -749,7 +751,7 @@ describe('deliver loop', () => {
           ...HANDED,
           gates: [READY, { state: 'pending', reported: true }],
         },
-        { args: wait },
+        { args: short },
       );
       expect(out.status).toBe(3);
       expect(out.stdout).toContain('waiting for handed-over pull requests');
