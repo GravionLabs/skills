@@ -42,6 +42,7 @@ const parsed = (() => {
         model: { type: 'string' },
         'session-minutes': { type: 'string', default: '90' },
         'merge-minutes': { type: 'string', default: '30' },
+        'handover-minutes': { type: 'string' },
         'dry-run': { type: 'boolean', default: false },
         'allow-no-required-checks': { type: 'boolean', default: false },
         'trust-authors': { type: 'boolean', default: false },
@@ -51,7 +52,7 @@ const parsed = (() => {
     // an unknown option or a missing value: one line, no stack trace
     const message = (error as Error).message.split('\n')[0];
     console.error(
-      `deliver-loop: ${message}. Options: --milestone, --issues, --base, --tracker, --harness, --max, --model, --session-minutes, --merge-minutes, --dry-run, --allow-no-required-checks, --trust-authors.`,
+      `deliver-loop: ${message}. Options: --milestone, --issues, --base, --tracker, --harness, --max, --model, --session-minutes, --merge-minutes, --handover-minutes, --dry-run, --allow-no-required-checks, --trust-authors.`,
     );
     process.exit(1);
   }
@@ -144,13 +145,23 @@ const root =
   );
 const commonDir = path.resolve(root, run('git', ['rev-parse', '--git-common-dir'], root));
 let config: {
-  deliver?: { base?: string; harness?: string; tracker?: string; protectedPaths?: string[] };
+  deliver?: {
+    base?: string;
+    harness?: string;
+    tracker?: string;
+    protectedPaths?: string[];
+    handoverMinutes?: number;
+  };
 } = {};
 try {
   config = JSON.parse(readFileSync(path.join(root, '.agents/config.json'), 'utf8'));
 } catch {
   // no project config
 }
+// How long the loop waits for handed-over pull requests when nothing else can start: the flag, then the config, else 120.
+const HANDOVER_MINUTES = Number(opt['handover-minutes'] ?? config.deliver?.handoverMinutes ?? 120);
+if (!Number.isInteger(HANDOVER_MINUTES) || HANDOVER_MINUTES < 0)
+  fail('--handover-minutes (deliver.handoverMinutes) needs a whole number from 0', 64);
 for (const warning of legacyWarnings) log(warning, 'warn');
 const configWarning = unknownConfigKeys(config.deliver);
 if (configWarning) log(configWarning, 'warn');
@@ -814,6 +825,121 @@ async function deliver(item: Item): Promise<{ reason?: string; pull?: Pull }> {
   return { reason, pull };
 }
 
+/** The tracker closes an issue a moment after its merge; until then it still blocks its dependents. */
+async function untilClosed(id: number): Promise<void> {
+  for (let second = 0; second < 120 && !stopped; second += 5) {
+    let closed = false;
+    try {
+      closed = !tracker.items().some((item) => item.id === id);
+    } catch {
+      // asked again
+    }
+    if (closed) break;
+    for (let wait = 0; wait < 5 && !stopped; wait++) await sleep(1);
+  }
+}
+
+/**
+ * One repair session for a handed-over pull request that conflicts with the base (at most one per pull request and
+ * run); the note goes into the hand-over reason and the line of the issue in results.jsonl. The loop never merges it.
+ */
+async function repairHandedOver(nr: number): Promise<void> {
+  const entry = handedPulls.get(nr);
+  const reason = handedOver.get(nr);
+  if (!entry || stopped || harnessDead || !reason || reason.includes(MORE_PULLS)) return;
+  const { item, pull } = entry;
+  const worktree = path.join(path.dirname(root), `${path.basename(root)}-wt-${nr}`);
+  if (!existsSync(worktree))
+    run('git', ['worktree', 'add', '--detach', worktree, `origin/${BASE}`], root);
+  const sessions: Session[] = [];
+  const note = await repairConflict(item, pull, worktree, sessions).catch(
+    (error) => `conflict not repaired: ${firstLine(error)}`,
+  );
+  if (!note) return;
+  log(`#${nr} ${note}, handed over`, note.startsWith('conflict repaired') ? 'info' : 'warn');
+  handedOver.set(nr, `${note}, ${reason}`);
+  // the line of the issue in results.jsonl says it too
+  const file = path.join(runDir, 'results.jsonl');
+  const rows = readFileSync(file, 'utf8')
+    .split('\n')
+    .filter(Boolean)
+    .map((line) => {
+      const row = JSON.parse(line) as Record<string, unknown>;
+      if (row.issue !== nr || typeof row.reason !== 'string') return line;
+      const all = [...((row.sessions as Session[]) ?? []), ...sessions];
+      return JSON.stringify({ ...row, reason: `${note}, ${row.reason}`, sessions: all });
+    });
+  writeFileSync(file, `${rows.join('\n')}\n`);
+}
+
+/**
+ * Nothing can start and pull requests are handed over: polls them every 60 s for up to HANDOVER_MINUTES.
+ * A merged one counts as merged, a closed one is set aside, a conflicting one gets its repair session.
+ * Returns true when one was merged or closed (the loop looks for the next issue), false on time over or stop.
+ */
+async function awaitHandovers(): Promise<boolean> {
+  if (HANDOVER_MINUTES === 0 || handedPulls.size === 0) return false;
+  const until = Date.now() + HANDOVER_MINUTES * 60_000 * Math.max(TICK_MS / 1000, 0.0001);
+  const names = () =>
+    [...handedPulls.values()].map(({ item, pull }) => `#${item.id} ${pull.url}`).join(', ');
+  log(`waiting for handed-over pull requests (up to ${HANDOVER_MINUTES} min): ${names()}`, 'warn');
+  emit(
+    'attention',
+    {
+      id: 'handover-wait',
+      reason: 'handed-over',
+      text: `waiting for you to merge: ${names()}`,
+      needsYou: true,
+      links: [...handedPulls.values()].map(({ pull }) => ({
+        rel: 'pull-request',
+        url: pull.url,
+      })),
+    },
+    'warning',
+  );
+  while (!stopped && !harnessDead && Date.now() < until) {
+    let changed = false;
+    for (const [nr, { item, pull }] of handedPulls) {
+      let gate: Gate | undefined;
+
+      try {
+        gate = tracker.gate(pull);
+      } catch {
+        // a failing read is no verdict: asked again
+      }
+      if (stopped) return false;
+      const row = { issue: nr, title: item.title, pr: pull.url, minutes: 0, sessions: [] };
+      const file = path.join(runDir, 'results.jsonl');
+      if (gate?.state === 'merged') {
+        handedOver.delete(nr);
+        handedPulls.delete(nr);
+        merged.push(`#${nr} ${pull.url}`);
+        log(`#${nr} merged by a person: ${pull.url}`, 'ok');
+        appendFileSync(file, `${JSON.stringify({ ...row, outcome: 'merged' })}\n`);
+        cleanup(item, pull);
+        emit('progress', { done: merged.length, total, label: 'PBIs' });
+        await untilClosed(nr);
+        changed = true;
+      } else if (gate?.state === 'closed') {
+        handedOver.delete(nr);
+        handedPulls.delete(nr);
+        aside.set(nr, `closed by a person, ${pull.url}`);
+        log(`#${nr} set aside: closed by a person, ${pull.url}`, 'bad');
+        appendFileSync(
+          file,
+          `${JSON.stringify({ ...row, outcome: 'aside', reason: 'closed by a person' })}\n`,
+        );
+        changed = true;
+      } else if (gate?.state === 'conflict') {
+        await repairHandedOver(nr);
+      }
+    }
+    if (changed || handedPulls.size === 0) return changed;
+    for (let second = 0; second < 60 && !stopped && Date.now() < until; second++) await sleep(1);
+  }
+  return false;
+}
+
 let cutNote = '';
 const baseExists = () =>
   attempt('git', ['ls-remote', '--exit-code', '--heads', 'origin', BASE], root) !== undefined;
@@ -1015,7 +1141,12 @@ try {
       if (reason) waiting.push(`#${item.id} ${reason}`);
       else if (!next) next = item;
     }
-    if (!next) break;
+    if (!next) {
+      // only handed-over pull requests are left (and what they block): wait for a person to merge them
+      if (!(await awaitHandovers())) break;
+      count--;
+      continue;
+    }
     log(`#${next.id} start: ${next.title} (${open.length} open)`, 'info');
     // x: the issues finished or set aside so far, plus this one; the log file is read at a fixed width
     const begun = merged.length + aside.size + handedOver.size + 1;
@@ -1038,17 +1169,7 @@ try {
         { task: `issue-${next.id}`, outcome: 'succeeded', text: 'merged' },
         'success',
       );
-      // the tracker closes the issue a moment after the merge; until then it still blocks its dependents
-      for (let second = 0; second < 120 && !stopped; second += 5) {
-        let closed = false;
-        try {
-          closed = !tracker.items().some((item) => item.id === next.id);
-        } catch {
-          // asked again
-        }
-        if (closed) break;
-        for (let wait = 0; wait < 5 && !stopped; wait++) await sleep(1);
-      }
+      await untilClosed(next.id);
     } else if (reason === 'stopped') {
       log(`#${next.id} stopped: not merged${pull ? `, ${pull.url}` : ''}`, 'warn');
       emit('task.finished', { task: `issue-${next.id}`, outcome: 'cancelled', text: 'stopped' });
@@ -1093,32 +1214,7 @@ try {
 // Before the run ends: a pull request handed over earlier may conflict with the base by now. One repair session
 // per pull request and run; the loop never merges it, the person does.
 if (!stopped && !harnessDead && !baseBlocked) {
-  for (const [nr, { item, pull }] of handedPulls) {
-    const reason = handedOver.get(nr);
-    if (stopped || harnessDead || !reason || reason.includes(MORE_PULLS)) continue;
-    const worktree = path.join(path.dirname(root), `${path.basename(root)}-wt-${nr}`);
-    if (!existsSync(worktree))
-      run('git', ['worktree', 'add', '--detach', worktree, `origin/${BASE}`], root);
-    const sessions: Session[] = [];
-    const note = await repairConflict(item, pull, worktree, sessions).catch(
-      (error) => `conflict not repaired: ${firstLine(error)}`,
-    );
-    if (!note) continue;
-    log(`#${nr} ${note}, handed over`, note.startsWith('conflict repaired') ? 'info' : 'warn');
-    handedOver.set(nr, `${note}, ${reason}`);
-    // the line of the issue in results.jsonl says it too
-    const file = path.join(runDir, 'results.jsonl');
-    const rows = readFileSync(file, 'utf8')
-      .split('\n')
-      .filter(Boolean)
-      .map((line) => {
-        const row = JSON.parse(line) as Record<string, unknown>;
-        if (row.issue !== nr || typeof row.reason !== 'string') return line;
-        const all = [...((row.sessions as Session[]) ?? []), ...sessions];
-        return JSON.stringify({ ...row, reason: `${note}, ${row.reason}`, sessions: all });
-      });
-    writeFileSync(file, `${rows.join('\n')}\n`);
-  }
+  for (const nr of handedPulls.keys()) await repairHandedOver(nr);
 }
 
 // A fully delivered milestone ends with the release pull request, which a person merges.

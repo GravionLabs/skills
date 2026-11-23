@@ -186,6 +186,11 @@
           "description": "The agent CLI: claude (default) or copilot.",
           "enum": ["claude", "copilot"]
         },
+        "handoverMinutes": {
+          "description": "How long the loop waits for handed-over pull requests when nothing else can start (default 120); 0 ends the run at once with exit 3.",
+          "type": "integer",
+          "minimum": 0
+        },
         "protectedPaths": {
           "description": "A pull request that changes one of these paths is not merged by the loop; replaces the default list.",
           "type": "array",

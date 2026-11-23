@@ -1,6 +1,6 @@
 // Names kept for one release: DELIVER_MIN_<X> is read as DELIVER_<X> (the new name wins) with a warning, and the
 // keys of `deliver` in .agents/config.json that the loop no longer knows are ignored with one warning.
-export const CONFIG_KEYS = ['base', 'tracker', 'harness', 'protectedPaths'];
+export const CONFIG_KEYS = ['base', 'tracker', 'harness', 'protectedPaths', 'handoverMinutes'];
 
 /** Copies each DELIVER_MIN_<X> to DELIVER_<X> when that is unset. Returns one warning per old name found. */
 export function adoptLegacyEnv(env: NodeJS.ProcessEnv = process.env): string[] {
