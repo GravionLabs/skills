@@ -1,3 +1,5 @@
+import { spawnSync } from 'child_process';
+import * as os from 'os';
 import * as fs from 'fs';
 import * as path from 'path';
 
@@ -67,5 +69,74 @@ describe('oxc setup (ADR 0006, #770)', () => {
     );
     expect(read('ts/ts-implementation/SKILL.md')).toContain('`setup-oxc-husky`');
     expect(read('ng/ng-implementation/SKILL.md')).toContain('`setup-oxc-husky`');
+  });
+});
+
+describe('oxc setup: Stylelint for CSS and SCSS (ADR 0008, #922)', () => {
+  const script = path.join(packages, skill, 'scripts/Setup-Oxc.ps1');
+  const hasPwsh = spawnSync('pwsh', ['-NoProfile', '-Command', '1']).status === 0;
+  const plan = (files: string[], args: string[] = []) => {
+    const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'oxc-sl-'));
+    try {
+      fs.writeFileSync(path.join(dir, 'package.json'), '{}');
+      for (const f of files) fs.writeFileSync(path.join(dir, f), '');
+      const r = spawnSync('pwsh', ['-NoProfile', '-File', script, '-WhatIf', ...args], {
+        cwd: dir,
+        encoding: 'utf8',
+      });
+      expect(r.status).toBe(0);
+      return JSON.parse(r.stdout);
+    } finally {
+      fs.rmSync(dir, { recursive: true, force: true });
+    }
+  };
+  const action = (p: { files: { path: string; action: string }[] }) =>
+    p.files.find((f) => f.path === 'stylelint.config.mjs')?.action;
+
+  it.skipIf(!hasPwsh)('Angular: packages, config, scripts and lint-staged', () => {
+    const p = plan(['angular.json']);
+    expect(p.packages).toEqual(
+      expect.arrayContaining(['stylelint', 'stylelint-config-standard-scss']),
+    );
+    expect(action(p)).toBe('create');
+    expect(p.scripts['lint:styles']).toContain('stylelint');
+    expect(p.scripts.lint).toContain('stylelint');
+    expect(p.lintStaged['*.{css,scss}']).toEqual([
+      'stylelint --fix --allow-empty-input',
+      'oxfmt --no-error-on-unmatched-pattern',
+    ]);
+  });
+
+  it.skipIf(!hasPwsh)('Angular: an existing config is kept', () => {
+    expect(action(plan(['angular.json', 'stylelint.config.mjs']))).toBe('keep');
+  });
+
+  it.skipIf(!hasPwsh)('plain TS: no Stylelint without the switch', () => {
+    const p = plan([]);
+    expect(p.packages).not.toContain('stylelint');
+    expect(action(p)).toBeUndefined();
+    expect(p.scripts['lint:styles']).toBeUndefined();
+    expect(p.lintStaged['*.{css,scss}']).toBeUndefined();
+  });
+
+  it.skipIf(!hasPwsh)(
+    'plain TS: -Stylelint adds packages, config, scripts; a config is kept',
+    () => {
+      const p = plan([], ['-Stylelint']);
+      expect(p.packages).toEqual(
+        expect.arrayContaining(['stylelint', 'stylelint-config-standard-scss']),
+      );
+      expect(action(p)).toBe('create');
+      expect(p.scripts['lint:styles']).toContain('stylelint');
+      expect(p.lintStaged['*.{css,scss}'][0]).toContain('stylelint --fix');
+      expect(action(plan(['stylelint.config.mjs'], ['-Stylelint']))).toBe('keep');
+    },
+  );
+
+  it('SKILL.md lists Stylelint and the Biome migration note', () => {
+    const md = read(`${skill}/SKILL.md`);
+    expect(md).toContain('**Stylelint**');
+    expect(md).toContain('From Biome: CSS rules move to Stylelint');
+    expect(md.split('\n').length).toBeLessThanOrEqual(100);
   });
 });

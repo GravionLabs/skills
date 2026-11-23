@@ -4,11 +4,13 @@ Angular repositories enforce the tokens of `docs/STYLEGUIDE.md` (skill `ui-style
 
 ## Install
 
+`setup-oxc-husky` installs `stylelint` and `stylelint-config-standard-scss`, copies its `templates/stylelint.config.mjs` to the repository root (the single source of the config, with the token rules) and adds `lint:styles` and the `lint-staged` entry (ADR 0008). By hand:
+
 ```powershell
 pnpm add -D stylelint stylelint-config-standard-scss
 ```
 
-Copy `templates/stylelint.config.mjs` to the repository root. It uses `postcss-scss` (a dependency of `stylelint-config-standard-scss`), so `.css` and `.scss` files are read.
+Copy `stylelint.config.mjs` from the `setup-oxc-husky` templates. It uses `postcss-scss` (a dependency of `stylelint-config-standard-scss`), so `.css` and `.scss` files are read.
 
 ## Rules
 
@@ -36,4 +38,4 @@ Add a fast check to `.agents/config.json`:
 
 ## Token file
 
-The token definitions may use raw values. The `overrides` entry of the template switches the three rules off for `tokens.css`, `tokens.scss`, `_tokens.scss` and `styles/tokens/`; change its `files` list to where the repository defines its tokens. Allow nothing else: a one-off value elsewhere is a new token in the guide.
+The token definitions may use raw values. The `overrides` entry of the config switches the three rules off for `tokens.css`, `tokens.scss`, `_tokens.scss` and `styles/tokens/`; change its `files` list to where the repository defines its tokens. Allow nothing else: a one-off value elsewhere is a new token in the guide.

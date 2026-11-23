@@ -56,6 +56,13 @@ describe.skipIf(!hasPwsh || process.platform === 'win32')('Format-Changed.ps1 -L
     repo.langs = mkRepo('langs', ['a.ts', 'e.py', 'F.cs', 'src/lib.rs', 'cmd/main.go', 'n.md']);
     repo.cfg = mkRepo('cfg', ['a.ts', 'A.cs', 'B.cs']);
     repo.oxc = mkRepo('oxc', ['.oxlintrc.json', 'biome.json', 'a.ts', 'c.html']);
+    repo.style = mkRepo('style', [
+      '.oxlintrc.json',
+      'stylelint.config.mjs',
+      'a.ts',
+      'b.scss',
+      'c.css',
+    ]);
   });
   afterAll(() => {
     worker.close();
@@ -92,6 +99,17 @@ describe.skipIf(!hasPwsh || process.platform === 'win32')('Format-Changed.ps1 -L
     const r = await go(repo.langs, ['-Lint', '-Language', lang]);
     expect(r).toMatchObject({ status: 0, stdout: 'linted: 1 files\n' });
     expect(callLines()).toEqual([cmd]);
+  });
+
+  // ADR 0008: stylelint.config.* adds Stylelint on .css/.scss
+  it('lints changed .css and .scss with Stylelint once stylelint.config.* exists', async () => {
+    const r = await go(repo.style, ['-Lint', '-Language', 'ng']);
+    expect(r.status).toBe(0);
+    expect(callLines()).toContain('npx --no-install stylelint b.scss c.css');
+  });
+  it('does not run Stylelint without a config', async () => {
+    await go(repo.oxc, ['-Lint', '-Language', 'ng']);
+    expect(callLines().join('\n')).not.toContain('stylelint');
   });
 
   // ADR 0006: .oxlintrc.json wins over a leftover biome.json; ng keeps eslint for the .html templates

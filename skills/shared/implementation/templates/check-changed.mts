@@ -9,7 +9,7 @@
 // Base: --base, else `base` of `.agents/config.json`, else origin/HEAD, else main/master.
 import { spawnSync } from 'node:child_process';
 import { createHash } from 'node:crypto';
-import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
+import { existsSync, mkdirSync, readdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { availableParallelism } from 'node:os';
 import * as path from 'node:path';
 
@@ -79,6 +79,9 @@ function exec(cmd: string, args: string[]) {
 const ext = (files: string[], re: RegExp) => files.filter((f) => re.test(f));
 const FORMAT = /\.(m?[jt]sx?|cjs|cts|json|jsonc|css|scss|html|md|ya?ml)$/;
 const LINT = /\.(m?[jt]sx?|cjs|cts)$/;
+const STYLES = /\.(css|scss)$/;
+const hasStylelint = () =>
+  readdirSync('.').some((f) => /^stylelint\.config\.|^\.stylelintrc/.test(f)) && bin('stylelint');
 
 export function steps(files: string[]): Step[] {
   const out: Step[] = [];
@@ -105,6 +108,11 @@ export function steps(files: string[]): Step[] {
       if (t === 'eslint') return exec(t, ['--no-warn-ignored', ...lintFiles]);
       return undefined;
     },
+  });
+  const styleFiles = ext(files, STYLES);
+  out.push({
+    name: 'stylelint',
+    run: () => (styleFiles.length && hasStylelint() ? exec('stylelint', styleFiles) : undefined),
   });
   out.push({
     name: 'typecheck',

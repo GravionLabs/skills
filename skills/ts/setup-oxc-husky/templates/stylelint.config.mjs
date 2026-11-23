@@ -1,5 +1,6 @@
 // Stylelint config that enforces the design tokens of docs/STYLEGUIDE.md.
-// Copy to the repository root as stylelint.config.mjs. See references/style-lint.md.
+// Copy to the repository root as stylelint.config.mjs (setup-oxc-husky does it). Token rules: ng-implementation references/style-lint.md.
+// Former Biome CSS rules: no duplicate properties, no unknown pseudo-elements (ng-deep allowed).
 const guide = 'See docs/STYLEGUIDE.md.';
 
 /** @type {import('stylelint').Config} */
@@ -7,6 +8,8 @@ export default {
   extends: ['stylelint-config-standard-scss'],
   customSyntax: 'postcss-scss',
   rules: {
+    'declaration-block-no-duplicate-properties': true,
+    'selector-pseudo-element-no-unknown': [true, { ignorePseudoElements: ['ng-deep'] }],
     'color-no-hex': [
       true,
       { message: `Why: raw hex colors bypass the color tokens. Instead: use var(--…). ${guide}` },
