@@ -1,7 +1,7 @@
 {
   "name": "gravionlabs-skills-tools",
   "version": "1.0.0",
-  "packageManager": "pnpm@11.6.0",
+  "packageManager": "pnpm@11.11.0",
   "description": "Checks, docs generator and tests for the GravionLabs skills",
   "scripts": {
     "generate": "node scripts/generate-skill-list.mjs",
