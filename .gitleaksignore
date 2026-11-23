@@ -1,0 +1,6 @@
+# False positive of generic-api-key: a sentence in a skill doc that mentions the word before a link, not a credential (#845)
+3b107f778eef9157d131248a956c5d4eb95a8051:skills/github/github-project/SKILL.md:generic-api-key:49
+# False positive of generic-api-key: a sentence in a doc that names a PowerShell script, not a credential (#845)
+f14120c3e9c89901e02b8306c36db424b75bd2ad:skills/delivery/deliver/references/herdr.md:generic-api-key:58
+# False positive of generic-api-key: the same sentence of that doc in an older commit, not a credential (#845)
+431ebc4ea329efd563ebe406ff57e2be0901e510:skills/delivery/deliver/references/herdr.md:generic-api-key:58
