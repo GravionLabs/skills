@@ -12,16 +12,18 @@ A group is a plugin in `.claude-plugin/marketplace.json` of GravionLabs/skills; 
 | `rust`       | `rust-implementation`, `rust-test`                                                                      | per project     |
 | `go`         | `go-implementation`, `go-test`                                                                          | per project     |
 | `ng`         | Angular skills, plus `angular/skills` (`angular-developer`)                                             | per project     |
+| `vault`      | notes vault skills (`vault-inbox`, `vault-setup`, ...)                                                  | per vault       |
+| `school`     | school vault skills (`school-summary`, `school-exam`, ...); builds on `vault`                           | per vault       |
 | `dotnet`     | .NET skills, plus `dotnet/skills` (`csharp-scripts`, `dotnet-pinvoke`, `nuget-trusted-publishing`)      | per project     |
 
 ## Presets
 
 - `core`: `shared`, `github`, `delivery`, `statusline`, no stack skills. Use `core -g` once per machine and the stack group per project.
-- `all`: every group except `skill-tooling`. For machines that mix stacks.
+- `all`: every group except `skill-tooling`, `vault` and `school` (notes vaults, not code repositories); install those by name. For machines that mix stacks.
 - `skill-tooling` (skill authoring and audit) is for contributors of GravionLabs/skills and never part of `all`; install it by name with `npx skills add GravionLabs/skills --skill skill-write ...`.
 
 Groups only exist at install time: `npx skills` records single skills in `skills-lock.json` and updates them one by one (`npx skills update`, `npx skills check`).
 
 ## Detection mapping
 
-detect-techstack emits `ts`, `js`, `py`, `dotnet`, `rust`, `go`: `ts` and `js` map to `ts`, the others to the group of the same name. angular framework: `ng` (next to `ts`). tauri framework: informational, no group; a Tauri project reports `rust` and usually `ts`, so both are proposed.
+detect-techstack emits `ts`, `js`, `py`, `dotnet`, `rust`, `go`: `ts` and `js` map to `ts`, the others to the group of the same name. angular framework: `ng` (next to `ts`). notes vault (`.nixe/` or `.obsidian/` folder in the project root, no build file such as `package.json`, `Cargo.toml`, `go.mod`, `*.csproj`): `vault`, plus `school` when `Profile.md` exists in the root. tauri framework: informational, no group; a Tauri project reports `rust` and usually `ts`, so both are proposed.
