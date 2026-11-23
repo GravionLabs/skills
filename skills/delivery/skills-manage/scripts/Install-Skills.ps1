@@ -5,13 +5,17 @@
 .DESCRIPTION
   A group is a plugin of .claude-plugin/marketplace.json in GravionLabs/skills; groups.json next to this
   script is its copy (kept in sync by scripts/check-marketplace.mjs). `core` and `all` are presets, not
-  groups: core = shared, github, delivery, statusline; all = every group except skill-tooling.
+  groups: core = shared, github, delivery, statusline; all = every group except skill-tooling, vault and school
+  (those are for notes vaults, not code repositories).
 
   Without -Groups (project install) the installed detect-techstack script maps the stack to groups
   (ts/js -> ts, py -> py, dotnet -> dotnet, rust -> rust, go -> go, angular -> ng). It is looked up in the
   user's own skill directories first; a copy that only exists in the project is repository code and runs
   only with -TrustProject. The base groups shared, github, delivery are added when their marker skill is
   missing from the user's skill directories. -Global without -Groups proposes only the base groups.
+
+  A notes vault (a .nixe/ or .obsidian/ folder in the current directory and no build file) gets vault, and
+  school when Profile.md exists; a project install without -Groups only.
 
   Every wanted skill that is already installed in the target scope (a directory of that name in one of the
   agent skill directories) is skipped. All remaining GravionLabs skills go into one call:
@@ -22,7 +26,7 @@
 
 .PARAMETER Groups
   Comma-separated groups or presets: shared, github, delivery, statusline, ts, py, ng, dotnet, rust, go, vault, school,
-  core, all. Skips detection.
+  core, all (vault and school are not part of either preset). Skips detection.
 
 .PARAMETER Global
   Install user-wide (skills -g) instead of into the project.
@@ -79,7 +83,7 @@ $source = 'GravionLabs/skills'
 $groupMap = Get-Content -Raw (Join-Path $PSScriptRoot 'groups.json') | ConvertFrom-Json -AsHashtable
 $presets = @{
   core = @('shared', 'github', 'delivery', 'statusline')
-  all  = @($groupMap.Keys | Where-Object { $_ -notin @('skill-tooling') } | Sort-Object)
+  all  = @($groupMap.Keys | Where-Object { $_ -notin @('skill-tooling', 'vault', 'school') } | Sort-Object)
 }
 $external = @{
   ng     = [ordered]@{ source = 'angular/skills#d422d3c17e27c9860f3df91b6e617ad80970ba05'; skills = @('angular-developer') }
@@ -208,6 +212,21 @@ if ($Groups) {
       }
     } elseif (-not ($notes | Where-Object { $_ -like 'detect-techstack found only*' })) {
       $notes.Add('detect-techstack not installed: only base groups resolved. Pass -Groups for stack groups.')
+    }
+  }
+  # A notes vault: .nixe/ or .obsidian/ and no build file; school when the pupil's Profile.md exists
+  if (-not $Global) {
+    $buildFiles = 'package.json', 'pyproject.toml', 'setup.py', 'requirements.txt', 'Cargo.toml', 'go.mod', 'pom.xml', 'build.gradle', 'build.gradle.kts', 'Gemfile', 'composer.json', 'CMakeLists.txt', 'Makefile'
+    $hasBuild = @($buildFiles | Where-Object { Test-Path -LiteralPath (Join-Path (Get-Location) $_) -PathType Leaf }).Count -gt 0 -or
+      @(Get-ChildItem -LiteralPath (Get-Location) -File -ErrorAction SilentlyContinue | Where-Object { $_.Extension -in '.sln', '.slnx', '.csproj', '.fsproj', '.vbproj' }).Count -gt 0
+    $isVault = (Test-Path -LiteralPath (Join-Path (Get-Location) '.nixe') -PathType Container) -or (Test-Path -LiteralPath (Join-Path (Get-Location) '.obsidian') -PathType Container)
+    if ($isVault -and -not $hasBuild) {
+      Add-Group 'vault'
+      $notes.Add('Notes vault detected (.nixe/ or .obsidian/, no build file): proposing vault.')
+      if (Test-Path -LiteralPath (Join-Path (Get-Location) 'Profile.md') -PathType Leaf) {
+        Add-Group 'school'
+        $notes.Add('Profile.md found: proposing school.')
+      }
     }
   }
   # Base groups: proposed when their marker skill is missing from the user's skill directories
