@@ -38,7 +38,7 @@ try {
   if ($LASTEXITCODE -eq 0) { $range = "$Base..HEAD" }
   $global:LASTEXITCODE = 0
 
-  $common = @('--redact', '--no-banner', '--exit-code', '3')
+  $common = @('--redact', '--verbose', '--no-banner', '--exit-code', '3')
   if (Test-Path -LiteralPath '.gitleaks.toml') { $common += @('--config', '.gitleaks.toml') }
 
   $scans = @(

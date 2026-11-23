@@ -18,6 +18,16 @@
       "name": "workflow-lint",
       "command": "pwsh skills/github/github-workflow-lint/scripts/Invoke-WorkflowLint.ps1",
       "fast": true
+    },
+    {
+      "name": "secret-scan",
+      "command": "pwsh skills/shared/secret-scan/scripts/Invoke-SecretScan.ps1",
+      "fast": true
+    },
+    {
+      "name": "secret-allowlist",
+      "command": "node skills/shared/secret-scan/scripts/check-allowlist.mts",
+      "fast": true
     }
   ]
 }
