@@ -713,6 +713,7 @@ describe('deliver loop', () => {
     expect(out.log.trim().split('\n').at(-1)).toMatch(
       /failed: the harness failed 3 times in a row, last exit code 7/,
     );
+    expect(out.events.at(-1)).toMatchObject({ outcome: 'failed', reason: 'harness' });
     expect(out.final).toMatchObject({ status: 'failed' });
   });
 
