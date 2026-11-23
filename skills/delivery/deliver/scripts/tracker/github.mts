@@ -105,6 +105,13 @@ export function mergedPullSince(
     .sort((a, b) => Date.parse(b.merged_at ?? '') - Date.parse(a.merged_at ?? ''))[0];
 }
 
+/** The open pull requests of issue `id` (head `<type>/<id>-…` of this repository), the oldest first. */
+export function openPullsOf(records: PullRecord[], repo: string, id: number): PullRecord[] {
+  return records
+    .filter((p) => p.head.repo?.full_name === repo && new RegExp(`^[a-z]+/${id}-`).test(p.head.ref))
+    .sort((a, b) => a.number - b.number);
+}
+
 /** The default branch takes merge commits (its ruleset allows only those, and the Conventional Commits stay visible); every other base takes squash. */
 export function mergeMethodFor(base: string, defaultBranch: string): 'merge' | 'squash' {
   return base === defaultBranch ? 'merge' : 'squash';
@@ -342,11 +349,10 @@ export function create({
     },
 
     pullOf(item: Item): Pull | undefined {
-      const found = list<PullRecord>(
-        `repos/${repo}/pulls?state=open&base=${base}&per_page=100`,
-      ).find(
-        (p) =>
-          p.head.repo?.full_name === repo && new RegExp(`^[a-z]+/${item.id}-`).test(p.head.ref),
+      const [found, ...others] = openPullsOf(
+        list<PullRecord>(`repos/${repo}/pulls?state=open&base=${base}&per_page=100`),
+        repo,
+        item.id,
       );
       return (
         found && {
@@ -354,6 +360,7 @@ export function create({
           title: found.title,
           url: found.html_url,
           branch: found.head.ref,
+          ...(others.length > 0 && { others: others.map((p) => p.html_url) }),
         }
       );
     },
