@@ -29,6 +29,8 @@ import { HARNESSES } from '../../../skills/delivery/deliver/scripts/harness.mts'
 import {
   checkVerdict,
   mergedPullSince,
+  closesIssue,
+  openPullsOf,
 } from '../../../skills/delivery/deliver/scripts/tracker/github.mts';
 
 const skill = path.resolve(__dirname, '../../../skills/delivery/deliver');
@@ -53,6 +55,7 @@ type Scenario = {
   filesFailures?: number;
   blocked?: string;
   earlierPull?: boolean;
+  twoPulls?: number[];
   lingers?: boolean;
   hangs?: boolean;
   plan?: { exit?: number; noPull?: boolean; hangs?: boolean }[];
@@ -523,6 +526,29 @@ describe('deliver loop', () => {
     expect(out.merges).toHaveLength(1);
   });
 
+  it('starts no session and merges neither when an issue already has two open pull requests', async () => {
+    const out = await loop({
+      items: [{ id: 75, title: '[PBI] feat: two pulls' }],
+      earlierPull: true,
+      twoPulls: [75],
+    });
+    expect(out.sessions).toHaveLength(0);
+    expect(out.merges).toEqual([]);
+    expect(out.results[0]?.reason).toBe(
+      'more than one open pull request (https://example.test/pull/175, https://example.test/pull/225), merge it yourself',
+    );
+  });
+
+  it('merges neither pull request when the session left a second one open', async () => {
+    const out = await loop({
+      items: [{ id: 76, title: '[PBI] feat: second pull' }],
+      twoPulls: [76],
+    });
+    expect(out.sessions).toHaveLength(1);
+    expect(out.merges).toEqual([]);
+    expect(out.results[0]?.reason).toContain('more than one open pull request');
+  });
+
   it('keeps the reason of a blocked session next to the reason of the guard', async () => {
     const out = await loop({
       items: [{ id: 75, title: '[PBI] feat: blocked' }],
@@ -687,6 +713,7 @@ describe('deliver loop', () => {
     expect(out.log.trim().split('\n').at(-1)).toMatch(
       /failed: the harness failed 3 times in a row, last exit code 7/,
     );
+    expect(out.events.at(-1)).toMatchObject({ outcome: 'failed', reason: 'harness' });
     expect(out.final).toMatchObject({ status: 'failed' });
   });
 
@@ -1074,12 +1101,19 @@ describe('deliver loop', () => {
 });
 
 describe('mergedPullSince of the GitHub tracker', () => {
-  const pr = (number: number, ref: string, merged_at: string | null, full_name = 'o/r') => ({
+  const pr = (
+    number: number,
+    ref: string,
+    merged_at: string | null,
+    full_name = 'o/r',
+    body = 'Closes #7',
+  ) => ({
     number,
     title: 't',
     html_url: `u${number}`,
     head: { ref, repo: { full_name } },
     merged_at,
+    body,
   });
   const since = '2026-11-10T00:00:00Z';
 
@@ -1102,6 +1136,57 @@ describe('mergedPullSince of the GitHub tracker', () => {
       pr(4, 'feat/7-x', '2026-11-16T11:00:00Z', 'fork/r'),
     ];
     expect(mergedPullSince(records, 'o/r', 7, since)).toBeUndefined();
+  });
+});
+
+describe('a merged pull request that does not close the issue', () => {
+  const rec = (body: string | null) => ({
+    number: 43,
+    title: 'docs: adr (#7)',
+    html_url: 'u43',
+    head: { ref: 'docs/7-adr', repo: { full_name: 'o/r' } },
+    merged_at: '2026-11-16T11:00:00Z',
+    body,
+  });
+  const since = '2026-11-10T00:00:00Z';
+
+  it('is no delivery of the issue', () => {
+    expect(mergedPullSince([rec('ADR for #7')], 'o/r', 7, since)).toBeUndefined();
+    expect(mergedPullSince([rec(null)], 'o/r', 7, since)).toBeUndefined();
+  });
+
+  it('is a delivery with a closing keyword or a closing reference', () => {
+    expect(mergedPullSince([rec('Closes #7')], 'o/r', 7, since)?.number).toBe(43);
+    expect(mergedPullSince([rec('no keyword')], 'o/r', 7, since, () => true)?.number).toBe(43);
+  });
+
+  it('reads closing keywords exactly', () => {
+    expect(closesIssue('fixes #7.', 7)).toBe(true);
+    expect(closesIssue('Resolved: #7', 7)).toBe(true);
+    expect(closesIssue('Closes #70', 7)).toBe(false);
+    expect(closesIssue('see #7', 7)).toBe(false);
+  });
+});
+
+describe('openPullsOf of the GitHub tracker', () => {
+  const pr = (number: number, ref: string, full_name = 'o/r') => ({
+    number,
+    title: 't',
+    html_url: `u${number}`,
+    head: { ref, repo: { full_name } },
+  });
+
+  it('returns both open pull requests of one issue with different slugs, the oldest first', () => {
+    const records = [
+      pr(139, 'chore/137-release-test-tauri-dev-setup'),
+      pr(138, 'chore/137-release-test-tauri-dev'),
+    ];
+    expect(openPullsOf(records, 'o/r', 137).map((p) => p.number)).toEqual([138, 139]);
+  });
+
+  it('ignores other issues, other numbers with the same prefix and forks', () => {
+    const records = [pr(1, 'feat/8-x'), pr(2, 'feat/70-x'), pr(3, 'feat/7-x', 'fork/r')];
+    expect(openPullsOf(records, 'o/r', 7)).toEqual([]);
   });
 });
 

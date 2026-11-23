@@ -3,6 +3,7 @@
 - Status: Accepted (2026-11-20)
 - Date: 2026-11-20
 - Issues: #769, #763
+- Extended by: [ADR 0008](0008-stylelint-lints-css-and-scss.md) (Stylelint lints CSS and SCSS)
 
 ## Context
 

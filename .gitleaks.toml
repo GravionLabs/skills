@@ -1,0 +1,12 @@
+# gitleaks configuration. Betterleaks reads this file unchanged: only keys both tools know are used.
+title = "secret-scan"
+
+[extend]
+useDefault = true
+
+# Allowlist example. Every entry needs a description that gives the reason; see references/allowlist.md.
+# Rotate a real secret first, allowlist it only afterwards.
+#
+# [[allowlists]]
+# description = "Fake token in the parser test fixture, not a credential (#123)"
+# paths = ['''test/fixtures/fake-token\.txt''']

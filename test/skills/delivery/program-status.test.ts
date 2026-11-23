@@ -2,7 +2,7 @@ import path from 'node:path';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
 const mod = path.resolve(__dirname, '../../../skills/delivery/deliver/scripts/program-status.mts');
-const { encodeStatus, programStatus } = (await import(
+const { encodeStatus, finishReport, programStatus } = (await import(
   mod
 )) as typeof import('../../../skills/delivery/deliver/scripts/program-status.mts');
 
@@ -48,6 +48,43 @@ describe('encodeStatus', () => {
     const sequence = encodeStatus({ state: 'blocked', msg: 'a\x1b[31m\nb‮c​d' });
     expect(decode(pairs(sequence).msg)).toBe('a [31m b c d');
     expect(sequence.length).toBeLessThan(4096);
+  });
+});
+
+describe('tone', () => {
+  it('writes tone=warning with done only', () => {
+    expect(pairs(encodeStatus({ state: 'done', tone: 'warning' })).tone).toBe('warning');
+    expect(pairs(encodeStatus({ state: 'error', tone: 'warning' }))).not.toHaveProperty('tone');
+    expect(pairs(encodeStatus({ state: 'done' }))).not.toHaveProperty('tone');
+  });
+});
+
+describe('finishReport', () => {
+  const text = 'blocked: merged 5, set aside 0, waiting 2';
+  it.each(['incomplete'])('an incomplete run is done with a warning and the counts', (reason) => {
+    expect(finishReport({ outcome: 'failed', reason, text }, 'M1')).toEqual({
+      state: 'done',
+      tone: 'warning',
+      title: 'M1',
+      msg: text,
+    });
+  });
+  it('a failed harness is an error', () => {
+    expect(finishReport({ outcome: 'failed', reason: 'harness', text }, 'M1').state).toBe('error');
+    expect(finishReport({ outcome: 'failed', text }).state).toBe('error');
+  });
+  it('a clean run is done without tone', () => {
+    expect(finishReport({ outcome: 'succeeded', text: 'done' }, 'M1')).toEqual({
+      state: 'done',
+      title: 'M1',
+      msg: 'done',
+    });
+  });
+  it('a clean run that needs you is done with a warning', () => {
+    expect(finishReport({ outcome: 'succeeded', text: 'done' }, 'M1', 2).tone).toBe('warning');
+  });
+  it('a stopped run is idle', () => {
+    expect(finishReport({ outcome: 'cancelled' }, 'M1')).toEqual({ state: 'idle', title: 'M1' });
   });
 });
 

@@ -69,6 +69,102 @@ describe('rust group', () => {
     expect(groups.rust).toEqual([...skills].sort());
   });
 
+  describe('lint set', () => {
+    const dir = 'skills/rust/rust-implementation';
+    // Minimal TOML reader: [tables] and key = value lines (values kept as text).
+    const parse = (text: string) => {
+      const out: Record<string, Record<string, string>> = {};
+      let table = '';
+      for (const raw of text.split('\n')) {
+        const line = raw.trim();
+        if (!line || line.startsWith('#')) continue;
+        const t = /^\[([\w.-]+)\]$/.exec(line);
+        if (t) {
+          table = t[1];
+          out[table] ??= {};
+          continue;
+        }
+        const kv = /^([\w-]+)\s*=\s*(.+)$/.exec(line);
+        expect(kv, `invalid TOML line: ${line}`).not.toBeNull();
+        expect(table).not.toBe('');
+        out[table][kv![1]] = kv![2];
+      }
+      return out;
+    };
+
+    it('workspace-lints.toml has pedantic and the five restriction lints', () => {
+      const t = parse(read(`${dir}/templates/workspace-lints.toml`));
+      const clippy = t['workspace.lints.clippy'];
+      expect(Object.keys(clippy).sort()).toEqual(
+        [
+          'allow_attributes',
+          'allow_attributes_without_reason',
+          'expect_used',
+          'panic',
+          'pedantic',
+          'unwrap_used',
+        ].sort(),
+      );
+      expect(clippy.pedantic).toMatch(/level = "warn".*priority = -1/);
+      for (const k of ['unwrap_used', 'expect_used', 'panic', 'allow_attributes'])
+        expect(clippy[k]).toBe('"warn"');
+      expect(t['workspace.lints.rust'].unsafe_code).toBe('"forbid"');
+    });
+
+    it('clippy.toml allows unwrap, expect and panic in tests', () => {
+      const text = read(`${dir}/templates/clippy.toml`);
+      const keys = parse(`[t]\n${text}`).t;
+      for (const k of ['unwrap', 'expect', 'panic', 'indexing-slicing'])
+        expect(keys[`allow-${k}-in-tests`]).toBe('true');
+      expect(text).toContain('# disallowed-methods');
+      expect(text).toContain('# disallowed-types');
+    });
+
+    it('lints.md states the expect rule and is linked from SKILL.md and conventions.md', () => {
+      const lints = read(`${dir}/references/lints.md`);
+      expect(lints).toContain('#[expect(lint, reason = "…")]');
+      expect(lints).toContain('unfulfilled_lint_expectations');
+      expect(lints).toContain('cargo clippy --all-targets --all-features -- -D warnings');
+      expect(read(`${dir}/SKILL.md`)).toContain('`references/lints.md`');
+      expect(read(`${dir}/references/conventions.md`)).toContain('`lints.md`');
+    });
+  });
+
+  describe('cargo-deny template', () => {
+    const dir = 'skills/rust/rust-implementation';
+
+    it('deny.toml has the four sections and the required keys', () => {
+      const text = read(`${dir}/templates/deny.toml`);
+      for (const t of ['graph', 'advisories', 'licenses', 'bans', 'sources'])
+        expect(text).toMatch(new RegExp(`^\\[${t}\\]$`, 'm'));
+      expect(text).toMatch(/^all-features = true$/m);
+      expect(text).toMatch(/^version = 2$/m);
+      expect(text).toMatch(/^wildcards = "deny"$/m);
+      expect(text).toMatch(/^allow-wildcard-paths = true$/m);
+      expect(text).toMatch(/^unknown-registry = "deny"$/m);
+      expect(text).toMatch(/^unknown-git = "deny"$/m);
+    });
+
+    it('every ignore example has a reason and an expiry', () => {
+      const files = ['templates/deny.toml', 'references/tauri.md', 'references/deny.md'];
+      let count = 0;
+      for (const f of files)
+        for (const m of read(`${dir}/${f}`).matchAll(/\{ id = "RUSTSEC[^}]*\}/g)) {
+          count++;
+          expect(m[0], m[0]).toMatch(/reason = "[^"]+"/);
+          expect(m[0], m[0]).toMatch(/expiry = "[^"]+"/);
+        }
+      expect(count).toBeGreaterThanOrEqual(3);
+    });
+
+    it('is linked from SKILL.md; deny.md names the network need; tauri.md the exit', () => {
+      expect(read(`${dir}/SKILL.md`)).toContain('`references/deny.md`');
+      expect(read(`${dir}/SKILL.md`)).toContain('`templates/deny.toml`');
+      expect(read(`${dir}/references/deny.md`)).toMatch(/needs the network/);
+      expect(read(`${dir}/references/tauri.md`)).toContain('when Tauri moves to GTK 4');
+    });
+  });
+
   describe('Tauri conventions', () => {
     const impl = () => read('skills/rust/rust-implementation/SKILL.md');
     const ref = () => read('skills/rust/rust-implementation/references/tauri.md');

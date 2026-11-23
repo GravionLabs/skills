@@ -5,7 +5,32 @@ Versioning follows [Semantic Versioning](https://semver.org/).
 
 ---
 
+## [5.6.0] — 2026-11-23
+
+### Bug Fixes
+- Deliver opens a second pull request for an issue that already has one (#928) (#935)
+- **deliver-loop**: Merged PR that does not close the PBI makes the loop stall (#893) (#936)
+- **deliver**: An incomplete run reports done with a warning, not error, over OSC 7501 (#921) (#937)
+
+
+### Documentation
+- Update CHANGELOG.md for v5.6.0 [skip ci]
+
+
+### Features
+- CI job template that scans the pull request range with gitleaks (#844) (#915)
+- Rust-implementation common lint set and clippy.toml template (#846) (#917)
+- Rust-implementation deny.toml template for cargo-deny (#847) (#918)
+- Convert-AllowToExpect.ps1 migrates allow attributes to expect with a reason (#848) (#919)
+- Gate mapping and review rules name cargo deny and the common lint set (#849) (#920)
+- **setup-oxc-husky**: Stylelint lints CSS and SCSS (#922) (#938)
+
+
 ## [5.5.0] — 2026-11-21
+
+### Documentation
+- Update CHANGELOG.md for v5.5.0 [skip ci]
+
 
 ### Features
 - **deliver**: The loop repeats its OSC 7501 status as a heartbeat (#912) (#913)

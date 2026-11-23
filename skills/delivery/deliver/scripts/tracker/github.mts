@@ -26,6 +26,7 @@ type PullRecord = {
   html_url: string;
   head: { ref: string; repo: { full_name: string } | null };
   merged_at?: string | null;
+  body?: string | null;
 };
 type Check = { name: string; bucket: string };
 
@@ -84,15 +85,26 @@ export function baseVerdict(required: string[], runs: CheckRun[]): BaseState {
   return { state: 'red', failed };
 }
 
+/** The body of a pull request closes issue `id` with a closing keyword (`Closes #12`, `fixes #12`, `Resolved #12`). */
+export function closesIssue(body: string | null | undefined, id: number): boolean {
+  return new RegExp(
+    `\\b(?:close[sd]?|fix(?:e[sd])?|resolve[sd]?)\\s*:?\\s+#${id}(?!\\d)`,
+    'i',
+  ).test(body ?? '');
+}
+
 /**
  * The merged pull request of issue `id` (head `<type>/<id>-…` of this repository) that was merged at or after
- * `since`, the moment the issue was last opened. The newest one wins.
+ * `since`, the moment the issue was last opened, and that closes the issue (`closes` decides; by default a closing
+ * keyword in its body). A merged pull request that does not close it (an ADR step of the issue) is no delivery.
+ * The newest one wins.
  */
 export function mergedPullSince(
   records: PullRecord[],
   repo: string,
   id: number,
   since: string,
+  closes: (p: PullRecord) => boolean = (p) => closesIssue(p.body, id),
 ): PullRecord | undefined {
   return records
     .filter(
@@ -100,9 +112,17 @@ export function mergedPullSince(
         p.merged_at &&
         Date.parse(p.merged_at) >= Date.parse(since) &&
         p.head.repo?.full_name === repo &&
-        new RegExp(`^[a-z]+/${id}-`).test(p.head.ref),
+        new RegExp(`^[a-z]+/${id}-`).test(p.head.ref) &&
+        closes(p),
     )
     .sort((a, b) => Date.parse(b.merged_at ?? '') - Date.parse(a.merged_at ?? ''))[0];
+}
+
+/** The open pull requests of issue `id` (head `<type>/<id>-…` of this repository), the oldest first. */
+export function openPullsOf(records: PullRecord[], repo: string, id: number): PullRecord[] {
+  return records
+    .filter((p) => p.head.repo?.full_name === repo && new RegExp(`^[a-z]+/${id}-`).test(p.head.ref))
+    .sort((a, b) => a.number - b.number);
 }
 
 /** The default branch takes merge commits (its ruleset allows only those, and the Conventional Commits stay visible); every other base takes squash. */
@@ -342,11 +362,10 @@ export function create({
     },
 
     pullOf(item: Item): Pull | undefined {
-      const found = list<PullRecord>(
-        `repos/${repo}/pulls?state=open&base=${base}&per_page=100`,
-      ).find(
-        (p) =>
-          p.head.repo?.full_name === repo && new RegExp(`^[a-z]+/${item.id}-`).test(p.head.ref),
+      const [found, ...others] = openPullsOf(
+        list<PullRecord>(`repos/${repo}/pulls?state=open&base=${base}&per_page=100`),
+        repo,
+        item.id,
       );
       return (
         found && {
@@ -354,6 +373,7 @@ export function create({
           title: found.title,
           url: found.html_url,
           branch: found.head.ref,
+          ...(others.length > 0 && { others: others.map((p) => p.html_url) }),
         }
       );
     },
@@ -372,7 +392,18 @@ export function create({
       const closed = api<PullRecord[]>(
         `repos/${repo}/pulls?state=closed&base=${base}&sort=updated&direction=desc&per_page=100`,
       );
-      const found = mergedPullSince(closed, repo, item.id, reopened ?? issue.created_at);
+      // closing references that the body does not spell out (a linked pull request) are read per candidate
+      const found = mergedPullSince(closed, repo, item.id, reopened ?? issue.created_at, (p) => {
+        if (closesIssue(p.body, item.id)) return true;
+        try {
+          const refs = JSON.parse(
+            gh('pr', 'view', String(p.number), '--repo', repo, '--json', 'closingIssuesReferences'),
+          ) as { closingIssuesReferences?: { number: number }[] };
+          return (refs.closingIssuesReferences ?? []).some((r) => r.number === item.id);
+        } catch {
+          return false;
+        }
+      });
       return (
         found && {
           id: found.number,
