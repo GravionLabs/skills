@@ -1,0 +1,12 @@
+{
+  "language": "en",
+  "folders": {
+    "inbox": "Inbox",
+    "subjects": "Subjects",
+    "sources": "Sources",
+    "exams": "Exams",
+    "templates": "Templates"
+  },
+  "files": { "profile": "Profile.md" },
+  "templates": { "folder": "Templates" }
+}

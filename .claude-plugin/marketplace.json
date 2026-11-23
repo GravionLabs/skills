@@ -164,6 +164,19 @@
         "./skills/vault/vault-summarize",
         "./skills/vault/vault-weekly-review"
       ]
+    },
+    {
+      "name": "school",
+      "description": "Skills for a school vault (Obsidian or Nixe): summary, timeline, exercises, flashcards and exam preparation from the transcribed class material of a pupil. Folders are found through the roles in .nixe/config.json, notes are written in the vault's language; profile assets for English and German vaults.",
+      "source": "./",
+      "strict": false,
+      "skills": [
+        "./skills/school/school-exam",
+        "./skills/school/school-exercises",
+        "./skills/school/school-flashcards",
+        "./skills/school/school-summary",
+        "./skills/school/school-timeline"
+      ]
     }
   ]
 }
