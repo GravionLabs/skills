@@ -1,0 +1,12 @@
+{
+  "language": "de",
+  "folders": {
+    "inbox": "00 Inbox",
+    "subjects": ".",
+    "sources": "Quellen",
+    "exams": "Klausuren",
+    "templates": "Vorlagen"
+  },
+  "files": { "profile": "Profil.md" },
+  "templates": { "folder": "Vorlagen" }
+}

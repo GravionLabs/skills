@@ -430,5 +430,45 @@
       "Clip this web page verbatim",
       "Write the minutes of yesterday's team meeting"
     ]
+  },
+  {
+    "skill": "school-summary",
+    "shouldTrigger": [
+      "Summarize the topic Weimar Republic for my history exam from my school notes",
+      "Write a study summary of this school topic"
+    ],
+    "shouldNotTrigger": ["Create flashcards for the topic", "Summarize this PDF into a note"]
+  },
+  {
+    "skill": "school-timeline",
+    "shouldTrigger": [
+      "Make a timeline of the French Revolution for school",
+      "Create a Mermaid timeline of this history topic from my class notes"
+    ],
+    "shouldNotTrigger": ["Write a study summary of the topic", "Create an exam study plan"]
+  },
+  {
+    "skill": "school-exercises",
+    "shouldTrigger": [
+      "Create practice exercises with solutions for the topic fractions",
+      "I want to quiz myself on this school topic, make exercises"
+    ],
+    "shouldNotTrigger": ["Create flashcards for vocabulary", "Write a mock exam for Friday"]
+  },
+  {
+    "skill": "school-flashcards",
+    "shouldTrigger": [
+      "Make flashcards for the French vocabulary of unit 3 in Spaced Repetition format",
+      "Create flashcards of this school topic"
+    ],
+    "shouldNotTrigger": ["Create exercises with solutions", "Summarize the topic"]
+  },
+  {
+    "skill": "school-exam",
+    "shouldTrigger": [
+      "I have a maths exam on 12 December, prepare a study plan and a mock exam",
+      "Create an exam note and a mock exam for my history test"
+    ],
+    "shouldNotTrigger": ["Create flashcards for my vocabulary list", "Write a summary of the topic"]
   }
 ]

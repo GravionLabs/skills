@@ -43,6 +43,13 @@
     "rust-implementation",
     "rust-test"
   ],
+  "school": [
+    "school-exam",
+    "school-exercises",
+    "school-flashcards",
+    "school-summary",
+    "school-timeline"
+  ],
   "shared": [
     "adr",
     "agents-md",
