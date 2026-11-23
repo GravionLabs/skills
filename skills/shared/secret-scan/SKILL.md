@@ -28,7 +28,7 @@ Agents copy tokens from logs, `.env` files and command output into code, tests a
 }
 ```
 
-4. Run the same two commands in a CI job on pull requests (checkout with `fetch-depth: 0`, the `gitleaks` binary installed from its release; not `gitleaks-action`).
+4. Copy `templates/secret-scan.yml` to `.github/workflows/`: on `pull_request` it scans `origin/<base>..HEAD` with `--redact`, installs the pinned `gitleaks` release binary after a sha256 check (update version and hash together), no `gitleaks-action`. Repositories on the shared `GravionLabs/ci` get the job there.
 
 ## Scan
 

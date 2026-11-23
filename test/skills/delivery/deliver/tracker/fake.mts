@@ -41,6 +41,8 @@ type Scenario = {
   mergedBefore?: number[];
   /** Items whose pull request is merged by someone else while their session runs. */
   mergedDuring?: number[];
+  /** Items that have a second open pull request once their first one exists. */
+  twoPulls?: number[];
 };
 
 export function create(): Tracker {
@@ -97,6 +99,9 @@ export function create(): Tracker {
         title: item.title,
         url: `https://example.test/pull/${id}`,
         branch: `feat/${item.id}-fake`,
+        ...((scenario.twoPulls ?? []).includes(item.id) && {
+          others: [`https://example.test/pull/${id + 50}`],
+        }),
       };
     },
     mergedPullOf(item: Item): Pull | undefined {

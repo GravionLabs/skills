@@ -6,7 +6,15 @@ import { openSync, writeSync } from 'node:fs';
 
 export type State = 'idle' | 'working' | 'blocked' | 'done' | 'error' | 'clear';
 export type Kind = 'permission' | 'question' | 'auth';
-export type Report = { state: State; title?: string; msg?: string; kind?: Kind; progress?: number };
+export type Tone = 'warning';
+export type Report = {
+  state: State;
+  title?: string;
+  msg?: string;
+  kind?: Kind;
+  progress?: number;
+  tone?: Tone;
+};
 
 const MAX_TITLE = 192;
 const MAX_MSG = 2048;
@@ -36,7 +44,7 @@ function limit(text: string, max: number): string {
 const b64 = (text: string, max: number): string =>
   Buffer.from(limit(clean(text), max), 'utf8').toString('base64');
 
-/** The escape sequence of one report; `kind` is only kept with `blocked`. */
+/** The escape sequence of one report; `kind` is only kept with `blocked`, `tone` with `done`. */
 export function encodeStatus(report: Report): string {
   const pairs = [`state=${report.state}`, `app=${APP}`];
   if (report.title) pairs.push(`title=${b64(report.title, MAX_TITLE)}`);
@@ -45,7 +53,29 @@ export function encodeStatus(report: Report): string {
     pairs.push(`progress=${Math.min(100, Math.max(0, report.progress))}`);
   }
   if (report.state === 'blocked' && report.kind) pairs.push(`kind=${report.kind}`);
+  if (report.state === 'done' && report.tone) pairs.push(`tone=${report.tone}`);
   return `\x1b]7501;${pairs.join(':')}\x1b\\`;
+}
+
+/**
+ * The report of the end of a run (ADR 0007): `error` only when the run failed (`reason: 'harness'`), a
+ * run that is incomplete (blocked, waiting for a handed-over PR) or leaves issues for the owner (`needsYou` > 0) is `done` with `tone=warning`,
+ * a stopped run `idle`, a clean run plain `done`.
+ */
+export function finishReport(
+  body: { outcome?: unknown; reason?: unknown; text?: unknown } | undefined,
+  title?: string,
+  needsYou = 0,
+): Report {
+  const msg = String(body?.text ?? '');
+  if (body?.outcome === 'cancelled') return { state: 'idle', title };
+  if (body?.outcome === 'succeeded') {
+    return needsYou > 0
+      ? { state: 'done', tone: 'warning', title, msg }
+      : { state: 'done', title, msg };
+  }
+  if (body?.reason === 'incomplete') return { state: 'done', tone: 'warning', title, msg };
+  return { state: 'error', title, msg };
 }
 
 export type Writer = (data: string) => void;

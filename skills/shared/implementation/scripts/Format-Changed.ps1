@@ -52,6 +52,8 @@ function Test-TopFile([string]$Name) { Test-Path -LiteralPath (Join-Path $root $
 $hasBiome = (Test-TopFile 'biome.json') -or (Test-TopFile 'biome.jsonc')
 $hasOxfmt = (Test-TopFile '.oxfmtrc.json') -or (Test-TopFile '.oxfmtrc.jsonc')
 $hasOxlint = Test-TopFile '.oxlintrc.json'
+# Stylelint (ADR 0008): any stylelint.config.* or .stylelintrc* at the toplevel
+$hasStylelint = [bool](Get-ChildItem -LiteralPath $root -File -Force -ErrorAction SilentlyContinue | Where-Object { $_.Name -like 'stylelint.config.*' -or $_.Name -like '.stylelintrc*' })
 
 function Stop-Fail([string]$Message) { Write-Error "error: $Message" -ErrorAction Continue; exit 1 }
 # `1 -is [pscustomobject]` is true in PowerShell: ask for the real type
@@ -242,6 +244,12 @@ if ($hasOxlint) {
   $lintDefaults['ts'] = @(@{ Tool = 'oxlint'; Ext = $exts5 + '.jsx'; Requires = 'npx --no-install oxlint --version'; Lint = @('npx --no-install oxlint --no-error-on-unmatched-pattern {files}') })
   $lintDefaults['ng'] = @(@{ Tool = 'oxlint'; Ext = $exts5; Requires = 'npx --no-install oxlint --version'; Lint = @('npx --no-install oxlint --no-error-on-unmatched-pattern {files}') },
     @{ Tool = 'eslint'; Ext = @('.html'); Requires = 'npx --no-install eslint --version'; Lint = @('npx --no-install eslint {files}') })
+}
+# stylelint.config.* (ADR 0008): lint .css/.scss too, wherever the language lints (ts, ng)
+if ($hasStylelint) {
+  foreach ($lang in 'ts', 'ng') {
+    $lintDefaults[$lang] += @{ Tool = 'stylelint'; Ext = @('.css', '.scss'); Requires = 'npx --no-install stylelint --version'; Lint = @('npx --no-install stylelint {files}') }
+  }
 }
 
 $steps = @()

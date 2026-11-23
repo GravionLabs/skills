@@ -11,6 +11,9 @@
 .PARAMETER IDE
   IDE-specific config to generate: 'vscode', 'webstorm', 'both', or 'none'.
 
+.PARAMETER Stylelint
+  Add Stylelint for CSS and SCSS (ADR 0008). Always on for Angular; optional for 'ts'.
+
 .PARAMETER WhatIf
   Prints the plan (packages, files, scripts) as JSON and changes nothing.
 #>
@@ -18,6 +21,7 @@ param(
   [ValidateSet('auto', 'ts', 'angular')][string]$ProjectType = 'auto',
   [ValidatePattern('^[a-z][a-z0-9-]*$')][string]$SelectorPrefix = 'app',
   [ValidateSet('vscode', 'webstorm', 'both', 'none')][string]$IDE = 'vscode',
+  [switch]$Stylelint,
   [switch]$WhatIf
 )
 
@@ -30,10 +34,13 @@ $Versions = [ordered]@{ 'oxlint' = '1.93.0'; 'oxfmt' = '0.78.0'; 'oxlint-tsgolin
 
 if (-not (Test-Path 'package.json')) { throw 'No package.json in the current directory: run from the project root.' }
 $angular = if ($ProjectType -eq 'auto') { Test-Path 'angular.json' } else { $ProjectType -eq 'angular' }
+$stylelintOn = $angular -or $Stylelint
 $variant = if ($angular) { 'angular' } else { 'plain-ts' }
 
 $packages = @($Versions.GetEnumerator() | ForEach-Object { "$($_.Key)@$($_.Value)" }) + @('husky', 'lint-staged')
 if ($angular) { $packages += @('eslint', 'angular-eslint', 'typescript-eslint', '@angular-eslint/eslint-plugin') }
+
+if ($stylelintOn) { $packages += @('stylelint', 'stylelint-config-standard-scss') }
 
 $files = [ordered]@{
   '.oxfmtrc.json'  = Join-Path $TemplatesDir '.oxfmtrc.json.template'
@@ -44,14 +51,20 @@ if ($angular) {
   foreach ($f in 'probe.ts', 'probe.html', 'check.mjs') { $files["lint-probe/$f"] = Join-Path $TemplatesDir "angular/lint-probe/$f" }
 }
 
+if ($stylelintOn) { $files['stylelint.config.mjs'] = Join-Path $TemplatesDir 'stylelint.config.mjs' }
+
 $code = '*.{ts,tsx,js,mjs,cjs}'
-$data = if ($angular) { '*.{json,md,yml,yaml,css,scss}' } else { '*.{json,md,yml,yaml,css}' }
+$data = if ($stylelintOn) { '*.{json,md,yml,yaml}' } else { '*.{json,md,yml,yaml,css}' }
 $fmt = 'oxfmt --no-error-on-unmatched-pattern'
 $lintStaged = [ordered]@{ $code = @('oxlint --fix --no-error-on-unmatched-pattern', $fmt); $data = @($fmt) }
+if ($stylelintOn) { $lintStaged['*.{css,scss}'] = @('stylelint --fix --allow-empty-input', $fmt) }
 if ($angular) { $lintStaged['*.html'] = @('eslint --fix --no-error-on-unmatched-pattern', $fmt) }
 
 $lint = if ($angular) { 'oxlint && eslint --no-error-on-unmatched-pattern "**/*.html" && node lint-probe/check.mjs' } else { 'oxlint' }
+$stylesCmd = 'stylelint --allow-empty-input "**/*.{css,scss}"'
+if ($stylelintOn) { $lint += " && $stylesCmd" }
 $scripts = [ordered]@{ 'lint' = $lint; 'lint:fix' = 'oxlint --fix'; 'format' = 'oxfmt'; 'format:check' = 'oxfmt --check' }
+if ($stylelintOn) { $scripts['lint:styles'] = $stylesCmd }
 
 $previous = @(
   @('biome.json', 'biome.jsonc') | Where-Object { Test-Path $_ }

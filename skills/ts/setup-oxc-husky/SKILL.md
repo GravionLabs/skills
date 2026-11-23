@@ -14,7 +14,8 @@ Set up oxlint and oxfmt with Husky for a plain TypeScript, Node.js or Angular pr
 - **oxlint** (`.oxlintrc.json`): correctness rules plus a fixed rule set, type-aware (`options.typeAware`, needs `oxlint-tsgolint`); Angular loads `@angular-eslint/eslint-plugin` as a JS plugin
 - **ESLint** (Angular only, `eslint.config.mjs`): `**/*.html` only, `templateRecommended` + `templateAccessibility`; oxlint cannot parse templates
 - **Lint probe** (Angular only, `lint-probe/`): a component and a template that break 8 known rules; `node lint-probe/check.mjs` (part of `lint`) fails when oxlint or ESLint stops reporting one
-- **Husky** + **lint-staged** running `oxlint --fix` and `oxfmt` (Angular: `eslint --fix` on `*.html`) on staged files
+- **Stylelint** (`stylelint.config.mjs`, `stylelint-config-standard-scss`; Angular always, plain TS with `-Stylelint`; ADR 0008): lints `*.css`, `*.scss` (`lint:styles`, part of `lint`); oxfmt formats them
+- **Husky** + **lint-staged** running `oxlint --fix` and `oxfmt` (Angular: `eslint --fix` on `*.html`; Stylelint: `stylelint --fix`, then `oxfmt` on `*.{css,scss}`) on staged files
 
 oxlint, oxfmt and oxlint-tsgolint are pinned to exact versions (`$Versions` in the script): JS plugins are alpha, and an update must pass the probe.
 
@@ -25,7 +26,7 @@ oxlint, oxfmt and oxlint-tsgolint are pinned to exact versions (`$Versions` in t
 3. Run it:
 
    ```powershell
-   pwsh scripts/Setup-Oxc.ps1 [-ProjectType auto|ts|angular] [-SelectorPrefix app] [-IDE vscode]
+   pwsh scripts/Setup-Oxc.ps1 [-ProjectType auto|ts|angular] [-SelectorPrefix app] [-Stylelint] [-IDE vscode]
    ```
 
    It installs the packages with pnpm or npm (detected from the lockfile / `packageManager` field) at exact versions, copies the configs unless they exist, initializes Husky, adds `lint-staged` and the `lint`, `lint:fix`, `format`, `format:check` scripts (existing scripts are kept and reported), and writes the IDE settings (VS Code: `oxc.oxc-vscode`).
@@ -36,6 +37,7 @@ oxlint, oxfmt and oxlint-tsgolint are pinned to exact versions (`$Versions` in t
 
 ## Migration
 
+- **From Biome: CSS rules move to Stylelint** (`declaration-block-no-duplicate-properties`, `selector-pseudo-element-no-unknown` with `ng-deep` allowed are in the template); run the script with `-Stylelint` in a plain TS project.
 - **From Biome**: no migration tool for lint rules; map the rules of `biome.json` by hand (`useNodejsImportProtocol` → `unicorn/prefer-node-protocol`, `noExplicitAny` → `typescript/no-explicit-any`, `noNonNullAssertion` → `typescript/no-non-null-assertion`, `useTemplate` → `prefer-template`, `useImportType` → `typescript/consistent-type-imports`, `noFocusedTests` → `vitest/no-focused-tests`). `npx oxfmt --migrate=biome` keeps the format options but drops the `files.includes` allowlist: add ignore patterns for templates, fixtures and generated files.
 - **From Prettier**: `npx oxfmt --migrate=prettier` (keeps the Angular parser override as `associations`).
 - **From ESLint**: `npx @oxlint/migrate` converts the TypeScript rules; list the skipped ones in the PR. Angular: move inline `template:` to `.html` files first (`component-max-inline-declarations` with `template: 0` then keeps them out), and drop `processInlineTemplates`.
@@ -50,6 +52,7 @@ oxlint, oxfmt and oxlint-tsgolint are pinned to exact versions (`$Versions` in t
 | `angular/.oxlintrc.json.template`  | As plain TS plus `@angular-eslint/eslint-plugin` (selector prefix, outputs, lifecycle, standalone, no inline templates outside specs) |
 | `angular/eslint.config.mjs`        | Template rules and accessibility rules on `**/*.html`                                                                                 |
 | `angular/lint-probe/`              | `probe.ts`, `probe.html` and `check.mjs` (the regression check of the JS plugin and the template rules)                               |
+| `stylelint.config.mjs`             | Stylelint: standard-scss, former Biome CSS rules, token rules of `ng-implementation` `references/style-lint.md` (single source)       |
 | `.husky/pre-commit`                | Runs `npx lint-staged` on commit                                                                                                      |
 
 ## Constraints

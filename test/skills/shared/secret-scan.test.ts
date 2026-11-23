@@ -1,3 +1,4 @@
+import { parse as parseYaml } from 'yaml';
 import { spawnSync } from 'node:child_process';
 import * as fs from 'node:fs';
 import * as os from 'node:os';
@@ -128,5 +129,29 @@ describe('Invoke-SecretScan.ps1 without gitleaks', () => {
     const r = spawnSync('pwsh', ['-NoProfile', '-File', SCAN], { encoding: 'utf8' });
     expect(r.status).toBe(2);
     expect(r.stderr).toContain('not installed');
+  });
+});
+
+describe('secret-scan CI template', () => {
+  const file = path.join(skill, 'templates/secret-scan.yml');
+  const text = fs.readFileSync(file, 'utf8');
+  const doc = parseYaml(text);
+
+  it('has a timeout and read-only permissions', () => {
+    expect(doc.permissions).toEqual({ contents: 'read' });
+    expect(doc.jobs.gitleaks['timeout-minutes']).toBeGreaterThan(0);
+  });
+
+  it('does not use gitleaks-action and pins actions by SHA', () => {
+    expect(text).not.toMatch(/gitleaks\/gitleaks-action/);
+    for (const m of text.matchAll(/uses:\s*(\S+)/g)) expect(m[1]).toMatch(/@[0-9a-f]{40}$/);
+  });
+
+  it('scans only the pull request range, redacted, with a checked pinned binary', () => {
+    expect(text).toMatch(/fetch-depth: 0/);
+    expect(text).toMatch(/--log-opts="origin\/\$\{BASE_REF\}\.\.HEAD"/);
+    expect(text).toMatch(/--redact/);
+    expect(doc.env.GITLEAKS_SHA256).toMatch(/^[0-9a-f]{64}$/);
+    expect(text).toMatch(/sha256sum --check/);
   });
 });

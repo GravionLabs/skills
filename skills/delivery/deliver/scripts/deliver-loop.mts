@@ -19,7 +19,7 @@ import { createInterface } from 'node:readline';
 import { parseArgs } from 'node:util';
 import { appSettings, tokenSource as makeSource } from './app-token.mts';
 import { type Emit, openEvents } from './events.mts';
-import { programStatus } from './program-status.mts';
+import { finishReport, programStatus } from './program-status.mts';
 import { HARNESSES } from './harness.mts';
 import { adoptLegacyEnv, unknownConfigKeys } from './legacy.mts';
 import { killTree, launch, promptPath } from './process.mts';
@@ -241,6 +241,12 @@ async function guard(pull: Pull): Promise<string | undefined> {
   }
   if (hits.length === 0) return undefined;
   return `changes protected paths (${hits.slice(0, 3).join(', ')}${hits.length > 3 ? ', …' : ''})${HANDS_OFF}`;
+}
+const MORE_PULLS = 'more than one open pull request';
+/** Two open pull requests of one item: a person closes the stale one, the loop merges neither. */
+function morePulls(pull: Pull | undefined): string | undefined {
+  if (!pull?.others?.length) return undefined;
+  return `${MORE_PULLS} (${[pull.url, ...pull.others].join(', ')})${HANDS_OFF}`;
 }
 /** The reason of a `result: blocked` session is kept next to the reason of the loop. */
 function withBlocked(reason: string, session: Session): string {
@@ -586,12 +592,12 @@ async function deliver(item: Item): Promise<{ reason?: string; pull?: Pull }> {
   let pull: Pull | undefined;
   let reason: string | undefined;
   const started = Date.now();
-  // a pull request of an earlier run that changes a protected path is handed over before a session is paid for;
-  // a failed read is no verdict here, the guard after the session asks again
+  // a pull request of an earlier run that changes a protected path, or two open pull requests of the item, are
+  // handed over before a session is paid for; a failed read is no verdict here, the guard after the session asks again
   const earlier = tracker.pullOf(item);
   if (earlier) {
-    const early = await guard(earlier);
-    if (early?.startsWith('changes protected paths')) {
+    const early = morePulls(earlier) ?? (await guard(earlier));
+    if (early?.startsWith('changes protected paths') || early?.startsWith(MORE_PULLS)) {
       appendFileSync(
         path.join(runDir, 'results.jsonl'),
         `${JSON.stringify({
@@ -636,7 +642,7 @@ async function deliver(item: Item): Promise<{ reason?: string; pull?: Pull }> {
       settle();
       break;
     }
-    reason = await guard(pull);
+    reason = morePulls(pull) ?? (await guard(pull));
     if (reason) {
       settle();
       break;
@@ -753,16 +759,7 @@ emit = (type, body, tone) => {
     blockedShown = false;
     report({ state: 'working', title: statusTitle });
   } else if (type === 'run.finished') {
-    const outcome = body?.outcome;
-    report(
-      outcome === 'cancelled'
-        ? { state: 'idle', title: statusTitle }
-        : {
-            state: outcome === 'succeeded' ? 'done' : 'error',
-            title: statusTitle,
-            msg: String(body?.text ?? ''),
-          },
-    );
+    report(finishReport(body, statusTitle, needsYou.length));
   }
 };
 log(`run ${runId} in ${tracker.repo}, results: ${path.join(runDir, 'results.jsonl')}`, 'dim');
@@ -1105,12 +1102,13 @@ appendFileSync(
   })}\n`,
 );
 // An incomplete run (issues set aside or waiting) is no success: the agent-events format has no
-// other outcome for it than `failed`; the counts are in the text.
+// other outcome for it than `failed`; the counts are in the text. OSC 7501 shows it as `done` with
+// `tone=warning`; only `reason: 'harness'` (the harness failed) is an `error`.
 emit(
   'run.finished',
   {
     outcome: stopped ? 'cancelled' : clean ? 'succeeded' : 'failed',
-    ...(stopped || clean ? {} : { reason: 'incomplete' }),
+    ...(stopped || clean ? {} : { reason: status === 'failed' ? 'harness' : 'incomplete' }),
     text: `${status}: merged ${merged.length}, set aside ${aside.size}, waiting ${waiting.length}${needsYou.length ? `, needs you ${needsYou.length}` : ''}`,
   },
   stopped ? 'neutral' : clean ? 'success' : 'warning',
