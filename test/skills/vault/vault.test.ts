@@ -20,7 +20,7 @@ const read = (n: string) => fs.readFileSync(path.join(dir, n, 'SKILL.md'), 'utf-
 
 describe('vault skills (#924)', () => {
   it('are all in the group, named like their folder, within 100 lines', () => {
-    expect(groupSkills('vault').sort()).toEqual([...names].sort());
+    expect(groupSkills('vault').sort()).toEqual([...names, 'vault-setup'].sort());
     for (const n of names) {
       const s = read(n);
       expect(s).toMatch(new RegExp(`^---\\nname: ${n}\\n`));

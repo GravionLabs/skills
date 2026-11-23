@@ -87,6 +87,7 @@
     "vault-inbox",
     "vault-meeting",
     "vault-recipe",
+    "vault-setup",
     "vault-summarize",
     "vault-weekly-review"
   ]

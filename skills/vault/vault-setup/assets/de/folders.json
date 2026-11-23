@@ -1,0 +1,15 @@
+{
+  "language": "de",
+  "folders": {
+    "inbox": "Posteingang",
+    "journal": "Tagebuch",
+    "templates": "Vorlagen",
+    "attachments": "Anhänge",
+    "projects": "Projekte",
+    "areas": "Bereiche",
+    "resources": "Ressourcen",
+    "archive": "Archiv",
+    "clippings": "Ressourcen/Ausschnitte"
+  },
+  "templates": { "folder": "Vorlagen" }
+}
