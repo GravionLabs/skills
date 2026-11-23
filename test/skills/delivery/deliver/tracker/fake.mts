@@ -21,6 +21,8 @@ type Scenario = {
   filesLater?: string[];
   /** The first this many reads of the changed files fail. */
   filesFailures?: number;
+  /** `package.json` contents by commit: `base` is the merge base, `head` the commit that is judged (missing: no such file). */
+  packageJson?: { base?: string; head?: string };
   required?: string[];
   needsDecision?: boolean;
   /** Every gate() call blocks this long, as a slow call of a real tracker does. */
@@ -175,6 +177,11 @@ export function create(): Tracker {
       const reads = fileReads - (scenario.filesFailures ?? 0);
       const files = reads > 1 ? (scenario.filesLater ?? scenario.files) : scenario.files;
       return files ?? ['src/a.ts'];
+    },
+    compareRefs: (_pull: Pull, head?: string) => ({ base: 'base-sha', head: head ?? 'head-sha' }),
+    fileAt(sha: string): string | undefined {
+      if (!scenario.packageJson) throw new Error('HTTP 500');
+      return sha === 'base-sha' ? scenario.packageJson.base : scenario.packageJson.head;
     },
     defaultBranch: () => 'main',
     releaseTests: (): Item[] =>
