@@ -523,6 +523,40 @@ async function seeStop(): Promise<void> {
   await new Promise((turn) => setImmediate(turn));
 }
 
+// a handed-over pull request with a conflict gets one repair session per run, never a merge by the loop
+const conflictTried = new Set<number>();
+/**
+ * Returns nothing when the gate of the pull request is no conflict (or it was tried in this run), else one line:
+ * `conflict repaired` or `conflict not repaired: <why>` after one session (`/deliver <nr>` merges the base in).
+ */
+async function repairConflict(
+  item: Item,
+  pull: Pull,
+  worktree: string,
+  sessions: Session[],
+): Promise<string | undefined> {
+  if (conflictTried.has(item.id) || stopped) return undefined;
+  const read = (): Gate | undefined => {
+    try {
+      return tracker.gate(pull);
+    } catch {
+      // a failing read is no verdict: no session
+      return undefined;
+    }
+  };
+  if (read()?.state !== 'conflict') return undefined;
+  conflictTried.add(item.id);
+  log(`#${item.id} ${pull.url} has a conflict, one repair session`, 'warn');
+  const ran = await runSession(item, worktree, sessions);
+  if (stopped) return undefined;
+  if (ran.reason) return `conflict not repaired: ${ran.reason}`;
+  if (ran.session.exit !== 0)
+    return `conflict not repaired: session failed (exit ${ran.session.exit})`;
+  const after = read();
+  if (after?.state === 'conflict') return `conflict not repaired: ${after.detail}`;
+  return 'conflict repaired';
+}
+
 /** Waits for the gate and merges. Returns nothing when merged, else the reason. */
 async function merge(pull: Pull): Promise<string | undefined> {
   const start = Date.now();
@@ -594,10 +628,26 @@ async function deliver(item: Item): Promise<{ reason?: string; pull?: Pull }> {
   const started = Date.now();
   // a pull request of an earlier run that changes a protected path, or two open pull requests of the item, are
   // handed over before a session is paid for; a failed read is no verdict here, the guard after the session asks again
-  const earlier = tracker.pullOf(item);
+  let earlier = tracker.pullOf(item);
   if (earlier) {
-    const early = morePulls(earlier) ?? (await guard(earlier));
-    if (early?.startsWith('changes protected paths') || early?.startsWith(MORE_PULLS)) {
+    let early = morePulls(earlier) ?? (await guard(earlier));
+    let note: string | undefined;
+    if (early?.startsWith('changes protected paths')) {
+      note = await repairConflict(item, earlier, worktree, sessions);
+      if (note) {
+        // the repair may have changed the pull request: the guard runs again
+        earlier = tracker.pullOf(item) ?? earlier;
+        early = morePulls(earlier) ?? (await guard(earlier));
+        if (early) early = `${note}, ${early}`;
+        else log(`#${item.id} ${note}`, 'info');
+      }
+    }
+    if (
+      early &&
+      (early.includes('changes protected paths') || early.startsWith(MORE_PULLS)) &&
+      !stopped
+    ) {
+      if (note) log(`#${item.id} ${note}`, note.startsWith('conflict repaired') ? 'info' : 'warn');
       appendFileSync(
         path.join(runDir, 'results.jsonl'),
         `${JSON.stringify({
@@ -613,6 +663,7 @@ async function deliver(item: Item): Promise<{ reason?: string; pull?: Pull }> {
       log(`#${item.id} worktree kept: ${worktree}`, 'warn');
       return { reason: early, pull: earlier };
     }
+    if (stopped) return { reason: 'stopped', pull: earlier };
   }
   for (let round = 1; round <= 2; round++) {
     const ran = await runSession(item, worktree, sessions);
@@ -785,6 +836,7 @@ emit('run.started', {
 const aside = new Map<number, string>();
 // handed over by rule (the guard): a person merges the pull request, it is no failure
 const handedOver = new Map<number, string>();
+const handedPulls = new Map<number, { item: Item; pull: Pull }>();
 const merged: string[] = [];
 let waiting: string[] = [];
 let total = 0;
@@ -928,6 +980,7 @@ try {
       const planned = reason.endsWith(HANDS_OFF);
       const why = planned ? reason.slice(0, -HANDS_OFF.length) : reason;
       (planned ? handedOver : aside).set(next.id, `${why}${pull ? `, ${pull.url}` : ''}`);
+      if (planned && pull) handedPulls.set(next.id, { item: next, pull });
       log(
         planned
           ? `#${next.id} handed over: ${why}, merge it yourself`
@@ -959,6 +1012,37 @@ try {
   emit('run.finished', { outcome: 'failed', text: firstLine(error).slice(0, 300) }, 'danger');
   log(`run failed: ${firstLine(error)}`, 'bad');
   process.exit(1);
+}
+
+// Before the run ends: a pull request handed over earlier may conflict with the base by now. One repair session
+// per pull request and run; the loop never merges it, the person does.
+if (!stopped && !harnessDead && !baseBlocked) {
+  for (const [nr, { item, pull }] of handedPulls) {
+    const reason = handedOver.get(nr);
+    if (stopped || harnessDead || !reason || reason.includes(MORE_PULLS)) continue;
+    const worktree = path.join(path.dirname(root), `${path.basename(root)}-wt-${nr}`);
+    if (!existsSync(worktree))
+      run('git', ['worktree', 'add', '--detach', worktree, `origin/${BASE}`], root);
+    const sessions: Session[] = [];
+    const note = await repairConflict(item, pull, worktree, sessions).catch(
+      (error) => `conflict not repaired: ${firstLine(error)}`,
+    );
+    if (!note) continue;
+    log(`#${nr} ${note}, handed over`, note.startsWith('conflict repaired') ? 'info' : 'warn');
+    handedOver.set(nr, `${note}, ${reason}`);
+    // the line of the issue in results.jsonl says it too
+    const file = path.join(runDir, 'results.jsonl');
+    const rows = readFileSync(file, 'utf8')
+      .split('\n')
+      .filter(Boolean)
+      .map((line) => {
+        const row = JSON.parse(line) as Record<string, unknown>;
+        if (row.issue !== nr || typeof row.reason !== 'string') return line;
+        const all = [...((row.sessions as Session[]) ?? []), ...sessions];
+        return JSON.stringify({ ...row, reason: `${note}, ${row.reason}`, sessions: all });
+      });
+    writeFileSync(file, `${rows.join('\n')}\n`);
+  }
 }
 
 // A fully delivered milestone ends with the release pull request, which a person merges.
