@@ -242,6 +242,12 @@ async function guard(pull: Pull): Promise<string | undefined> {
   if (hits.length === 0) return undefined;
   return `changes protected paths (${hits.slice(0, 3).join(', ')}${hits.length > 3 ? ', …' : ''})${HANDS_OFF}`;
 }
+const MORE_PULLS = 'more than one open pull request';
+/** Two open pull requests of one item: a person closes the stale one, the loop merges neither. */
+function morePulls(pull: Pull | undefined): string | undefined {
+  if (!pull?.others?.length) return undefined;
+  return `${MORE_PULLS} (${[pull.url, ...pull.others].join(', ')})${HANDS_OFF}`;
+}
 /** The reason of a `result: blocked` session is kept next to the reason of the loop. */
 function withBlocked(reason: string, session: Session): string {
   if (!session.blocked) return reason;
@@ -586,12 +592,12 @@ async function deliver(item: Item): Promise<{ reason?: string; pull?: Pull }> {
   let pull: Pull | undefined;
   let reason: string | undefined;
   const started = Date.now();
-  // a pull request of an earlier run that changes a protected path is handed over before a session is paid for;
-  // a failed read is no verdict here, the guard after the session asks again
+  // a pull request of an earlier run that changes a protected path, or two open pull requests of the item, are
+  // handed over before a session is paid for; a failed read is no verdict here, the guard after the session asks again
   const earlier = tracker.pullOf(item);
   if (earlier) {
-    const early = await guard(earlier);
-    if (early?.startsWith('changes protected paths')) {
+    const early = morePulls(earlier) ?? (await guard(earlier));
+    if (early?.startsWith('changes protected paths') || early?.startsWith(MORE_PULLS)) {
       appendFileSync(
         path.join(runDir, 'results.jsonl'),
         `${JSON.stringify({
@@ -636,7 +642,7 @@ async function deliver(item: Item): Promise<{ reason?: string; pull?: Pull }> {
       settle();
       break;
     }
-    reason = await guard(pull);
+    reason = morePulls(pull) ?? (await guard(pull));
     if (reason) {
       settle();
       break;

@@ -12,7 +12,8 @@ export type Subject = { kind: string; id: string; title: string; url?: string };
 /** `body` is the text the session works from: the loop hands it over, the session does not fetch it. */
 export type Item = { id: number; title: string; url: string; labels: string[]; body: string };
 
-export type Pull = { id: number; title: string; url: string; branch: string };
+/** `others`: the URLs of further open pull requests of the same item (`pullOf` only); the loop merges none of them. */
+export type Pull = { id: number; title: string; url: string; branch: string; others?: string[] };
 
 /**
  * Where a pull request stands on its way to the merge.
@@ -67,7 +68,7 @@ export interface Tracker {
   waitReason(item: Item): string | undefined;
   /** The session asked a question instead of delivering. */
   needsDecision(item: Item): boolean;
-  /** The open pull request of the item, found by its branch `<type>/<id>-…`. */
+  /** The open pull request of the item, found by its branch `<type>/<id>-…`; more than one: the oldest, the rest in `others`. */
   pullOf(item: Item): Pull | undefined;
   /**
    * A pull request of the item that is already merged into the base branch, merged after the item was last
