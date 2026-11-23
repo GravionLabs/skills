@@ -152,7 +152,7 @@
     },
     {
       "name": "vault",
-      "description": "Skills for a Markdown notes vault (Obsidian or Nixe): inbox, clip, summarize, meeting, decision, weekly review, recipe. Folders are found through the roles in .nixe/config.json, notes are written in the vault's language.",
+      "description": "Skills for a Markdown notes vault (Obsidian or Nixe): inbox, clip, summarize, meeting, decision, weekly review, recipe, setup (PARA or school profile, folder roles, update of the core rules). Folders are found through the roles in .nixe/config.json, notes are written in the vault's language.",
       "source": "./",
       "strict": false,
       "skills": [
@@ -161,6 +161,7 @@
         "./skills/vault/vault-inbox",
         "./skills/vault/vault-meeting",
         "./skills/vault/vault-recipe",
+        "./skills/vault/vault-setup",
         "./skills/vault/vault-summarize",
         "./skills/vault/vault-weekly-review"
       ]

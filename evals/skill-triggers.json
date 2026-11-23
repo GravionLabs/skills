@@ -432,6 +432,17 @@
     ]
   },
   {
+    "skill": "vault-setup",
+    "shouldTrigger": [
+      "Set up my notes vault as a school vault in German",
+      "Add a folder role recipes to my vault and update the vault core rules"
+    ],
+    "shouldNotTrigger": [
+      "Save this recipe from a URL as a note",
+      "Write the minutes of today's meeting"
+    ]
+  },
+  {
     "skill": "school-summary",
     "shouldTrigger": [
       "Summarize the topic Weimar Republic for my history exam from my school notes",
