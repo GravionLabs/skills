@@ -1348,4 +1348,17 @@ describe('deliver SKILL.md branch update rule', () => {
     expect(text).toContain('git merge origin/<base>');
     expect(text).toMatch(/Never rebase and never force-push/);
   });
+  it('regenerates a conflicting lockfile instead of merging it by hand', () => {
+    expect(text).toContain('git checkout --theirs <lockfile>');
+    for (const cmd of [
+      '`pnpm-lock.yaml`: `pnpm install`',
+      '`package-lock.json`: `npm install`',
+      '`Cargo.lock`: `cargo update --workspace`',
+      '`uv.lock`: `uv lock`',
+      '`go.sum`: `go mod tidy`',
+    ])
+      expect(text).toContain(cmd);
+    expect(text).toMatch(/any other lockfile: the command of the project's `AGENTS\.md`/);
+    expect(text).toMatch(/verify commands as after any change/);
+  });
 });

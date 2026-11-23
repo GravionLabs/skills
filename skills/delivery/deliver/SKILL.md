@@ -27,6 +27,8 @@ An open pull request for the issue already exists (found in step 2, not by the e
 
 To bring `<base>` into your branch (a conflict, or a branch that is only behind), always run `git merge origin/<base>` and push with a plain `git push`. Never rebase and never force-push: a rebase rewrites history and the push is denied.
 
+A conflict in a lockfile is never merged by hand: resolve the manifest (`package.json`, `Cargo.toml`, …) first, keeping both sides' changes; take the lockfile of the base (`git checkout --theirs <lockfile>`: during `git merge origin/<base>` theirs is the base); regenerate it with the package manager; commit the merge. `pnpm-lock.yaml`: `pnpm install`; `package-lock.json`: `npm install`; `Cargo.lock`: `cargo update --workspace`; `uv.lock`: `uv lock`; `go.sum`: `go mod tidy`; any other lockfile: the command of the project's `AGENTS.md`. Then run the verify commands as after any change.
+
 ## Rules
 
 - Never ask. An unclear acceptance criterion, or work the issue does not describe: comment on the issue with the question, add the label `needs-decision`, and end without a pull request. Never build extra work silently.
