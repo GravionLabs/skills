@@ -19,7 +19,7 @@ import { createInterface } from 'node:readline';
 import { parseArgs } from 'node:util';
 import { appSettings, tokenSource as makeSource } from './app-token.mts';
 import { type Emit, openEvents } from './events.mts';
-import { programStatus } from './program-status.mts';
+import { finishReport, programStatus } from './program-status.mts';
 import { HARNESSES } from './harness.mts';
 import { adoptLegacyEnv, unknownConfigKeys } from './legacy.mts';
 import { killTree, launch, promptPath } from './process.mts';
@@ -759,16 +759,7 @@ emit = (type, body, tone) => {
     blockedShown = false;
     report({ state: 'working', title: statusTitle });
   } else if (type === 'run.finished') {
-    const outcome = body?.outcome;
-    report(
-      outcome === 'cancelled'
-        ? { state: 'idle', title: statusTitle }
-        : {
-            state: outcome === 'succeeded' ? 'done' : 'error',
-            title: statusTitle,
-            msg: String(body?.text ?? ''),
-          },
-    );
+    report(finishReport(body, statusTitle, needsYou.length));
   }
 };
 log(`run ${runId} in ${tracker.repo}, results: ${path.join(runDir, 'results.jsonl')}`, 'dim');
@@ -1111,12 +1102,13 @@ appendFileSync(
   })}\n`,
 );
 // An incomplete run (issues set aside or waiting) is no success: the agent-events format has no
-// other outcome for it than `failed`; the counts are in the text.
+// other outcome for it than `failed`; the counts are in the text. OSC 7501 shows it as `done` with
+// `tone=warning`; only `reason: 'harness'` (the harness failed) is an `error`.
 emit(
   'run.finished',
   {
     outcome: stopped ? 'cancelled' : clean ? 'succeeded' : 'failed',
-    ...(stopped || clean ? {} : { reason: 'incomplete' }),
+    ...(stopped || clean ? {} : { reason: status === 'failed' ? 'harness' : 'incomplete' }),
     text: `${status}: merged ${merged.length}, set aside ${aside.size}, waiting ${waiting.length}${needsYou.length ? `, needs you ${needsYou.length}` : ''}`,
   },
   stopped ? 'neutral' : clean ? 'success' : 'warning',

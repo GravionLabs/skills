@@ -17,7 +17,7 @@ The loop writes OSC 7501 records for the **root record** of its terminal, and on
 
 - `working` with `app=deliver` and `title` (milestone or issues) at the run start and when an issue starts after a `blocked`.
 - `blocked` with `kind=question` and `msg` (the text of the attention) on an attention that needs the owner.
-- `done` (run succeeded) or `error` (run failed) at the run end; `idle` when the run was stopped.
+- At the run end: `done` when the run succeeded; `done` with `tone=warning` and the counts as `msg` when it is incomplete (end status `blocked` or `waiting-for-handed-over`) or leaves issues that need the owner (`needs you` > 0); `error` only when the run failed (end status `failed`, the harness failed several times in a row); `idle` when the run was stopped. Nothing failed in an incomplete run, so it is no error. `tone` is only sent with `done`; a terminal that does not know the key shows `done` (GravionLabs/poimen#1152).
 - `title` and `msg` are base64 of UTF-8, cleaned of control and invisible characters and cut to 192 and 2048 bytes. `progress` and child records are not used.
 - The sequence goes to the controlling terminal (`/dev/tty` on Unix, `CONOUT$` on Windows), not to stdout, which an agent harness captures. Without a terminal (CI, detached) nothing is written and the loop is never stopped by it.
 - `DELIVER_PROGRAM_STATUS=0` turns it off.
