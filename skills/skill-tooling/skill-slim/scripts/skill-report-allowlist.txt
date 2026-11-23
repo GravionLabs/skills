@@ -41,3 +41,5 @@ agents-md: docs/agents-md-refs/
 agents-md: docs/agents-md-refs/<topic>.md
 agents-md: docs/agents-md-refs/migrations.md
 agents-md: docs/agents-md-refs/release.md
+# ng-deep is the Angular pseudo-element the stylelint template allows, not a skill
+setup-oxc-husky: ng-deep

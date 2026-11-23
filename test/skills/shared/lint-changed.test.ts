@@ -17,7 +17,7 @@ describe.skipIf(!hasPwsh || process.platform === 'win32')('Format-Changed.ps1 -L
   let worker: PwshWorker;
   let tmp: string;
   const bins = { ok: '', noProbe: '', gitOnly: '' };
-  const repo = { langs: '', cfg: '', oxc: '' };
+  const repo = { langs: '', cfg: '', oxc: '', style: '' };
   const log = () => path.join(tmp, 'calls.log');
   const git = (cwd: string, ...a: string[]) => spawnSync('git', a, { cwd });
   const write = (cwd: string, rel: string, c = 'x') => {
