@@ -5,7 +5,21 @@ Versioning follows [Semantic Versioning](https://semver.org/).
 
 ---
 
+## [5.9.0] — 2026-11-24
+
+### Features
+- **deliver**: A dependency-only change of Cargo.toml is not protected (#970) (#979)
+- **deliver**: A catalog-only change of pnpm-workspace.yaml is not protected (#971) (#981)
+- **deliver**: A dependency-only change of pyproject.toml is not protected (#972) (#982)
+- **deliver**: A require-only change of go.mod is not protected (#973) (#983)
+- **deliver**: A PackageVersion-only change of Directory.Packages.props is not protected (#974) (#984)
+
+
 ## [5.8.0] — 2026-11-24
+
+### Documentation
+- Update CHANGELOG.md for v5.8.0 [skip ci]
+
 
 ### Features
 - **deliver**: Repair the conflict of a handed-over pull request before handing it over (#965) (#969)
