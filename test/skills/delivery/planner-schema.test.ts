@@ -356,3 +356,87 @@ describe('objective plans across repositories (#541)', () => {
     expect(cfp).toMatch(/another owner → stop/);
   });
 });
+
+describe('behavior sections in PBI bodies (#955)', () => {
+  const sections = ['## Current behavior', '## Desired behavior', '## Out of scope'];
+  const root = path.resolve(__dirname, '../../..');
+  const read = (p: string) => fs.readFileSync(path.join(root, p), 'utf-8');
+
+  it('the plan fixture pbi body has the three sections', () => {
+    const body: string = example.items[0].body;
+    for (const s of sections) expect(body).toContain(s);
+    expect(body).not.toMatch(/:\d+\b|line \d+/);
+  });
+
+  it('templates, ready.md and create-from-plan.md carry them', () => {
+    for (const f of ['.github/ISSUE_TEMPLATE/pbi.md', '.github/ISSUE_TEMPLATE/bug_report.md']) {
+      for (const s of sections) expect(read(f)).toContain(s);
+    }
+    const ready = read('skills/delivery/planner/references/ready.md');
+    const pbi = ready.slice(ready.indexOf('## PBI'), ready.indexOf('## Milestone'));
+    expect(pbi).toContain('Current behavior');
+    expect(pbi).toContain('Desired behavior');
+    expect(pbi).toMatch(/never line numbers/);
+    const cfp = read('skills/github/github-issue/references/create-from-plan.md');
+    for (const s of sections) expect(cfp).toContain(s);
+    expect(read('skills/delivery/planner/references/plan-schema.md')).toContain(
+      '`## Current behavior`',
+    );
+  });
+});
+
+describe('test seams (#956)', () => {
+  /** A plan whose item has no existing test at its seam must carry a seam question. */
+  const seamErrors = (plan: any, existing: Record<string, string | null>): string[] =>
+    plan.items.flatMap((it: any) => {
+      const ex = existing[it.id];
+      if (ex === undefined || ex === it.seam) return [];
+      const q = plan.questions.find(
+        (x: any) => x.blocks.includes(it.id) && x.options.includes(it.seam),
+      );
+      if (!q) return [`${it.id}: new seam without question`];
+      return ex === null || (q.options.includes(ex) && q.recommended === ex)
+        ? []
+        : [`${it.id}: existing seam not recommended`];
+    });
+
+  const withSeam = () => {
+    const plan = clone();
+    plan.items[0].seam = 'pwsh scripts/New-Thing.ps1';
+    plan.items[0].body += '\n\nTests: pwsh scripts/New-Thing.ps1';
+    return plan;
+  };
+
+  it('accepts items[].seam', () => {
+    expect(check(withSeam())).toEqual([]);
+  });
+
+  it('an item with a new seam and no question yields an error', () => {
+    const plan = withSeam();
+    plan.questions = [];
+    expect(seamErrors(plan, { [plan.items[0].id]: 'Get-Thing()' })).toEqual([
+      `${plan.items[0].id}: new seam without question`,
+    ]);
+  });
+
+  it('a seam question lists the new and the existing seam, recommending the existing one', () => {
+    const plan = withSeam();
+    const id = plan.items[0].id;
+    plan.questions = [
+      {
+        id: 'q1',
+        question: 'Test through the new script or the existing function?',
+        options: ['pwsh scripts/New-Thing.ps1', 'Get-Thing()'],
+        recommended: 'Get-Thing()',
+        why: 'The existing seam already has tests.',
+        blocks: [id],
+      },
+    ];
+    expect(check(plan)).toEqual([]);
+    expect(seamErrors(plan, { [id]: 'Get-Thing()' })).toEqual([]);
+    plan.questions[0].recommended = 'pwsh scripts/New-Thing.ps1';
+    expect(seamErrors(plan, { [id]: 'Get-Thing()' })).toEqual([
+      `${id}: existing seam not recommended`,
+    ]);
+  });
+});

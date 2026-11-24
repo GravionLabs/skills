@@ -18,13 +18,13 @@ Steps to reproduce the behavior:
 2. Click on '...'
 3. See error
 
-## Expected Behavior
+## Current behavior
 
-What should happen.
+What happens today, as behavior; name interfaces or symbols, no line numbers.
 
-## Actual Behavior
+## Desired behavior
 
-What happens instead.
+What should happen instead.
 
 ## Environment
 
@@ -35,6 +35,10 @@ What happens instead.
 ## Screenshots
 
 <!-- Optional. -->
+
+## Out of scope
+
+What this fix does not change.
 
 ## Definition of Done
 

@@ -14,6 +14,14 @@ User story or concise description of the increment.
 
 Context, constraints, prior art.
 
+## Current behavior
+
+What the system does today, as behavior; name interfaces or symbols, no line numbers.
+
+## Desired behavior
+
+What it does when the PBI is done, as behavior, not as steps.
+
 ## Parent
 
 Parent Feature: #NNN
@@ -25,6 +33,10 @@ Parent Feature: #NNN
 ## Technical Notes
 
 <!-- Optional: implementation hints, affected files/packages. -->
+
+## Out of scope
+
+What this PBI does not change.
 
 ## Definition of Done
 

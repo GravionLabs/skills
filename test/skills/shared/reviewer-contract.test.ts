@@ -129,8 +129,8 @@ describe('rule proposal', () => {
     expect(contract).toMatch(/candidate to retire/);
   });
 
-  it('keeps the reviewer result schema unchanged', () => {
-    expect(Object.keys(schema.properties).sort()).toEqual(['blocking', 'notes']);
+  it('keeps the reviewer result schema to blocking, notes and the optional spec', () => {
+    expect(Object.keys(schema.properties).sort()).toEqual(['blocking', 'notes', 'spec']);
   });
 });
 
@@ -169,5 +169,128 @@ describe('UX review of a UI diff', () => {
     );
     const cr = evals.find((e: { skill: string }) => e.skill === 'code-review');
     expect(cr.shouldTrigger.some((q: string) => /component\.ts/.test(q))).toBe(true);
+  });
+});
+
+describe('spec section', () => {
+  const skill = read('SKILL.md');
+  const ref = read('references/reviewer-contract.md');
+  const item = {
+    kind: 'unrequested',
+    criterion: 'none',
+    file: 'src/a.ts',
+    detail: 'adds a retry nobody asked for',
+  };
+
+  it('keeps old results without spec valid and requires no spec', () => {
+    expect(schema.required).toEqual(['blocking', 'notes']);
+    expect(validate({ blocking: [], notes: [] })).toBe(true);
+  });
+
+  it.each(['missing', 'unrequested', 'wrong'])('accepts a %s item', (kind) => {
+    expect(validate({ blocking: [], notes: [], spec: [{ ...item, kind }] })).toBe(true);
+  });
+
+  it.each([
+    ['other kind', { ...item, kind: 'extra' }],
+    ['no criterion', { ...item, criterion: undefined }],
+    ['no detail', { ...item, detail: '' }],
+    ['extra property', { ...item, line: 1 }],
+  ])('rejects %s', (_n, v) => {
+    expect(validate({ blocking: [], notes: [], spec: [JSON.parse(JSON.stringify(v))] })).toBe(
+      false,
+    );
+  });
+
+  it('SKILL.md has the Spec section, the rules and the source commit', () => {
+    expect(skill).toMatch(/^## Spec$/m);
+    expect(skill).toMatch(/`## Blocking`, `## Spec`.*`## Notes`/);
+    expect(skill).toMatch(/\*\*unrequested\*\*.*note/);
+    expect(skill).toContain('49dd158d1076134a641b33efb035946536778336');
+    expect(skill.split('\n').length).toBeLessThanOrEqual(100);
+  });
+
+  it('the contract names every spec property and kind', () => {
+    for (const k of [
+      ...Object.keys(schema.properties.spec.items.properties),
+      'missing',
+      'unrequested',
+      'wrong',
+    ])
+      expect(ref).toContain(`\`${k}\``);
+  });
+
+  it('deliver step 4 returns unrequested behavior', () => {
+    const deliver = fs.readFileSync(
+      path.resolve(__dirname, '../../../skills/delivery/deliver/SKILL.md'),
+      'utf-8',
+    );
+    expect(deliver).toMatch(/unrequested behavior/);
+  });
+
+  it('the eval case: a diff with an unrequested change is reported as unrequested', () => {
+    const fx = JSON.parse(
+      fs.readFileSync(
+        path.resolve(__dirname, '../../../evals/code-review/unrequested.json'),
+        'utf-8',
+      ),
+    );
+    expect(validate(fx.expected)).toBe(true);
+    expect(fx.expected.blocking).toEqual([]);
+    const [s] = fx.expected.spec;
+    expect(s.kind).toBe('unrequested');
+    expect(fx.diff).toContain(s.file);
+    expect(fx.expected.notes.length).toBeGreaterThan(0);
+  });
+
+  describe('smell baseline', () => {
+    const smells = read('references/smells.md');
+    const names = [
+      'Mysterious Name',
+      'Duplicated Code',
+      'Feature Envy',
+      'Data Clumps',
+      'Primitive Obsession',
+      'Repeated Switches',
+      'Shotgun Surgery',
+      'Divergent Change',
+      'Speculative Generality',
+      'Message Chains',
+      'Middle Man',
+      'Refused Bequest',
+    ];
+
+    it('lists the twelve smells, each with a fix', () => {
+      for (const n of names) expect(smells).toMatch(new RegExp(`\\*\\*${n}\\*\\* — .+ → .+`));
+    });
+
+    it('is loaded in step 5 and stays a note', () => {
+      expect(skill).toMatch(/non-test file of the diff load `references\/smells\.md`/);
+      expect(smells).toMatch(/always a \*\*note\*\*/);
+      expect(smells).toContain('possible <smell>');
+    });
+
+    it('is suppressed by review rules and lessons and skipped for linted rules', () => {
+      expect(smells).toMatch(/`## Review rules` entry .* or an approved lesson/);
+      expect(smells).toMatch(/linter of the repository enforces/);
+    });
+
+    it('does not contradict step 10 (no abstractions without need)', () => {
+      expect(skill).toMatch(/10\. Do not recommend patterns or abstractions/);
+      expect(smells).toMatch(/step 10/);
+      expect(smells).toMatch(/Speculative Generality/);
+    });
+
+    it('the eval case: duplicated logic is a note, not blocking', () => {
+      const fx = JSON.parse(
+        fs.readFileSync(
+          path.resolve(__dirname, '../../../evals/code-review/duplicated-code.json'),
+          'utf-8',
+        ),
+      );
+      expect(validate(fx.expected)).toBe(true);
+      expect(fx.expected.blocking).toEqual([]);
+      expect(fx.expected.notes[0]).toMatch(/^possible Duplicated Code/);
+    });
   });
 });

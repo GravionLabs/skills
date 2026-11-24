@@ -32,7 +32,7 @@ Create a PR from the current branch. No dialogue — tool calls only. On Claude 
    ```markdown
    ## Summary
 
-   <what changed and why>
+   <the smallest visual plus one or two short lines: `references/summary.md`>
 
    ## Risk
 
@@ -58,6 +58,8 @@ Create a PR from the current branch. No dialogue — tool calls only. On Claude 
    ```
 
    `## Suggested AGENTS.md additions` is optional: omit it when empty (not in release mode). One line per entry: the trap, why it is not obvious, where it was hit. A person decides by the admission rule of the `agents-md` skill; the agent never edits `AGENTS.md` for it.
+
+   `## Summary`: the form and limits are in `references/summary.md` (not in release mode).
 
    `## Risk` and `## Visual proof` are always present (not in release mode); levels, the `N/A` form and the rule for a visible change: `references/risk-and-proof.md`. No AI-disclosure or ELI5 section.
 
