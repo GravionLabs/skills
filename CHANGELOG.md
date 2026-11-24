@@ -5,10 +5,22 @@ Versioning follows [Semantic Versioning](https://semver.org/).
 
 ---
 
+## [5.11.0] — 2026-11-24
+
+### Features
+- **github**: Github-triage for issues filed by others (#957) (#992)
+- **delivery**: Handoff skill (#959) (#995)
+- **shared**: Prototype skill (#960) (#996)
+- **shared**: Wizard skill for steps only a human can take (#961) (#997)
+- **shared**: Architecture-survey skill for deepening opportunities (#962) (#998)
+- **shared**: Glossary skill and grill-me --docs (#958) (#994)
+
+
 ## [5.10.0] — 2026-11-24
 
 ### Documentation
 - **github-issue**: Gh 2.94 shortcuts, open-blocker count and the close --comment trap (#954) (#989)
+- Update CHANGELOG.md for v5.10.0 [skip ci]
 
 
 ### Features
