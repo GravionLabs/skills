@@ -67,6 +67,33 @@ describe.skipIf(!hasPwsh || process.platform === 'win32')('Check-Prerequisites.p
     expect(r.out).not.toMatch(/dromos|apm-hub/i);
   });
 
+  const withGh = (version: string) => {
+    const bin = path.join(dir, `gh-${version}`);
+    linkTools(bin, ['git', 'node', 'npm', 'uname', 'sh']);
+    fs.writeFileSync(
+      path.join(bin, 'gh'),
+      `#!/bin/sh\necho "gh version ${version} (2026-01-01)"\n`,
+      {
+        mode: 0o755,
+      },
+    );
+    return bin;
+  };
+
+  it('reports gh and recommends 2.94 when it is older, without failing', async () => {
+    const r = await run(withGh('2.91.0'));
+    expect(r.code).toBe(0);
+    expect(r.out).toContain('gh version 2.91.0');
+    expect(r.out).toContain('2.94+ recommended');
+  });
+
+  it('reports gh 2.94 without the recommendation note', async () => {
+    const r = await run(withGh('2.94.0'));
+    expect(r.code).toBe(0);
+    expect(r.out).toContain('gh version 2.94.0');
+    expect(r.out).not.toContain('recommended');
+  });
+
   it('fails and names Node.js when node is missing', async () => {
     const r = await run(noNode);
     expect(r.code).toBe(1);
