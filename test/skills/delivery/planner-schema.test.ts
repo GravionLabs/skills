@@ -356,3 +356,31 @@ describe('objective plans across repositories (#541)', () => {
     expect(cfp).toMatch(/another owner → stop/);
   });
 });
+
+describe('behavior sections in PBI bodies (#955)', () => {
+  const sections = ['## Current behavior', '## Desired behavior', '## Out of scope'];
+  const root = path.resolve(__dirname, '../../..');
+  const read = (p: string) => fs.readFileSync(path.join(root, p), 'utf-8');
+
+  it('the plan fixture pbi body has the three sections', () => {
+    const body: string = example.items[0].body;
+    for (const s of sections) expect(body).toContain(s);
+    expect(body).not.toMatch(/:\d+\b|line \d+/);
+  });
+
+  it('templates, ready.md and create-from-plan.md carry them', () => {
+    for (const f of ['.github/ISSUE_TEMPLATE/pbi.md', '.github/ISSUE_TEMPLATE/bug_report.md']) {
+      for (const s of sections) expect(read(f)).toContain(s);
+    }
+    const ready = read('skills/delivery/planner/references/ready.md');
+    const pbi = ready.slice(ready.indexOf('## PBI'), ready.indexOf('## Milestone'));
+    expect(pbi).toContain('Current behavior');
+    expect(pbi).toContain('Desired behavior');
+    expect(pbi).toMatch(/never line numbers/);
+    const cfp = read('skills/github/github-issue/references/create-from-plan.md');
+    for (const s of sections) expect(cfp).toContain(s);
+    expect(read('skills/delivery/planner/references/plan-schema.md')).toContain(
+      '`## Current behavior`',
+    );
+  });
+});
