@@ -15,12 +15,20 @@ Read-only: report findings, never edit.
 6. `.agents/config.json` has `governance`: load `references/governance.md` (ADR and spec rules) and add its findings
 7. Rule proposal: `ast-grep-rules` installed and a blocking finding repeats (matches an approved lesson, or the same class in two reviews): add the note `propose ast-grep rule` per `references/rule-proposal.md`; never write the rule. Not installed: as before
 8. UI diff: the diff has a UI file (`.html`, `.css`, `.scss`, `.tsx`, `.jsx`, `.vue`, `.svelte`, `*.component.ts`): load `references/ux-review.md`; no UI file: do not load it
-9. Sort each finding: **blocking** or **note**
+9. Sort each finding: **blocking** or **note**; with acceptance criteria given, check each criterion and the diff for the spec axis (`## Spec`)
 10. Do not recommend patterns or abstractions that add complexity without a concrete need
 
 ## Blocking
 
 Blocking = breaks an acceptance criterion, or is a correctness or security defect (bug, vulnerability, data loss, broken test). Everything else is a note. When unsure, it is a note.
+
+## Spec
+
+Adapted from the "Spec" axis of `code-review` in mattpocock/skills @ 49dd158d1076134a641b33efb035946536778336 (MIT). Only with acceptance criteria given; it is kept apart from correctness so one does not mask the other. Each finding quotes the criterion:
+
+- **missing** — a criterion not implemented, or only partly (blocking)
+- **wrong** — a criterion that looks implemented but behaves differently (blocking)
+- **unrequested** — behavior in the diff that no criterion asks for, scope creep (note, quote the nearest criterion or "none")
 
 ## Security
 
@@ -32,6 +40,6 @@ A diff that adds a mechanism forbidden by `implementation` `references/no-backgr
 
 ## Output
 
-Interactive: a readable report, `## Blocking` then `## Notes`, grouped by file, each blocking item as `file:line — title`, why, suggested fix. No praise, no summary of what is fine. With nothing blocking, say so in one line.
+Interactive: a readable report, `## Blocking`, `## Spec` (only with criteria; omit when empty) and `## Notes`, grouped by file, each blocking item as `file:line — title`, why, suggested fix. No praise, no summary of what is fine. With nothing blocking, say so in one line.
 
 Started by a runner or with input of diff plus criteria: load `references/reviewer-contract.md`. It defines the input and prints the JSON result of `schema/review.schema.json`.

@@ -1,0 +1,16 @@
+{
+  "criteria": ["`parse('')` returns `[]`"],
+  "diff": "--- a/src/parse.ts\n+++ b/src/parse.ts\n@@ -1,3 +1,9 @@\n export function parse(s: string) {\n+  if (s === '') return [];\n+  return retry(() => s.split(','), 3);\n }\n+\n+function retry<T>(f: () => T, n: number): T {\n+  try { return f(); } catch (e) { if (n > 0) return retry(f, n - 1); throw e; }\n+}\n",
+  "expected": {
+    "blocking": [],
+    "notes": ["`retry` in src/parse.ts is not asked for by any criterion"],
+    "spec": [
+      {
+        "kind": "unrequested",
+        "criterion": "none",
+        "file": "src/parse.ts",
+        "detail": "adds a retry around split; no criterion asks for it"
+      }
+    ]
+  }
+}
