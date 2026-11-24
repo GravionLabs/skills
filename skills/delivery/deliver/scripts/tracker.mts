@@ -91,6 +91,10 @@ export interface Tracker {
   reportBaseRed(failed: BaseState['failed'], env: Record<string, string>): Item;
   /** The paths the pull request changes, a rename with both names. */
   changedFiles(pull: Pull): string[];
+  /** The merge base of the pull request and the commit that is judged: `head` when given, else the current head of the pull request. */
+  compareRefs(pull: Pull, head?: string): { base: string; head: string };
+  /** The content of the file at the commit, `undefined` when the file does not exist there. Any other failure throws. */
+  fileAt(sha: string, file: string): string | undefined;
   /** The branch the release goes into (`main`), where a missing base branch is cut from. */
   defaultBranch(): string;
   /** The open `release-test` issues of the selection: a person tests the release candidate, the loop never starts them. */

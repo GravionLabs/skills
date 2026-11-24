@@ -42,6 +42,7 @@ const parsed = (() => {
         model: { type: 'string' },
         'session-minutes': { type: 'string', default: '90' },
         'merge-minutes': { type: 'string', default: '30' },
+        'handover-minutes': { type: 'string' },
         'dry-run': { type: 'boolean', default: false },
         'allow-no-required-checks': { type: 'boolean', default: false },
         'trust-authors': { type: 'boolean', default: false },
@@ -51,7 +52,7 @@ const parsed = (() => {
     // an unknown option or a missing value: one line, no stack trace
     const message = (error as Error).message.split('\n')[0];
     console.error(
-      `deliver-loop: ${message}. Options: --milestone, --issues, --base, --tracker, --harness, --max, --model, --session-minutes, --merge-minutes, --dry-run, --allow-no-required-checks, --trust-authors.`,
+      `deliver-loop: ${message}. Options: --milestone, --issues, --base, --tracker, --harness, --max, --model, --session-minutes, --merge-minutes, --handover-minutes, --dry-run, --allow-no-required-checks, --trust-authors.`,
     );
     process.exit(1);
   }
@@ -144,13 +145,23 @@ const root =
   );
 const commonDir = path.resolve(root, run('git', ['rev-parse', '--git-common-dir'], root));
 let config: {
-  deliver?: { base?: string; harness?: string; tracker?: string; protectedPaths?: string[] };
+  deliver?: {
+    base?: string;
+    harness?: string;
+    tracker?: string;
+    protectedPaths?: string[];
+    handoverMinutes?: number;
+  };
 } = {};
 try {
   config = JSON.parse(readFileSync(path.join(root, '.agents/config.json'), 'utf8'));
 } catch {
   // no project config
 }
+// How long the loop waits for handed-over pull requests when nothing else can start: the flag, then the config, else 120.
+const HANDOVER_MINUTES = Number(opt['handover-minutes'] ?? config.deliver?.handoverMinutes ?? 120);
+if (!Number.isInteger(HANDOVER_MINUTES) || HANDOVER_MINUTES < 0)
+  fail('--handover-minutes (deliver.handoverMinutes) needs a whole number from 0', 64);
 for (const warning of legacyWarnings) log(warning, 'warn');
 const configWarning = unknownConfigKeys(config.deliver);
 if (configWarning) log(configWarning, 'warn');
@@ -220,14 +231,90 @@ const protectedHits = (files: string[]): string[] =>
         : name === guarded || path.posix.basename(name) === guarded;
     });
   });
+// A `package.json` whose difference is only in these keys is no hit. A fixed list: a repository cannot widen it.
+const DEPENDENCY_KEYS = [
+  'dependencies',
+  'devDependencies',
+  'peerDependencies',
+  'optionalDependencies',
+];
+const sameJson = (a: unknown, b: unknown) =>
+  JSON.stringify(sortKeys(a)) === JSON.stringify(sortKeys(b));
+function sortKeys(value: unknown): unknown {
+  if (Array.isArray(value)) return value.map(sortKeys);
+  if (value && typeof value === 'object') {
+    return Object.fromEntries(
+      Object.entries(value as Record<string, unknown>)
+        .sort(([x], [y]) => (x < y ? -1 : x > y ? 1 : 0))
+        .map(([k, v]) => [k, sortKeys(v)]),
+    );
+  }
+  return value;
+}
+/**
+ * The keys outside the dependency maps in which `package.json` differs between the merge base and `head`;
+ * `undefined` when unknown (added, deleted, renamed, not JSON), then the file is a plain hit.
+ * Throws when a read fails: the caller treats that as unknown too.
+ */
+function packageJsonKeys(file: string, refs: { base: string; head: string }): string[] | undefined {
+  const before = tracker.fileAt(refs.base, file);
+  const after = tracker.fileAt(refs.head, file);
+  if (before === undefined || after === undefined) return undefined;
+  let a: unknown;
+  let b: unknown;
+  try {
+    a = JSON.parse(before);
+    b = JSON.parse(after);
+  } catch {
+    return undefined;
+  }
+  const isObject = (v: unknown): v is Record<string, unknown> =>
+    !!v && typeof v === 'object' && !Array.isArray(v);
+  if (!isObject(a) || !isObject(b)) return undefined;
+  return [...new Set([...Object.keys(a), ...Object.keys(b)])]
+    .filter((key) => !DEPENDENCY_KEYS.includes(key) && !sameJson(a[key], b[key]))
+    .sort();
+}
+/** The protected hits, a `package.json` that differs only in its dependency maps dropped, the others named with their keys. */
+function judgeHits(pull: Pull, files: string[], head?: string): string[] {
+  const hits = protectedHits(files);
+  if (!hits.some((file) => path.posix.basename(file.toLowerCase()) === 'package.json')) return hits;
+  let refs: { base: string; head: string } | undefined;
+  try {
+    refs = tracker.compareRefs(pull, head);
+  } catch {
+    return hits;
+  }
+  const out: string[] = [];
+  for (const file of hits) {
+    // the case-folded name matches `package.json`; the file itself is read under its own name
+    const lower = file.toLowerCase();
+    const inDirectory = PROTECTED.some(
+      (entry) => entry.endsWith('/') && lower.startsWith(entry.toLowerCase()),
+    );
+    if (inDirectory || path.posix.basename(lower) !== 'package.json') {
+      out.push(file);
+      continue;
+    }
+    let keys: string[] | undefined;
+    try {
+      keys = packageJsonKeys(file, refs);
+    } catch {
+      keys = undefined;
+    }
+    if (keys === undefined) out.push(file);
+    else if (keys.length > 0) out.push(`${file}: ${keys.join(', ')}`);
+  }
+  return out;
+}
 /** Why the loop does not merge the pull request as it is now, else nothing. A person decides then, no repair session. */
 const HANDS_OFF = ', merge it yourself';
 const GUARD_READS = 3;
-async function guard(pull: Pull): Promise<string | undefined> {
+async function guard(pull: Pull, head?: string): Promise<string | undefined> {
   let hits: string[] = [];
   for (let read = 1; ; read++) {
     try {
-      hits = protectedHits(tracker.changedFiles(pull));
+      hits = judgeHits(pull, tracker.changedFiles(pull), head);
       break;
     } catch (error) {
       // a read that fails once (server load, rate limit) is asked again, as the gate is
@@ -523,6 +610,40 @@ async function seeStop(): Promise<void> {
   await new Promise((turn) => setImmediate(turn));
 }
 
+// a handed-over pull request with a conflict gets one repair session per run, never a merge by the loop
+const conflictTried = new Set<number>();
+/**
+ * Returns nothing when the gate of the pull request is no conflict (or it was tried in this run), else one line:
+ * `conflict repaired` or `conflict not repaired: <why>` after one session (`/deliver <nr>` merges the base in).
+ */
+async function repairConflict(
+  item: Item,
+  pull: Pull,
+  worktree: string,
+  sessions: Session[],
+): Promise<string | undefined> {
+  if (conflictTried.has(item.id) || stopped) return undefined;
+  const read = (): Gate | undefined => {
+    try {
+      return tracker.gate(pull);
+    } catch {
+      // a failing read is no verdict: no session
+      return undefined;
+    }
+  };
+  if (read()?.state !== 'conflict') return undefined;
+  conflictTried.add(item.id);
+  log(`#${item.id} ${pull.url} has a conflict, one repair session`, 'warn');
+  const ran = await runSession(item, worktree, sessions);
+  if (stopped) return undefined;
+  if (ran.reason) return `conflict not repaired: ${ran.reason}`;
+  if (ran.session.exit !== 0)
+    return `conflict not repaired: session failed (exit ${ran.session.exit})`;
+  const after = read();
+  if (after?.state === 'conflict') return `conflict not repaired: ${after.detail}`;
+  return 'conflict repaired';
+}
+
 /** Waits for the gate and merges. Returns nothing when merged, else the reason. */
 async function merge(pull: Pull): Promise<string | undefined> {
   const start = Date.now();
@@ -546,7 +667,7 @@ async function merge(pull: Pull): Promise<string | undefined> {
       if (stopped) break;
       // the files of the commit that is merged, not of the one the session left: a later push is checked too.
       // The merge names gate.head, so a push after this read is refused by the tracker.
-      const handsOff = await guard(pull);
+      const handsOff = await guard(pull, gate.head);
       if (handsOff) return handsOff;
       // the read of the files blocks too: a stop request that came in during it must be seen before the merge
       await seeStop();
@@ -594,10 +715,26 @@ async function deliver(item: Item): Promise<{ reason?: string; pull?: Pull }> {
   const started = Date.now();
   // a pull request of an earlier run that changes a protected path, or two open pull requests of the item, are
   // handed over before a session is paid for; a failed read is no verdict here, the guard after the session asks again
-  const earlier = tracker.pullOf(item);
+  let earlier = tracker.pullOf(item);
   if (earlier) {
-    const early = morePulls(earlier) ?? (await guard(earlier));
-    if (early?.startsWith('changes protected paths') || early?.startsWith(MORE_PULLS)) {
+    let early = morePulls(earlier) ?? (await guard(earlier));
+    let note: string | undefined;
+    if (early?.startsWith('changes protected paths')) {
+      note = await repairConflict(item, earlier, worktree, sessions);
+      if (note) {
+        // the repair may have changed the pull request: the guard runs again
+        earlier = tracker.pullOf(item) ?? earlier;
+        early = morePulls(earlier) ?? (await guard(earlier));
+        if (early) early = `${note}, ${early}`;
+        else log(`#${item.id} ${note}`, 'info');
+      }
+    }
+    if (
+      early &&
+      (early.includes('changes protected paths') || early.startsWith(MORE_PULLS)) &&
+      !stopped
+    ) {
+      if (note) log(`#${item.id} ${note}`, note.startsWith('conflict repaired') ? 'info' : 'warn');
       appendFileSync(
         path.join(runDir, 'results.jsonl'),
         `${JSON.stringify({
@@ -613,6 +750,7 @@ async function deliver(item: Item): Promise<{ reason?: string; pull?: Pull }> {
       log(`#${item.id} worktree kept: ${worktree}`, 'warn');
       return { reason: early, pull: earlier };
     }
+    if (stopped) return { reason: 'stopped', pull: earlier };
   }
   for (let round = 1; round <= 2; round++) {
     const ran = await runSession(item, worktree, sessions);
@@ -685,6 +823,121 @@ async function deliver(item: Item): Promise<{ reason?: string; pull?: Pull }> {
     })}\n`,
   );
   return { reason, pull };
+}
+
+/** The tracker closes an issue a moment after its merge; until then it still blocks its dependents. */
+async function untilClosed(id: number): Promise<void> {
+  for (let second = 0; second < 120 && !stopped; second += 5) {
+    let closed = false;
+    try {
+      closed = !tracker.items().some((item) => item.id === id);
+    } catch {
+      // asked again
+    }
+    if (closed) break;
+    for (let wait = 0; wait < 5 && !stopped; wait++) await sleep(1);
+  }
+}
+
+/**
+ * One repair session for a handed-over pull request that conflicts with the base (at most one per pull request and
+ * run); the note goes into the hand-over reason and the line of the issue in results.jsonl. The loop never merges it.
+ */
+async function repairHandedOver(nr: number): Promise<void> {
+  const entry = handedPulls.get(nr);
+  const reason = handedOver.get(nr);
+  if (!entry || stopped || harnessDead || !reason || reason.includes(MORE_PULLS)) return;
+  const { item, pull } = entry;
+  const worktree = path.join(path.dirname(root), `${path.basename(root)}-wt-${nr}`);
+  if (!existsSync(worktree))
+    run('git', ['worktree', 'add', '--detach', worktree, `origin/${BASE}`], root);
+  const sessions: Session[] = [];
+  const note = await repairConflict(item, pull, worktree, sessions).catch(
+    (error) => `conflict not repaired: ${firstLine(error)}`,
+  );
+  if (!note) return;
+  log(`#${nr} ${note}, handed over`, note.startsWith('conflict repaired') ? 'info' : 'warn');
+  handedOver.set(nr, `${note}, ${reason}`);
+  // the line of the issue in results.jsonl says it too
+  const file = path.join(runDir, 'results.jsonl');
+  const rows = readFileSync(file, 'utf8')
+    .split('\n')
+    .filter(Boolean)
+    .map((line) => {
+      const row = JSON.parse(line) as Record<string, unknown>;
+      if (row.issue !== nr || typeof row.reason !== 'string') return line;
+      const all = [...((row.sessions as Session[]) ?? []), ...sessions];
+      return JSON.stringify({ ...row, reason: `${note}, ${row.reason}`, sessions: all });
+    });
+  writeFileSync(file, `${rows.join('\n')}\n`);
+}
+
+/**
+ * Nothing can start and pull requests are handed over: polls them every 60 s for up to HANDOVER_MINUTES.
+ * A merged one counts as merged, a closed one is set aside, a conflicting one gets its repair session.
+ * Returns true when one was merged or closed (the loop looks for the next issue), false on time over or stop.
+ */
+async function awaitHandovers(): Promise<boolean> {
+  if (HANDOVER_MINUTES === 0 || handedPulls.size === 0) return false;
+  const until = Date.now() + HANDOVER_MINUTES * 60_000 * Math.max(TICK_MS / 1000, 0.0001);
+  const names = () =>
+    [...handedPulls.values()].map(({ item, pull }) => `#${item.id} ${pull.url}`).join(', ');
+  log(`waiting for handed-over pull requests (up to ${HANDOVER_MINUTES} min): ${names()}`, 'warn');
+  emit(
+    'attention',
+    {
+      id: 'handover-wait',
+      reason: 'handed-over',
+      text: `waiting for you to merge: ${names()}`,
+      needsYou: true,
+      links: [...handedPulls.values()].map(({ pull }) => ({
+        rel: 'pull-request',
+        url: pull.url,
+      })),
+    },
+    'warning',
+  );
+  while (!stopped && !harnessDead && Date.now() < until) {
+    let changed = false;
+    for (const [nr, { item, pull }] of handedPulls) {
+      let gate: Gate | undefined;
+
+      try {
+        gate = tracker.gate(pull);
+      } catch {
+        // a failing read is no verdict: asked again
+      }
+      if (stopped) return false;
+      const row = { issue: nr, title: item.title, pr: pull.url, minutes: 0, sessions: [] };
+      const file = path.join(runDir, 'results.jsonl');
+      if (gate?.state === 'merged') {
+        handedOver.delete(nr);
+        handedPulls.delete(nr);
+        merged.push(`#${nr} ${pull.url}`);
+        log(`#${nr} merged by a person: ${pull.url}`, 'ok');
+        appendFileSync(file, `${JSON.stringify({ ...row, outcome: 'merged' })}\n`);
+        cleanup(item, pull);
+        emit('progress', { done: merged.length, total, label: 'PBIs' });
+        await untilClosed(nr);
+        changed = true;
+      } else if (gate?.state === 'closed') {
+        handedOver.delete(nr);
+        handedPulls.delete(nr);
+        aside.set(nr, `closed by a person, ${pull.url}`);
+        log(`#${nr} set aside: closed by a person, ${pull.url}`, 'bad');
+        appendFileSync(
+          file,
+          `${JSON.stringify({ ...row, outcome: 'aside', reason: 'closed by a person' })}\n`,
+        );
+        changed = true;
+      } else if (gate?.state === 'conflict') {
+        await repairHandedOver(nr);
+      }
+    }
+    if (changed || handedPulls.size === 0) return changed;
+    for (let second = 0; second < 60 && !stopped && Date.now() < until; second++) await sleep(1);
+  }
+  return false;
 }
 
 let cutNote = '';
@@ -785,6 +1038,7 @@ emit('run.started', {
 const aside = new Map<number, string>();
 // handed over by rule (the guard): a person merges the pull request, it is no failure
 const handedOver = new Map<number, string>();
+const handedPulls = new Map<number, { item: Item; pull: Pull }>();
 const merged: string[] = [];
 let waiting: string[] = [];
 let total = 0;
@@ -887,7 +1141,12 @@ try {
       if (reason) waiting.push(`#${item.id} ${reason}`);
       else if (!next) next = item;
     }
-    if (!next) break;
+    if (!next) {
+      // only handed-over pull requests are left (and what they block): wait for a person to merge them
+      if (!(await awaitHandovers())) break;
+      count--;
+      continue;
+    }
     log(`#${next.id} start: ${next.title} (${open.length} open)`, 'info');
     // x: the issues finished or set aside so far, plus this one; the log file is read at a fixed width
     const begun = merged.length + aside.size + handedOver.size + 1;
@@ -910,17 +1169,7 @@ try {
         { task: `issue-${next.id}`, outcome: 'succeeded', text: 'merged' },
         'success',
       );
-      // the tracker closes the issue a moment after the merge; until then it still blocks its dependents
-      for (let second = 0; second < 120 && !stopped; second += 5) {
-        let closed = false;
-        try {
-          closed = !tracker.items().some((item) => item.id === next.id);
-        } catch {
-          // asked again
-        }
-        if (closed) break;
-        for (let wait = 0; wait < 5 && !stopped; wait++) await sleep(1);
-      }
+      await untilClosed(next.id);
     } else if (reason === 'stopped') {
       log(`#${next.id} stopped: not merged${pull ? `, ${pull.url}` : ''}`, 'warn');
       emit('task.finished', { task: `issue-${next.id}`, outcome: 'cancelled', text: 'stopped' });
@@ -928,6 +1177,7 @@ try {
       const planned = reason.endsWith(HANDS_OFF);
       const why = planned ? reason.slice(0, -HANDS_OFF.length) : reason;
       (planned ? handedOver : aside).set(next.id, `${why}${pull ? `, ${pull.url}` : ''}`);
+      if (planned && pull) handedPulls.set(next.id, { item: next, pull });
       log(
         planned
           ? `#${next.id} handed over: ${why}, merge it yourself`
@@ -959,6 +1209,12 @@ try {
   emit('run.finished', { outcome: 'failed', text: firstLine(error).slice(0, 300) }, 'danger');
   log(`run failed: ${firstLine(error)}`, 'bad');
   process.exit(1);
+}
+
+// Before the run ends: a pull request handed over earlier may conflict with the base by now. One repair session
+// per pull request and run; the loop never merges it, the person does.
+if (!stopped && !harnessDead && !baseBlocked) {
+  for (const nr of handedPulls.keys()) await repairHandedOver(nr);
 }
 
 // A fully delivered milestone ends with the release pull request, which a person merges.

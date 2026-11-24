@@ -24,7 +24,7 @@ Rules: never ask (an unclear criterion becomes a comment and the label `needs-de
 | issues of authors without write access    | `--trust-authors`            |
 | merging a pull request on protected paths | merge it yourself            |
 
-Settings: `deliver.base`, `deliver.tracker`, `deliver.harness`, `deliver.protectedPaths` ([project config](usage/project-config.md#deliver)). The tracker contract is `scripts/tracker.mts` in the skill, GitHub is `scripts/tracker/github.mts`; the agent CLIs are in `scripts/harness.mts`.
+Settings: `deliver.base`, `deliver.tracker`, `deliver.harness`, `deliver.handoverMinutes`, `deliver.protectedPaths` ([project config](usage/project-config.md#deliver)). The tracker contract is `scripts/tracker.mts` in the skill, GitHub is `scripts/tracker/github.mts`; the agent CLIs are in `scripts/harness.mts`.
 
 ## Release pull request
 

@@ -53,6 +53,7 @@ type Scenario = {
   noPull?: boolean;
   risks?: Record<number, string>;
   filesFailures?: number;
+  packageJson?: { base?: string; head?: string };
   blocked?: string;
   earlierPull?: boolean;
   twoPulls?: number[];
@@ -143,6 +144,8 @@ function loop(
         '--tracker',
         'fake',
         ...(options.milestone ? ['--milestone', 'M001'] : ['--issues', issues]),
+        // no wait for handed-over pull requests unless a test asks for one
+        ...(options.args?.includes('--handover-minutes') ? [] : ['--handover-minutes', '0']),
         ...(options.args ?? []),
       ],
       { cwd: repo, env, stdio: ['ignore', 'pipe', 'pipe'] },
@@ -475,6 +478,59 @@ describe('deliver loop', () => {
     );
   });
 
+  describe('package.json (#967)', () => {
+    const pkg = (o: object) => JSON.stringify(o);
+    const base = { name: 'x', scripts: { test: 'vitest' }, dependencies: { a: '1' } };
+    const run = (head?: string, baseText: string | null = pkg(base), files = ['package.json']) =>
+      loop({
+        items: [{ id: 63, title: '[PBI] feat: dependency' }],
+        files,
+        packageJson: { base: baseText ?? undefined, head },
+      });
+    it('merges a change of the dependency maps only', async () => {
+      const out = await run(
+        pkg({
+          dependencies: { b: '2' },
+          name: 'x',
+          scripts: { test: 'vitest' },
+          devDependencies: { c: '3' },
+        }),
+      );
+      expect(out.merges).toHaveLength(1);
+    });
+    it.each([
+      [
+        'a postinstall script',
+        { ...base, scripts: { ...base.scripts, postinstall: 'x' } },
+        'scripts',
+      ],
+      ['packageManager', { ...base, packageManager: 'pnpm@10' }, 'packageManager'],
+    ])('hands over %s', async (_name, head, key) => {
+      const out = await run(pkg(head));
+      expect(out.merges).toEqual([]);
+      expect(out.results[0]?.reason).toBe(
+        `changes protected paths (package.json: ${key}), merge it yourself`,
+      );
+    });
+    it('names scripts when dependencies change too', async () => {
+      const out = await run(pkg({ ...base, dependencies: { a: '2' }, scripts: {} }));
+      expect(out.results[0]?.reason).toBe(
+        'changes protected paths (package.json: scripts), merge it yourself',
+      );
+    });
+    it.each([
+      ['invalid JSON', '{ nope', pkg(base)],
+      ['an added file', pkg(base), null],
+      ['a deleted file', undefined, pkg(base)],
+    ])('hands over %s', async (_name, head, before) => {
+      const out = await run(head, before);
+      expect(out.merges).toEqual([]);
+      expect(out.results[0]?.reason).toBe(
+        'changes protected paths (package.json), merge it yourself',
+      );
+    });
+  });
+
   it('sets a pull request aside that changes a protected path', async () => {
     const out = await loop({
       items: [{ id: 61, title: '[PBI] ci: workflow' }],
@@ -515,6 +571,78 @@ describe('deliver loop', () => {
     expect(out.sessions).toHaveLength(0);
     expect(out.merges).toEqual([]);
     expect(out.results[0]?.reason).toBe('changes protected paths (Cargo.toml), merge it yourself');
+  });
+
+  describe('conflict of a handed-over pull request', () => {
+    const CONFLICT = { state: 'conflict', detail: 'conflicts with release/next' };
+    const repairs = (out: Outcome) => out.sessions.length;
+
+    it('runs one repair session for an earlier protected pull request, then hands it over', async () => {
+      const out = await loop({
+        items: [{ id: 91, title: '[PBI] feat: conflicting pull' }],
+        files: ['Cargo.toml'],
+        earlierPull: true,
+        gates: [CONFLICT, READY],
+      });
+      expect(repairs(out)).toBe(1);
+      expect(out.sessions[0]?.prompt).toContain('/deliver 91');
+      expect(out.merges).toEqual([]);
+      expect(out.results[0]?.reason).toBe(
+        'conflict repaired, changes protected paths (Cargo.toml), merge it yourself',
+      );
+      expect(out.log).toContain('conflict repaired');
+    });
+
+    it('runs no session without a conflict', async () => {
+      const out = await loop({
+        items: [{ id: 92, title: '[PBI] feat: clean protected pull' }],
+        files: ['Cargo.toml'],
+        earlierPull: true,
+        gates: [READY],
+      });
+      expect(repairs(out)).toBe(0);
+      expect(out.results[0]?.reason).toBe(
+        'changes protected paths (Cargo.toml), merge it yourself',
+      );
+    });
+
+    it('hands it over with the failure reason when the repair leaves the conflict', async () => {
+      const out = await loop({
+        items: [{ id: 93, title: '[PBI] feat: stubborn conflict' }],
+        files: ['Cargo.toml'],
+        earlierPull: true,
+        gates: [CONFLICT],
+      });
+      expect(repairs(out)).toBe(1);
+      expect(out.merges).toEqual([]);
+      expect(out.results[0]?.reason).toBe(
+        'conflict not repaired: conflicts with release/next, changes protected paths (Cargo.toml), merge it yourself',
+      );
+    });
+
+    it('runs no session for two open pull requests', async () => {
+      const out = await loop({
+        items: [{ id: 94, title: '[PBI] feat: two conflicting pulls' }],
+        earlierPull: true,
+        twoPulls: [94],
+        gates: [CONFLICT],
+      });
+      expect(repairs(out)).toBe(0);
+      expect(out.results[0]?.reason).toContain('more than one open pull request');
+    });
+
+    it('repairs a conflict that a pull request handed over after its session got by the end of the run', async () => {
+      const out = await loop({
+        items: [{ id: 95, title: '[PBI] feat: conflict at the end' }],
+        files: ['Cargo.toml'],
+        gates: [CONFLICT, READY],
+      });
+      expect(repairs(out)).toBe(2);
+      expect(out.merges).toEqual([]);
+      expect(out.results[0]?.reason).toBe(
+        'conflict repaired, changes protected paths (Cargo.toml), merge it yourself',
+      );
+    });
   });
 
   it('starts a session for an open pull request without a protected path', async () => {
@@ -581,6 +709,114 @@ describe('deliver loop', () => {
       status: 'waiting-for-handed-over',
       handedOver: [81],
       waitingFor: { '81': ['#82 blocked by #81', '#83 blocked by #81'] },
+    });
+  });
+
+  describe('waiting for handed-over pull requests', () => {
+    const HANDED = { files: ['.github/workflows/ci.yml'] };
+    // the wait is wall clock (minutes x DELIVER_TICK_MS x 60 ms): wide enough for a slow runner
+    const wait = ['--handover-minutes', '120'];
+    const short = ['--handover-minutes', '5'];
+
+    it('starts the blocked issue after a person merged the pull request', async () => {
+      const out = await loop(
+        {
+          items: [
+            { id: 181, title: '[PBI] ci: workflow' },
+            { id: 182, title: '[PBI] feat: after it', blockedBy: [181] },
+          ],
+          ...HANDED,
+          gates: [READY, READY, { state: 'pending', reported: true }, { state: 'merged' }, READY],
+          filesLater: ['src/a.ts'],
+        },
+        { args: wait },
+      );
+      expect(out.status).toBe(0);
+      expect(out.sessions.map((s) => s.id)).toEqual([181, 182]);
+      expect(out.merges.map((m) => m.pull)).toEqual([282]);
+      expect(out.results.map((r) => [r.issue, r.outcome])).toEqual([
+        [181, 'aside'],
+        [181, 'merged'],
+        [182, 'merged'],
+      ]);
+      expect(out.stdout).toMatch(/merged \(2\):\n {2}#181 \S+\n {2}#182/);
+      expect(out.stdout).toMatch(/set aside \(0\):/);
+      expect(out.events.filter((e) => e.type === 'attention')).toHaveLength(2);
+    });
+
+    it('ends with exit 3 when the time is over', async () => {
+      const out = await loop(
+        {
+          items: [{ id: 183, title: '[PBI] ci: workflow' }],
+          ...HANDED,
+          gates: [READY, { state: 'pending', reported: true }],
+        },
+        { args: short },
+      );
+      expect(out.status).toBe(3);
+      expect(out.stdout).toContain('waiting for handed-over pull requests');
+      expect(out.stdout).toContain(
+        'waiting for a handed-over PR: merge it, then run /deliver again',
+      );
+      expect(out.final).toMatchObject({ status: 'waiting-for-handed-over', handedOver: [183] });
+    });
+
+    it('sets a closed pull request aside', async () => {
+      const out = await loop(
+        {
+          items: [{ id: 184, title: '[PBI] ci: workflow' }],
+          ...HANDED,
+          gates: [READY, READY, { state: 'closed' }],
+        },
+        { args: wait },
+      );
+      expect(out.status).toBe(2);
+      expect(out.stdout).toMatch(/set aside \(1\):\n {2}#184 closed by a person/);
+    });
+
+    it('ends the wait at once on a stop request', async () => {
+      const out = await loop(
+        {
+          items: [{ id: 185, title: '[PBI] ci: workflow' }],
+          ...HANDED,
+          gates: [READY, { state: 'pending', reported: true }],
+        },
+        {
+          args: ['--handover-minutes', '120'],
+          whenStdout: (text, stop) => {
+            if (text.includes('waiting for handed-over pull requests')) stop();
+          },
+        },
+      );
+      expect(out.status).toBe(130);
+    });
+
+    it('repairs a conflict that appears during the wait once, then waits on', async () => {
+      const conflict = { state: 'conflict', detail: 'conflicts with main' };
+      const out = await loop(
+        {
+          items: [{ id: 186, title: '[PBI] ci: workflow' }],
+          ...HANDED,
+          gates: [
+            READY,
+            READY,
+            conflict,
+            conflict,
+            { state: 'pending', reported: true },
+            { state: 'merged' },
+          ],
+        },
+        { args: wait },
+      );
+      expect(out.status).toBe(0);
+      expect(out.sessions.map((s) => s.id)).toEqual([186, 186]);
+      expect(out.log).toContain('conflict repaired');
+    });
+
+    it('ends at once with exit 3 when the wait is turned off', async () => {
+      const out = await loop({ items: [{ id: 187, title: '[PBI] ci: workflow' }], ...HANDED });
+      expect(out.status).toBe(3);
+      expect(out.stdout).not.toContain('waiting for handed-over pull requests');
     });
   });
 
@@ -1275,5 +1511,18 @@ describe('deliver SKILL.md branch update rule', () => {
   it('tells the session to merge the base, never rebase or force-push', () => {
     expect(text).toContain('git merge origin/<base>');
     expect(text).toMatch(/Never rebase and never force-push/);
+  });
+  it('regenerates a conflicting lockfile instead of merging it by hand', () => {
+    expect(text).toContain('git checkout --theirs <lockfile>');
+    for (const cmd of [
+      '`pnpm-lock.yaml`: `pnpm install`',
+      '`package-lock.json`: `npm install`',
+      '`Cargo.lock`: `cargo update --workspace`',
+      '`uv.lock`: `uv lock`',
+      '`go.sum`: `go mod tidy`',
+    ])
+      expect(text).toContain(cmd);
+    expect(text).toMatch(/any other lockfile: the command of the project's `AGENTS\.md`/);
+    expect(text).toMatch(/verify commands as after any change/);
   });
 });
