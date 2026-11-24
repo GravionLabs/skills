@@ -777,6 +777,20 @@ describe('deliver loop', () => {
     ])('hands over %s', async (_name, head) => {
       await handedOver(head, 'Directory.Packages.props');
     });
+    it('hands over a reordered property and a reordered import', async () => {
+      const props = '<PropertyGroup><A>1</A><A>2</A></PropertyGroup>';
+      const imports = '<Import Project="a.props" /><Import Project="b.props" />';
+      for (const [x, y] of [
+        [props, props.replace('<A>1</A><A>2</A>', '<A>2</A><A>1</A>')],
+        [imports, '<Import Project="b.props" /><Import Project="a.props" />'],
+      ]) {
+        await handedOver(
+          base.replace('</Project>', `${y}</Project>`),
+          x === props ? 'Directory.Packages.props: A' : 'Directory.Packages.props: Import',
+          base.replace('</Project>', `${x}</Project>`),
+        );
+      }
+    });
     it('hands over an item over several lines', async () => {
       await handedOver(
         add('<PackageVersion Include="Moq"\n Version="1.0.0" />'),

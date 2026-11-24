@@ -111,5 +111,13 @@ export function directoryPackagesPropsKeys(before: string, after: string): strin
   const names = new Set<string>();
   for (const { sig, name } of [...a, ...b])
     if ((ca.get(sig) ?? 0) !== (cb.get(sig) ?? 0)) names.add(name);
+  // MSBuild evaluates in document order (the last property wins, imports run in sequence): a reorder or a move of
+  // anything but the allowed items is a difference too, named after the entries that changed place.
+  if (names.size === 0 && a.length === b.length)
+    for (let i = 0; i < a.length; i++)
+      if (a[i]!.sig !== b[i]!.sig) {
+        names.add(a[i]!.name);
+        names.add(b[i]!.name);
+      }
   return [...names].sort();
 }
