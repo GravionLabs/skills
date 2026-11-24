@@ -22,6 +22,7 @@
     "github-project",
     "github-pull-request",
     "github-release",
+    "github-triage",
     "github-workflow-lint"
   ],
   "go": [
