@@ -22,6 +22,7 @@
         "./skills/shared/code-review",
         "./skills/shared/detect-techstack",
         "./skills/shared/diagnose",
+        "./skills/shared/glossary",
         "./skills/shared/implementation",
         "./skills/shared/lessons",
         "./skills/shared/project-setup",
