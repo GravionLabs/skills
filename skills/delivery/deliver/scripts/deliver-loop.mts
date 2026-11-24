@@ -21,6 +21,7 @@ import { appSettings, tokenSource as makeSource } from './app-token.mts';
 import { type Emit, openEvents } from './events.mts';
 import { finishReport, programStatus } from './program-status.mts';
 import { cargoTomlKeys } from './cargo-toml.mts';
+import { directoryPackagesPropsKeys } from './directory-packages-props.mts';
 import { goModKeys } from './go-mod.mts';
 import { pyprojectTomlKeys } from './pyproject-toml.mts';
 import { pnpmWorkspaceKeys } from './pnpm-workspace.mts';
@@ -341,6 +342,23 @@ function goModParts(file: string, refs: { base: string; head: string }): string[
     return undefined;
   }
 }
+/**
+ * The parts outside the `PackageVersion` items in which `Directory.Packages.props` differs between the merge base and
+ * `head`; `undefined` when unknown (added, deleted, markup the strict parser does not understand).
+ */
+function directoryPackagesPropsParts(
+  file: string,
+  refs: { base: string; head: string },
+): string[] | undefined {
+  const before = tracker.fileAt(refs.base, file);
+  const after = tracker.fileAt(refs.head, file);
+  if (before === undefined || after === undefined) return undefined;
+  try {
+    return directoryPackagesPropsKeys(before, after);
+  } catch {
+    return undefined;
+  }
+}
 /** The files with a comparator, by lower-case name: what differs outside the allowed parts, `undefined` when unknown. */
 const COMPARATORS: Record<string, typeof packageJsonKeys> = {
   'package.json': packageJsonKeys,
@@ -348,8 +366,9 @@ const COMPARATORS: Record<string, typeof packageJsonKeys> = {
   'pnpm-workspace.yaml': pnpmWorkspaceParts,
   'pyproject.toml': pyprojectTomlParts,
   'go.mod': goModParts,
+  'directory.packages.props': directoryPackagesPropsParts,
 };
-/** The protected hits, a `package.json`, `Cargo.toml`, `pnpm-workspace.yaml`, `pyproject.toml` or `go.mod` that differs only in its dependencies dropped, the others named with their parts. */
+/** The protected hits, a `package.json`, `Cargo.toml`, `pnpm-workspace.yaml`, `pyproject.toml`, `go.mod` or `Directory.Packages.props` that differs only in its dependencies dropped, the others named with their parts. */
 function judgeHits(pull: Pull, files: string[], head?: string): string[] {
   const hits = protectedHits(files);
   if (!hits.some((file) => Object.hasOwn(COMPARATORS, path.posix.basename(file.toLowerCase()))))

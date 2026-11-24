@@ -31,6 +31,8 @@ type Scenario = {
   pyproject?: { base?: string; head?: string };
   /** The same for `go.mod`. */
   goMod?: { base?: string; head?: string };
+  /** The same for `Directory.Packages.props`. */
+  packagesProps?: { base?: string; head?: string };
   required?: string[];
   needsDecision?: boolean;
   /** Every gate() call blocks this long, as a slow call of a real tracker does. */
@@ -198,7 +200,9 @@ export function create(): Tracker {
             ? scenario.pyproject
             : /go\.mod$/i.test(file)
               ? scenario.goMod
-              : scenario.packageJson;
+              : /directory\.packages\.props$/i.test(file)
+                ? scenario.packagesProps
+                : scenario.packageJson;
       if (!contents) throw new Error('HTTP 500');
       return sha === 'base-sha' ? contents.base : contents.head;
     },

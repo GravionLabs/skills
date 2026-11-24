@@ -58,6 +58,7 @@ type Scenario = {
   pnpmWorkspace?: { base?: string; head?: string };
   pyproject?: { base?: string; head?: string };
   goMod?: { base?: string; head?: string };
+  packagesProps?: { base?: string; head?: string };
   blocked?: string;
   earlierPull?: boolean;
   twoPulls?: number[];
@@ -683,6 +684,122 @@ describe('deliver loop', () => {
     it('hands over an added and a deleted file', async () => {
       await handedOver(base, 'go.mod', null);
       await handedOver(undefined, 'go.mod');
+    });
+  });
+
+  describe('Directory.Packages.props (#974)', () => {
+    const base = [
+      '<Project>',
+      '  <PropertyGroup>',
+      '    <ManagePackageVersionsCentrally>true</ManagePackageVersionsCentrally>',
+      '  </PropertyGroup>',
+      '  <ItemGroup Label="Test">',
+      '    <!-- the test packages -->',
+      '    <PackageVersion Include="NUnit" Version="4.5.1" />',
+      '    <PackageVersion Include="Shouldly" Version="4.3.0" />',
+      '  </ItemGroup>',
+      '</Project>',
+      '',
+    ].join('\n');
+    const run = (head?: string, before: string | null = base) =>
+      loop({
+        items: [{ id: 65, title: '[PBI] feat: dependency' }],
+        files: ['Directory.Packages.props'],
+        packagesProps: { base: before ?? undefined, head },
+      });
+    const handedOver = async (head: string | undefined, reason: string, before?: string | null) => {
+      const out = await run(head, before);
+      expect(out.merges).toEqual([]);
+      expect(out.results[0]?.reason).toBe(`changes protected paths (${reason}), merge it yourself`);
+    };
+    const add = (line: string) => base.replace('  </ItemGroup>', `    ${line}\n  </ItemGroup>`);
+    it('merges a PackageVersion added, removed and bumped', async () => {
+      expect(
+        (await run(add('<PackageVersion Include="Moq" Version="1.0.0" />'))).merges,
+      ).toHaveLength(1);
+      expect(
+        (await run(base.replace('    <PackageVersion Include="NUnit" Version="4.5.1" />\n', '')))
+          .merges,
+      ).toHaveLength(1);
+      expect((await run(base.replace('4.5.1', '4.6.0'))).merges).toHaveLength(1);
+    });
+    it('hands over a GlobalPackageReference, naming it', async () => {
+      await handedOver(
+        add('<GlobalPackageReference Include="Evil" Version="1.0.0" />'),
+        'Directory.Packages.props: GlobalPackageReference',
+      );
+    });
+    it('hands over a Condition, a VersionOverride and an extra attribute', async () => {
+      await handedOver(
+        add('<PackageVersion Include="Moq" Version="1.0.0" Condition="true" />'),
+        'Directory.Packages.props: PackageVersion',
+      );
+      await handedOver(
+        add('<PackageVersion Include="Moq" Version="1.0.0" VersionOverride="2.0.0" />'),
+        'Directory.Packages.props: PackageVersion',
+      );
+      await handedOver(
+        base.replace('<ItemGroup Label="Test">', '<ItemGroup Condition="true">'),
+        'Directory.Packages.props: ItemGroup, PackageVersion',
+      );
+    });
+    it('hands over a changed property, an import and a target', async () => {
+      await handedOver(
+        base.replace('>true<', '>false<'),
+        'Directory.Packages.props: ManagePackageVersionsCentrally',
+      );
+      await handedOver(
+        base.replace('</Project>', '  <Import Project="evil.props" />\n</Project>'),
+        'Directory.Packages.props: Import',
+      );
+      await handedOver(
+        base.replace('</Project>', '  <Target Name="X"><Exec Command="x" /></Target>\n</Project>'),
+        'Directory.Packages.props: Exec, Target',
+      );
+    });
+    it('hands over an item that moved out of the plain group', async () => {
+      await handedOver(
+        base.replace(
+          '</Project>',
+          '  <Target Name="X">\n  <ItemGroup>\n    <PackageVersion Include="Moq" Version="1" />\n  </ItemGroup>\n  </Target>\n</Project>',
+        ),
+        'Directory.Packages.props: ItemGroup, PackageVersion, Target',
+      );
+    });
+    it.each([
+      [
+        'a comment that hides an element',
+        add('<!-- <PackageVersion Include="Moq" Version="1" /> -->'),
+      ],
+      ['CDATA', add('<![CDATA[ x ]]>')],
+      ['a single-quoted attribute', add("<PackageVersion Include='Moq' Version='1' />")],
+      ['a mismatched tag', base.replace('</ItemGroup>', '</Group>')],
+    ])('hands over %s', async (_name, head) => {
+      await handedOver(head, 'Directory.Packages.props');
+    });
+    it('hands over a reordered property and a reordered import', async () => {
+      const props = '<PropertyGroup><A>1</A><A>2</A></PropertyGroup>';
+      const imports = '<Import Project="a.props" /><Import Project="b.props" />';
+      for (const [x, y] of [
+        [props, props.replace('<A>1</A><A>2</A>', '<A>2</A><A>1</A>')],
+        [imports, '<Import Project="b.props" /><Import Project="a.props" />'],
+      ]) {
+        await handedOver(
+          base.replace('</Project>', `${y}</Project>`),
+          x === props ? 'Directory.Packages.props: A' : 'Directory.Packages.props: Import',
+          base.replace('</Project>', `${x}</Project>`),
+        );
+      }
+    });
+    it('hands over an item over several lines', async () => {
+      await handedOver(
+        add('<PackageVersion Include="Moq"\n Version="1.0.0" />'),
+        'Directory.Packages.props: PackageVersion',
+      );
+    });
+    it('hands over an added and a deleted file', async () => {
+      await handedOver(base, 'Directory.Packages.props', null);
+      await handedOver(undefined, 'Directory.Packages.props');
     });
   });
 
