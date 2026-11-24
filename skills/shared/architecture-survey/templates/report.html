@@ -1,0 +1,35 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Architecture survey: {{repo}}</title>
+<style>
+body{font:16px/1.5 system-ui,sans-serif;max-width:60rem;margin:2rem auto;padding:0 1rem;color:#1b1b1b;background:#fff}
+section{border:1px solid #ccc;border-radius:6px;padding:1rem 1.25rem;margin:1.5rem 0}
+h1,h2{line-height:1.2}
+.ba{display:grid;grid-template-columns:1fr 1fr;gap:1rem}
+pre{background:#f4f4f4;padding:.75rem;overflow:auto;border-radius:4px}
+.meta{color:#555;font-size:.9rem}
+@media (max-width:40rem){.ba{grid-template-columns:1fr}}
+@media (prefers-color-scheme:dark){body{background:#161616;color:#e8e8e8}section{border-color:#444}pre{background:#222}.meta{color:#aaa}}
+</style>
+</head>
+<body>
+<h1>Architecture survey: {{repo}}</h1>
+<p class="meta">Scope: {{scope}} · {{date}} · ADRs read, their decisions are not re-litigated.</p>
+<!-- one section per candidate, ranked by leverage -->
+<section id="c{{n}}">
+<h2>{{n}}. {{title}}</h2>
+<p class="meta">Files: {{files}}</p>
+<h3>Problem</h3>
+<p>{{problem}} Deletion test: {{deletion_test}}</p>
+<h3>Proposal</h3>
+<p>{{proposal}}</p>
+<p class="meta">Leverage: {{leverage}} · Locality: {{locality}} · ADR: {{adr}}</p>
+<div class="ba">
+<div><h3>Before</h3><pre>{{before}}</pre></div>
+<div><h3>After</h3><pre>{{after}}</pre></div>
+</div>
+</section>
+</body>
+</html>
