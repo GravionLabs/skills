@@ -34,7 +34,7 @@ with `governance`: also `references/governance.md`
 - Testable acceptance criteria.
 - `## Current behavior` and `## Desired behavior`, stated as behavior (not as steps).
 - Files and symbols named, never line numbers (the body must stay valid while the code moves).
-- Where the tests go.
+- Where the tests go: a `Tests: <seam>` line naming the public interface.
 - `## Out of scope`.
 - Size S or M (size L: split, see `## Refine` in `SKILL.md`).
 - A `Tier: <tier> — <reason>` line (`refine` adds a missing one, `SKILL.md` `## Refine`).

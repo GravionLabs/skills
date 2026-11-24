@@ -50,6 +50,7 @@
           "body": { "type": "string", "minLength": 1 },
           "size": { "enum": ["S", "M", "L"] },
           "tier": { "enum": ["fast", "standard", "strong"] },
+          "seam": { "type": "string", "minLength": 1 },
           "blocked_by": {
             "type": "array",
             "items": {
