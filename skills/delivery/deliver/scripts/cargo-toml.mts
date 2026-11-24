@@ -180,7 +180,8 @@ class Parser {
     let out = '';
     for (;;) {
       const c = this.text[this.pos++];
-      if (c === undefined || c === '\n' || c === '\r') this.fail('unterminated string');
+      if (c === undefined || c === '\n' || c === '\r' || c === '\u0000')
+        this.fail('unterminated string');
       if (c === '"') return out;
       if (c !== '\\') {
         out += c;
@@ -193,7 +194,8 @@ class Parser {
         const hex = this.text.slice(this.pos, this.pos + len);
         if (!new RegExp(`^[0-9A-Fa-f]{${len}}$`).test(hex)) this.fail('bad escape');
         const code = parseInt(hex, 16);
-        if (code > 0x10ffff || (code >= 0xd800 && code <= 0xdfff)) this.fail('bad escape');
+        if (code === 0 || code > 0x10ffff || (code >= 0xd800 && code <= 0xdfff))
+          this.fail('bad escape');
         out += String.fromCodePoint(code);
         this.pos += len;
       } else this.fail('bad escape');
@@ -203,7 +205,7 @@ class Parser {
     if (this.text.startsWith("'''", this.pos)) this.fail('multi-line string');
     const end = this.text.indexOf("'", this.pos + 1);
     const body = end < 0 ? '' : this.text.slice(this.pos + 1, end);
-    if (end < 0 || /[\r\n]/.test(body)) this.fail('unterminated string');
+    if (end < 0 || /[\r\n\u0000]/.test(body)) this.fail('unterminated string');
     this.pos = end + 1;
     return body;
   }
@@ -221,7 +223,8 @@ class Parser {
     if (word === 'true') return true;
     if (word === 'false') return false;
     if (/^[+-]?(0|[1-9](_?\d)*)(\.\d(_?\d)*)?([eE][+-]?\d(_?\d)*)?$/.test(word)) {
-      return Number(word.replace(/_/g, ''));
+      // the raw token, never a double: `1e999` and `2e999` must differ (NUL cannot occur in a parsed string)
+      return `\u0000${word.replace(/_/g, '')}`;
     }
     return this.fail('unsupported value');
   }

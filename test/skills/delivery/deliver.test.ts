@@ -598,6 +598,10 @@ describe('deliver loop', () => {
     ])('hands over %s', async (_name, head) => {
       await handedOver(head, 'Cargo.toml');
     });
+    it('hands over a changed number that a double cannot tell apart', async () => {
+      const before = `${base}[profile.release]\nx = 1e999\n`;
+      await handedOver(before.replace('1e999', '2e999'), 'Cargo.toml: profile', before);
+    });
     it('hands over an added and a deleted file', async () => {
       await handedOver(base, 'Cargo.toml', null);
       await handedOver(undefined, 'Cargo.toml');
