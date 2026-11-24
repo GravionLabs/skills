@@ -9,6 +9,8 @@
 # Everything between "BEGIN wizard library" and "END wizard library" is the wizard
 # library: do not hand-edit it. Author the per-step stages below the STAGES marker.
 
+# Library functions are used by the stages a wizard adds below; keep them all.
+# shellcheck disable=SC2329
 set -euo pipefail
 
 # ──────────────────────────────────────────────────────────────────────────
@@ -114,6 +116,7 @@ ask() {
   current=$(_existing "$key" || true)
   # Readline needs the colour codes wrapped in \001..\002 to place the cursor.
   p="  $s$BOLD$e$prompt$s$RESET$e "
+  # shellcheck disable=SC1087  # "$e[" is a variable followed by a literal bracket
   [[ -n "$current" ]] && p+="$s$DIM$e[Enter keeps current]$s$RESET$e "
   read -e -r -p "$p" input || rc=1
   if (( rc )) && [[ -z "$input" ]]; then return 1; fi
