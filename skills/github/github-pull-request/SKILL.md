@@ -27,6 +27,7 @@ Create a PR from the current branch. No dialogue — tool calls only. On Claude 
 
 1. **Gather context** (parallel): `git branch --show-current`, `git log origin/<base>..<head> --oneline`, `git diff --stat origin/<base>...<head>`, `gh issue view <nr> --json title,body,labels` (release mode: no `gh issue view`, the `git log`/`git diff` of the release head against `origin/<base>` still run)
 2. **Title**: release mode uses the caller `title`. Otherwise `<type>: <description> (#<issue_number>)` from the issue title: strip the level prefix `[Epic|Feature|PBI|Task|Bug] ` (the squash commit must stay a conventional commit), keep type, scope and summary word for word (never shorten or rephrase them) and append ` (#<issue_number>)`: `[PBI] feat(adapters): read the subagents of Claude Code workflows` → `feat(adapters): read the subagents of Claude Code workflows (#436)`. An issue title without a conventional type: type from the commits (`feat`, `fix`, `docs`, `refactor`, `perf`; mixed → dominant type or the issue's labels) before the summary.
+   `GLOSSARY.md` at the repository root exists: read it and use its terms in title and body (never one listed under `_Avoid_`); absent: no note, no suggestion to create it.
 3. **Body**:
 
    ```markdown

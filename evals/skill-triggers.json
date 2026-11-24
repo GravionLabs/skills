@@ -313,6 +313,17 @@
     "shouldNotTrigger": ["Update the spec of the BFF", "Plan Feature #64 into PBIs"]
   },
   {
+    "skill": "glossary",
+    "shouldTrigger": [
+      "Add the term Tier to the glossary with its definition and the synonyms to avoid",
+      "What do we call this concept? Settle one canonical term in GLOSSARY.md"
+    ],
+    "shouldNotTrigger": [
+      "Define the glossary of terms in my school vocabulary lesson",
+      "Translate this paragraph into French"
+    ]
+  },
+  {
     "skill": "ratchet",
     "shouldTrigger": [
       "Add a ratchet for the eslint no-explicit-any rule with a baseline of the existing violations",
