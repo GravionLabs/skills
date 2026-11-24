@@ -55,6 +55,7 @@
   "shared": [
     "adr",
     "agents-md",
+    "architecture-survey",
     "ast-grep-rules",
     "check-prerequisites",
     "code-review",
