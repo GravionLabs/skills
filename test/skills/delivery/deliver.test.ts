@@ -56,6 +56,7 @@ type Scenario = {
   packageJson?: { base?: string; head?: string };
   cargoToml?: { base?: string; head?: string };
   pnpmWorkspace?: { base?: string; head?: string };
+  pyproject?: { base?: string; head?: string };
   blocked?: string;
   earlierPull?: boolean;
   twoPulls?: number[];
@@ -606,6 +607,115 @@ describe('deliver loop', () => {
     it('hands over an added and a deleted file', async () => {
       await handedOver(base, 'Cargo.toml', null);
       await handedOver(undefined, 'Cargo.toml');
+    });
+  });
+
+  describe('pyproject.toml (#972)', () => {
+    const base = [
+      '[build-system]',
+      'requires = ["hatchling"]',
+      'build-backend = "hatchling.build"',
+      '',
+      '[project]',
+      'name = "x"',
+      'requires-python = ">=3.11"',
+      'dependencies = [',
+      '  "requests>=2",',
+      ']',
+      '',
+      '[project.optional-dependencies]',
+      'cli = ["click"]',
+      '',
+      '[project.scripts]',
+      'x = "x:main"',
+      '',
+      '[dependency-groups]',
+      'dev = ["pytest>=8", {include-group = "lint"}]',
+      'lint = ["ruff"]',
+      '',
+      '[tool.pytest.ini_options]',
+      'addopts = "-q"',
+      '',
+    ].join('\n');
+    const run = (head?: string, before: string | null = base) =>
+      loop({
+        items: [{ id: 63, title: '[PBI] feat: dependency' }],
+        files: ['pyproject.toml'],
+        pyproject: { base: before ?? undefined, head },
+      });
+    const handedOver = async (head: string | undefined, reason: string, before?: string | null) => {
+      const out = await run(head, before);
+      expect(out.merges).toEqual([]);
+      expect(out.results[0]?.reason).toBe(`changes protected paths (${reason}), merge it yourself`);
+    };
+    it('merges a package added to project.dependencies', async () => {
+      expect(
+        (
+          await run(
+            base.replace(
+              '"requests>=2",',
+              '"requests>=2",\n  "httpx[http2]~=0.27; python_version >= \'3.9\'",',
+            ),
+          )
+        ).merges,
+      ).toHaveLength(1);
+    });
+    it('merges a changed dependency group entry and an optional dependency', async () => {
+      const head = base
+        .replace('"pytest>=8"', '"pytest>=9"')
+        .replace('["click"]', '["click", "rich"]');
+      expect((await run(head)).merges).toHaveLength(1);
+    });
+    it('merges a removed entry and tool.uv.dev-dependencies', async () => {
+      expect((await run(base.replace('  "requests>=2",\n', ''))).merges).toHaveLength(1);
+      expect((await run(`${base}[tool.uv]\ndev-dependencies = ["mypy"]\n`)).merges).toHaveLength(1);
+    });
+    it('hands over a changed build-system.requires', async () => {
+      await handedOver(
+        base.replace('["hatchling"]', '["hatchling", "evil"]'),
+        'pyproject.toml: build-system',
+      );
+    });
+    it.each([
+      ['a git+ reference', 'evil @ git+https://example.com/e.git'],
+      ['a URL reference', 'evil@https://example.com/e.whl'],
+      ['a file path', '../evil'],
+      ['a bare URL', 'https://example.com/e.whl'],
+    ])('hands over a requirement with %s', async (_name, item) => {
+      await handedOver(
+        base.replace('"requests>=2",', `"requests>=2", "${item}",`),
+        'pyproject.toml: project.dependencies',
+      );
+    });
+    it('hands over a changed tool.pytest, project.scripts and requires-python', async () => {
+      await handedOver(base.replace('-q', '-p evil'), 'pyproject.toml: tool.pytest');
+      await handedOver(base.replace('x:main', 'evil:main'), 'pyproject.toml: project.scripts');
+      await handedOver(base.replace('>=3.11', '>=3.9'), 'pyproject.toml: project.requires-python');
+    });
+    it('hands over tool.uv.sources, tool.uv.index and tool.poetry.source', async () => {
+      await handedOver(
+        `${base}[tool.uv.sources]\nrequests = { git = "https://x.test/r.git" }\n`,
+        'pyproject.toml: tool.uv.sources',
+      );
+      await handedOver(`${base}[tool.poetry]\nsource = []\n`, 'pyproject.toml: tool.poetry');
+    });
+    it('names the other part when a dependency changes too', async () => {
+      await handedOver(
+        base.replace('"click"', '"click", "rich"').replace('x:main', 'y:main'),
+        'pyproject.toml: project.scripts',
+      );
+    });
+    it.each([
+      ['a multi-line string', `${base}[tool.x]\nnote = """\n[project]\n"""\n`],
+      ['an array table', `${base}[[tool.uv.index]]\nurl = "https://x.test"\n`],
+      ['text that is not TOML', 'nope nope'],
+      ['a duplicate key', `${base.replace('[project]', '[project]\nname = "y"')}`],
+    ])('hands over %s', async (_name, head) => {
+      await handedOver(head, 'pyproject.toml');
+    });
+    it('hands over an added and a deleted file', async () => {
+      await handedOver(base, 'pyproject.toml', null);
+      await handedOver(undefined, 'pyproject.toml');
     });
   });
 
