@@ -194,6 +194,17 @@
     ]
   },
   {
+    "skill": "handoff",
+    "shouldTrigger": [
+      "Write a handoff document for the next session",
+      "/handoff continue the review fixes tomorrow"
+    ],
+    "shouldNotTrigger": [
+      "Run a retrospective of the last delivery run",
+      "Show me the lessons from .agents/lessons"
+    ]
+  },
+  {
     "skill": "lessons",
     "shouldTrigger": [
       "Load the approved project lessons for the review role in this TypeScript repo",
