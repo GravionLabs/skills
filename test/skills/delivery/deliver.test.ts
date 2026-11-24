@@ -55,6 +55,7 @@ type Scenario = {
   filesFailures?: number;
   packageJson?: { base?: string; head?: string };
   cargoToml?: { base?: string; head?: string };
+  pnpmWorkspace?: { base?: string; head?: string };
   blocked?: string;
   earlierPull?: boolean;
   twoPulls?: number[];
@@ -605,6 +606,99 @@ describe('deliver loop', () => {
     it('hands over an added and a deleted file', async () => {
       await handedOver(base, 'Cargo.toml', null);
       await handedOver(undefined, 'Cargo.toml');
+    });
+  });
+
+  describe('pnpm-workspace.yaml (#971)', () => {
+    const base = [
+      'packages:',
+      "  - 'apps/*'",
+      'onlyBuiltDependencies:',
+      '  - esbuild',
+      'minimumReleaseAge: 1440',
+      'catalog:',
+      "  '@angular/core': ^21.0.0",
+      '  zod: ~3.2.0',
+      'catalogs:',
+      '  legacy:',
+      '    react: 18.3.1',
+      '',
+    ].join('\n');
+    const run = (head?: string, before: string | null = base) =>
+      loop({
+        items: [{ id: 63, title: '[PBI] feat: dependency' }],
+        files: ['pnpm-workspace.yaml'],
+        pnpmWorkspace: { base: before ?? undefined, head },
+      });
+    const handedOver = async (head: string | undefined, reason: string, before?: string | null) => {
+      const out = await run(head, before);
+      expect(out.merges).toEqual([]);
+      expect(out.results[0]?.reason).toBe(`changes protected paths (${reason}), merge it yourself`);
+    };
+    it('merges a bumped catalog version', async () => {
+      expect((await run(base.replace('~3.2.0', '^3.3.0'))).merges).toHaveLength(1);
+    });
+    it('merges a new, a removed and a named catalog entry', async () => {
+      const head = base
+        .replace('  zod: ~3.2.0\n', '  rxjs: ">=7 <8"\n  local: workspace:*\n')
+        .replace('react: 18.3.1', 'react: 19.0.0\n    vue: 3.x');
+      expect((await run(head)).merges).toHaveLength(1);
+      expect(
+        (await run(base.replace('catalog:\n', 'catalog:\n  new: 1.0.0\n'))).merges,
+      ).toHaveLength(1);
+    });
+    it('hands over an added onlyBuiltDependencies entry', async () => {
+      await handedOver(
+        base.replace('  - esbuild', '  - esbuild\n  - evil'),
+        'pnpm-workspace.yaml: onlyBuiltDependencies',
+      );
+    });
+    it('hands over minimumReleaseAgeExclude and a new top-level key', async () => {
+      await handedOver(
+        `${base}minimumReleaseAgeExclude:\n  - '@angular/core@22.3.0'\n`,
+        'pnpm-workspace.yaml: minimumReleaseAgeExclude',
+      );
+      await handedOver(base.replace('1440', '0'), 'pnpm-workspace.yaml: minimumReleaseAge');
+    });
+    it('names the other part when a catalog changes too', async () => {
+      await handedOver(
+        base.replace('~3.2.0', '^3.3.0').replace("'apps/*'", "'x/*'"),
+        'pnpm-workspace.yaml: packages',
+      );
+    });
+    it.each([
+      ['git+https', 'zod: git+https://example.com/zod.git'],
+      ['file:', 'zod: file:../zod'],
+      ['link:', 'zod: link:../zod'],
+      ['a URL', 'zod: https://example.com/zod.tgz'],
+      ['an npm alias', 'zod: npm:evil@1'],
+    ])('hands over a catalog entry with %s', async (_name, line) => {
+      await handedOver(base.replace('zod: ~3.2.0', line), 'pnpm-workspace.yaml: catalog.zod');
+    });
+    it('hands over a non-plain entry of a named catalog', async () => {
+      await handedOver(
+        base.replace('react: 18.3.1', 'react: git+https://x.test/r.git'),
+        'pnpm-workspace.yaml: catalogs.legacy.react',
+      );
+    });
+    it.each([
+      ['an alias', `${base.replace('zod: ~3.2.0', 'zod: *x')}`],
+      ['an anchor', base.replace('zod: ~3.2.0', 'zod: &a ~3.2.0')],
+      ['a tag', base.replace('zod: ~3.2.0', 'zod: !!str 1')],
+      ['a multi-line scalar', base.replace('zod: ~3.2.0', 'zod: |\n    1.0.0')],
+      ['a flow mapping outside a catalog', `${base}settings: { a: 1 }\n`],
+      ['a duplicate key', `${base}minimumReleaseAge: 1\n`],
+      ['text that is not YAML', 'nope nope'],
+      ['a tab', base.replace('  zod', '\tzod')],
+    ])('hands over %s', async (_name, head) => {
+      await handedOver(head, 'pnpm-workspace.yaml');
+    });
+    it('does not let a header-like line in a multi-line string pass', async () => {
+      await handedOver(`${base}note: >\n  catalog:\n    a: 1\n`, 'pnpm-workspace.yaml');
+    });
+    it('hands over an added and a deleted file', async () => {
+      await handedOver(base, 'pnpm-workspace.yaml', null);
+      await handedOver(undefined, 'pnpm-workspace.yaml');
     });
   });
 
