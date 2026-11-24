@@ -2,6 +2,7 @@
   "delivery": [
     "deliver",
     "grill-me",
+    "handoff",
     "planner",
     "poimen-lead",
     "retro",
@@ -22,6 +23,7 @@
     "github-project",
     "github-pull-request",
     "github-release",
+    "github-triage",
     "github-workflow-lint"
   ],
   "go": [
@@ -53,17 +55,21 @@
   "shared": [
     "adr",
     "agents-md",
+    "architecture-survey",
     "ast-grep-rules",
     "check-prerequisites",
     "code-review",
     "detect-techstack",
     "diagnose",
+    "glossary",
     "implementation",
     "lessons",
     "project-setup",
+    "prototype",
     "ratchet",
     "secret-scan",
-    "ui-styleguide"
+    "ui-styleguide",
+    "wizard"
   ],
   "skill-tooling": [
     "skill-audit",
