@@ -27,6 +27,8 @@ type Scenario = {
   cargoToml?: { base?: string; head?: string };
   /** The same for `pnpm-workspace.yaml`. */
   pnpmWorkspace?: { base?: string; head?: string };
+  /** The same for `pyproject.toml`. */
+  pyproject?: { base?: string; head?: string };
   required?: string[];
   needsDecision?: boolean;
   /** Every gate() call blocks this long, as a slow call of a real tracker does. */
@@ -190,7 +192,9 @@ export function create(): Tracker {
         ? scenario.cargoToml
         : /pnpm-workspace\.yaml$/i.test(file)
           ? scenario.pnpmWorkspace
-          : scenario.packageJson;
+          : /pyproject\.toml$/i.test(file)
+            ? scenario.pyproject
+            : scenario.packageJson;
       if (!contents) throw new Error('HTTP 500');
       return sha === 'base-sha' ? contents.base : contents.head;
     },
