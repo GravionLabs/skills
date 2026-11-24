@@ -42,6 +42,7 @@
         "./skills/github/github-project",
         "./skills/github/github-pull-request",
         "./skills/github/github-release",
+        "./skills/github/github-triage",
         "./skills/github/github-workflow-lint"
       ]
     },
