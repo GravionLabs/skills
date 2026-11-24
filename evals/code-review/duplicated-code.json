@@ -1,0 +1,11 @@
+{
+  "criteria": ["`formatUser` and `formatOrder` return a display string"],
+  "diff": "--- a/src/format.ts\n+++ b/src/format.ts\n@@ -1,1 +1,17 @@\n+export function formatUser(u: User) {\n+  const name = u.name.trim().toLowerCase();\n+  if (name.length > 20) return name.slice(0, 17) + '...';\n+  return name;\n+}\n+\n+export function formatOrder(o: Order) {\n+  const name = o.title.trim().toLowerCase();\n+  if (name.length > 20) return name.slice(0, 17) + '...';\n+  return name;\n+}\n",
+  "expected": {
+    "blocking": [],
+    "notes": [
+      "possible Duplicated Code: trim, lowercase and truncate repeated in `formatUser` and `formatOrder` (src/format.ts)"
+    ],
+    "spec": []
+  }
+}

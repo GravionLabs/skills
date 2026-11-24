@@ -242,4 +242,55 @@ describe('spec section', () => {
     expect(fx.diff).toContain(s.file);
     expect(fx.expected.notes.length).toBeGreaterThan(0);
   });
+
+  describe('smell baseline', () => {
+    const smells = read('references/smells.md');
+    const names = [
+      'Mysterious Name',
+      'Duplicated Code',
+      'Feature Envy',
+      'Data Clumps',
+      'Primitive Obsession',
+      'Repeated Switches',
+      'Shotgun Surgery',
+      'Divergent Change',
+      'Speculative Generality',
+      'Message Chains',
+      'Middle Man',
+      'Refused Bequest',
+    ];
+
+    it('lists the twelve smells, each with a fix', () => {
+      for (const n of names) expect(smells).toMatch(new RegExp(`\\*\\*${n}\\*\\* — .+ → .+`));
+    });
+
+    it('is loaded in step 5 and stays a note', () => {
+      expect(skill).toMatch(/non-test file of the diff load `references\/smells\.md`/);
+      expect(smells).toMatch(/always a \*\*note\*\*/);
+      expect(smells).toContain('possible <smell>');
+    });
+
+    it('is suppressed by review rules and lessons and skipped for linted rules', () => {
+      expect(smells).toMatch(/`## Review rules` entry .* or an approved lesson/);
+      expect(smells).toMatch(/linter of the repository enforces/);
+    });
+
+    it('does not contradict step 10 (no abstractions without need)', () => {
+      expect(skill).toMatch(/10\. Do not recommend patterns or abstractions/);
+      expect(smells).toMatch(/step 10/);
+      expect(smells).toMatch(/Speculative Generality/);
+    });
+
+    it('the eval case: duplicated logic is a note, not blocking', () => {
+      const fx = JSON.parse(
+        fs.readFileSync(
+          path.resolve(__dirname, '../../../evals/code-review/duplicated-code.json'),
+          'utf-8',
+        ),
+      );
+      expect(validate(fx.expected)).toBe(true);
+      expect(fx.expected.blocking).toEqual([]);
+      expect(fx.expected.notes[0]).toMatch(/^possible Duplicated Code/);
+    });
+  });
 });
