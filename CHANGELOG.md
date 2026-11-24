@@ -5,7 +5,25 @@ Versioning follows [Semantic Versioning](https://semver.org/).
 
 ---
 
+## [5.10.0] — 2026-11-24
+
+### Documentation
+- **github-issue**: Gh 2.94 shortcuts, open-blocker count and the close --comment trap (#954) (#989)
+
+
+### Features
+- **code-review**: Spec section reports missing, unrequested and wrong behavior (#951) (#985)
+- **code-review**: Fowler smell baseline as notes (#952) (#987)
+- **github-pull-request**: Summary as the smallest visual (#953) (#988)
+- **planner**: Test seams are a planning decision (#956) (#991)
+- **planner**: PBI and Bug state current and desired behavior and out of scope (#955) (#990)
+
+
 ## [5.9.0] — 2026-11-24
+
+### Documentation
+- Update CHANGELOG.md for v5.9.0 [skip ci]
+
 
 ### Features
 - **deliver**: A dependency-only change of Cargo.toml is not protected (#970) (#979)
