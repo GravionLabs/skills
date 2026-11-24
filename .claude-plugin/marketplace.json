@@ -11,12 +11,13 @@
   "plugins": [
     {
       "name": "shared",
-      "description": "Base skills every other group uses: stack detection (detect-techstack), language-agnostic implementation rules (implementation), code review (code-review), bug diagnosis (diagnose), the prerequisite check (check-prerequisites) and project setup (project-setup: formatter per language, .editorconfig).",
+      "description": "Base skills every other group uses: stack detection (detect-techstack), language-agnostic implementation rules (implementation), code review (code-review), bug diagnosis (diagnose), the prerequisite check (check-prerequisites), project setup (project-setup: formatter per language, .editorconfig) and throwaway prototypes that answer a design question (prototype), interactive scripts for steps only a human can take (wizard) and a survey of deepening opportunities in module shape (architecture-survey).",
       "source": "./",
       "strict": false,
       "skills": [
         "./skills/shared/adr",
         "./skills/shared/agents-md",
+        "./skills/shared/architecture-survey",
         "./skills/shared/ast-grep-rules",
         "./skills/shared/check-prerequisites",
         "./skills/shared/code-review",
@@ -26,9 +27,11 @@
         "./skills/shared/implementation",
         "./skills/shared/lessons",
         "./skills/shared/project-setup",
+        "./skills/shared/prototype",
         "./skills/shared/ratchet",
         "./skills/shared/secret-scan",
-        "./skills/shared/ui-styleguide"
+        "./skills/shared/ui-styleguide",
+        "./skills/shared/wizard"
       ]
     },
     {
@@ -49,12 +52,13 @@
     },
     {
       "name": "delivery",
-      "description": "Issue-driven delivery: /deliver, one pull request per issue on any harness, open-decision interview (grill-me), planning (planner), milestone plan and ROADMAP.md (roadmap), run retrospective (retro) and the installer and updater (skills-manage). Needs shared and github.",
+      "description": "Issue-driven delivery: /deliver, one pull request per issue on any harness, open-decision interview (grill-me), planning (planner), milestone plan and ROADMAP.md (roadmap), run retrospective (retro), session handoff document (handoff) and the installer and updater (skills-manage). Needs shared and github.",
       "source": "./",
       "strict": false,
       "skills": [
         "./skills/delivery/deliver",
         "./skills/delivery/grill-me",
+        "./skills/delivery/handoff",
         "./skills/delivery/planner",
         "./skills/delivery/poimen-lead",
         "./skills/delivery/retro",

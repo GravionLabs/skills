@@ -2,6 +2,7 @@
   "delivery": [
     "deliver",
     "grill-me",
+    "handoff",
     "planner",
     "poimen-lead",
     "retro",
@@ -54,6 +55,7 @@
   "shared": [
     "adr",
     "agents-md",
+    "architecture-survey",
     "ast-grep-rules",
     "check-prerequisites",
     "code-review",
@@ -63,9 +65,11 @@
     "implementation",
     "lessons",
     "project-setup",
+    "prototype",
     "ratchet",
     "secret-scan",
-    "ui-styleguide"
+    "ui-styleguide",
+    "wizard"
   ],
   "skill-tooling": [
     "skill-audit",

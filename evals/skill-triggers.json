@@ -351,6 +351,17 @@
     ]
   },
   {
+    "skill": "prototype",
+    "shouldTrigger": [
+      "Prototype the retry and cancel state model in a single HTML file before we plan the Feature",
+      "Build three UI variants of the settings page on one route that I can switch with a URL parameter"
+    ],
+    "shouldNotTrigger": [
+      "Implement the settings page with tests and open a pull request",
+      "Write an ADR for the choice of state library"
+    ]
+  },
+  {
     "skill": "agents-md",
     "shouldTrigger": [
       "Our AGENTS.md is too big, slim it down",
@@ -492,5 +503,16 @@
       "Create an exam note and a mock exam for my history test"
     ],
     "shouldNotTrigger": ["Create flashcards for my vocabulary list", "Write a summary of the topic"]
+  },
+  {
+    "skill": "wizard",
+    "shouldTrigger": [
+      "Write a script that walks me through creating the GitHub App and storing its key as a CI secret",
+      "Generate a setup wizard for the Stripe keys and the secrets our workflows use"
+    ],
+    "shouldNotTrigger": [
+      "Set the repository secret with gh secret set using the value in my env",
+      "Prototype the retry state model in one HTML file"
+    ]
   }
 ]
