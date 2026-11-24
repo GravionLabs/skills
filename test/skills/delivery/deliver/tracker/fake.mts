@@ -23,6 +23,16 @@ type Scenario = {
   filesFailures?: number;
   /** `package.json` contents by commit: `base` is the merge base, `head` the commit that is judged (missing: no such file). */
   packageJson?: { base?: string; head?: string };
+  /** The same for `Cargo.toml`. */
+  cargoToml?: { base?: string; head?: string };
+  /** The same for `pnpm-workspace.yaml`. */
+  pnpmWorkspace?: { base?: string; head?: string };
+  /** The same for `pyproject.toml`. */
+  pyproject?: { base?: string; head?: string };
+  /** The same for `go.mod`. */
+  goMod?: { base?: string; head?: string };
+  /** The same for `Directory.Packages.props`. */
+  packagesProps?: { base?: string; head?: string };
   required?: string[];
   needsDecision?: boolean;
   /** Every gate() call blocks this long, as a slow call of a real tracker does. */
@@ -181,9 +191,20 @@ export function create(): Tracker {
       return files ?? ['src/a.ts'];
     },
     compareRefs: (_pull: Pull, head?: string) => ({ base: 'base-sha', head: head ?? 'head-sha' }),
-    fileAt(sha: string): string | undefined {
-      if (!scenario.packageJson) throw new Error('HTTP 500');
-      return sha === 'base-sha' ? scenario.packageJson.base : scenario.packageJson.head;
+    fileAt(sha: string, file: string): string | undefined {
+      const contents = /cargo\.toml$/i.test(file)
+        ? scenario.cargoToml
+        : /pnpm-workspace\.yaml$/i.test(file)
+          ? scenario.pnpmWorkspace
+          : /pyproject\.toml$/i.test(file)
+            ? scenario.pyproject
+            : /go\.mod$/i.test(file)
+              ? scenario.goMod
+              : /directory\.packages\.props$/i.test(file)
+                ? scenario.packagesProps
+                : scenario.packageJson;
+      if (!contents) throw new Error('HTTP 500');
+      return sha === 'base-sha' ? contents.base : contents.head;
     },
     defaultBranch: () => 'main',
     releaseTests: (): Item[] =>

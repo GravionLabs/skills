@@ -54,6 +54,11 @@ type Scenario = {
   risks?: Record<number, string>;
   filesFailures?: number;
   packageJson?: { base?: string; head?: string };
+  cargoToml?: { base?: string; head?: string };
+  pnpmWorkspace?: { base?: string; head?: string };
+  pyproject?: { base?: string; head?: string };
+  goMod?: { base?: string; head?: string };
+  packagesProps?: { base?: string; head?: string };
   blocked?: string;
   earlierPull?: boolean;
   twoPulls?: number[];
@@ -528,6 +533,475 @@ describe('deliver loop', () => {
       expect(out.results[0]?.reason).toBe(
         'changes protected paths (package.json), merge it yourself',
       );
+    });
+  });
+
+  describe('Cargo.toml (#970)', () => {
+    const base = [
+      '[package]',
+      'name = "x"',
+      'version = "0.1.0"',
+      '',
+      '[dependencies]',
+      'serde = { version = "1", features = ["derive"] }',
+      '',
+    ].join('\n');
+    const run = (head?: string, before: string | null = base) =>
+      loop({
+        items: [{ id: 63, title: '[PBI] feat: dependency' }],
+        files: ['Cargo.toml'],
+        cargoToml: { base: before ?? undefined, head },
+      });
+    const handedOver = async (head: string | undefined, reason: string, before?: string | null) => {
+      const out = await run(head, before);
+      expect(out.merges).toEqual([]);
+      expect(out.results[0]?.reason).toBe(`changes protected paths (${reason}), merge it yourself`);
+    };
+    it('merges a crate added to [dependencies]', async () => {
+      expect((await run(`${base}tokio = "1"\n`)).merges).toHaveLength(1);
+    });
+    it('merges a changed feature list, a sub-table, a target table and a multi-line array', async () => {
+      const head = base
+        .replace('["derive"]', '[\n  "derive", # comment\n  "std",\n]')
+        .concat('[dependencies.anyhow]\nversion = "1"\n')
+        .concat('[target.\'cfg(unix)\'.dev-dependencies]\nlibc = "0.2"\n')
+        .concat('[workspace.dependencies]\nrand.version = "0.8"\n');
+      expect((await run(head)).merges).toHaveLength(1);
+    });
+    it('hands over [patch.crates-io] naming patch', async () => {
+      await handedOver(
+        `${base}[patch.crates-io]\nserde = { version = "1" }\n`,
+        'Cargo.toml: patch',
+      );
+    });
+    it('hands over a changed package.build', async () => {
+      await handedOver(
+        base.replace('version = "0.1.0"', 'build = "x.rs"'),
+        'Cargo.toml: package.build, package.version',
+      );
+    });
+    it('hands over a git or path dependency', async () => {
+      await handedOver(
+        `${base}x = { git = "https://example.com/x" }\n`,
+        'Cargo.toml: dependencies.x',
+      );
+      await handedOver(`${base}[dependencies.y]\npath = "../y"\n`, 'Cargo.toml: dependencies.y');
+    });
+    it('hands over a new table header outside the list', async () => {
+      await handedOver(`${base}[profile.release]\nlto = true\n`, 'Cargo.toml: profile');
+      await handedOver(`${base}[lints]\n`, 'Cargo.toml: lints');
+    });
+    it('hands over a header inside a multi-line string', async () => {
+      await handedOver(`${base}[package.metadata]\nx = """\n[dependencies]\n"""\n`, 'Cargo.toml');
+    });
+    it.each([
+      ['an array table', `${base}[[bin]]\nname = "a"\n`],
+      ['a multi-line array outside a dependency', `${base}[package.metadata]\nx = [\n1,\n]\n`],
+      ['a duplicate key', `${base}[dependencies]\n`],
+      ['text that is not TOML', 'nope nope'],
+    ])('hands over %s', async (_name, head) => {
+      await handedOver(head, 'Cargo.toml');
+    });
+    it('hands over a changed number that a double cannot tell apart', async () => {
+      const before = `${base}[profile.release]\nx = 1e999\n`;
+      await handedOver(before.replace('1e999', '2e999'), 'Cargo.toml: profile', before);
+    });
+    it('hands over an added and a deleted file', async () => {
+      await handedOver(base, 'Cargo.toml', null);
+      await handedOver(undefined, 'Cargo.toml');
+    });
+  });
+
+  describe('go.mod (#973)', () => {
+    const base = [
+      'module example.com/x',
+      '',
+      'go 1.24',
+      '',
+      'toolchain go1.24.1',
+      '',
+      'require github.com/a/a v1.0.0',
+      '',
+      'require (',
+      '\tgithub.com/b/b v1.2.3',
+      '\tgithub.com/c/c v0.1.0 // indirect',
+      ')',
+      '',
+    ].join('\n');
+    const run = (head?: string, before: string | null = base) =>
+      loop({
+        items: [{ id: 64, title: '[PBI] feat: dependency' }],
+        files: ['go.mod'],
+        goMod: { base: before ?? undefined, head },
+      });
+    const handedOver = async (head: string | undefined, reason: string, before?: string | null) => {
+      const out = await run(head, before);
+      expect(out.merges).toEqual([]);
+      expect(out.results[0]?.reason).toBe(`changes protected paths (${reason}), merge it yourself`);
+    };
+    it('merges a module added to a require block', async () => {
+      expect(
+        (
+          await run(
+            base.replace(
+              '\tgithub.com/b/b v1.2.3',
+              '\tgithub.com/b/b v1.2.3\n\tgithub.com/d/d v2.0.0+incompatible',
+            ),
+          )
+        ).merges,
+      ).toHaveLength(1);
+    });
+    it('merges a version bump with // indirect, a single-line change and a removal', async () => {
+      expect(
+        (await run(base.replace('v0.1.0 // indirect', 'v0.2.0 // indirect'))).merges,
+      ).toHaveLength(1);
+      expect((await run(base.replace('a/a v1.0.0', 'a/a v1.1.0'))).merges).toHaveLength(1);
+      expect((await run(base.replace('\tgithub.com/b/b v1.2.3\n', ''))).merges).toHaveLength(1);
+    });
+    it('hands over a replace, naming it', async () => {
+      await handedOver(`${base}replace github.com/a/a => ../evil\n`, 'go.mod: replace');
+    });
+    it('hands over a changed toolchain, go and module line', async () => {
+      await handedOver(base.replace('go1.24.1', 'go1.99.0'), 'go.mod: toolchain');
+      await handedOver(base.replace('go 1.24', 'go 1.25'), 'go.mod: go');
+      await handedOver(base.replace('example.com/x', 'example.com/y'), 'go.mod: module');
+    });
+    it('names every other directive that differs', async () => {
+      await handedOver(
+        `${base.replace('go 1.24', 'go 1.25')}exclude github.com/a/a v0.9.0\n`,
+        'go.mod: exclude, go',
+      );
+    });
+    it.each([
+      ['a backtick string', `${base}replace x => \`y\`\n`],
+      ['a quote', base.replace('github.com/a/a', '"github.com/a/a"')],
+      ['an unknown directive', `${base}frobnicate x\n`],
+      ['an unclosed block', `${base}require (\n\tgithub.com/z/z v1.0.0\n`],
+      ['a require without a version', base.replace('a/a v1.0.0', 'a/a')],
+    ])('hands over %s', async (_name, head) => {
+      await handedOver(head, 'go.mod');
+    });
+    it('hands over an added and a deleted file', async () => {
+      await handedOver(base, 'go.mod', null);
+      await handedOver(undefined, 'go.mod');
+    });
+  });
+
+  describe('Directory.Packages.props (#974)', () => {
+    const base = [
+      '<Project>',
+      '  <PropertyGroup>',
+      '    <ManagePackageVersionsCentrally>true</ManagePackageVersionsCentrally>',
+      '  </PropertyGroup>',
+      '  <ItemGroup Label="Test">',
+      '    <!-- the test packages -->',
+      '    <PackageVersion Include="NUnit" Version="4.5.1" />',
+      '    <PackageVersion Include="Shouldly" Version="4.3.0" />',
+      '  </ItemGroup>',
+      '</Project>',
+      '',
+    ].join('\n');
+    const run = (head?: string, before: string | null = base) =>
+      loop({
+        items: [{ id: 65, title: '[PBI] feat: dependency' }],
+        files: ['Directory.Packages.props'],
+        packagesProps: { base: before ?? undefined, head },
+      });
+    const handedOver = async (head: string | undefined, reason: string, before?: string | null) => {
+      const out = await run(head, before);
+      expect(out.merges).toEqual([]);
+      expect(out.results[0]?.reason).toBe(`changes protected paths (${reason}), merge it yourself`);
+    };
+    const add = (line: string) => base.replace('  </ItemGroup>', `    ${line}\n  </ItemGroup>`);
+    it('merges a PackageVersion added, removed and bumped', async () => {
+      expect(
+        (await run(add('<PackageVersion Include="Moq" Version="1.0.0" />'))).merges,
+      ).toHaveLength(1);
+      expect(
+        (await run(base.replace('    <PackageVersion Include="NUnit" Version="4.5.1" />\n', '')))
+          .merges,
+      ).toHaveLength(1);
+      expect((await run(base.replace('4.5.1', '4.6.0'))).merges).toHaveLength(1);
+    });
+    it('hands over a GlobalPackageReference, naming it', async () => {
+      await handedOver(
+        add('<GlobalPackageReference Include="Evil" Version="1.0.0" />'),
+        'Directory.Packages.props: GlobalPackageReference',
+      );
+    });
+    it('hands over a Condition, a VersionOverride and an extra attribute', async () => {
+      await handedOver(
+        add('<PackageVersion Include="Moq" Version="1.0.0" Condition="true" />'),
+        'Directory.Packages.props: PackageVersion',
+      );
+      await handedOver(
+        add('<PackageVersion Include="Moq" Version="1.0.0" VersionOverride="2.0.0" />'),
+        'Directory.Packages.props: PackageVersion',
+      );
+      await handedOver(
+        base.replace('<ItemGroup Label="Test">', '<ItemGroup Condition="true">'),
+        'Directory.Packages.props: ItemGroup, PackageVersion',
+      );
+    });
+    it('hands over a changed property, an import and a target', async () => {
+      await handedOver(
+        base.replace('>true<', '>false<'),
+        'Directory.Packages.props: ManagePackageVersionsCentrally',
+      );
+      await handedOver(
+        base.replace('</Project>', '  <Import Project="evil.props" />\n</Project>'),
+        'Directory.Packages.props: Import',
+      );
+      await handedOver(
+        base.replace('</Project>', '  <Target Name="X"><Exec Command="x" /></Target>\n</Project>'),
+        'Directory.Packages.props: Exec, Target',
+      );
+    });
+    it('hands over an item that moved out of the plain group', async () => {
+      await handedOver(
+        base.replace(
+          '</Project>',
+          '  <Target Name="X">\n  <ItemGroup>\n    <PackageVersion Include="Moq" Version="1" />\n  </ItemGroup>\n  </Target>\n</Project>',
+        ),
+        'Directory.Packages.props: ItemGroup, PackageVersion, Target',
+      );
+    });
+    it.each([
+      [
+        'a comment that hides an element',
+        add('<!-- <PackageVersion Include="Moq" Version="1" /> -->'),
+      ],
+      ['CDATA', add('<![CDATA[ x ]]>')],
+      ['a single-quoted attribute', add("<PackageVersion Include='Moq' Version='1' />")],
+      ['a mismatched tag', base.replace('</ItemGroup>', '</Group>')],
+    ])('hands over %s', async (_name, head) => {
+      await handedOver(head, 'Directory.Packages.props');
+    });
+    it('hands over a reordered property and a reordered import', async () => {
+      const props = '<PropertyGroup><A>1</A><A>2</A></PropertyGroup>';
+      const imports = '<Import Project="a.props" /><Import Project="b.props" />';
+      for (const [x, y] of [
+        [props, props.replace('<A>1</A><A>2</A>', '<A>2</A><A>1</A>')],
+        [imports, '<Import Project="b.props" /><Import Project="a.props" />'],
+      ]) {
+        await handedOver(
+          base.replace('</Project>', `${y}</Project>`),
+          x === props ? 'Directory.Packages.props: A' : 'Directory.Packages.props: Import',
+          base.replace('</Project>', `${x}</Project>`),
+        );
+      }
+    });
+    it('hands over an item over several lines', async () => {
+      await handedOver(
+        add('<PackageVersion Include="Moq"\n Version="1.0.0" />'),
+        'Directory.Packages.props: PackageVersion',
+      );
+    });
+    it('hands over an added and a deleted file', async () => {
+      await handedOver(base, 'Directory.Packages.props', null);
+      await handedOver(undefined, 'Directory.Packages.props');
+    });
+  });
+
+  describe('pyproject.toml (#972)', () => {
+    const base = [
+      '[build-system]',
+      'requires = ["hatchling"]',
+      'build-backend = "hatchling.build"',
+      '',
+      '[project]',
+      'name = "x"',
+      'requires-python = ">=3.11"',
+      'dependencies = [',
+      '  "requests>=2",',
+      ']',
+      '',
+      '[project.optional-dependencies]',
+      'cli = ["click"]',
+      '',
+      '[project.scripts]',
+      'x = "x:main"',
+      '',
+      '[dependency-groups]',
+      'dev = ["pytest>=8", {include-group = "lint"}]',
+      'lint = ["ruff"]',
+      '',
+      '[tool.pytest.ini_options]',
+      'addopts = "-q"',
+      '',
+    ].join('\n');
+    const run = (head?: string, before: string | null = base) =>
+      loop({
+        items: [{ id: 63, title: '[PBI] feat: dependency' }],
+        files: ['pyproject.toml'],
+        pyproject: { base: before ?? undefined, head },
+      });
+    const handedOver = async (head: string | undefined, reason: string, before?: string | null) => {
+      const out = await run(head, before);
+      expect(out.merges).toEqual([]);
+      expect(out.results[0]?.reason).toBe(`changes protected paths (${reason}), merge it yourself`);
+    };
+    it('merges a package added to project.dependencies', async () => {
+      expect(
+        (
+          await run(
+            base.replace(
+              '"requests>=2",',
+              '"requests>=2",\n  "httpx[http2]~=0.27; python_version >= \'3.9\'",',
+            ),
+          )
+        ).merges,
+      ).toHaveLength(1);
+    });
+    it('merges a changed dependency group entry and an optional dependency', async () => {
+      const head = base
+        .replace('"pytest>=8"', '"pytest>=9"')
+        .replace('["click"]', '["click", "rich"]');
+      expect((await run(head)).merges).toHaveLength(1);
+    });
+    it('merges a removed entry and tool.uv.dev-dependencies', async () => {
+      expect((await run(base.replace('  "requests>=2",\n', ''))).merges).toHaveLength(1);
+      expect((await run(`${base}[tool.uv]\ndev-dependencies = ["mypy"]\n`)).merges).toHaveLength(1);
+    });
+    it('hands over a changed build-system.requires', async () => {
+      await handedOver(
+        base.replace('["hatchling"]', '["hatchling", "evil"]'),
+        'pyproject.toml: build-system',
+      );
+    });
+    it.each([
+      ['a git+ reference', 'evil @ git+https://example.com/e.git'],
+      ['a URL reference', 'evil@https://example.com/e.whl'],
+      ['a file path', '../evil'],
+      ['a bare URL', 'https://example.com/e.whl'],
+    ])('hands over a requirement with %s', async (_name, item) => {
+      await handedOver(
+        base.replace('"requests>=2",', `"requests>=2", "${item}",`),
+        'pyproject.toml: project.dependencies',
+      );
+    });
+    it('hands over a changed tool.pytest, project.scripts and requires-python', async () => {
+      await handedOver(base.replace('-q', '-p evil'), 'pyproject.toml: tool.pytest');
+      await handedOver(base.replace('x:main', 'evil:main'), 'pyproject.toml: project.scripts');
+      await handedOver(base.replace('>=3.11', '>=3.9'), 'pyproject.toml: project.requires-python');
+    });
+    it('hands over tool.uv.sources, tool.uv.index and tool.poetry.source', async () => {
+      await handedOver(
+        `${base}[tool.uv.sources]\nrequests = { git = "https://x.test/r.git" }\n`,
+        'pyproject.toml: tool.uv.sources',
+      );
+      await handedOver(`${base}[tool.poetry]\nsource = []\n`, 'pyproject.toml: tool.poetry');
+    });
+    it('names the other part when a dependency changes too', async () => {
+      await handedOver(
+        base.replace('"click"', '"click", "rich"').replace('x:main', 'y:main'),
+        'pyproject.toml: project.scripts',
+      );
+    });
+    it.each([
+      ['a multi-line string', `${base}[tool.x]\nnote = """\n[project]\n"""\n`],
+      ['an array table', `${base}[[tool.uv.index]]\nurl = "https://x.test"\n`],
+      ['text that is not TOML', 'nope nope'],
+      ['a duplicate key', `${base.replace('[project]', '[project]\nname = "y"')}`],
+    ])('hands over %s', async (_name, head) => {
+      await handedOver(head, 'pyproject.toml');
+    });
+    it('hands over an added and a deleted file', async () => {
+      await handedOver(base, 'pyproject.toml', null);
+      await handedOver(undefined, 'pyproject.toml');
+    });
+  });
+
+  describe('pnpm-workspace.yaml (#971)', () => {
+    const base = [
+      'packages:',
+      "  - 'apps/*'",
+      'onlyBuiltDependencies:',
+      '  - esbuild',
+      'minimumReleaseAge: 1440',
+      'catalog:',
+      "  '@angular/core': ^21.0.0",
+      '  zod: ~3.2.0',
+      'catalogs:',
+      '  legacy:',
+      '    react: 18.3.1',
+      '',
+    ].join('\n');
+    const run = (head?: string, before: string | null = base) =>
+      loop({
+        items: [{ id: 63, title: '[PBI] feat: dependency' }],
+        files: ['pnpm-workspace.yaml'],
+        pnpmWorkspace: { base: before ?? undefined, head },
+      });
+    const handedOver = async (head: string | undefined, reason: string, before?: string | null) => {
+      const out = await run(head, before);
+      expect(out.merges).toEqual([]);
+      expect(out.results[0]?.reason).toBe(`changes protected paths (${reason}), merge it yourself`);
+    };
+    it('merges a bumped catalog version', async () => {
+      expect((await run(base.replace('~3.2.0', '^3.3.0'))).merges).toHaveLength(1);
+    });
+    it('merges a new, a removed and a named catalog entry', async () => {
+      const head = base
+        .replace('  zod: ~3.2.0\n', '  rxjs: ">=7 <8"\n  local: workspace:*\n')
+        .replace('react: 18.3.1', 'react: 19.0.0\n    vue: 3.x');
+      expect((await run(head)).merges).toHaveLength(1);
+      expect(
+        (await run(base.replace('catalog:\n', 'catalog:\n  new: 1.0.0\n'))).merges,
+      ).toHaveLength(1);
+    });
+    it('hands over an added onlyBuiltDependencies entry', async () => {
+      await handedOver(
+        base.replace('  - esbuild', '  - esbuild\n  - evil'),
+        'pnpm-workspace.yaml: onlyBuiltDependencies',
+      );
+    });
+    it('hands over minimumReleaseAgeExclude and a new top-level key', async () => {
+      await handedOver(
+        `${base}minimumReleaseAgeExclude:\n  - '@angular/core@22.3.0'\n`,
+        'pnpm-workspace.yaml: minimumReleaseAgeExclude',
+      );
+      await handedOver(base.replace('1440', '0'), 'pnpm-workspace.yaml: minimumReleaseAge');
+    });
+    it('names the other part when a catalog changes too', async () => {
+      await handedOver(
+        base.replace('~3.2.0', '^3.3.0').replace("'apps/*'", "'x/*'"),
+        'pnpm-workspace.yaml: packages',
+      );
+    });
+    it.each([
+      ['git+https', 'zod: git+https://example.com/zod.git'],
+      ['file:', 'zod: file:../zod'],
+      ['link:', 'zod: link:../zod'],
+      ['a URL', 'zod: https://example.com/zod.tgz'],
+      ['an npm alias', 'zod: npm:evil@1'],
+    ])('hands over a catalog entry with %s', async (_name, line) => {
+      await handedOver(base.replace('zod: ~3.2.0', line), 'pnpm-workspace.yaml: catalog.zod');
+    });
+    it('hands over a non-plain entry of a named catalog', async () => {
+      await handedOver(
+        base.replace('react: 18.3.1', 'react: git+https://x.test/r.git'),
+        'pnpm-workspace.yaml: catalogs.legacy.react',
+      );
+    });
+    it.each([
+      ['an alias', `${base.replace('zod: ~3.2.0', 'zod: *x')}`],
+      ['an anchor', base.replace('zod: ~3.2.0', 'zod: &a ~3.2.0')],
+      ['a tag', base.replace('zod: ~3.2.0', 'zod: !!str 1')],
+      ['a multi-line scalar', base.replace('zod: ~3.2.0', 'zod: |\n    1.0.0')],
+      ['a flow mapping outside a catalog', `${base}settings: { a: 1 }\n`],
+      ['a duplicate key', `${base}minimumReleaseAge: 1\n`],
+      ['text that is not YAML', 'nope nope'],
+      ['a tab', base.replace('  zod', '\tzod')],
+    ])('hands over %s', async (_name, head) => {
+      await handedOver(head, 'pnpm-workspace.yaml');
+    });
+    it('does not let a header-like line in a multi-line string pass', async () => {
+      await handedOver(`${base}note: >\n  catalog:\n    a: 1\n`, 'pnpm-workspace.yaml');
+    });
+    it('hands over an added and a deleted file', async () => {
+      await handedOver(base, 'pnpm-workspace.yaml', null);
+      await handedOver(undefined, 'pnpm-workspace.yaml');
     });
   });
 
