@@ -229,7 +229,17 @@ describe('spec section', () => {
   });
 
   it('the eval case: a diff with an unrequested change is reported as unrequested', () => {
-    expect(skill).toMatch(/unrequested/);
-    expect(validate({ blocking: [], notes: ['extra retry'], spec: [item] })).toBe(true);
+    const fx = JSON.parse(
+      fs.readFileSync(
+        path.resolve(__dirname, '../../../evals/code-review/unrequested.json'),
+        'utf-8',
+      ),
+    );
+    expect(validate(fx.expected)).toBe(true);
+    expect(fx.expected.blocking).toEqual([]);
+    const [s] = fx.expected.spec;
+    expect(s.kind).toBe('unrequested');
+    expect(fx.diff).toContain(s.file);
+    expect(fx.expected.notes.length).toBeGreaterThan(0);
   });
 });
