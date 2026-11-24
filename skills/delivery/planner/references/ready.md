@@ -33,7 +33,7 @@ with `governance`: also `references/governance.md`
 - Milestone set.
 - Testable acceptance criteria.
 - Files and symbols named.
-- Where the tests go.
+- Where the tests go: a `Tests: <seam>` line naming the public interface.
 - Out of scope.
 - Size S or M (size L: split, see `## Refine` in `SKILL.md`).
 - A `Tier: <tier> — <reason>` line (`refine` adds a missing one, `SKILL.md` `## Refine`).

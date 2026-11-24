@@ -9,6 +9,17 @@ Adapted from `to-tickets` in [mattpocock/skills](https://github.com/mattpocock/s
 - Slice by behavior, not by layer. "Add column", "add endpoint", "add UI" as three items is a horizontal split; one item per user-visible behavior is the target.
 - Order by risk and dependency: unknowns and shared foundations first, each `blocked_by` only what it truly needs, so independent items can run in parallel.
 
+## Test seams
+
+Adapted from `tdd` and `to-spec` in [mattpocock/skills](https://github.com/mattpocock/skills) (MIT License, Matt Pocock). Reworded for this hub.
+
+Per item the plan names the public interface its tests go through (`items[].seam`, body line `Tests: <seam>`).
+
+- Existing seam first: reuse an interface that already has tests (find them in the exploration).
+- Highest seam possible: the command, endpoint or public function a caller uses, not a helper below it.
+- Few seams: ideally one per item; every extra seam is a reason to look again.
+- A new seam is one with no existing test at that interface and not obvious from the code. It becomes a question in `questions[]` (`questions.md`): the options are the new seam and the existing one, the existing one is `recommended`, `blocks` lists the item.
+
 ## Wide refactors
 
 A change touching many call sites is never one item. Plan it as:
