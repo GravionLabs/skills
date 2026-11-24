@@ -5,10 +5,20 @@ Versioning follows [Semantic Versioning](https://semver.org/).
 
 ---
 
+## [5.8.0] — 2026-11-24
+
+### Features
+- **deliver**: Repair the conflict of a handed-over pull request before handing it over (#965) (#969)
+- **deliver**: Resolve lockfile conflicts by regenerating the lockfile (#966) (#976)
+- **deliver**: A dependency-only change of package.json is not protected (#967) (#977)
+- **deliver**: Wait for a handed-over pull request instead of ending with exit 3 (#968) (#978)
+
+
 ## [5.7.0] — 2026-11-23
 
 ### Documentation
 - **site**: Evaluate mattpocock/skills on the frameworks page (#950) (#963)
+- Update CHANGELOG.md for v5.7.0 [skip ci]
 
 
 ### Features
