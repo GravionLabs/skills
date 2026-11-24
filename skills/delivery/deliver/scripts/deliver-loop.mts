@@ -20,6 +20,7 @@ import { parseArgs } from 'node:util';
 import { appSettings, tokenSource as makeSource } from './app-token.mts';
 import { type Emit, openEvents } from './events.mts';
 import { finishReport, programStatus } from './program-status.mts';
+import { cargoTomlKeys } from './cargo-toml.mts';
 import { HARNESSES } from './harness.mts';
 import { adoptLegacyEnv, unknownConfigKeys } from './legacy.mts';
 import { killTree, launch, promptPath } from './process.mts';
@@ -275,10 +276,30 @@ function packageJsonKeys(file: string, refs: { base: string; head: string }): st
     .filter((key) => !DEPENDENCY_KEYS.includes(key) && !sameJson(a[key], b[key]))
     .sort();
 }
-/** The protected hits, a `package.json` that differs only in its dependency maps dropped, the others named with their keys. */
+/**
+ * The parts outside the dependency entries in which `Cargo.toml` differs between the merge base and `head`;
+ * `undefined` when unknown (added, deleted, a file the parser does not understand), then the file is a plain hit.
+ */
+function cargoTomlParts(file: string, refs: { base: string; head: string }): string[] | undefined {
+  const before = tracker.fileAt(refs.base, file);
+  const after = tracker.fileAt(refs.head, file);
+  if (before === undefined || after === undefined) return undefined;
+  try {
+    return cargoTomlKeys(before, after);
+  } catch {
+    return undefined;
+  }
+}
+/** The files with a comparator, by lower-case name: what differs outside the allowed parts, `undefined` when unknown. */
+const COMPARATORS: Record<string, typeof packageJsonKeys> = {
+  'package.json': packageJsonKeys,
+  'cargo.toml': cargoTomlParts,
+};
+/** The protected hits, a `package.json` or `Cargo.toml` that differs only in its dependencies dropped, the others named with their parts. */
 function judgeHits(pull: Pull, files: string[], head?: string): string[] {
   const hits = protectedHits(files);
-  if (!hits.some((file) => path.posix.basename(file.toLowerCase()) === 'package.json')) return hits;
+  if (!hits.some((file) => Object.hasOwn(COMPARATORS, path.posix.basename(file.toLowerCase()))))
+    return hits;
   let refs: { base: string; head: string } | undefined;
   try {
     refs = tracker.compareRefs(pull, head);
@@ -287,18 +308,20 @@ function judgeHits(pull: Pull, files: string[], head?: string): string[] {
   }
   const out: string[] = [];
   for (const file of hits) {
-    // the case-folded name matches `package.json`; the file itself is read under its own name
+    // the case-folded name matches the manifest; the file itself is read under its own name
     const lower = file.toLowerCase();
     const inDirectory = PROTECTED.some(
       (entry) => entry.endsWith('/') && lower.startsWith(entry.toLowerCase()),
     );
-    if (inDirectory || path.posix.basename(lower) !== 'package.json') {
+    const name = path.posix.basename(lower);
+    const compare = Object.hasOwn(COMPARATORS, name) ? COMPARATORS[name] : undefined;
+    if (inDirectory || !compare) {
       out.push(file);
       continue;
     }
     let keys: string[] | undefined;
     try {
-      keys = packageJsonKeys(file, refs);
+      keys = compare(file, refs);
     } catch {
       keys = undefined;
     }

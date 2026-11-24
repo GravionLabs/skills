@@ -54,6 +54,7 @@ type Scenario = {
   risks?: Record<number, string>;
   filesFailures?: number;
   packageJson?: { base?: string; head?: string };
+  cargoToml?: { base?: string; head?: string };
   blocked?: string;
   earlierPull?: boolean;
   twoPulls?: number[];
@@ -528,6 +529,82 @@ describe('deliver loop', () => {
       expect(out.results[0]?.reason).toBe(
         'changes protected paths (package.json), merge it yourself',
       );
+    });
+  });
+
+  describe('Cargo.toml (#970)', () => {
+    const base = [
+      '[package]',
+      'name = "x"',
+      'version = "0.1.0"',
+      '',
+      '[dependencies]',
+      'serde = { version = "1", features = ["derive"] }',
+      '',
+    ].join('\n');
+    const run = (head?: string, before: string | null = base) =>
+      loop({
+        items: [{ id: 63, title: '[PBI] feat: dependency' }],
+        files: ['Cargo.toml'],
+        cargoToml: { base: before ?? undefined, head },
+      });
+    const handedOver = async (head: string | undefined, reason: string, before?: string | null) => {
+      const out = await run(head, before);
+      expect(out.merges).toEqual([]);
+      expect(out.results[0]?.reason).toBe(`changes protected paths (${reason}), merge it yourself`);
+    };
+    it('merges a crate added to [dependencies]', async () => {
+      expect((await run(`${base}tokio = "1"\n`)).merges).toHaveLength(1);
+    });
+    it('merges a changed feature list, a sub-table, a target table and a multi-line array', async () => {
+      const head = base
+        .replace('["derive"]', '[\n  "derive", # comment\n  "std",\n]')
+        .concat('[dependencies.anyhow]\nversion = "1"\n')
+        .concat('[target.\'cfg(unix)\'.dev-dependencies]\nlibc = "0.2"\n')
+        .concat('[workspace.dependencies]\nrand.version = "0.8"\n');
+      expect((await run(head)).merges).toHaveLength(1);
+    });
+    it('hands over [patch.crates-io] naming patch', async () => {
+      await handedOver(
+        `${base}[patch.crates-io]\nserde = { version = "1" }\n`,
+        'Cargo.toml: patch',
+      );
+    });
+    it('hands over a changed package.build', async () => {
+      await handedOver(
+        base.replace('version = "0.1.0"', 'build = "x.rs"'),
+        'Cargo.toml: package.build, package.version',
+      );
+    });
+    it('hands over a git or path dependency', async () => {
+      await handedOver(
+        `${base}x = { git = "https://example.com/x" }\n`,
+        'Cargo.toml: dependencies.x',
+      );
+      await handedOver(`${base}[dependencies.y]\npath = "../y"\n`, 'Cargo.toml: dependencies.y');
+    });
+    it('hands over a new table header outside the list', async () => {
+      await handedOver(`${base}[profile.release]\nlto = true\n`, 'Cargo.toml: profile');
+      await handedOver(`${base}[lints]\n`, 'Cargo.toml: lints');
+    });
+    it('hands over a header inside a multi-line string', async () => {
+      await handedOver(`${base}[package.metadata]\nx = """\n[dependencies]\n"""\n`, 'Cargo.toml');
+    });
+    it.each([
+      ['an array table', `${base}[[bin]]\nname = "a"\n`],
+      ['a multi-line array outside a dependency', `${base}[package.metadata]\nx = [\n1,\n]\n`],
+      ['a duplicate key', `${base}[dependencies]\n`],
+      ['text that is not TOML', 'nope nope'],
+    ])('hands over %s', async (_name, head) => {
+      await handedOver(head, 'Cargo.toml');
+    });
+    it('hands over a changed number that a double cannot tell apart', async () => {
+      const before = `${base}[profile.release]\nx = 1e999\n`;
+      await handedOver(before.replace('1e999', '2e999'), 'Cargo.toml: profile', before);
+    });
+    it('hands over an added and a deleted file', async () => {
+      await handedOver(base, 'Cargo.toml', null);
+      await handedOver(undefined, 'Cargo.toml');
     });
   });
 
