@@ -340,6 +340,17 @@
     ]
   },
   {
+    "skill": "prototype",
+    "shouldTrigger": [
+      "Prototype the retry and cancel state model in a single HTML file before we plan the Feature",
+      "Build three UI variants of the settings page on one route that I can switch with a URL parameter"
+    ],
+    "shouldNotTrigger": [
+      "Implement the settings page with tests and open a pull request",
+      "Write an ADR for the choice of state library"
+    ]
+  },
+  {
     "skill": "agents-md",
     "shouldTrigger": [
       "Our AGENTS.md is too big, slim it down",

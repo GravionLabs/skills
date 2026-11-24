@@ -11,7 +11,7 @@
   "plugins": [
     {
       "name": "shared",
-      "description": "Base skills every other group uses: stack detection (detect-techstack), language-agnostic implementation rules (implementation), code review (code-review), bug diagnosis (diagnose), the prerequisite check (check-prerequisites) and project setup (project-setup: formatter per language, .editorconfig).",
+      "description": "Base skills every other group uses: stack detection (detect-techstack), language-agnostic implementation rules (implementation), code review (code-review), bug diagnosis (diagnose), the prerequisite check (check-prerequisites), project setup (project-setup: formatter per language, .editorconfig) and throwaway prototypes that answer a design question (prototype).",
       "source": "./",
       "strict": false,
       "skills": [
@@ -25,6 +25,7 @@
         "./skills/shared/implementation",
         "./skills/shared/lessons",
         "./skills/shared/project-setup",
+        "./skills/shared/prototype",
         "./skills/shared/ratchet",
         "./skills/shared/secret-scan",
         "./skills/shared/ui-styleguide"
