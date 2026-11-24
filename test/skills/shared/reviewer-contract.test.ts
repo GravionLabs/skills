@@ -129,8 +129,8 @@ describe('rule proposal', () => {
     expect(contract).toMatch(/candidate to retire/);
   });
 
-  it('keeps the reviewer result schema unchanged', () => {
-    expect(Object.keys(schema.properties).sort()).toEqual(['blocking', 'notes']);
+  it('keeps the reviewer result schema to blocking, notes and the optional spec', () => {
+    expect(Object.keys(schema.properties).sort()).toEqual(['blocking', 'notes', 'spec']);
   });
 });
 
@@ -169,5 +169,67 @@ describe('UX review of a UI diff', () => {
     );
     const cr = evals.find((e: { skill: string }) => e.skill === 'code-review');
     expect(cr.shouldTrigger.some((q: string) => /component\.ts/.test(q))).toBe(true);
+  });
+});
+
+describe('spec section', () => {
+  const skill = read('SKILL.md');
+  const ref = read('references/reviewer-contract.md');
+  const item = {
+    kind: 'unrequested',
+    criterion: 'none',
+    file: 'src/a.ts',
+    detail: 'adds a retry nobody asked for',
+  };
+
+  it('keeps old results without spec valid and requires no spec', () => {
+    expect(schema.required).toEqual(['blocking', 'notes']);
+    expect(validate({ blocking: [], notes: [] })).toBe(true);
+  });
+
+  it.each(['missing', 'unrequested', 'wrong'])('accepts a %s item', (kind) => {
+    expect(validate({ blocking: [], notes: [], spec: [{ ...item, kind }] })).toBe(true);
+  });
+
+  it.each([
+    ['other kind', { ...item, kind: 'extra' }],
+    ['no criterion', { ...item, criterion: undefined }],
+    ['no detail', { ...item, detail: '' }],
+    ['extra property', { ...item, line: 1 }],
+  ])('rejects %s', (_n, v) => {
+    expect(validate({ blocking: [], notes: [], spec: [JSON.parse(JSON.stringify(v))] })).toBe(
+      false,
+    );
+  });
+
+  it('SKILL.md has the Spec section, the rules and the source commit', () => {
+    expect(skill).toMatch(/^## Spec$/m);
+    expect(skill).toMatch(/`## Blocking`, `## Spec`.*`## Notes`/);
+    expect(skill).toMatch(/\*\*unrequested\*\*.*note/);
+    expect(skill).toContain('49dd158d1076134a641b33efb035946536778336');
+    expect(skill.split('\n').length).toBeLessThanOrEqual(100);
+  });
+
+  it('the contract names every spec property and kind', () => {
+    for (const k of [
+      ...Object.keys(schema.properties.spec.items.properties),
+      'missing',
+      'unrequested',
+      'wrong',
+    ])
+      expect(ref).toContain(`\`${k}\``);
+  });
+
+  it('deliver step 4 returns unrequested behavior', () => {
+    const deliver = fs.readFileSync(
+      path.resolve(__dirname, '../../../skills/delivery/deliver/SKILL.md'),
+      'utf-8',
+    );
+    expect(deliver).toMatch(/unrequested behavior/);
+  });
+
+  it('the eval case: a diff with an unrequested change is reported as unrequested', () => {
+    expect(skill).toMatch(/unrequested/);
+    expect(validate({ blocking: [], notes: ['extra retry'], spec: [item] })).toBe(true);
   });
 });
