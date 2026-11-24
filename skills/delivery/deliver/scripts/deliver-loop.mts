@@ -21,6 +21,7 @@ import { appSettings, tokenSource as makeSource } from './app-token.mts';
 import { type Emit, openEvents } from './events.mts';
 import { finishReport, programStatus } from './program-status.mts';
 import { cargoTomlKeys } from './cargo-toml.mts';
+import { pnpmWorkspaceKeys } from './pnpm-workspace.mts';
 import { HARNESSES } from './harness.mts';
 import { adoptLegacyEnv, unknownConfigKeys } from './legacy.mts';
 import { killTree, launch, promptPath } from './process.mts';
@@ -290,12 +291,30 @@ function cargoTomlParts(file: string, refs: { base: string; head: string }): str
     return undefined;
   }
 }
+/**
+ * The top-level parts outside the catalog entries in which `pnpm-workspace.yaml` differs between the merge base and
+ * `head`; `undefined` when unknown (added, deleted, a file the strict parser does not understand).
+ */
+function pnpmWorkspaceParts(
+  file: string,
+  refs: { base: string; head: string },
+): string[] | undefined {
+  const before = tracker.fileAt(refs.base, file);
+  const after = tracker.fileAt(refs.head, file);
+  if (before === undefined || after === undefined) return undefined;
+  try {
+    return pnpmWorkspaceKeys(before, after);
+  } catch {
+    return undefined;
+  }
+}
 /** The files with a comparator, by lower-case name: what differs outside the allowed parts, `undefined` when unknown. */
 const COMPARATORS: Record<string, typeof packageJsonKeys> = {
   'package.json': packageJsonKeys,
   'cargo.toml': cargoTomlParts,
+  'pnpm-workspace.yaml': pnpmWorkspaceParts,
 };
-/** The protected hits, a `package.json` or `Cargo.toml` that differs only in its dependencies dropped, the others named with their parts. */
+/** The protected hits, a `package.json`, `Cargo.toml` or `pnpm-workspace.yaml` that differs only in its dependencies dropped, the others named with their parts. */
 function judgeHits(pull: Pull, files: string[], head?: string): string[] {
   const hits = protectedHits(files);
   if (!hits.some((file) => Object.hasOwn(COMPARATORS, path.posix.basename(file.toLowerCase()))))

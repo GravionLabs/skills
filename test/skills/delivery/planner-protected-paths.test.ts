@@ -17,7 +17,8 @@ describe('planner protected paths (#752)', () => {
 
   it('the loop reads the shared file and keeps no second copy', () => {
     expect(loop).toContain('protected-paths.json');
-    expect(loop).not.toContain("'pnpm-workspace.yaml'");
+    // the comparators are keyed by file name (#967, #970, #971), the list itself is not copied
+    expect(loop).not.toContain("'Directory.Packages.props'");
   });
 
   it('the slicing rules name the config key and the shared file, not a copy', () => {
