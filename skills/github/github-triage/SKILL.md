@@ -1,6 +1,9 @@
 ---
 name: github-triage
 description: 'Triage issues filed by other people: list the queue, then move one to needs-info, ready ([Bug]/[PBI] in our format), already implemented or out of scope. Use for "/github-triage", "triage issue #N" or unsorted bug reports.'
+disable-model-invocation: true
+metadata:
+  opencode/autoinvoke: 'false'
 ---
 
 Moves issues filed by others to a decision. `planner refine` checks only our own issues; `deliver` delivers only issues by authors with write access, so a triaged issue gets a body written by us. Prerequisites: `gh` authenticated, repo root. Paths are relative to this skill's directory.

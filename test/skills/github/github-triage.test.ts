@@ -12,7 +12,9 @@ describe('github-triage skill', () => {
   it('has valid frontmatter and stays within 100 lines', () => {
     const text = read('SKILL.md');
     expect(text.split('\n').length).toBeLessThanOrEqual(101);
-    const fm = text.match(/^---\nname: github-triage\ndescription: '(.+)'\n---\n/);
+    const fm = text.match(
+      /^---\nname: github-triage\ndescription: '(.+)'\ndisable-model-invocation: true\nmetadata:\n  opencode\/autoinvoke: 'false'\n---\n/,
+    );
     expect(fm).not.toBeNull();
     expect(fm?.[1]?.length ?? 0).toBeLessThanOrEqual(1024);
   });
