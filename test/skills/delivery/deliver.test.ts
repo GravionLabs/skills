@@ -57,6 +57,7 @@ type Scenario = {
   cargoToml?: { base?: string; head?: string };
   pnpmWorkspace?: { base?: string; head?: string };
   pyproject?: { base?: string; head?: string };
+  goMod?: { base?: string; head?: string };
   blocked?: string;
   earlierPull?: boolean;
   twoPulls?: number[];
@@ -607,6 +608,81 @@ describe('deliver loop', () => {
     it('hands over an added and a deleted file', async () => {
       await handedOver(base, 'Cargo.toml', null);
       await handedOver(undefined, 'Cargo.toml');
+    });
+  });
+
+  describe('go.mod (#973)', () => {
+    const base = [
+      'module example.com/x',
+      '',
+      'go 1.24',
+      '',
+      'toolchain go1.24.1',
+      '',
+      'require github.com/a/a v1.0.0',
+      '',
+      'require (',
+      '\tgithub.com/b/b v1.2.3',
+      '\tgithub.com/c/c v0.1.0 // indirect',
+      ')',
+      '',
+    ].join('\n');
+    const run = (head?: string, before: string | null = base) =>
+      loop({
+        items: [{ id: 64, title: '[PBI] feat: dependency' }],
+        files: ['go.mod'],
+        goMod: { base: before ?? undefined, head },
+      });
+    const handedOver = async (head: string | undefined, reason: string, before?: string | null) => {
+      const out = await run(head, before);
+      expect(out.merges).toEqual([]);
+      expect(out.results[0]?.reason).toBe(`changes protected paths (${reason}), merge it yourself`);
+    };
+    it('merges a module added to a require block', async () => {
+      expect(
+        (
+          await run(
+            base.replace(
+              '\tgithub.com/b/b v1.2.3',
+              '\tgithub.com/b/b v1.2.3\n\tgithub.com/d/d v2.0.0+incompatible',
+            ),
+          )
+        ).merges,
+      ).toHaveLength(1);
+    });
+    it('merges a version bump with // indirect, a single-line change and a removal', async () => {
+      expect(
+        (await run(base.replace('v0.1.0 // indirect', 'v0.2.0 // indirect'))).merges,
+      ).toHaveLength(1);
+      expect((await run(base.replace('a/a v1.0.0', 'a/a v1.1.0'))).merges).toHaveLength(1);
+      expect((await run(base.replace('\tgithub.com/b/b v1.2.3\n', ''))).merges).toHaveLength(1);
+    });
+    it('hands over a replace, naming it', async () => {
+      await handedOver(`${base}replace github.com/a/a => ../evil\n`, 'go.mod: replace');
+    });
+    it('hands over a changed toolchain, go and module line', async () => {
+      await handedOver(base.replace('go1.24.1', 'go1.99.0'), 'go.mod: toolchain');
+      await handedOver(base.replace('go 1.24', 'go 1.25'), 'go.mod: go');
+      await handedOver(base.replace('example.com/x', 'example.com/y'), 'go.mod: module');
+    });
+    it('names every other directive that differs', async () => {
+      await handedOver(
+        `${base.replace('go 1.24', 'go 1.25')}exclude github.com/a/a v0.9.0\n`,
+        'go.mod: exclude, go',
+      );
+    });
+    it.each([
+      ['a backtick string', `${base}replace x => \`y\`\n`],
+      ['a quote', base.replace('github.com/a/a', '"github.com/a/a"')],
+      ['an unknown directive', `${base}frobnicate x\n`],
+      ['an unclosed block', `${base}require (\n\tgithub.com/z/z v1.0.0\n`],
+      ['a require without a version', base.replace('a/a v1.0.0', 'a/a')],
+    ])('hands over %s', async (_name, head) => {
+      await handedOver(head, 'go.mod');
+    });
+    it('hands over an added and a deleted file', async () => {
+      await handedOver(base, 'go.mod', null);
+      await handedOver(undefined, 'go.mod');
     });
   });
 
