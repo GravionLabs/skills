@@ -92,6 +92,7 @@
     "vault-decision",
     "vault-inbox",
     "vault-meeting",
+    "vault-pdf",
     "vault-recipe",
     "vault-setup",
     "vault-summarize",

@@ -443,6 +443,17 @@
     ]
   },
   {
+    "skill": "vault-pdf",
+    "shouldTrigger": [
+      "Make PDFs of the summary and the timeline of my history topic for the exam",
+      "Export this note from my vault as a PDF with the diagrams"
+    ],
+    "shouldNotTrigger": [
+      "Summarize this PDF article into a note",
+      "Import the scanned PDFs in my inbox"
+    ]
+  },
+  {
     "skill": "vault-recipe",
     "shouldTrigger": [
       "Save this recipe from a URL as a note in my vault",

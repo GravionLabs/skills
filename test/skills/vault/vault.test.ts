@@ -15,6 +15,7 @@ const names = [
   'vault-decision',
   'vault-weekly-review',
   'vault-recipe',
+  'vault-pdf',
 ];
 const read = (n: string) => fs.readFileSync(path.join(dir, n, 'SKILL.md'), 'utf-8');
 
