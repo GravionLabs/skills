@@ -7,6 +7,6 @@
     "exams": "Klausuren",
     "templates": "Vorlagen"
   },
-  "files": { "profile": "Profil.md" },
+  "files": { "school-profile": "Profil.md" },
   "templates": { "folder": "Vorlagen" }
 }

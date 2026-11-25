@@ -19,7 +19,7 @@ Four phases in this order: review, propose, approve, import. Steps 1–5 read on
 ## Propose
 
 3. Decide what each group is: reference note, meeting, decision, recipe, project update, journal entry, or a source for a subject.
-4. Pick the target. Read **every role that has a `description`** and match the group against it; use `projects`, `areas`, `resources`, `subjects`, `sources` by their usual meaning. A role with a `profile` file (`files.profile`) is read first for subject and topic. PARA targets (projects, areas, resources, own roles) and school targets (`<subjects>/<Subject>/<Topic>/`) are proposed side by side. An existing topic folder wins over a near-identically named new one. Search the vault for notes on the same subject: extending a match beats a near-duplicate.
+4. Pick the target. Read **every role that has a `description`** and match the group against it; use `projects`, `areas`, `resources`, `subjects`, `sources` by their usual meaning. With the school role `subjects`, read the school profile (`files.school-profile`) first for subject and topic. PARA targets (projects, areas, resources, own roles) and school targets (`<subjects>/<Subject>/<Topic>/`) are proposed side by side in one table. When `subjects` lies below `areas`, class material goes to its topic folder there, never loose into an area. An existing topic folder wins over a near-identically named new one. Search the vault for notes on the same subject: extending a match beats a near-duplicate.
 5. Show one table, one row per group, then stop and wait for the answer:
 
    | #   | Files | What it is | Target (role, area or subject/topic; existing or new folder) | Note type | Uncertain points |

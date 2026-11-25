@@ -19,12 +19,12 @@ Without an argument ask which of the four the user wants (profile and language f
 
 ## setup `para|school [--language <code>]`
 
-Default language `en`; `en` and `de` ship. Another code: English folder names and templates, a notice, notes in that language.
+The profiles combine in one vault with one language: the default is the vault's `language`, else `en`; another language than the vault's is refused (relay the message). `en` and `de` ship. Another code: English folder names and templates, a notice, notes in that language.
 
 1. Installs the profile's skills as a project install: `npx skills add GravionLabs/skills --skill … -y` (list in `assets/profiles.json`); `skills-lock.json` stays. Without `npx` a warning, the rest runs.
-2. Writes `language`, `folders`, `files.profile` (school), `templates.folder` to `.nixe/config.json`. An existing entry of `folders`, `files` or `templates` is kept, a missing one is added.
+2. Writes `language`, `folders`, `files.school-profile` (school), `templates.folder` to `.nixe/config.json`. An existing entry of `folders`, `files` or `templates` is kept, a missing one is added. A vault with `files.profile` keeps it as the school profile. school on a vault with the role `areas` (PARA) sets `subjects` to `<areas>/School` (`Schule`) instead of the school default.
 3. Creates the folders in that language (`Exams/` or `Klausuren/`) and copies the templates (`Templates/Exam.md` or `Vorlagen/Prüfung.md`; PARA: Note, Meeting, Decision, Recipe). school: the profile file from the assets of `school-summary`.
-4. `CLAUDE.md`: the core block between `<!-- vault-core:start -->` and `<!-- vault-core:end -->`, then the profile section under "Vault-specific rules".
+4. `CLAUDE.md`: the core block between `<!-- vault-core:start -->` and `<!-- vault-core:end -->`, then the profile section under "Vault-specific rules" (school: the rules of the school area only).
 
 Never overwrites an existing note: existing files are reported as `kept`.
 

@@ -38,7 +38,15 @@ describe('school skills (#926)', () => {
       expect(s).not.toMatch(/Inbox\/|Klausuren\/|Quellen\/|Vorlagen\/|Exams\/|Subjects\//);
       expect(s).not.toMatch(/Thema|Zusammenfassung|Karteikarten/);
     }
-    for (const k of ['files.profile', 'Profile.md', 'name', 'grade', 'school_type', 'state'])
+    for (const k of [
+      'files.school-profile',
+      'files.profile',
+      'Profile.md',
+      'name',
+      'grade',
+      'school_type',
+      'state',
+    ])
       expect(ref).toContain(k);
     for (const r of ['inbox', 'subjects', 'sources', 'exams', 'templates'])
       expect(ref).toContain(`\`${r}\``);
@@ -120,9 +128,9 @@ describe('school vaults resolved through the roles', () => {
     expect(j.folders.exams).toMatchObject({ path: 'Klausuren', exists: true });
     expect(j.folders.sources.path).toBe('Quellen');
     expect(j.folders.subjects.path).toBe('.');
-    expect(j.files.profile).toBe('Profil.md');
+    expect(j.files['school-profile']).toBe('Profil.md');
     expect(j.templates).toEqual({ folder: 'Vorlagen', source: '.nixe/config.json' });
-    expect(fs.existsSync(path.join(v, j.files.profile))).toBe(true);
+    expect(fs.existsSync(path.join(v, j.files['school-profile']))).toBe(true);
   });
 
   it('English school vault: English folders and Profile.md', async () => {
@@ -137,8 +145,20 @@ describe('school vaults resolved through the roles', () => {
     expect(j.folders.inbox).toMatchObject({ path: 'Inbox', exists: true });
     expect(j.folders.exams).toMatchObject({ path: 'Exams', exists: true });
     expect(j.folders.subjects).toMatchObject({ path: 'Subjects', exists: true });
-    expect(j.files.profile).toBe('Profile.md');
+    expect(j.files['school-profile']).toBe('Profile.md');
     expect(j.templates.folder).toBe('Templates');
+  });
+
+  it('an older school vault with files.profile keeps its profile file', async () => {
+    const v = path.join(tmp, 'legacy');
+    fs.mkdirSync(path.join(v, '.nixe'), { recursive: true });
+    fs.writeFileSync(path.join(v, '.nixe/config.json'), '{"files":{"profile":"Me.md"}}');
+    expect((await roles(v)).files['school-profile']).toBe('Me.md');
+    fs.writeFileSync(
+      path.join(v, '.nixe/config.json'),
+      '{"files":{"profile":"Me.md","school-profile":"School.md"}}',
+    );
+    expect((await roles(v)).files['school-profile']).toBe('School.md');
   });
 
   it('a school vault without .nixe/config.json falls back to the English roles', async () => {
@@ -147,6 +167,6 @@ describe('school vaults resolved through the roles', () => {
     const j = await roles(v);
     expect(j.language).toBe('en');
     expect(j.folders.exams).toMatchObject({ path: 'Exams', exists: true });
-    expect(j.files.profile).toBe('Profile.md');
+    expect(j.files['school-profile']).toBe('Profile.md');
   });
 });

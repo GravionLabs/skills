@@ -7,6 +7,6 @@
     "exams": "Exams",
     "templates": "Templates"
   },
-  "files": { "profile": "Profile.md" },
+  "files": { "school-profile": "Profile.md" },
   "templates": { "folder": "Templates" }
 }
