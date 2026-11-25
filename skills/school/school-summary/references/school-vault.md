@@ -4,7 +4,7 @@ Shared by `school-summary`, `school-timeline`, `school-exercises`, `school-flash
 
 ## Resolve first
 
-`pwsh ../vault-inbox/scripts/Get-VaultRoles.ps1 -Vault <vault root>` prints `language`, the roles (`path`, `exists`), `files.profile` and the template folder as JSON. Use these paths, never a fixed folder name.
+`pwsh ../vault-inbox/scripts/Get-VaultRoles.ps1 -Vault <vault root>` prints `language`, the roles (`path`, `exists`), `files.school-profile` and the template folder as JSON. Use these paths, never a fixed folder name.
 
 | Role        | English default | German vault (example) | Holds                                                 |
 | ----------- | --------------- | ---------------------- | ----------------------------------------------------- |
@@ -16,11 +16,13 @@ Shared by `school-summary`, `school-timeline`, `school-exercises`, `school-flash
 
 The inbox is committed (it carries the photos from the phone to the computer): no `.gitignore` entry for it. `inbox` and `attachments` are never the same folder.
 
+In a vault that also holds PARA notes, `subjects` lies below `areas` (`Areas/School`, `Bereiche/Schule`): these rules apply to the school area (`subjects` and the notes in `exams`), not to the other notes.
+
 A topic is `<subjects>/<Subject>/<Topic>/`, its sources are in `<topic>/<sources>/`. A missing role resolves to the default; a role whose folder is missing is reported, never created silently.
 
 ## Profile
 
-`files.profile` (default `Profile.md`) holds the frontmatter `name`, `grade`, `school_type`, `state`, `school_year` and a table of the `subjects` (subject, teacher, textbook, notes). German profiles may use `klasse`, `schulform`, `bundesland`, `fach`: read both spellings. Read it before every job: level, length, language and task formats follow grade and school type. A field needed for the job is missing: ask and add it to the profile (append, never overwrite other text).
+`files.school-profile` (default `Profile.md`; older vaults: `files.profile`, read as a fallback) holds the frontmatter `name`, `grade`, `school_type`, `state`, `school_year` and a table of the `subjects` (subject, teacher, textbook, notes). German profiles may use `klasse`, `schulform`, `bundesland`, `fach`: read both spellings. Read it before every job: level, length, language and task formats follow grade and school type. A field needed for the job is missing: ask and add it to the profile (append, never overwrite other text).
 
 ## Language and file names
 

@@ -4,6 +4,8 @@
 Sets up a vault (PARA or school), sets folder roles and updates the core rules of CLAUDE.md.
 .DESCRIPTION
 setup <para|school> [-Language en|de]  folders, .nixe/config.json, templates, profile file, CLAUDE.md, skills
+                                       Both profiles share one vault: one language (another one is refused), and
+                                       school on a vault with the role areas puts subjects below it.
 role <name> <path> [description]       set or change a folder role; -List lists, -Remove <name> removes
 update                                 npx skills check + update, then the core block of CLAUDE.md
 Never overwrites an existing note, never commits. Prints a summary.
@@ -129,7 +131,12 @@ function Find-SchoolAssets {
 function Invoke-Setup {
   $kind = $Arg1
   if ($kind -notin 'para', 'school') { throw "setup needs a profile: para or school (got '$kind')" }
-  $lang = if ($Language) { $Language.ToLowerInvariant() } else { 'en' }
+  # one vault has one language: without -Language the vault's language counts, another one is refused before anything is written
+  $current = [string](Read-Config)['language']
+  $lang = if ($Language) { $Language.ToLowerInvariant() } elseif ($current) { $current.ToLowerInvariant() } else { 'en' }
+  if ($current -and $lang -ne $current.ToLowerInvariant()) {
+    throw "setup refused, nothing changed: the vault's language is '$current', not '$lang'. All profiles of a vault share one language: run setup $kind -Language $current"
+  }
   $assetLang = $lang
   if ($lang -notin 'en', 'de') {
     $assetLang = 'en'
@@ -157,7 +164,22 @@ function Invoke-Setup {
   New-Item -ItemType Directory -Path (Join-Path $root '.nixe') -Force | Out-Null
   $cfg = Read-Config
   $clashed = Test-InboxClash $cfg['folders']
-  $cfg['language'] = $lang
+  $cfg['language'] = if ($current) { $current } else { $lang }
+  if ($kind -eq 'school') {
+    # in a PARA vault the school is one area: subjects goes below areas, not to the vault root
+    if ($cfg['folders'] -and $cfg['folders']['areas']) {
+      $v = $cfg['folders']['areas']
+      $areas = if ($v -is [string]) { $v } else { [string]$v['path'] }
+      $areas = ($areas -replace '\\', '/').TrimEnd('/')
+      $name = if ($assetLang -eq 'de') { 'Schule' } else { 'School' }
+      $new['folders']['subjects'] = if ($areas -in '', '.') { $name } else { "$areas/$name" }
+    }
+    # an older vault names the school profile files.profile: keep using it, add no second key
+    if ($cfg['files'] -and $cfg['files']['profile'] -and -not $cfg['files']['school-profile']) {
+      $new.Remove('files')
+      $summary.Add('kept files.profile of the existing config as the school profile')
+    }
+  }
   foreach ($k in 'folders', 'files', 'templates') {
     if (-not $new.ContainsKey($k)) { continue }
     if (-not $cfg.ContainsKey($k) -or $null -eq $cfg[$k]) { $cfg[$k] = @{} }
@@ -191,7 +213,8 @@ function Invoke-Setup {
   } else {
     $examName = if ($assetLang -eq 'de') { 'Prüfung.md' } else { 'Exam.md' }
     Add-NoteFile (Join-Path $src 'Exam.md') (Join-Path $root "$tplDir/$examName")
-    $profName = [string]$cfg['files']['profile']
+    $profName = [string]$cfg['files']['school-profile']
+    if (-not $profName) { $profName = [string]$cfg['files']['profile'] }
     Add-NoteFile (Join-Path $src 'Profile.md') (Join-Path $root $profName)
     $section = Read-Text (Join-Path $src 'CLAUDE-school.md')
   }
@@ -199,7 +222,10 @@ function Invoke-Setup {
   $summary.Add("CLAUDE.md core block: $core")
   $text = (Read-Text $claudeFile) -replace "`r`n", "`n"
   $first = ($section.Trim() -split "`n")[0]
-  if ($text.Contains($first)) { $summary.Add('CLAUDE.md profile section: kept') }
+  # headings of earlier versions of the section count too: no second school section
+  $known = @($first)
+  if ($kind -eq 'school') { $known += '## School vault', '## Schul-Vault' }
+  if ($known | Where-Object { $text -match "(?m)^$([regex]::Escape($_))\s*$" }) { $summary.Add('CLAUDE.md profile section: kept') }
   else {
     if ($text -notmatch [regex]::Escape($ownHeading)) { $text = $text.TrimEnd() + "`n`n$ownHeading`n" }
     Write-Text $claudeFile ($text.TrimEnd() + "`n`n" + $section.Trim() + "`n")
