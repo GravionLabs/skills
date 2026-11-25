@@ -63,13 +63,15 @@ describe('vault-setup (#925)', () => {
     const c = cfg(v);
     expect(c.language).toBe('en');
     expect(c.folders.exams).toBe('Exams');
-    expect(c.files.profile).toBe('Profile.md');
+    expect(c.files['school-profile']).toBe('Profile.md');
+    // a school-only vault keeps its layout
+    expect(c.folders.subjects).toBe('Subjects');
     for (const f of ['Exams', 'Subjects', 'Sources', 'Inbox', 'Templates/Exam.md', 'Profile.md'])
       expect(fs.existsSync(path.join(v, f))).toBe(true);
     const md = claude(v);
     expect(md).toContain(START);
     expect(md).toContain('## Vault-specific rules');
-    expect(md).toContain('School vault');
+    expect(md).toContain('## School area');
   });
 
   it('sets up a school vault in de', async () => {
@@ -77,9 +79,13 @@ describe('vault-setup (#925)', () => {
     const r = await run(v, 'setup', 'school', '-Language', 'de');
     expect(r.status).toBe(0);
     expect(cfg(v).language).toBe('de');
-    for (const f of ['Klausuren', 'Vorlagen/Prüfung.md', 'Profil.md', '00 Inbox'])
+    for (const f of ['Klausuren', 'Vorlagen/Prüfung.md', 'Profil.md', 'Inbox'])
       expect(fs.existsSync(path.join(v, f))).toBe(true);
-    expect(claude(v)).toContain('Schul-Vault');
+    expect(cfg(v).folders.inbox).toBe('Inbox');
+    // the inbox stays committed
+    expect(fs.existsSync(path.join(v, '.gitignore'))).toBe(false);
+    expect(cfg(v).folders.subjects).toBe('.');
+    expect(claude(v)).toContain('## Schulbereich');
   });
 
   it('sets up PARA in de with templates', async () => {
@@ -142,10 +148,174 @@ describe('vault-setup (#925)', () => {
       expect((await run(v, 'update')).stdout).toContain('unchanged');
     });
 
+    it('still updates with a broken config', async () => {
+      const v = vault({ '.nixe/config.json': '{ broken' });
+      expect((await run(v, 'update')).status).toBe(0);
+    });
+
     it('creates CLAUDE.md when it is missing', async () => {
       const v = vault();
       expect((await run(v, 'update')).stdout).toContain('created');
       expect(claude(v)).toContain('## Vault-specific rules');
+    });
+  });
+
+  describe('PARA and school in one vault (#1001)', () => {
+    // a fake npx on PATH records the skills each setup installs
+    const withNpx = () => {
+      const bin = path.join(tmp, `bin${n++}`);
+      const log = path.join(bin, 'npx.log');
+      fs.mkdirSync(bin);
+      fs.writeFileSync(
+        path.join(bin, 'npx.ps1'),
+        `Add-Content -LiteralPath '${log}' -Value ($args -join ' ')\nexit 0\n`,
+        { mode: 0o755 },
+      );
+      const env = { ...process.env };
+      const key = Object.keys(env).find((k) => k.toUpperCase() === 'PATH') ?? 'PATH';
+      env[key] = `${bin}${path.delimiter}${env[key]}`;
+      return { env, log };
+    };
+
+    it('setup para then setup school gives one config, both sections and both skill groups', async () => {
+      const v = vault();
+      const { env, log } = withNpx();
+      for (const kind of ['para', 'school']) {
+        const r = await worker.run(['setup', kind, '-Vault', v], { cwd: tmp, env });
+        expect(r.status).toBe(0);
+      }
+      const c = cfg(v);
+      expect(c.folders).toMatchObject({
+        projects: 'Projects',
+        areas: 'Areas',
+        resources: 'Resources',
+        archive: 'Archive',
+        subjects: 'Areas/School',
+        sources: 'Sources',
+        exams: 'Exams',
+      });
+      expect(c.files).toEqual({ 'school-profile': 'Profile.md' });
+      expect(fs.existsSync(path.join(v, 'Areas/School'))).toBe(true);
+      expect(fs.existsSync(path.join(v, 'Subjects'))).toBe(false);
+      const md = claude(v);
+      expect(md).toContain('## PARA vault');
+      expect(md).toContain('## School area');
+      const installed = fs.readFileSync(log, 'utf-8');
+      for (const s of ['vault-inbox', 'vault-weekly-review', 'school-summary', 'school-exam'])
+        expect(installed).toContain(`--skill ${s}`);
+    });
+
+    it('uses the German names and the language of the vault', async () => {
+      const v = vault();
+      await run(v, 'setup', 'para', '-Language', 'de');
+      expect((await run(v, 'setup', 'school')).status).toBe(0);
+      expect(cfg(v).language).toBe('de');
+      expect(cfg(v).folders.subjects).toBe('Bereiche/Schule');
+      expect(claude(v)).toContain('## Schulbereich');
+    });
+
+    it('puts the school below a renamed areas folder', async () => {
+      const v = vault({
+        '.nixe/config.json': JSON.stringify({
+          folders: { areas: { path: '20 Areas/', description: 'ongoing' } },
+        }),
+      });
+      await run(v, 'setup', 'school');
+      expect(cfg(v).folders.subjects).toBe('20 Areas/School');
+    });
+
+    it('keeps the spelling of the vault language', async () => {
+      const v = vault({ '.nixe/config.json': JSON.stringify({ language: 'de-CH' }) });
+      expect((await run(v, 'setup', 'para')).status).toBe(0);
+      expect(cfg(v).language).toBe('de-CH');
+    });
+
+    it('refuses a second setup with another language and changes nothing', async () => {
+      const v = vault();
+      await run(v, 'setup', 'para', '-Language', 'de');
+      const before = [cfg(v), claude(v)];
+      const r = await run(v, 'setup', 'school', '-Language', 'en');
+      expect(r.status).not.toBe(0);
+      expect(r.stdout + r.stderr).toContain("the vault's language is 'de', not 'en'");
+      expect([cfg(v), claude(v)]).toEqual(before);
+      expect(fs.existsSync(path.join(v, 'Profile.md'))).toBe(false);
+    });
+
+    it('keeps files.profile and the old section of an existing school vault', async () => {
+      const v = vault({
+        '.nixe/config.json': JSON.stringify({ files: { profile: 'Me.md' } }),
+        'CLAUDE.md': '# V\n\n## Vault-specific rules\n\n## School vault\n\nold\n',
+      });
+      expect((await run(v, 'setup', 'school')).status).toBe(0);
+      expect(cfg(v).files).toEqual({ profile: 'Me.md' });
+      expect(fs.existsSync(path.join(v, 'Me.md'))).toBe(true);
+      expect(fs.existsSync(path.join(v, 'Profile.md'))).toBe(false);
+      expect(claude(v)).not.toContain('## School area');
+    });
+  });
+
+  describe('inbox and attachments (#1000)', () => {
+    const config = (folders: Record<string, string>, language = 'de') => ({
+      '.nixe/config.json': JSON.stringify({ language, folders }),
+    });
+    const expectProposal = (out: string, name: string) => {
+      expect(out).toContain("'attachments'");
+      expect(out).toContain("'inbox'");
+      expect(out).toContain(`role attachments ${name}`);
+    };
+
+    it('role refuses attachments on the inbox of a new German school vault', async () => {
+      const v = vault();
+      await run(v, 'setup', 'school', '-Language', 'de');
+      const r = await run(v, 'role', 'attachments', 'Inbox');
+      expect(r.status).not.toBe(0);
+      expectProposal(r.stdout + r.stderr, 'Anhänge');
+      expect(cfg(v).folders.attachments).toBeUndefined();
+    });
+
+    it.each([
+      ['inbox on attachments', { attachments: 'Files' }, ['role', 'inbox', './files/']],
+      ['attachments on the default inbox', {}, ['role', 'attachments', 'Inbox']],
+      ['inbox on the default attachments', {}, ['role', 'inbox', 'Attachments']],
+      [
+        'removing a role so that the default clashes',
+        { inbox: 'In', attachments: 'Inbox' },
+        ['role', '-Remove', 'inbox'],
+      ],
+    ])('role refuses %s', async (_n, folders, args) => {
+      const v = vault(config(folders, 'en'));
+      const r = await run(v, ...args);
+      expect(r.status).not.toBe(0);
+      expectProposal(r.stdout + r.stderr, 'Attachments');
+      expect(cfg(v).folders).toEqual(folders);
+    });
+
+    it('setup refuses to add an inbox on the attachments folder', async () => {
+      const v = vault(config({ attachments: 'Posteingang' }));
+      const r = await run(v, 'setup', 'para', '-Language', 'de');
+      expect(r.status).not.toBe(0);
+      expectProposal(r.stdout + r.stderr, 'Anhänge');
+      expect(cfg(v).folders).toEqual({ attachments: 'Posteingang' });
+    });
+
+    it.each([
+      ['setup', ['setup', 'school', '-Language', 'de']],
+      ['update', ['update']],
+      ['role -List', ['role', '-List']],
+    ])('%s warns for an existing vault with both on one folder', async (_n, args) => {
+      const v = vault(config({ inbox: '00 Inbox', attachments: '00 Inbox' }));
+      const r = await run(v, ...args);
+      expect(r.status).toBe(0);
+      expect(r.stdout).toContain('warning:');
+      expectProposal(r.stdout, 'Anhänge');
+      expect(cfg(v).folders.attachments).toBe('00 Inbox');
+    });
+
+    it('the proposed command resolves the warning', async () => {
+      const v = vault(config({ attachments: 'Inbox' }));
+      const r = await run(v, 'role', 'attachments', 'Anhänge');
+      expect(r.status).toBe(0);
+      expect(r.stdout).not.toContain('warning:');
     });
   });
 

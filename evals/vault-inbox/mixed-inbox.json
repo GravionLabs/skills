@@ -1,0 +1,48 @@
+{
+  "prompt": "/vault-inbox",
+  "vault": {
+    "language": "en",
+    "folders": {
+      "inbox": "Inbox",
+      "attachments": "Attachments",
+      "subjects": "Subjects",
+      "sources": "Sources",
+      "recipes": { "path": "Areas/Cooking/Recipes", "description": "Recipes of dishes" }
+    },
+    "existing": ["Subjects/History/French Revolution/Sources", "Areas/Cooking/Recipes"]
+  },
+  "inbox": [
+    {
+      "file": "Inbox/IMG_2041.heic",
+      "content": "Photo of textbook page 84: causes of the French Revolution"
+    },
+    {
+      "file": "Inbox/IMG_2042.heic",
+      "content": "Photo of textbook page 85: the sentence of page 84 continues"
+    },
+    {
+      "file": "Inbox/Tomato soup.md",
+      "content": "Web clipping of a tomato soup recipe with source URL, ingredients and steps"
+    }
+  ],
+  "expected": {
+    "writesBeforeApproval": [],
+    "movesBeforeApproval": [],
+    "proposal": [
+      {
+        "files": ["Inbox/IMG_2041.heic", "Inbox/IMG_2042.heic"],
+        "what": "two book pages of one topic",
+        "target": "subjects: History/French Revolution (existing)",
+        "noteType": "source for a subject",
+        "uncertain": []
+      },
+      {
+        "files": ["Inbox/Tomato soup.md"],
+        "what": "recipe clipping",
+        "target": "recipes: Areas/Cooking/Recipes (existing)",
+        "noteType": "recipe",
+        "uncertain": []
+      }
+    ]
+  }
+}

@@ -46,6 +46,46 @@ describe('vault skills (#924)', () => {
     expect(s).toContain('File only into a folder that has a role');
   });
 
+  it('vault-inbox proposes first and writes nothing before the approval (#999)', () => {
+    const s = read('vault-inbox');
+    const at = ['## Review', '## Propose', '## Approve', '## Import'].map((h) => s.indexOf(h));
+    expect(at.every((i) => i > 0)).toBe(true);
+    expect(at).toEqual([...at].sort((a, b) => a - b));
+    expect(s).toMatch(
+      /nothing in the vault is created, changed, moved or deleted before the approval/,
+    );
+    expect(s).toMatch(/\| Files \| What it is \| Target .*\| Note type \| Uncertain points \|/);
+    expect(s).toContain('"1–3 ok, 4 to Mathe"');
+    expect(s).toContain('A row that is not approved stays in the inbox');
+    expect(s).toMatch(/PARA targets .* school targets .* side by side/);
+  });
+
+  it('vault-inbox converts, moves once and empties the inbox (#999)', () => {
+    const s = read('vault-inbox');
+    expect(s).toMatch(/larger than 2000 px or a HEIC .*quality 80, at most 2000 px/);
+    expect(s).toMatch(/one JPEG per page at about 150 dpi/);
+    expect(s).toMatch(/PDF with real \(selectable\) text stays/);
+    expect(s).toContain('pdftoppm -jpeg -jpegopt quality=80 -r 150');
+    expect(s).toContain('never re-encoded again');
+    expect(s).toContain('Git must store each file only once');
+    expect(s).toContain('after a full import the inbox is empty');
+    expect(s).not.toContain('never delete them');
+  });
+
+  it('the eval case: a mixed inbox gives a proposal table and no write', () => {
+    const fx = JSON.parse(
+      fs.readFileSync(path.join(root, 'evals/vault-inbox/mixed-inbox.json'), 'utf-8'),
+    );
+    expect(fx.expected.writesBeforeApproval).toEqual([]);
+    expect(fx.expected.movesBeforeApproval).toEqual([]);
+    const rows: { files: string[]; noteType: string }[] = fx.expected.proposal;
+    expect(rows.map((r) => r.files.length)).toEqual([2, 1]);
+    expect(rows.flatMap((r) => r.files)).toEqual(fx.inbox.map((i: { file: string }) => i.file));
+    expect(rows[1].noteType).toBe('recipe');
+    for (const r of rows)
+      expect(Object.keys(r)).toEqual(['files', 'what', 'target', 'noteType', 'uncertain']);
+  });
+
   it('vault-recipe uses the role recipes and points to vault-setup when missing', () => {
     const s = read('vault-recipe');
     expect(s).toContain('`recipes`');
@@ -59,6 +99,7 @@ describe('vault skills (#924)', () => {
       'uvx trafilatura',
       'heif-convert',
       'magick',
+      'Bash(pdftoppm *)',
       'WebFetch',
       '.obsidian/templates.json',
     ])

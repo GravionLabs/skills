@@ -4,7 +4,8 @@
 Resolves the folder roles, the language and the template folder of a vault as JSON.
 .DESCRIPTION
 Reads <Vault>/.nixe/config.json (language, folders, files, templates.folder). A role missing in
-`folders` gets its English default name; own roles (any other key) are listed with their description.
+`folders` gets its English default name;
+files.school-profile falls back to files.profile, then Profile.md; own roles (any other key) are listed with their description.
 The template folder comes from templates.folder, then .obsidian/templates.json, then the role templates.
 .PARAMETER Vault
 Vault root; default is the current directory.
@@ -53,8 +54,12 @@ else {
 }
 if (-not $tpl) { $tpl = $folders['templates'].path }
 
-$files = [ordered]@{ profile = 'Profile.md' }
-if ($cfg -and $cfg.files) { foreach ($k in $cfg.files.Keys) { $files[$k] = [string]$cfg.files[$k] } }
+$files = [ordered]@{ 'school-profile' = 'Profile.md' }
+if ($cfg -and $cfg.files) {
+  foreach ($k in $cfg.files.Keys) { $files[$k] = [string]$cfg.files[$k] }
+  # fallback: older school vaults name the school profile files.profile
+  if (-not $cfg.files['school-profile'] -and $cfg.files['profile']) { $files['school-profile'] = [string]$cfg.files['profile'] }
+}
 
 [ordered]@{
   language = if ($cfg -and $cfg.language) { [string]$cfg.language } else { 'en' }

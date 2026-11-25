@@ -4,9 +4,13 @@
 Sets up a vault (PARA or school), sets folder roles and updates the core rules of CLAUDE.md.
 .DESCRIPTION
 setup <para|school> [-Language en|de]  folders, .nixe/config.json, templates, profile file, CLAUDE.md, skills
+                                       Both profiles share one vault: one language (another one is refused), and
+                                       school on a vault with the role areas puts subjects below it.
 role <name> <path> [description]       set or change a folder role; -List lists, -Remove <name> removes
 update                                 npx skills check + update, then the core block of CLAUDE.md
 Never overwrites an existing note, never commits. Prints a summary.
+The roles attachments and inbox never share a folder: setup and role refuse it, a vault that
+already has it gets a warning.
 .PARAMETER SkipInstall
 Do not run npx skills (tests, offline).
 .EXAMPLE
@@ -61,6 +65,20 @@ function Test-Inside($rel) {
 }
 function Get-Norm($p) { ($p -replace '\\', '/').Trim('/').ToLowerInvariant() }
 
+# The roles inbox and attachments must differ: the import empties the inbox. An unset role is its English default.
+function Test-InboxClash($folders) {
+  $full = foreach ($k in 'inbox', 'attachments') {
+    $v = if ($folders) { $folders[$k] }
+    $p = if ($null -eq $v) { $k.Substring(0, 1).ToUpperInvariant() + $k.Substring(1) } elseif ($v -is [string]) { $v } else { [string]$v['path'] }
+    [IO.Path]::GetFullPath((Join-Path $root $p)).TrimEnd('/', '\')
+  }
+  return $full[0] -eq $full[1]
+}
+function Get-ClashText($lang) {
+  $name = if ($lang -eq 'de') { 'Anhänge' } else { 'Attachments' }
+  "the roles 'attachments' and 'inbox' point to the same folder (the import empties the inbox, attachments must stay). Proposal: role attachments $name"
+}
+
 function Get-CoreBlock {
   $body = (Read-Text (Join-Path $assets 'core/CLAUDE-core.md')).Trim()
   "$startMark`n$body`n$endMark"
@@ -113,7 +131,12 @@ function Find-SchoolAssets {
 function Invoke-Setup {
   $kind = $Arg1
   if ($kind -notin 'para', 'school') { throw "setup needs a profile: para or school (got '$kind')" }
-  $lang = if ($Language) { $Language.ToLowerInvariant() } else { 'en' }
+  # one vault has one language: without -Language the vault's language counts, another one is refused before anything is written
+  $current = [string](Read-Config)['language']
+  $lang = if ($Language) { $Language.ToLowerInvariant() } elseif ($current) { $current.ToLowerInvariant() } else { 'en' }
+  if ($current -and $lang -ne $current.ToLowerInvariant()) {
+    throw "setup refused, nothing changed: the vault's language is '$current', not '$lang'. All profiles of a vault share one language: run setup $kind -Language $current"
+  }
   $assetLang = $lang
   if ($lang -notin 'en', 'de') {
     $assetLang = 'en'
@@ -140,7 +163,23 @@ function Invoke-Setup {
   # 3. config: an existing value is kept, a missing one is added
   New-Item -ItemType Directory -Path (Join-Path $root '.nixe') -Force | Out-Null
   $cfg = Read-Config
-  $cfg['language'] = $lang
+  $clashed = Test-InboxClash $cfg['folders']
+  $cfg['language'] = if ($current) { $current } else { $lang }
+  if ($kind -eq 'school') {
+    # in a PARA vault the school is one area: subjects goes below areas, not to the vault root
+    if ($cfg['folders'] -and $cfg['folders']['areas']) {
+      $v = $cfg['folders']['areas']
+      $areas = if ($v -is [string]) { $v } else { [string]$v['path'] }
+      $areas = ($areas -replace '\\', '/').TrimEnd('/')
+      $name = if ($assetLang -eq 'de') { 'Schule' } else { 'School' }
+      $new['folders']['subjects'] = if ($areas -in '', '.') { $name } else { "$areas/$name" }
+    }
+    # an older vault names the school profile files.profile: keep using it, add no second key
+    if ($cfg['files'] -and $cfg['files']['profile'] -and -not $cfg['files']['school-profile']) {
+      $new.Remove('files')
+      $summary.Add('kept files.profile of the existing config as the school profile')
+    }
+  }
   foreach ($k in 'folders', 'files', 'templates') {
     if (-not $new.ContainsKey($k)) { continue }
     if (-not $cfg.ContainsKey($k) -or $null -eq $cfg[$k]) { $cfg[$k] = @{} }
@@ -149,6 +188,7 @@ function Invoke-Setup {
       else { $cfg[$k][$e] = $new[$k][$e] }
     }
   }
+  if (-not $clashed -and (Test-InboxClash $cfg['folders'])) { throw "setup refused, config not written: $(Get-ClashText $lang)" }
   $ordered = [ordered]@{}
   foreach ($k in 'language', 'folders', 'files', 'templates') { if ($cfg.ContainsKey($k)) { $ordered[$k] = $cfg[$k] } }
   foreach ($k in $cfg.Keys) { if (-not $ordered.Contains($k)) { $ordered[$k] = $cfg[$k] } }
@@ -173,7 +213,8 @@ function Invoke-Setup {
   } else {
     $examName = if ($assetLang -eq 'de') { 'Prüfung.md' } else { 'Exam.md' }
     Add-NoteFile (Join-Path $src 'Exam.md') (Join-Path $root "$tplDir/$examName")
-    $profName = [string]$cfg['files']['profile']
+    $profName = [string]$cfg['files']['school-profile']
+    if (-not $profName) { $profName = [string]$cfg['files']['profile'] }
     Add-NoteFile (Join-Path $src 'Profile.md') (Join-Path $root $profName)
     $section = Read-Text (Join-Path $src 'CLAUDE-school.md')
   }
@@ -181,7 +222,10 @@ function Invoke-Setup {
   $summary.Add("CLAUDE.md core block: $core")
   $text = (Read-Text $claudeFile) -replace "`r`n", "`n"
   $first = ($section.Trim() -split "`n")[0]
-  if ($text.Contains($first)) { $summary.Add('CLAUDE.md profile section: kept') }
+  # headings of earlier versions of the section count too: no second school section
+  $known = @($first)
+  if ($kind -eq 'school') { $known += '## School vault', '## Schul-Vault' }
+  if ($known | Where-Object { $text -match "(?m)^$([regex]::Escape($_))\s*$" }) { $summary.Add('CLAUDE.md profile section: kept') }
   else {
     if ($text -notmatch [regex]::Escape($ownHeading)) { $text = $text.TrimEnd() + "`n`n$ownHeading`n" }
     Write-Text $claudeFile ($text.TrimEnd() + "`n`n" + $section.Trim() + "`n")
@@ -204,7 +248,9 @@ function Invoke-Role {
   }
   if ($Remove) {
     if (-not $folders.ContainsKey($Remove)) { throw "role '$Remove' is not set" }
+    $clashed = Test-InboxClash $folders
     $folders.Remove($Remove)
+    if (-not $clashed -and (Test-InboxClash $folders)) { throw "role '$Remove' not removed: $(Get-ClashText $cfg['language'])" }
     Save-Config $cfg
     $summary.Add("removed role $Remove (the folder stays)")
     return
@@ -215,6 +261,11 @@ function Invoke-Role {
   if (-not (Test-Inside $rel)) { throw "path '$rel' is outside the vault" }
   $isOwn = $name -notin $standard
   if ($isOwn -and -not $desc) { throw "own role '$name' needs a description (what belongs in the folder)" }
+  if ($name -in 'inbox', 'attachments') {
+    $next = @{ inbox = $folders['inbox']; attachments = $folders['attachments'] }
+    $next[$name] = $rel
+    if (Test-InboxClash $next) { throw "path '$rel' refused: $(Get-ClashText $cfg['language'])" }
+  }
   foreach ($k in $folders.Keys) {
     if ($k -ne $name -and (Get-Norm (& $path $folders[$k])) -eq (Get-Norm $rel)) { throw "folder '$rel' already has the role '$k' (one role per folder)" }
   }
@@ -237,5 +288,12 @@ switch ($Command) {
   'setup' { Invoke-Setup }
   'role' { Invoke-Role }
   'update' { Invoke-Update }
+}
+# a broken config must not fail 'update', which does not need it
+$final = try { Read-Config } catch { Write-Warning ".nixe/config.json not readable: $_"; @{} }
+if ($final.Count -gt 0 -and (Test-InboxClash $final['folders'])) {
+  $text = Get-ClashText $final['language']
+  Write-Warning $text
+  $summary.Add("warning: $text")
 }
 $summary | ForEach-Object { Write-Output $_ }

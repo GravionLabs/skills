@@ -1,16 +1,18 @@
-## School vault
+## School area
 
-This vault belongs to a pupil. It collects class material and turns it into study material: summaries, timelines, exercises, flashcards and mock exams.
+The school area collects a pupil's class material and turns it into study material: summaries, timelines, exercises, flashcards and mock exams. It is the folder of the `subjects` role, together with the exam notes in `exams`; in a school-only vault it can be the whole vault.
 
-- Read the profile file (`files.profile`) before every job; level, length and task formats follow grade and school type. Missing facts: ask and add them to the profile.
+The rules below apply only in the school area; other notes follow the rest of this file.
+
+- Read the profile file (`files.school-profile`) before every job; level, length and task formats follow grade and school type. Missing facts: ask and add them to the profile.
 - Folders only through the roles of `.nixe/config.json`: `<subjects>/<Subject>/<Topic>/` with the `sources` folder inside, exams in `exams`.
 - Study material rests on the transcriptions in the sources folder. Additions are marked `> [!info] Addition (not from class)`; invent nothing.
-- Transcribe verbatim with the page per photo; mark `[illegible]` and `[?]`, never guess. Never delete or change originals, never overwrite a note.
+- Transcribe verbatim with the page per photo; mark `[illegible]` and `[?]`, never guess. Never delete or change filed originals (only `/vault-inbox` converts and moves inbox files, after your approval), never overwrite a note.
 - Solutions in a collapsed callout (`> [!success]- Solution`), formulas as LaTeX, diagrams as Mermaid.
 
 | Command | Purpose |
 | --- | --- |
-| `/vault-inbox` | transcribe photos from the inbox and file them |
+| `/vault-inbox` | propose the import of the inbox, transcribe and file what you approve |
 | `/school-summary <topic>` | summary of a topic |
 | `/school-timeline <topic>` | timeline of a topic |
 | `/school-exercises <topic>` | exercises with solutions |
