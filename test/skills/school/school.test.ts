@@ -110,13 +110,13 @@ describe('school vaults resolved through the roles', () => {
     const v = mk(
       'de',
       'de',
-      ['00 Inbox', 'Klausuren', 'Vorlagen', 'Geschichte/Weimarer Republik/Quellen'],
+      ['Inbox', 'Klausuren', 'Vorlagen', 'Geschichte/Weimarer Republik/Quellen'],
       'Profil.md',
     );
     fs.writeFileSync(path.join(v, 'Vorlagen/Klausur.md'), asset('de', 'Exam.md'));
     const j = await roles(v);
     expect(j.language).toBe('de');
-    expect(j.folders.inbox).toMatchObject({ path: '00 Inbox', exists: true });
+    expect(j.folders.inbox).toMatchObject({ path: 'Inbox', exists: true });
     expect(j.folders.exams).toMatchObject({ path: 'Klausuren', exists: true });
     expect(j.folders.sources.path).toBe('Quellen');
     expect(j.folders.subjects.path).toBe('.');

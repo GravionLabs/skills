@@ -77,8 +77,11 @@ describe('vault-setup (#925)', () => {
     const r = await run(v, 'setup', 'school', '-Language', 'de');
     expect(r.status).toBe(0);
     expect(cfg(v).language).toBe('de');
-    for (const f of ['Klausuren', 'Vorlagen/Prüfung.md', 'Profil.md', '00 Inbox'])
+    for (const f of ['Klausuren', 'Vorlagen/Prüfung.md', 'Profil.md', 'Inbox'])
       expect(fs.existsSync(path.join(v, f))).toBe(true);
+    expect(cfg(v).folders.inbox).toBe('Inbox');
+    // the inbox stays committed
+    expect(fs.existsSync(path.join(v, '.gitignore'))).toBe(false);
     expect(claude(v)).toContain('Schul-Vault');
   });
 
@@ -146,6 +149,71 @@ describe('vault-setup (#925)', () => {
       const v = vault();
       expect((await run(v, 'update')).stdout).toContain('created');
       expect(claude(v)).toContain('## Vault-specific rules');
+    });
+  });
+
+  describe('inbox and attachments (#1000)', () => {
+    const config = (folders: Record<string, string>, language = 'de') => ({
+      '.nixe/config.json': JSON.stringify({ language, folders }),
+    });
+    const expectProposal = (out: string, name: string) => {
+      expect(out).toContain("'attachments'");
+      expect(out).toContain("'inbox'");
+      expect(out).toContain(`role attachments ${name}`);
+    };
+
+    it('role refuses attachments on the inbox of a new German school vault', async () => {
+      const v = vault();
+      await run(v, 'setup', 'school', '-Language', 'de');
+      const r = await run(v, 'role', 'attachments', 'Inbox');
+      expect(r.status).not.toBe(0);
+      expectProposal(r.stdout + r.stderr, 'Anhänge');
+      expect(cfg(v).folders.attachments).toBeUndefined();
+    });
+
+    it.each([
+      ['inbox on attachments', { attachments: 'Files' }, ['role', 'inbox', './files/']],
+      ['attachments on the default inbox', {}, ['role', 'attachments', 'Inbox']],
+      ['inbox on the default attachments', {}, ['role', 'inbox', 'Attachments']],
+      [
+        'removing a role so that the default clashes',
+        { inbox: 'In', attachments: 'Inbox' },
+        ['role', '-Remove', 'inbox'],
+      ],
+    ])('role refuses %s', async (_n, folders, args) => {
+      const v = vault(config(folders, 'en'));
+      const r = await run(v, ...args);
+      expect(r.status).not.toBe(0);
+      expectProposal(r.stdout + r.stderr, 'Attachments');
+      expect(cfg(v).folders).toEqual(folders);
+    });
+
+    it('setup refuses to add an inbox on the attachments folder', async () => {
+      const v = vault(config({ attachments: 'Posteingang' }));
+      const r = await run(v, 'setup', 'para', '-Language', 'de');
+      expect(r.status).not.toBe(0);
+      expectProposal(r.stdout + r.stderr, 'Anhänge');
+      expect(cfg(v).folders).toEqual({ attachments: 'Posteingang' });
+    });
+
+    it.each([
+      ['setup', ['setup', 'school', '-Language', 'de']],
+      ['update', ['update']],
+      ['role -List', ['role', '-List']],
+    ])('%s warns for an existing vault with both on one folder', async (_n, args) => {
+      const v = vault(config({ inbox: '00 Inbox', attachments: '00 Inbox' }));
+      const r = await run(v, ...args);
+      expect(r.status).toBe(0);
+      expect(r.stdout).toContain('warning:');
+      expectProposal(r.stdout, 'Anhänge');
+      expect(cfg(v).folders.attachments).toBe('00 Inbox');
+    });
+
+    it('the proposed command resolves the warning', async () => {
+      const v = vault(config({ attachments: 'Inbox' }));
+      const r = await run(v, 'role', 'attachments', 'Anhänge');
+      expect(r.status).toBe(0);
+      expect(r.stdout).not.toContain('warning:');
     });
   });
 
