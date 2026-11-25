@@ -5,7 +5,19 @@ Versioning follows [Semantic Versioning](https://semver.org/).
 
 ---
 
+## [5.12.0] — 2026-11-25
+
+### Features
+- **vault**: Vault-inbox proposes the import and files only after the approval (#999) (#1002)
+- **vault**: The school inbox is named Inbox and attachments never point to the inbox (#1000) (#1004)
+- **vault**: Combine the profiles PARA and school in one vault (#1001) (#1005)
+
+
 ## [5.11.0] — 2026-11-24
+
+### Documentation
+- Update CHANGELOG.md for v5.11.0 [skip ci]
+
 
 ### Features
 - **github**: Github-triage for issues filed by others (#957) (#992)
