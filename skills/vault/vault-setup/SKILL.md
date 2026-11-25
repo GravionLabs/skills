@@ -32,6 +32,8 @@ Never overwrites an existing note: existing files are reported as `kept`.
 
 `role <name> <path> [description]` sets or changes a role and creates the folder. Rules as in Nixe (GravionLabs/nixe#438): the name is unique (lower case, digits, `-`), one role per folder, the path is inside the vault, an own role (not one of the standard roles in `../vault-inbox/references/vault-config.md`) needs a description. `-List` prints name, path and description; `-Remove <name>` removes the role, the folder stays.
 
+`attachments` and `inbox` are never the same folder (an unset role counts with its English default): `setup` and `role` refuse it. A vault that already has it (e.g. imported from `attachmentFolderPath` of `.obsidian/app.json`) gets a warning with the proposal `role attachments <Anhänge|Attachments>`: relay it.
+
 ## update
 
 1. `npx skills check`, then `npx skills update`.

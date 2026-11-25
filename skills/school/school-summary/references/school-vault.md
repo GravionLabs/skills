@@ -8,11 +8,13 @@ Shared by `school-summary`, `school-timeline`, `school-exercises`, `school-flash
 
 | Role        | English default | German vault (example) | Holds                                                 |
 | ----------- | --------------- | ---------------------- | ----------------------------------------------------- |
-| `inbox`     | `Inbox`         | `00 Inbox`             | new photos and PDFs                                   |
+| `inbox`     | `Inbox`         | `Inbox`                | new photos and PDFs                                   |
 | `subjects`  | `Subjects`      | `.` (vault root)       | `<Subject>/<Topic>/` folders                          |
 | `sources`   | `Sources`       | `Quellen`              | folder name inside a topic: originals + transcription |
 | `exams`     | `Exams`         | `Klausuren`            | exam notes and mock exams                             |
 | `templates` | `Templates`     | `Vorlagen`             | `Exam.md` / `Klausur.md`                              |
+
+The inbox is committed (it carries the photos from the phone to the computer): no `.gitignore` entry for it. `inbox` and `attachments` are never the same folder.
 
 A topic is `<subjects>/<Subject>/<Topic>/`, its sources are in `<topic>/<sources>/`. A missing role resolves to the default; a role whose folder is missing is reported, never created silently.
 
