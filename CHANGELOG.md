@@ -5,7 +5,17 @@ Versioning follows [Semantic Versioning](https://semver.org/).
 
 ---
 
+## [5.13.0] — 2026-11-25
+
+### Features
+- **vault**: Vault-pdf writes notes as PDF through nixe and a headless browser (#1006) (#1007)
+
+
 ## [5.12.0] — 2026-11-25
+
+### Documentation
+- Update CHANGELOG.md for v5.12.0 [skip ci]
+
 
 ### Features
 - **vault**: Vault-inbox proposes the import and files only after the approval (#999) (#1002)
