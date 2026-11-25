@@ -224,6 +224,12 @@ describe('vault-setup (#925)', () => {
       expect(cfg(v).folders.subjects).toBe('20 Areas/School');
     });
 
+    it('keeps the spelling of the vault language', async () => {
+      const v = vault({ '.nixe/config.json': JSON.stringify({ language: 'de-CH' }) });
+      expect((await run(v, 'setup', 'para')).status).toBe(0);
+      expect(cfg(v).language).toBe('de-CH');
+    });
+
     it('refuses a second setup with another language and changes nothing', async () => {
       const v = vault();
       await run(v, 'setup', 'para', '-Language', 'de');

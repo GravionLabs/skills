@@ -164,7 +164,7 @@ function Invoke-Setup {
   New-Item -ItemType Directory -Path (Join-Path $root '.nixe') -Force | Out-Null
   $cfg = Read-Config
   $clashed = Test-InboxClash $cfg['folders']
-  $cfg['language'] = $lang
+  $cfg['language'] = if ($current) { $current } else { $lang }
   if ($kind -eq 'school') {
     # in a PARA vault the school is one area: subjects goes below areas, not to the vault root
     if ($cfg['folders'] -and $cfg['folders']['areas']) {
