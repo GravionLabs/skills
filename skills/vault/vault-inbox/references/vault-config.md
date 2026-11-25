@@ -43,12 +43,12 @@ The skills fetch pages and convert images. The vault allows these tools (as in `
 }
 ```
 
-| Entry                              | Used by                                                                   |
-| ---------------------------------- | ------------------------------------------------------------------------- |
-| `WebFetch`, `WebSearch`            | `vault-clip`, `vault-summarize`, `vault-recipe` (fallback to read a page) |
-| `Bash(uvx trafilatura *)`          | `vault-clip`, `vault-recipe`: page text as Markdown                       |
-| `Bash(grep *)`, `rg`, `find`, `ls` | duplicate and related-note search in every skill                          |
-| `Bash(heif-convert *)`, `magick`   | `vault-inbox`, `vault-recipe`: JPG copy of a HEIC photo                   |
-| `Bash(pdftoppm *)`                 | `vault-inbox`: one JPEG per page of a scanned PDF                         |
+| Entry                              | Used by                                                                        |
+| ---------------------------------- | ------------------------------------------------------------------------------ |
+| `WebFetch`, `WebSearch`            | `vault-clip`, `vault-summarize`, `vault-recipe` (fallback to read a page)      |
+| `Bash(uvx trafilatura *)`          | `vault-clip`, `vault-recipe`: page text as Markdown                            |
+| `Bash(grep *)`, `rg`, `find`, `ls` | duplicate and related-note search in every skill                               |
+| `Bash(heif-convert *)`, `magick`   | `vault-inbox`, `vault-recipe`: HEIC to JPG; `vault-inbox`: resize large photos |
+| `Bash(pdftoppm *)`                 | `vault-inbox`: one JPEG per page of a scanned PDF                              |
 
 The skills run without them, but each use asks for a permission.

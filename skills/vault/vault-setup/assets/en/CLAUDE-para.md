@@ -2,13 +2,13 @@
 
 Notes are organized as PARA: projects (with an end), areas (ongoing), resources (reference), archive (finished).
 
-- New material lands in the inbox; `/vault-inbox` files it by the roles.
+- New material lands in the inbox; `/vault-inbox` proposes targets by the roles and files what you approve.
 - A note belongs to one project or area; link the rest with `[[wikilinks]]`.
 - Finished projects move to the archive, never get deleted.
 
 | Command | Purpose |
 | --- | --- |
-| `/vault-inbox` | file the inbox |
+| `/vault-inbox` | propose the import of the inbox, file what you approve |
 | `/vault-clip <url>` | clip a page |
 | `/vault-summarize <source>` | structured summary |
 | `/vault-meeting` | meeting note with action items |
