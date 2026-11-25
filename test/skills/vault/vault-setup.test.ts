@@ -145,6 +145,11 @@ describe('vault-setup (#925)', () => {
       expect((await run(v, 'update')).stdout).toContain('unchanged');
     });
 
+    it('still updates with a broken config', async () => {
+      const v = vault({ '.nixe/config.json': '{ broken' });
+      expect((await run(v, 'update')).status).toBe(0);
+    });
+
     it('creates CLAUDE.md when it is missing', async () => {
       const v = vault();
       expect((await run(v, 'update')).stdout).toContain('created');

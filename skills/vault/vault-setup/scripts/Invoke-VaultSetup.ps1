@@ -263,7 +263,8 @@ switch ($Command) {
   'role' { Invoke-Role }
   'update' { Invoke-Update }
 }
-$final = Read-Config
+# a broken config must not fail 'update', which does not need it
+$final = try { Read-Config } catch { Write-Warning ".nixe/config.json not readable: $_"; @{} }
 if ($final.Count -gt 0 -and (Test-InboxClash $final['folders'])) {
   $text = Get-ClashText $final['language']
   Write-Warning $text
