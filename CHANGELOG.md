@@ -5,7 +5,25 @@ Versioning follows [Semantic Versioning](https://semver.org/).
 
 ---
 
+## [5.14.0] — 2026-11-26
+
+### Features
+- **deliver**: Review runs as its own session with its own model (#1013) (#1018)
+- **deliver**: The loop keeps the issue stage in agent labels (#1014) (#1020)
+- **deliver**: Feature pull requests are transport, the issue is the human surface (#1015) (#1021)
+- **ng**: File naming follows angular.json, not the files that happen to exist (#1019) (#1022)
+- **deliver**: A resumed run keeps the risk level and the review findings (#1023) (#1024)
+
+
+### Refactoring
+- **vault**: Vault-pdf calls nixe export --format pdf and drops Export-VaultPdf.ps1 (#1008) (#1016)
+
+
 ## [5.13.0] — 2026-11-25
+
+### Documentation
+- Update CHANGELOG.md for v5.13.0 [skip ci]
+
 
 ### Features
 - **vault**: Vault-pdf writes notes as PDF through nixe and a headless browser (#1006) (#1007)
