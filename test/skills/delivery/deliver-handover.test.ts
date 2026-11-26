@@ -18,6 +18,8 @@ describe('handoverNote', () => {
     ['red: ci', 'red-checks'],
     ['needs-decision', 'needs-decision'],
     ['session timeout', 'session-timeout'],
+    ['needs-decision: review still asks for changes after 2 fix rounds (x)', 'changes-remain'],
+    ['session failed (exit 1) (session: blocked a conflict)', 'session-failed'],
     ['something else', 'other'],
   ])('names %s %s', (reason, kind) => {
     expect(reasonKind(reason)).toBe(kind);

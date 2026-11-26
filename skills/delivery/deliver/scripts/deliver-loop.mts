@@ -1274,6 +1274,7 @@ async function awaitHandovers(): Promise<boolean> {
         handedPulls.delete(nr);
         aside.set(nr, `closed by a person, ${pull.url}`);
         log(`#${nr} set aside: closed by a person, ${pull.url}`, 'bad');
+        tell(item, pull, CLOSED, false);
         appendFileSync(
           file,
           `${JSON.stringify({ ...row, outcome: 'aside', reason: 'closed by a person' })}\n`,
@@ -1523,7 +1524,7 @@ try {
       );
       log(`#${next.id} merged: ${pull?.url}`, 'ok');
       mark(next, 'merged');
-      if (risks.get(next.id) === 'high') tell(next, pull, 'high risk: merged by the loop', false);
+      if (risks.get(next.id) === 'high') tell(next, pull, 'high risk: merged', false);
       emit(
         'task.finished',
         { task: `issue-${next.id}`, outcome: 'succeeded', text: 'merged' },

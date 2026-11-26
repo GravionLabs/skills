@@ -4,6 +4,7 @@ import type { Verdict } from './review.mts';
 
 /** The reason of the loop as one word of the marker; the first match wins. */
 const KINDS: [RegExp, string][] = [
+  [/^needs-decision: review still asks/, 'changes-remain'],
   [/^needs-decision/, 'needs-decision'],
   [/more than one open pull request/, 'more-pulls'],
   [/changes protected paths/, 'protected-paths'],
@@ -20,10 +21,15 @@ const KINDS: [RegExp, string][] = [
   [/^harness failed/, 'harness-failed'],
   [/^pull request closed/, 'pull-closed'],
 ];
-export const reasonKind = (reason: string): string =>
-  KINDS.find(([pattern]) => pattern.test(reason))?.[1] ?? 'other';
+export const reasonKind = (reason: string): string => {
+  // the text a blocked session adds to the reason names no kind
+  const own = reason.replace(/ \(session: blocked .*/s, '');
+  return KINDS.find(([pattern]) => pattern.test(own))?.[1] ?? 'other';
+};
 
 const NEXT: Record<string, string> = {
+  'changes-remain':
+    'Read the findings on the pull request, fix them or adjust this issue, then start the loop again.',
   'needs-decision':
     'Answer the open question on this issue, remove the label `needs-decision` if it is set, then start the loop again.',
   'more-pulls': 'Close the stale pull request, then start the loop again.',
