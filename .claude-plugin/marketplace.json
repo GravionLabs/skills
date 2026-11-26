@@ -103,12 +103,13 @@
     },
     {
       "name": "ng",
-      "description": "Angular 21+: implementation conventions and review rules, Vitest/TestBed testing, project scaffolding, NgRx Signal Store, AG Grid. skills-manage adds angular/skills (angular-developer).",
+      "description": "Angular 21+: implementation conventions and review rules, Vitest/TestBed testing, project scaffolding, NgRx Signal Store, AG Grid, Helix UI components and recipes. skills-manage adds angular/skills (angular-developer).",
       "source": "./",
       "strict": false,
       "skills": [
         "./skills/ng/ng-ag-grid",
         "./skills/ng/ng-create-project",
+        "./skills/ng/ng-helix",
         "./skills/ng/ng-implementation",
         "./skills/ng/ng-test"
       ]
