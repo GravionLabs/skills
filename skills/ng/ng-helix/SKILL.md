@@ -23,6 +23,7 @@ Load the file for the task at hand. Paths are relative to this skill's directory
 | Recipes        | `references/recipes.md`    | Building a form field, form, dialog, confirmation, path field or list of rows |
 | Desktop frame  | `references/desktop.md`    | Building the app shell or status bar, a Tauri app, or showing updates         |
 | Migration      | `references/migration.md`  | Migrating an app from raw controls, adding the lint preset or its allowlist   |
+| Testing        | `references/testing.md`    | Tests of Helix-based components                                               |
 
 ## Gotchas
 
