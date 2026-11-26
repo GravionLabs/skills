@@ -115,7 +115,7 @@ export function create(): Tracker {
         `${JSON.stringify({ id: item.id, marker, body })}\n`,
       ),
     recordVerdict: () => {},
-    recordedVerdict: () => undefined,
+    recordedVerdicts: () => [],
     pullOf(item: Item): Pull | undefined {
       if (!existsSync(path.join(dir, `pr-${item.id}`))) return undefined;
       const id = 100 + item.id;

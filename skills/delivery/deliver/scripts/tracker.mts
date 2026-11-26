@@ -6,7 +6,7 @@
 import path from 'node:path';
 import { pathToFileURL } from 'node:url';
 import type { Stage } from './stage.mts';
-import type { Verdict } from './review.mts';
+import type { ReviewMark, Verdict } from './review.mts';
 
 /** What a reader of the run sees: a milestone, an issue, a repository. */
 export type Subject = { kind: string; id: string; title: string; url?: string };
@@ -72,10 +72,10 @@ export interface Tracker {
   syncStageLabels(): string[];
   /** Comments `body` on the item unless a comment of the login of the loop already starts with `marker`. */
   commentOnce(item: Item, marker: string, body: string): void;
-  /** Marks on the pull request the verdict the loop accepted for the commit `head`. */
-  recordVerdict(pull: Pull, verdict: Verdict['verdict'], head: string): void;
-  /** The latest verdict recorded for exactly the commit `head` by the login of the loop; anyone else's mark is ignored. */
-  recordedVerdict(pull: Pull, head: string): Verdict['verdict'] | undefined;
+  /** Marks on the pull request the verdict the loop accepted for the commit `head` (`markBody`), with the risk level. */
+  recordVerdict(pull: Pull, review: Verdict, head: string, risk?: string): void;
+  /** The marks the login of the loop recorded on the pull request, oldest first (`parseMark`); anyone else's are ignored. */
+  recordedVerdicts(pull: Pull): ReviewMark[];
   /** Why the item cannot start now (a hold label, an open blocker, an author without write access), else nothing. */
   waitReason(item: Item): string | undefined;
   /** The session asked a question instead of delivering. */
