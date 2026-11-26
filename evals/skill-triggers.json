@@ -57,6 +57,17 @@
     ]
   },
   {
+    "skill": "ng-helix",
+    "shouldTrigger": [
+      "Build a settings dialog with Helix fields, a select and a switch",
+      "Ask for confirmation with HxConfirmationService before deleting a row in our helix-ui app"
+    ],
+    "shouldNotTrigger": [
+      "Add an AG Grid table with server-side rows to this page",
+      "Write a TestBed test for an Angular service without any UI"
+    ]
+  },
+  {
     "skill": "ng-implementation",
     "shouldTrigger": [
       "Convert this Angular component to standalone with signals",
@@ -64,6 +75,7 @@
     ],
     "shouldNotTrigger": [
       "Add an ag-grid table to my Angular page",
+      "Which inputs does the Helix hx-message component take?",
       "Scaffold a new Angular workspace with Vitest and ESLint"
     ]
   },
