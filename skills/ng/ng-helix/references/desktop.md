@@ -1,6 +1,6 @@
 # Helix desktop
 
-The frame of a desktop or Tauri app, from `docs/HELIX-DESKTOP.md` and the public APIs of Helix `release/next`. Build the toolbar, activity bar and status bar from these; do not hand-build them.
+The frame of a desktop or Tauri app, from the [Helix Desktop guide](https://github.com/GravionLabs/helix/blob/release/next/docs/HELIX-DESKTOP.md) and the public APIs of Helix `release/next`. Build the toolbar, activity bar and status bar from these; do not hand-build them.
 
 - Check the package: `npm ls @gravionlabs/helix-desktop`. Peers: `@angular/cdk`, `@gravionlabs/helix-ui`.
 - Styles, once and globally: `@gravionlabs/helix-ui/tokens.css`, then `@gravionlabs/helix-desktop/styles.css`.
