@@ -111,4 +111,43 @@ describe('ui-styleguide', () => {
     for (const s of SECTIONS) expect(fill).toContain(s);
     expect(fill).toMatch(/Nothing is invented/);
   });
+
+  it('SKILL.md names the sync mode with its trigger words and links references/sync.md', () => {
+    const skill = read('SKILL.md');
+    const modes = skill.split(/^## Modes$/m)[1]?.split(/^## /m)[0];
+    expect(modes).toContain('/ui-styleguide sync');
+    expect(modes).toContain('"update the style guide"');
+    expect(modes).toContain('(references/sync.md)');
+    expect(skill.match(/^description: .*$/m)?.[0]).toContain('"update the style guide"');
+  });
+
+  describe('references/sync.md', () => {
+    const sync = read('references/sync.md');
+
+    it('reads the core file and the deep dives', () => {
+      expect(sync).toContain('docs/STYLEGUIDE.md');
+      expect(sync).toContain('docs/styleguide/*.md');
+    });
+
+    it.each(['Stale references', 'Missing components', 'Missing template parts', 'Broken rules'])(
+      'has the check %s',
+      (check) => {
+        expect(sync).toMatch(new RegExp(`^\\d\\. \\*\\*${check}\\.\\*\\*`, 'm'));
+      },
+    );
+
+    it('finds components like fill.md step 4 and counts broken rules with examples', () => {
+      expect(sync).toMatch(/\(fill\.md\) step 4/);
+      expect(sync).toContain('more than one screen');
+      expect(sync).toContain('the count and up to five examples');
+      expect(sync).toContain('file and evidence');
+    });
+
+    it('outputs a list and a diff and writes only after approval', () => {
+      expect(sync).toMatch(/^1\. \*\*List\*\*/m);
+      expect(sync).toMatch(/^2\. \*\*Proposed diff\*\*/m);
+      expect(sync).toContain('Write nothing before the user approves');
+      expect(sync).toContain('Apply an approved diff as shown');
+    });
+  });
 });
