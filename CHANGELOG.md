@@ -5,9 +5,25 @@ Versioning follows [Semantic Versioning](https://semver.org/).
 
 ---
 
+## [5.16.0] — 2026-11-26
+
+### Documentation
+- **ng-implementation**: Style-lint uses the Helix lint preset (#1031) (#1047)
+- **github-release**: A release job that fails after the merge is completed by a re-run (#1039) (#1049)
+
+
+### Features
+- **ng-helix**: Skill with Helix components and form and dialog recipes (#1042) (#1050)
+- **ng-helix**: Helix-desktop reference (#1044) (#1051)
+- **ng-helix**: Migration from raw controls and lint preset wiring (#1045) (#1052)
+- **ng-helix**: Testing Helix components by role and keyboard (#1046) (#1053)
+- **ng-helix**: Tokens and theming reference (#1043) (#1054)
+
+
 ## [5.15.0] — 2026-11-26
 
 ### Documentation
+- Update CHANGELOG.md for v5.15.0 [skip ci]
 - Update CHANGELOG.md for v5.15.0 [skip ci]
 
 
