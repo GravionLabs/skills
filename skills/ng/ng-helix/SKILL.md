@@ -24,6 +24,7 @@ Load the file for the task at hand. Paths are relative to this skill's directory
 | Desktop frame  | `references/desktop.md`    | Building the app shell or status bar, a Tauri app, or showing updates         |
 | Migration      | `references/migration.md`  | Migrating an app from raw controls, adding the lint preset or its allowlist   |
 | Testing        | `references/testing.md`    | Tests of Helix-based components                                               |
+| Theming        | `references/theming.md`    | Colors, spacing, font sizes, dark mode, density, theme preset                 |
 
 ## Gotchas
 

@@ -20,6 +20,7 @@ describe('ng-helix skill', () => {
       'references/desktop.md',
       'references/migration.md',
       'references/testing.md',
+      'references/theming.md',
     ]);
     for (const file of files) expect(existsSync(path.join(root, file)), file).toBe(true);
   });
@@ -74,6 +75,25 @@ describe('ng-helix skill', () => {
     expect(examples.length).toBeGreaterThan(0);
     for (const code of examples)
       expect(code).not.toMatch(/\.hx-|querySelector|By\.css|getElementsByClassName/);
+  });
+  it('loads the theming reference for colors, sizes, dark mode and density', () => {
+    const row = skill.split('\n').find((line) => line.includes('`references/theming.md`'));
+    for (const word of ['Colors', 'spacing', 'font sizes', 'dark mode', 'density'])
+      expect(row).toContain(word);
+  });
+  it('names the surface roles of the accepted ADR 0004 and both scales', () => {
+    const theming = read(path.join(root, 'references/theming.md'));
+    const roles = theming.split('## Surface roles')[1].split('\n## ')[0];
+    expect(roles).toMatch(/ADR 0004\]\([^)]+\) of Helix \(Accepted/);
+    const names = [
+      ...['frame', 'panel', 'card', 'overlay', 'hover'].map((role) => `surface-${role}`),
+      'border-panel',
+      'border-divider',
+    ];
+    for (const name of names) expect(roles, name).toContain(`\`--h-${name}\``);
+    for (const step of ['xs', 'sm', 'md', 'lg', 'xl', '2xl', '3xl'])
+      expect(theming).toContain(`\`--h-font-size-${step}\``);
+    for (let step = 1; step <= 8; step++) expect(theming).toContain(`\`--h-space-${step}\``);
   });
   it('links the UX rules and the style guide of the project', () => {
     expect(skill).toContain('https://github.com/GravionLabs/helix/blob/main/docs/UX-RULES.md');
