@@ -190,7 +190,8 @@ export function create(): Tracker {
       const files = reads > 1 ? (scenario.filesLater ?? scenario.files) : scenario.files;
       return files ?? ['src/a.ts'];
     },
-    compareRefs: (_pull: Pull, head?: string) => ({ base: 'base-sha', head: head ?? 'head-sha' }),
+    // `abc123` is a tag of the fixture repository: the loop checks the head out for the review
+    compareRefs: (_pull: Pull, head?: string) => ({ base: 'base-sha', head: head ?? 'abc123' }),
     fileAt(sha: string, file: string): string | undefined {
       const contents = /cargo\.toml$/i.test(file)
         ? scenario.cargoToml
