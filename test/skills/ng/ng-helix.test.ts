@@ -14,8 +14,29 @@ const helix = read(path.join(ng, 'ng-implementation/references/helix.md'));
 describe('ng-helix skill', () => {
   it('has the reference files of its table', () => {
     const files = [...skill.matchAll(/^\|[^|]+\| `(references\/[^`]+)`/gm)].map(([, f]) => f);
-    expect(files).toEqual(['references/components.md', 'references/recipes.md']);
+    expect(files).toEqual([
+      'references/components.md',
+      'references/recipes.md',
+      'references/desktop.md',
+    ]);
     for (const file of files) expect(existsSync(path.join(root, file)), file).toBe(true);
+  });
+  it('loads the desktop reference for shell, status bar, Tauri and updates', () => {
+    const row = skill.split('\n').find((line) => line.includes('`references/desktop.md`'));
+    for (const word of ['app shell', 'status bar', 'Tauri', 'updates']) expect(row).toContain(word);
+  });
+  it('names the desktop exports and invents no window controls', () => {
+    const desktop = read(path.join(root, 'references/desktop.md'));
+    const names = [
+      'HxAppShell HxAppToolbar HxActivityBar HxMobileShell HxBottomBar HxStatusBar HxStatusItem',
+      'HxStatusPopover HxStatusVersion HxStatusZoom HelixView getHxPlatform setHxPlatform',
+      'HxUpdateService HX_UPDATE_BACKEND tauriUpdateBackend HxStatusUpdate HxStatusAppVersion',
+      'provideHxAppInfo providePlatform isTauri',
+    ]
+      .join(' ')
+      .split(' ');
+    for (const name of names) expect(desktop, name).toContain(name);
+    expect(desktop).toContain('no window controls and no title bar');
   });
   it('links the UX rules and the style guide of the project', () => {
     expect(skill).toContain('https://github.com/GravionLabs/helix/blob/main/docs/UX-RULES.md');
