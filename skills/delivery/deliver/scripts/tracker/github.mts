@@ -391,6 +391,16 @@ export function create({
       return syncLabels((...args) => gh(...args), repo);
     },
 
+    commentOnce(item: Item, marker: string, body: string): void {
+      const route = `repos/${repo}/issues/${item.id}/comments`;
+      const login = gh('api', 'user', '--jq', '.login');
+      // anyone can write the marker: only the comment of the loop itself counts as posted
+      const posted = list<Comment>(`${route}?per_page=100`).some(
+        (c) => c.user?.login === login && (c.body ?? '').startsWith(marker),
+      );
+      if (!posted) gh('api', '-X', 'POST', route, '-f', `body=${body}`);
+    },
+
     recordVerdict(pull: Pull, verdict: 'approve' | 'changes', head: string): void {
       const body = `<!-- deliver-review: ${verdict} ${head} -->\nThe deliver loop recorded the review verdict \`${verdict}\` for ${head}.`;
       gh('api', '-X', 'POST', `repos/${repo}/issues/${pull.id}/comments`, '-f', `body=${body}`);

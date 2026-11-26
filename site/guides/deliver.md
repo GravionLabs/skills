@@ -132,6 +132,10 @@ State lives in GitHub (issue, branch, pull request, checks). After a crash, a cl
 
 The board shows where each issue is: the loop keeps the stage in one `agent:*` label (`agent:implementing`, `agent:review`, `agent:changes`, `agent:approved`, `agent:handover`) and removes them all after the merge. Run the same command again after a stop, and an issue with an open pull request resumes at its label: `agent:approved` at the merge gate, `agent:review` with a review, the others with the implementer. Do not rely on a label you set yourself: `agent:approved` counts only with the review verdict the loop recorded as a pull request comment for the current commit, written by the login that runs the loop; anything else is reviewed again. The loop creates missing labels at start (`node <skill-dir>/scripts/sync-labels.mts` does it by hand).
 
+## Comments on the issue
+
+Feature pull requests are transport; read the issue. After every review round with a verdict the loop comments the verdict, the number of blocking findings and unmet criteria and the pull request (the findings stay in the pull request comment). When it hands an issue over or sets it aside, and after it merged a pull request of risk `high`, it comments the reason, the pull request and your next step. Each comment starts with a marker (`<!-- deliver-handover: <reason> <sha> -->`) and is posted once per reason and commit, also when you run the loop again.
+
 ## Progress events
 
 The loop writes [agent-events](https://github.com/GravionLabs/agent-events) to `<git-common-dir>/.agents/events/<run>.jsonl`: the run, one task per issue with its pull request, progress, and an attention for an issue set aside. The session reports nothing itself. Displays such as [herdr](herdr.md) read the file.
