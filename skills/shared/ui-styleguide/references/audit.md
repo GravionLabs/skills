@@ -20,9 +20,12 @@ Neither exists: say so, ask for a folder or a command, and stop. Do not take scr
 Read the first that exists:
 
 1. `docs/styleguide/ux-review-rubric.md` of the repository;
-2. the template of this skill, [ux-review-rubric.md](../templates/styleguide/ux-review-rubric.md).
+2. the base guide's rubric, when `docs/STYLEGUIDE.md` starts with `Extends: <path>`: `ux-review-rubric.md` beside `<path>` or in its `styleguide/` folder;
+3. the template of this skill, [ux-review-rubric.md](../templates/styleguide/ux-review-rubric.md).
 
-Read `docs/STYLEGUIDE.md` and its deep dives when they exist. Without them, say once that no guide rule can be named.
+An `Extends:` path that does not exist is reported as `base guide not found: <path>`, never guessed; go on with the next source.
+
+Read `docs/STYLEGUIDE.md` and its deep dives when they exist, and with `Extends:` the base guide and its deep dives too: its rules apply unless `## Deviations` replaces them. Without them, say once that no guide rule can be named.
 
 ## Per view
 
