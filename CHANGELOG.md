@@ -5,7 +5,21 @@ Versioning follows [Semantic Versioning](https://semver.org/).
 
 ---
 
+## [5.15.0] — 2026-11-26
+
+### Features
+- **ui-styleguide**: Form field and dialog rules in the templates and fill.md (#1026) (#1032)
+- **ui-styleguide**: Sync mode proposes a diff between a guide and the code (#1027) (#1034)
+- **ui-styleguide**: Audit mode checks screenshots against the rubric (#1028) (#1035)
+- **ng-implementation**: Helix primitives instead of raw controls (#1029) (#1036)
+- **ui-styleguide**: A project guide extends a base guide (#1030) (#1037)
+
+
 ## [5.14.0] — 2026-11-26
+
+### Documentation
+- Update CHANGELOG.md for v5.14.0 [skip ci]
+
 
 ### Features
 - **deliver**: Review runs as its own session with its own model (#1013) (#1018)
