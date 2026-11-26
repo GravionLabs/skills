@@ -294,3 +294,26 @@ describe('spec section', () => {
     });
   });
 });
+
+describe('ux-review rubric lookup with a base guide', () => {
+  const ref = fs.readFileSync(
+    path.resolve(__dirname, '../../../skills/shared/code-review/references/ux-review.md'),
+    'utf8',
+  );
+
+  it('looks up the project rubric, then the base rubric, then the skill template', () => {
+    const order = [
+      '1. `docs/styleguide/ux-review-rubric.md`',
+      "2. the base guide's rubric",
+      '3. the default rubric',
+    ].map((s) => ref.indexOf(s));
+    expect(order.every((i) => i >= 0)).toBe(true);
+    expect([...order].sort((a, b) => a - b)).toEqual(order);
+    expect(ref).toContain('Extends: <path>');
+  });
+
+  it('reports a missing base path instead of guessing', () => {
+    expect(ref).toContain('`base guide not found: <path>`');
+    expect(ref).toContain('never guess another file');
+  });
+});

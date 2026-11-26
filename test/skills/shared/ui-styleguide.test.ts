@@ -66,6 +66,38 @@ describe('ui-styleguide', () => {
     expect([...positions].sort((a, b) => a - b)).toEqual(positions);
   });
 
+  it('ux-rules.md has the field and dialog anatomy', () => {
+    const rules = read('templates/styleguide/ux-rules.md');
+    for (const h of ['Field anatomy', 'Dialog anatomy']) {
+      expect(rules).toMatch(new RegExp(`^### ${h}$`, 'm'));
+    }
+    for (const s of ['aria-invalid', 'aria-describedby', 'input group', '<platform order>']) {
+      expect(rules).toContain(s);
+    }
+    expect(rules).toMatch(/exactly one primary action/);
+    expect(rules).toMatch(/Cancel never uses the danger role/);
+  });
+
+  it('components.md has the form and dialog rows and the button hierarchy', () => {
+    const components = read('templates/styleguide/components.md');
+    for (const row of ['FormField', 'InputGroup', 'DialogFooter']) {
+      expect(components).toMatch(new RegExp(`^\\| \`<${row}>\` +\\|`, 'm'));
+    }
+    expect(components).toMatch(/^## Button hierarchy$/m);
+    for (const v of ['primary', 'secondary', 'quiet / toolbar', 'icon-only', 'link', 'danger']) {
+      expect(components).toMatch(new RegExp(`^\\| ${v} +\\|`, 'm'));
+    }
+  });
+
+  it('fill.md reads the form and dialog components and leaves gaps open', () => {
+    const step = read('references/fill.md')
+      .split('\n')
+      .find((l) => l.includes('**Read the form and dialog components.**'));
+    for (const s of ['field wrapper', 'footer', 'button variants', 'Open: …', 'never invented']) {
+      expect(step).toContain(s);
+    }
+  });
+
   it('agents-styleguide.md holds the binding paragraph', () => {
     const p = read('templates/agents-styleguide.md');
     expect(p).toContain('docs/STYLEGUIDE.md');
@@ -78,5 +110,159 @@ describe('ui-styleguide', () => {
     const fill = read('references/fill.md');
     for (const s of SECTIONS) expect(fill).toContain(s);
     expect(fill).toMatch(/Nothing is invented/);
+  });
+
+  it('SKILL.md names the sync mode with its trigger words and links references/sync.md', () => {
+    const skill = read('SKILL.md');
+    const modes = skill.split(/^## Modes$/m)[1]?.split(/^## /m)[0];
+    expect(modes).toContain('/ui-styleguide sync');
+    expect(modes).toContain('"update the style guide"');
+    expect(modes).toContain('(references/sync.md)');
+    expect(skill.match(/^description: .*$/m)?.[0]).toContain('"update the style guide"');
+  });
+
+  describe('references/sync.md', () => {
+    const sync = read('references/sync.md');
+
+    it('reads the core file and the deep dives', () => {
+      expect(sync).toContain('docs/STYLEGUIDE.md');
+      expect(sync).toContain('docs/styleguide/*.md');
+    });
+
+    it.each(['Stale references', 'Missing components', 'Missing template parts', 'Broken rules'])(
+      'has the check %s',
+      (check) => {
+        expect(sync).toMatch(new RegExp(`^\\d\\. \\*\\*${check}\\.\\*\\*`, 'm'));
+      },
+    );
+
+    it('finds components like fill.md step 4 and counts broken rules with examples', () => {
+      expect(sync).toMatch(/\(fill\.md\) step 4/);
+      expect(sync).toContain('more than one screen');
+      expect(sync).toContain('the count and up to five examples');
+      expect(sync).toContain('file and evidence');
+    });
+
+    it('outputs a list and a diff and writes only after approval', () => {
+      expect(sync).toMatch(/^1\. \*\*List\*\*/m);
+      expect(sync).toMatch(/^2\. \*\*Proposed diff\*\*/m);
+      expect(sync).toContain('Write nothing before the user approves');
+      expect(sync).toContain('Apply an approved diff as shown');
+    });
+  });
+
+  it('SKILL.md names the audit mode with its trigger words and links references/audit.md', () => {
+    const skill = read('SKILL.md');
+    const modes = skill.split(/^## Modes$/m)[1]?.split(/^## /m)[0];
+    expect(modes).toContain('/ui-styleguide audit [<names>…]');
+    expect(modes).toContain('"audit the UI against the style guide"');
+    expect(modes).toContain('(references/audit.md)');
+    expect(skill.match(/^description: .*$/m)?.[0]).toContain(
+      '"audit the UI against the style guide"',
+    );
+  });
+
+  describe('references/audit.md', () => {
+    const audit = read('references/audit.md');
+
+    it('resolves the input without driving a browser', () => {
+      expect(audit).toContain('screenshot folder');
+      expect(audit).toContain('pnpm screenshots');
+      expect(audit).toContain('package.json');
+      expect(audit).toContain('No browser is driven');
+    });
+
+    it('looks up the project rubric before the template and does not copy it', () => {
+      const project = audit.indexOf('docs/styleguide/ux-review-rubric.md');
+      const template = audit.indexOf('(../templates/styleguide/ux-review-rubric.md)');
+      expect(project).toBeGreaterThanOrEqual(0);
+      expect(template).toBeGreaterThan(project);
+      expect(audit).not.toContain('What is the one thing the user came to do');
+    });
+
+    it('reports the five rubric headings per view in the rubric order', () => {
+      const rubric = read('templates/styleguide/ux-review-rubric.md');
+      const headings = rubric.match(/^### .+$/gm) ?? [];
+      expect(headings).toHaveLength(5);
+      const positions = headings.map((h) => audit.indexOf(`\`${h}\``));
+      expect(positions.every((i) => i >= 0)).toBe(true);
+      expect([...positions].sort((a, b) => a - b)).toEqual(positions);
+      expect(audit).toContain('Write "None"');
+      expect(audit).toContain('names the file and the section');
+      expect(audit).toContain('only from the markup');
+    });
+
+    it('ranks the top fixes and creates drafts only after approval', () => {
+      expect(audit).toContain('`## Top fixes across views`, ranked');
+      expect(audit).toContain('PBI draft');
+      expect(audit).toContain('`github-issue` format');
+      expect(audit).toContain('Show every draft in full');
+      expect(audit).toContain('Create nothing before the user approves');
+    });
+  });
+});
+
+describe('ui-styleguide extends mode', () => {
+  it('SKILL.md names the mode with its trigger words and links references/extends.md', () => {
+    const skill = read('SKILL.md');
+    const modes = skill.split(/^## Modes$/m)[1]?.split(/^## /m)[0];
+    expect(modes).toContain('/ui-styleguide extends <path>');
+    expect(modes).toContain('"add a style guide on Helix"');
+    expect(modes).toContain('(references/extends.md)');
+    expect(skill.match(/^description: .*$/m)?.[0]).toContain('"add a style guide on Helix"');
+    expect(skill).toContain('templates/STYLEGUIDE.extends.md');
+  });
+
+  it('references/extends.md creates a guide without copying the base or guessing', () => {
+    const mode = read('references/extends.md');
+    expect(mode).toContain('(../templates/STYLEGUIDE.extends.md)');
+    expect(mode).toContain('Its first line is `Extends: <path>`');
+    expect(mode).toContain('Copy nothing of the base');
+    expect(mode).toContain('`base guide not found: <path>`');
+    expect(mode).toContain('Never take another file instead');
+    expect(mode).toContain('never overwrite');
+    expect(mode).toContain('(../templates/agents-styleguide.md)');
+  });
+
+  it('STYLEGUIDE.extends.md starts with Extends: and has ## Deviations with a reason', () => {
+    const t = read('templates/STYLEGUIDE.extends.md');
+    expect(t).toMatch(/^Extends: <path/);
+    expect(t).toMatch(/^## Deviations$/m);
+    expect(t).toMatch(/^\| Base rule +\| This project +\| Reason +\|$/m);
+    expect(lineCount(t)).toBeLessThanOrEqual(100);
+    for (const s of SECTIONS) expect(t).not.toMatch(new RegExp(`^## ${s}$`, 'm'));
+  });
+
+  it('agents-styleguide.md has a paragraph that names both files', () => {
+    const p = read('templates/agents-styleguide.md');
+    const variant = p.split('<!--')[1];
+    expect(variant).toContain('<path to the base STYLEGUIDE.md>');
+    expect(variant).toContain('docs/STYLEGUIDE.md');
+  });
+
+  it('sync.md compares with the base', () => {
+    const base = read('references/sync.md')
+      .split(/^## Base guide$/m)[1]
+      ?.split(/^## /m)[0];
+    expect(base).toContain('Extends: <path>');
+    expect(base).toContain('**Repeats the base.**');
+    expect(base).toContain('flagged for removal');
+    expect(base).toContain('**Deviation without a reason.**');
+    expect(base).toContain('never guess');
+  });
+
+  it('audit.md looks up project, base and template rubric in that order', () => {
+    const rubric =
+      read('references/audit.md')
+        .split(/^## Rubric$/m)[1]
+        ?.split(/^## /m)[0] ?? '';
+    const order = [
+      '1. `docs/styleguide/ux-review-rubric.md`',
+      "2. the base guide's rubric",
+      '3. the template',
+    ].map((s) => rubric.indexOf(s));
+    expect(order.every((i) => i >= 0)).toBe(true);
+    expect([...order].sort((a, b) => a - b)).toEqual(order);
+    expect(rubric).toContain('never guessed');
   });
 });
