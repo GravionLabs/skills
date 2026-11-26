@@ -77,6 +77,22 @@ gh pr merge <nr> --merge
 
 `deliver` and `finish` never merge it and never wait for it. `release/next` is never deleted. After the merge the next `github-release finish` (or `cut`) moves it to `main` by a fast-forward for the next release, and open PRs into it keep their base.
 
+## When the release job fails
+
+The release job runs on `main` after the merge of the release PR. When it fails, the release is not finished, even though the release PR is merged. Two transient failures seen so far:
+
+- `actions/attest` fails with `InternalError: error fetching tlog entry - (404) Not Found` (Sigstore). A **draft** release with the artifacts can exist without a tag.
+- The tag push fails with `! [remote rejected] v<x.y.z> -> v<x.y.z> (missing necessary objects)`, after the changelog commit reached `main`.
+
+Re-run the failed jobs of that run:
+
+```bash
+gh run list --branch main --status failure
+gh run rerun <run id> --failed
+```
+
+Never create the tag by hand and never open a new release PR. `Get-ReleaseState.ps1 -Mode finish` sets `warning` when the newest release is a draft without a tag and names the failed run when it finds it; such a release is unfinished, not released. A pre-release (`-rc.N`) draft is no failure and is not reported.
+
 ## After a hotfix
 
 A hotfix goes straight into `main` and must come back into `release/next`, otherwise `finish` stops (`main` is not an ancestor of `release/next`; `Get-ReleaseState.ps1` reports `defaultIsAncestor` and `mergeConflicts`). The back-merge is a real merge commit, not a squash, which would drop the ancestry:

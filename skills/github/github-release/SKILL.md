@@ -51,9 +51,9 @@ The script is read-only and prints JSON: `default`, `branch`, `state`, `openPrs`
 ## Gotchas
 
 - A `warning` about a missing `deletion` rule (with `delete_branch_on_merge`, merging the release PR deletes `release/next`) or `retargetedPrs` (PRs GitHub moved to the default branch): print it, tell the owner to add the rule (`site/guides/release.md`) before the merge, and retarget those PRs with `gh pr edit <nr> --base release/next`. Never merge the release PR yourself; the push to `main` builds, regenerates the changelog and closes the delivered issues.
+- The release job on `main` fails after the merge, for example `actions/attest` with `InternalError: error fetching tlog entry - (404) Not Found` (Sigstore; may leave a draft release without a tag) or the tag push with `! [remote rejected] v<x.y.z> -> v<x.y.z> (missing necessary objects)`: re-run it with `gh run rerun <run id> --failed`. Never tag by hand and never open a new release PR. A draft release without a tag is unfinished, not released: `finish` mode reports it in `warning`, with the run id when found (a `-rc.N` draft is no failure); print it, skip the milestone step.
 - Issues close at merge into `release/next`: `references/closing.md`. A repo without `cliff.toml` gets no changelog from CI: `references/cliff-setup.md`.
-- Hotfixes bypass this skill (`fix/<nr>-<slug>` from `main`, merge commit into `main`); afterwards run the back-merge (`references/back-merge.md`: merge commit PR, never squash).
+- A release branch is never continued after its merge. The CI release PR title may show the branch name, not the version (`release-branches.md`). Hotfixes bypass this skill (`fix/<nr>-<slug>` from `main`, merge commit into `main`); afterwards run the back-merge (`references/back-merge.md`: merge commit PR, never squash).
 - Workflows reference `GravionLabs/ci` at the major tag `@v<major>` (today `@v1`, as `templates/release-branch.yml`), never `@main` or a commit SHA; third-party actions stay SHA-pinned where the repository requires it.
-- A release branch is never continued after its merge. The CI release PR title may show the branch name, not the version (`release-branches.md`).
 
 Report: mode, branch, PR URL (finish) or the Feature issue updated (cut).
