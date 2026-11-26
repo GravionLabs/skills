@@ -2,6 +2,7 @@
 // deliver loop: a fresh agent session per issue, a review session for its pull request, merge, then the next issue.
 // The state is read from the tracker before every issue. The run only remembers what it set aside.
 // Tracker: tracker.mts. Progress events: events.mts. Review settings and verdict: review.mts. Issue stage: stage.mts.
+// Comments on the issue: handover.mts.
 import { execFileSync } from 'node:child_process';
 import {
   appendFileSync,
@@ -19,6 +20,7 @@ import { createInterface } from 'node:readline';
 import { parseArgs } from 'node:util';
 import { appSettings, tokenSource as makeSource } from './app-token.mts';
 import { type Emit, openEvents } from './events.mts';
+import { type Note, handoverNote, reviewNote } from './handover.mts';
 import { finishReport, programStatus } from './program-status.mts';
 import { cargoTomlKeys } from './cargo-toml.mts';
 import { directoryPackagesPropsKeys } from './directory-packages-props.mts';
@@ -584,6 +586,29 @@ function mark(item: Item, event: StageEvent): void {
   }
 }
 
+/** Comments on the issue, once per marker. A failing call is logged, as for the label. */
+function note(item: Item, { marker, body }: Note): void {
+  try {
+    tracker.commentOnce(item, marker, body);
+  } catch (error) {
+    log(`#${item.id} issue comment not written: ${firstLine(error)}`, 'warn');
+  }
+}
+
+/** Tells the person on the issue why it is theirs now, once per reason and head of the pull request. */
+function tell(item: Item, pull: Pull | undefined, reason: string, planned: boolean): void {
+  let head = 'none';
+  if (pull) {
+    try {
+      head = tracker.compareRefs(pull).head;
+    } catch {
+      head = 'unknown';
+    }
+  }
+  const urls = pull ? [pull.url, ...(pull.others ?? [])] : [];
+  note(item, handoverNote({ reason, planned, head, urls, risk: risks.get(item.id) }));
+}
+
 /** The next step of an issue; `merge` names the approved commit. */
 type Step = { step: 'implement' | 'review' } | { step: 'merge'; head: string };
 
@@ -1095,6 +1120,7 @@ async function deliver(item: Item): Promise<{ reason?: string; pull?: Pull }> {
         log(`#${item.id} review verdict not recorded: ${firstLine(error)}`, 'warn');
       }
       mark(item, `verdict-${reviewed.verdict.verdict}`);
+      note(item, reviewNote(round, reviewed.verdict, reviewed.head, pull.url));
       if (reviewed.verdict.verdict === 'changes') {
         if (fixes >= FIX_ROUNDS) {
           // the findings are text of an agent: it never ends the reason, whose ending decides about a hand-over
@@ -1169,13 +1195,17 @@ async function repairHandedOver(nr: number): Promise<void> {
   if (!existsSync(worktree))
     run('git', ['worktree', 'add', '--detach', worktree, `origin/${BASE}`], root);
   const sessions: Session[] = [];
-  const note = await repairConflict(item, pull, worktree, sessions).catch(
+  const repaired = await repairConflict(item, pull, worktree, sessions).catch(
     (error) => `conflict not repaired: ${firstLine(error)}`,
   );
-  if (!note) return;
+  if (!repaired) return;
   mark(item, 'handed-over');
-  log(`#${nr} ${note}, handed over`, note.startsWith('conflict repaired') ? 'info' : 'warn');
-  handedOver.set(nr, `${note}, ${reason}`);
+  log(
+    `#${nr} ${repaired}, handed over`,
+    repaired.startsWith('conflict repaired') ? 'info' : 'warn',
+  );
+  handedOver.set(nr, `${repaired}, ${reason}`);
+  tell(item, pull, `${repaired}, ${reason}`, true);
   // the line of the issue in results.jsonl says it too
   const file = path.join(runDir, 'results.jsonl');
   const rows = readFileSync(file, 'utf8')
@@ -1185,7 +1215,7 @@ async function repairHandedOver(nr: number): Promise<void> {
       const row = JSON.parse(line) as Record<string, unknown>;
       if (row.issue !== nr || typeof row.reason !== 'string') return line;
       const all = [...((row.sessions as Session[]) ?? []), ...sessions];
-      return JSON.stringify({ ...row, reason: `${note}, ${row.reason}`, sessions: all });
+      return JSON.stringify({ ...row, reason: `${repaired}, ${row.reason}`, sessions: all });
     });
   writeFileSync(file, `${rows.join('\n')}\n`);
 }
@@ -1493,6 +1523,7 @@ try {
       );
       log(`#${next.id} merged: ${pull?.url}`, 'ok');
       mark(next, 'merged');
+      if (risks.get(next.id) === 'high') tell(next, pull, 'high risk: merged by the loop', false);
       emit(
         'task.finished',
         { task: `issue-${next.id}`, outcome: 'succeeded', text: 'merged' },
@@ -1508,6 +1539,7 @@ try {
       (planned ? handedOver : aside).set(next.id, `${why}${pull ? `, ${pull.url}` : ''}`);
       if (planned && pull) handedPulls.set(next.id, { item: next, pull });
       mark(next, planned ? 'handed-over' : 'set-aside');
+      tell(next, pull, why, planned);
       log(
         planned
           ? `#${next.id} handed over: ${why}, merge it yourself`

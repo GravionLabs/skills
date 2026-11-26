@@ -66,6 +66,8 @@ export type Outcome = {
   /** The stages the loop wrote, in order; `null` removes the label. */
   stages: { id: number; stage: string | null }[];
   releasePulls: number;
+  /** The comments the loop asked the tracker to post on an issue. */
+  comments: { id: number; marker: string; body: string }[];
   calls: string[];
   sessions: {
     id: number;
@@ -178,6 +180,7 @@ export function loop(
         ).length,
         calls: lines<{ call: string }>(path.join(dir, 'calls.jsonl')).map((call) => call.call),
         stages: lines(path.join(dir, 'stages.jsonl')),
+        comments: lines(path.join(dir, 'comments.jsonl')),
         sessions: lines(path.join(dir, 'sessions.jsonl')),
         reviews: lines(path.join(dir, 'reviews.jsonl')),
         results: results

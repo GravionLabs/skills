@@ -109,6 +109,11 @@ export function create(): Tracker {
         `${JSON.stringify({ id: item.id, stage: stage ?? null })}\n`,
       ),
     syncStageLabels: () => [],
+    commentOnce: (item: Item, marker: string, body: string) =>
+      appendFileSync(
+        path.join(dir, 'comments.jsonl'),
+        `${JSON.stringify({ id: item.id, marker, body })}\n`,
+      ),
     recordVerdict: () => {},
     recordedVerdict: () => undefined,
     pullOf(item: Item): Pull | undefined {

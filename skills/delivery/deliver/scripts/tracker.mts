@@ -70,6 +70,8 @@ export interface Tracker {
   setStage(item: Item, stage: Stage | undefined): void;
   /** Creates the missing `agent:*` labels and returns their names. */
   syncStageLabels(): string[];
+  /** Comments `body` on the item unless a comment of the login of the loop already starts with `marker`. */
+  commentOnce(item: Item, marker: string, body: string): void;
   /** Marks on the pull request the verdict the loop accepted for the commit `head`. */
   recordVerdict(pull: Pull, verdict: Verdict['verdict'], head: string): void;
   /** The latest verdict recorded for exactly the commit `head` by the login of the loop; anyone else's mark is ignored. */
