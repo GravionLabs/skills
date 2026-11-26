@@ -30,7 +30,7 @@ The official `angular-developer` skill (dependency `angular/skills`) covers the 
 The convention is the one `angular.json` declares in `schematics` (workspace root; `projects.<name>.schematics` overrides it), not the one the existing files happen to use. It decides what `ng generate` writes; each schematic counts on its own.
 
 - No `type` (CLI default since Angular 20): no role suffix (`editor.ts`, class `Editor`; services and directives likewise)
-- `"type"` of `@schematics/angular:component` (`"component"`), `:directive` (`"directive"`), `:service` (`"service"`): suffixes on purpose (`editor.component.ts`, class `EditorComponent`)
+- `"type"` of `@schematics/angular:component` (`"component"`), `:directive` (`"directive"`), `:service` (`"service"`): suffixes on purpose (`editor.component.ts`, class `EditorComponent`; with `"addTypeToClassName": false` the suffix is in the file name only, class `Editor`)
 - `"typeSeparator": "."` of `@schematics/angular:guard`, `:interceptor`, `:module`, `:pipe`, `:resolver`: `auth.guard.ts`; without it `auth-guard.ts`
 - `ng update` to v20 writes all eight settings into a project that keeps the old style
 - Drift (suffixed files, no declared `type`): follow an ADR of the project that decides it; without one add no suffixed file, report the drift once and ask. No renames in passing.
@@ -72,7 +72,7 @@ Run `pnpm check:changed` once when the work is done (the gate of this stack; `im
 - Subscriptions cleaned up via `DestroyRef` / `takeUntilDestroyed`
 - No complex template expressions; ARIA labels and `alt` text on interactive elements and images
 - Library code exported only through `public-api.ts`
-- 🟡 A new file or class named differently from what `angular.json` declares (File naming), or a class name that shadows a DOM/JS global
+- 🟡 A new file or class named differently from what `angular.json` or the ADR of a drift case declares (File naming), or a class name that shadows a DOM/JS global
 - New or changed behavior has tests per `ng-test`
 
 ## Scaffolding

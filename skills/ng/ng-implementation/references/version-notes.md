@@ -8,7 +8,7 @@ Non-obvious or experimental APIs. For anything else, use the Angular MCP server 
 
 - The style guide and the CLI default dropped the role suffix: `ng generate` writes `editor.ts` with class `Editor`; guards, interceptors, modules, pipes and resolvers get `-` as separator (`auth-guard.ts`)
 - There is no rename migration: existing files keep their names, and `ng update` to v20 writes `type` / `typeSeparator` into `angular.json` to keep the old style
-- A project created on v20+ declares neither unless someone adds them; the rule is "File naming" in `SKILL.md`
+- A project created on v20+ with the default style guide declares neither (`ng new --file-name-style-guide=2016` does); the rule is "File naming" in `SKILL.md`
 
 ## `linkedSignal` vs `computed` vs `effect`
 

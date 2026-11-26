@@ -34,7 +34,7 @@ describe('ng-implementation file naming', () => {
   });
   it('reviews naming that differs from angular.json or shadows a global', () => {
     expect(section(read('SKILL.md'), 'Review rules')).toMatch(
-      /🟡 .*differently from what `angular\.json` declares.*shadows a DOM\/JS global/,
+      /🟡 .*differently from what `angular\.json`.*declares.*shadows a DOM\/JS global/,
     );
   });
 });

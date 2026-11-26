@@ -13,7 +13,7 @@ Scaffold one standalone Angular component.
 
 ## File naming
 
-The rule is "File naming" in `SKILL.md`: `schematics` in `angular.json` decides, not the existing files. For a component: no `type` on `@schematics/angular:component` gives `header.ts`, `header.html`, `header.css`, class `Header`; `"type": "component"` gives `header.component.ts` (and `.html`, `.css`), class `HeaderComponent`. Drift, name collisions and renames: as stated there.
+The rule is "File naming" in `SKILL.md`: `schematics` in `angular.json` decides, not the existing files. For a component: no `type` on `@schematics/angular:component` gives `header.ts`, `header.html`, `header.css`, class `Header`; `"type": "component"` gives `header.component.ts` (and `.html`, `.css`), class `HeaderComponent` (`Header` with `"addTypeToClassName": false`). Drift, name collisions and renames: as stated there.
 
 ## Constraints
 
