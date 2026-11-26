@@ -22,6 +22,7 @@ Load the file for the task at hand. Paths are relative to this skill's directory
 | Component APIs | `references/components.md` | Selector, class, entry point or inputs of a component, service or validator   |
 | Recipes        | `references/recipes.md`    | Building a form field, form, dialog, confirmation, path field or list of rows |
 | Desktop frame  | `references/desktop.md`    | Building the app shell or status bar, a Tauri app, or showing updates         |
+| Migration      | `references/migration.md`  | Migrating an app from raw controls, adding the lint preset or its allowlist   |
 
 ## Gotchas
 
