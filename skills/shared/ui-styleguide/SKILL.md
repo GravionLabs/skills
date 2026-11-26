@@ -1,6 +1,6 @@
 ---
 name: ui-styleguide
-description: 'Add a short UI style guide (docs/STYLEGUIDE.md) with deep-dive files and a binding AGENTS.md paragraph to a project. Use for "add a style guide", "UI conventions", "design rules for agents", "update the style guide" or `/ui-styleguide sync`.'
+description: 'Add a short UI style guide (docs/STYLEGUIDE.md) with deep-dive files and a binding AGENTS.md paragraph to a project. Use for "add a style guide", "UI conventions", "design rules for agents", "update the style guide", "audit the UI against the style guide", `/ui-styleguide sync` or `/ui-styleguide audit`.'
 ---
 
 Gives a project a short core style guide and deep-dive files that an agent reads only when a task touches the topic. Framework-neutral.
@@ -14,6 +14,7 @@ Gives a project a short core style guide and deep-dive files that an agent reads
 
 - **Add** (default): the guide is missing or incomplete; see `## Steps`.
 - **Sync** (`/ui-styleguide sync`, "update the style guide"): compare the guide with the code and the template and propose a diff, written only after approval; follow [references/sync.md](references/sync.md).
+- **Audit** (`/ui-styleguide audit [<names>…]`, "audit the UI against the style guide"): check screenshots of the views against the review rubric, report per view, draft PBIs for the top fixes on request; follow [references/audit.md](references/audit.md).
 
 ## Steps
 
