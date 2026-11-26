@@ -34,6 +34,7 @@
   "ng": [
     "ng-ag-grid",
     "ng-create-project",
+    "ng-helix",
     "ng-implementation",
     "ng-test"
   ],

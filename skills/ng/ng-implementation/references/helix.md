@@ -33,5 +33,6 @@ The lint preset `@gravionlabs/helix-lint` reports raw controls and raw colors an
 
 ## See also
 
+- Skill `ng-helix`: component APIs and form and dialog recipes.
 - [Helix UX rules](https://github.com/GravionLabs/helix/blob/main/docs/UX-RULES.md): which element for which feedback, confirm or undo.
 - `docs/STYLEGUIDE.md` of the project (skill `ui-styleguide`), when it exists.

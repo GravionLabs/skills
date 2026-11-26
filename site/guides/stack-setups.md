@@ -51,6 +51,7 @@ The same pattern works with `ts`, `py` and `ng`: `<lang>-create-project` or `ng-
 | Standalone component                               | "Add a product-list component under features/catalog." | `ng-implementation` (`references/component.md`)    |
 | NgRx Signal Store                                  | "Create a signal store for the cart."                  | `ng-implementation` (`references/signal-store.md`) |
 | AG Grid Enterprise                                 | "Add a grid with row grouping and Excel export."       | `ng-ag-grid`                                       |
+| Helix forms and dialogs                            | "Add a Helix settings dialog with a name field."       | `ng-helix`                                         |
 | MCP server                                         | "Generate an MCP server with a search tool."           | `ts-mcp-server-generator`                          |
 
 ## Verify a change
