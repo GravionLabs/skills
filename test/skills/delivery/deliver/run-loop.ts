@@ -53,6 +53,10 @@ export type Scenario = {
   mergedBefore?: number[];
   mergedDuring?: number[];
   verdicts?: ('approve' | 'changes' | 'invalid' | 'none' | 'fail')[];
+  /** The summary of the finding of a `changes` verdict, which then has no unmet criterion. */
+  summary?: string;
+  /** Only the first implementer session writes the risk level. */
+  riskOnce?: boolean;
 };
 export type Outcome = {
   status: number | null;

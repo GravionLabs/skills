@@ -974,6 +974,9 @@ async function deliver(item: Item): Promise<{ reason?: string; pull?: Pull }> {
   for (;;) {
     const ran = await runSession(item, worktree, sessions, implementer(item, reviewFile));
     reviewFile = undefined;
+    // read after every implementer session: the next one (a fix round) starts without this file
+    const level = riskOf(item);
+    if (level) risks.set(item.id, level);
     const session = ran.session;
     reason = undefined;
     pull = tracker.pullOf(item);
@@ -1035,7 +1038,8 @@ async function deliver(item: Item): Promise<{ reason?: string; pull?: Pull }> {
     }
     if (verdict === 'changes') {
       if (fixes >= FIX_ROUNDS) {
-        reason = `needs-decision: review still asks for changes after ${FIX_ROUNDS} fix rounds: ${findingsLine(reviewed.verdict)}`;
+        // the findings are text of an agent: it never ends the reason, whose ending decides about a hand-over
+        reason = `needs-decision: review still asks for changes after ${FIX_ROUNDS} fix rounds (${findingsLine(reviewed.verdict)})`;
         break;
       }
       fixes += 1;
@@ -1063,8 +1067,7 @@ async function deliver(item: Item): Promise<{ reason?: string; pull?: Pull }> {
     // not merged: the worktree may hold work that is not pushed
     log(`#${item.id} worktree kept: ${worktree}`, 'warn');
   }
-  const risk = riskOf(item);
-  if (risk) risks.set(item.id, risk);
+  const risk = risks.get(item.id);
   appendFileSync(
     path.join(runDir, 'results.jsonl'),
     `${JSON.stringify({

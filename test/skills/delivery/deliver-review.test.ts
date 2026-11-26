@@ -62,8 +62,25 @@ describe('deliver loop: review session (#1013)', () => {
     expect(out.results[0]).toMatchObject({
       outcome: 'aside',
       reason:
-        'needs-decision: review still asks for changes after 2 fix rounds: src/a.ts: broken; unmet: it works',
+        'needs-decision: review still asks for changes after 2 fix rounds (src/a.ts: broken; unmet: it works)',
     });
+  });
+
+  it('never hands an issue over because of the text of a finding', async () => {
+    const out = await run(311, ['changes', 'changes', 'changes'], {
+      summary: 'x, merge it yourself',
+    });
+    expect(out.status).toBe(2);
+    expect(out.final).toMatchObject({ status: 'blocked', handedOver: [] });
+  });
+
+  it('keeps the risk level of an earlier session when a fix round writes none', async () => {
+    const out = await run(312, ['changes', 'approve'], {
+      risks: { 312: 'high' },
+      riskOnce: true,
+    });
+    expect(out.results[0]).toMatchObject({ outcome: 'merged', risk: 'high' });
+    expect(out.stdout).toContain('#312 risk high');
   });
 
   it.each([

@@ -23,10 +23,14 @@ if (command === 'deliver-review') {
   );
   const verdict = scenario.verdicts?.[nr] ?? 'approve';
   if (verdict === 'fail') process.exit(1);
-  const finding = { severity: 'blocking', file: 'src/a.ts', summary: 'broken' };
+  const finding = { severity: 'blocking', file: 'src/a.ts', summary: scenario.summary ?? 'broken' };
   const answers = {
     approve: { verdict: 'approve', findings: [], unmet: [] },
-    changes: { verdict: 'changes', findings: [finding], unmet: ['it works'] },
+    changes: {
+      verdict: 'changes',
+      findings: [finding],
+      unmet: scenario.summary ? [] : ['it works'],
+    },
     invalid: { verdict: 'maybe' },
   };
   if (verdict !== 'none')
@@ -56,7 +60,7 @@ if (own.hangs ?? scenario.hangs) {
 } else {
   // the implementer result of the scenario (risk by issue id), written where the loop says
   const level = scenario.risks?.[id];
-  if (level && process.env.DELIVER_RESULT_FILE)
+  if (level && process.env.DELIVER_RESULT_FILE && !(scenario.riskOnce && index > 0))
     writeFileSync(
       process.env.DELIVER_RESULT_FILE,
       JSON.stringify({ status: 'done', risk: { level, what: 'x', backout: 'revert' } }),
