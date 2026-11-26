@@ -1,18 +1,9 @@
 // deliver: the loop (deliver-loop.mts) against a fake tracker and a fake harness in a real git repository, and
 // the check verdict of the GitHub tracker. The loop is started as its own process, as a user starts it.
-import { execFileSync, spawn } from 'node:child_process';
+import { execFileSync } from 'node:child_process';
 import { generateKeyPairSync, createVerify } from 'node:crypto';
 import { type Server, createServer } from 'node:http';
-import {
-  existsSync,
-  mkdirSync,
-  mkdtempSync,
-  readdirSync,
-  readFileSync,
-  rmSync,
-  writeFileSync,
-} from 'node:fs';
-import { tmpdir } from 'node:os';
+import { existsSync, readdirSync, readFileSync, writeFileSync } from 'node:fs';
 import path from 'node:path';
 import {
   APP_PERMISSIONS,
@@ -33,196 +24,21 @@ import {
   openPullsOf,
 } from '../../../skills/delivery/deliver/scripts/tracker/github.mts';
 
-const skill = path.resolve(__dirname, '../../../skills/delivery/deliver');
-const loopScript = path.join(skill, 'scripts/deliver-loop.mts');
-const helpers = path.resolve(__dirname, 'deliver');
+import {
+  type Outcome,
+  git,
+  loop,
+  loopScript,
+  READY,
+  RED,
+  skill,
+  root,
+  repo,
+  fixture,
+} from './deliver/run-loop';
 
-type Result = { issue: number; outcome: string; reason?: string; risk?: string };
-
-type Scenario = {
-  items: { id: number; title: string; blockedBy?: number[] }[];
-  gates?: unknown[];
-  files?: string[];
-  filesLater?: string[];
-  required?: string[];
-  needsDecision?: boolean;
-  gateBlockMs?: number;
-  stopInGate?: boolean;
-  stopInChangedFiles?: boolean;
-  exits?: number[];
-  noPull?: boolean;
-  risks?: Record<number, string>;
-  filesFailures?: number;
-  packageJson?: { base?: string; head?: string };
-  cargoToml?: { base?: string; head?: string };
-  pnpmWorkspace?: { base?: string; head?: string };
-  pyproject?: { base?: string; head?: string };
-  goMod?: { base?: string; head?: string };
-  packagesProps?: { base?: string; head?: string };
-  blocked?: string;
-  earlierPull?: boolean;
-  twoPulls?: number[];
-  lingers?: boolean;
-  hangs?: boolean;
-  plan?: { exit?: number; noPull?: boolean; hangs?: boolean }[];
-  closeAfterCalls?: number;
-  releaseTests?: number[];
-  releaseCommits?: number;
-  base?: string[];
-  mergedBefore?: number[];
-  mergedDuring?: number[];
-};
-type Outcome = {
-  status: number | null;
-  stdout: string;
-  stderr: string;
-  merges: { pull: number; head: string }[];
-  releasePulls: number;
-  calls: string[];
-  sessions: {
-    id: number;
-    prompt: string;
-    run: string | null;
-    ghToken: string | null;
-    hasSessionTokenVariable: boolean;
-  }[];
-  results: Result[];
-  final?: Record<string, unknown>;
-  events: { type: string; outcome?: string; reason?: string; needsYou?: boolean }[];
-  log: string;
-};
-
-let root: string;
-let repo: string;
-let count = 0;
-
-const git = (cwd: string, ...args: string[]) =>
-  execFileSync('git', ['-c', 'user.name=test', '-c', 'user.email=test@example.test', ...args], {
-    cwd,
-    encoding: 'utf8',
-    stdio: ['ignore', 'pipe', 'pipe'],
-  });
-const lines = <T>(file: string): T[] =>
-  existsSync(file)
-    ? readFileSync(file, 'utf8')
-        .split('\n')
-        .filter(Boolean)
-        .map((line) => JSON.parse(line))
-    : [];
-
-/** Runs the loop for one scenario. `whenStdout` is called with the output so far (the stop case sends a signal). */
-function loop(
-  scenario: Scenario,
-  options: {
-    args?: string[];
-    milestone?: boolean;
-    env?: Record<string, string>;
-    whenStdout?: (out: string, stop: () => void) => void;
-  } = {},
-): Promise<Outcome> {
-  count += 1;
-  const dir = path.join(root, `case-${count}`);
-  mkdirSync(dir);
-  writeFileSync(path.join(dir, 'scenario.json'), JSON.stringify(scenario));
-  if (scenario.earlierPull)
-    for (const item of scenario.items) writeFileSync(path.join(dir, `pr-${item.id}`), '');
-  const env: NodeJS.ProcessEnv = {
-    ...process.env,
-    NO_COLOR: '1',
-    FAKE_DIR: dir,
-    AGENT_EVENTS_DIR: path.join(dir, 'events'),
-    DELIVER_TRACKER_DIR: path.join(helpers, 'tracker'),
-    DELIVER_HARNESS: JSON.stringify(['node', path.join(helpers, 'fake-harness.mjs'), dir]),
-    DELIVER_TICK_MS: '1',
-    GH_TOKEN: 'login-token',
-    ...options.env,
-  };
-  if (!options.env?.['DELIVER_SESSION_TOKEN']) delete env['DELIVER_SESSION_TOKEN'];
-  // the user's own (old or new) variables must not leak into the loop under test
-  delete env['DELIVER_MIN_SESSION_TOKEN'];
-  const issues = scenario.items.map((item) => item.id).join(',');
-  return new Promise((done) => {
-    const child = spawn(
-      'node',
-      [
-        loopScript,
-        '--tracker',
-        'fake',
-        ...(options.milestone ? ['--milestone', 'M001'] : ['--issues', issues]),
-        // no wait for handed-over pull requests unless a test asks for one
-        ...(options.args?.includes('--handover-minutes') ? [] : ['--handover-minutes', '0']),
-        ...(options.args ?? []),
-      ],
-      { cwd: repo, env, stdio: ['ignore', 'pipe', 'pipe'] },
-    );
-    let stdout = '';
-    let stderr = '';
-    let signalled = false;
-    child.stdout.on('data', (chunk) => {
-      stdout += chunk;
-      options.whenStdout?.(stdout, () => {
-        if (!signalled) {
-          // Windows cannot deliver SIGINT to a process: the loop also stops on a file `stop` in its run folder
-          const results = /results: (\S+)/.exec(stdout)?.[1];
-          if (process.platform === 'win32' && results)
-            writeFileSync(path.join(path.dirname(results), 'stop'), '');
-          else child.kill('SIGINT');
-        }
-        signalled = true;
-      });
-    });
-    child.stderr.on('data', (chunk) => {
-      stderr += chunk;
-    });
-    child.on('close', (status) => {
-      const results = /results: (\S+)/.exec(stdout)?.[1];
-      const events = path.join(dir, 'events');
-      done({
-        status,
-        stdout,
-        stderr,
-        merges: lines<{ call: string; pull: number; head: string }>(
-          path.join(dir, 'calls.jsonl'),
-        ).filter((call) => call.call === 'merge'),
-        releasePulls: lines<{ call: string }>(path.join(dir, 'calls.jsonl')).filter(
-          (call) => call.call === 'releasePull',
-        ).length,
-        calls: lines<{ call: string }>(path.join(dir, 'calls.jsonl')).map((call) => call.call),
-        sessions: lines(path.join(dir, 'sessions.jsonl')),
-        results: results
-          ? lines<Result | { issue?: undefined }>(results).filter(
-              (r): r is Result => r.issue !== undefined,
-            )
-          : [],
-        final: results ? lines<Record<string, unknown>>(results).find((r) => r.run) : undefined,
-        events: existsSync(events) ? lines(path.join(events, readdirSync(events)[0] ?? '')) : [],
-        log: results
-          ? readFileSync(path.join(path.dirname(path.dirname(results)), 'loop.log'), 'utf8')
-          : '',
-      });
-    });
-  });
-}
-
-const READY = { state: 'ready', reported: true, head: 'abc123' };
-const RED = { state: 'red', detail: 'ci' };
-
-beforeAll(() => {
-  root = mkdtempSync(path.join(tmpdir(), 'deliver-'));
-  const origin = path.join(root, 'origin.git');
-  repo = path.join(root, 'repo');
-  execFileSync('git', ['init', '--quiet', '--bare', '--initial-branch', 'main', origin]);
-  execFileSync('git', ['init', '--quiet', '--initial-branch', 'main', repo]);
-  writeFileSync(path.join(repo, 'README.md'), 'fixture\n');
-  git(repo, 'add', 'README.md');
-  git(repo, 'commit', '--quiet', '-m', 'chore: fixture');
-  git(repo, 'remote', 'add', 'origin', origin);
-  git(repo, 'push', '--quiet', 'origin', 'main', 'main:release/next');
-});
-
-afterAll(() => {
-  rmSync(root, { recursive: true, force: true });
-});
+fixture();
+let pathCase = 0;
 
 describe('deliver loop: base check', () => {
   const items = [{ id: 81, title: '[PBI] feat: one' }];
@@ -298,9 +114,11 @@ describe('deliver loop', () => {
       'progress',
       'task.started',
       'step.finished',
+      'step.finished',
       'task.finished',
       'progress',
       'task.started',
+      'step.finished',
       'step.finished',
       'task.finished',
       'progress',
@@ -432,9 +250,9 @@ describe('deliver loop', () => {
     ['a file named like a protected directory', '.agents'],
     ['a manifest in another case', 'sub/Package.json'],
   ])('treats %s as a protected path', async (_name, file) => {
-    count += 1;
+    pathCase += 1;
     const out = await loop({
-      items: [{ id: 600 + count, title: '[PBI] feat: path' }],
+      items: [{ id: 600 + pathCase, title: '[PBI] feat: path' }],
       files: [file],
     });
     expect(out.status).toBe(3);
@@ -1381,9 +1199,6 @@ describe('deliver loop', () => {
     expect(argv.slice(0, 3)).toEqual(['copilot', '-p', '/deliver 1']);
     expect(argv).toEqual(expect.arrayContaining(['--no-ask-user', '--no-color']));
     expect(HARNESSES.copilot.claudeStream).toBe(false);
-    expect(
-      readFileSync(path.resolve(__dirname, '../../../skills/delivery/deliver/SKILL.md'), 'utf8'),
-    ).toMatch(/without subagents/);
   });
 
   it('sets an issue aside when the session ends without a pull request', async () => {
@@ -1577,7 +1392,8 @@ describe('deliver loop', () => {
         ghToken: 'app-token-1',
         hasSessionTokenVariable: false,
       });
-      expect(requests.map((r) => `${r.method} ${r.url}`)).toEqual([
+      // one token for the implementer and one for the review: 90 session minutes outlast a token
+      expect(requests.slice(0, 2).map((r) => `${r.method} ${r.url}`)).toEqual([
         expect.stringMatching(/^GET \/repos\/.+\/installation$/),
         'POST /app/installations/77/access_tokens',
       ]);

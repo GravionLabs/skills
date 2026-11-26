@@ -17,7 +17,7 @@
 /deliver 42 --base main
 ```
 
-The session reads the issue, branches `<type>/<nr>-<slug>` from `origin/<base>`, implements with tests, runs the verify commands of `AGENTS.md`, has a subagent review the diff against the acceptance criteria (at most 2 fix rounds), opens the pull request with `Closes #42` and ends. It never merges. Its last line is `result: pr <url>`, `result: needs-decision` or `result: blocked <reason>`. An unclear criterion is never guessed: the session comments on the issue, adds `needs-decision` and ends without a pull request.
+The session reads the issue, branches `<type>/<nr>-<slug>` from `origin/<base>`, implements with tests, runs the verify commands of `AGENTS.md`, opens the pull request with `Closes #42` and ends. It never merges and does not review its own diff: run `/deliver-review 42 --pr <url>` for that, the loop does it by itself ([review](#the-review)). Its last line is `result: pr <url>`, `result: needs-decision` or `result: blocked <reason>`. An unclear criterion is never guessed: the session comments on the issue, adds `needs-decision` and ends without a pull request.
 
 An existing branch is continued, and an open pull request is repaired (red check, conflict with the base) instead of recreated.
 
@@ -29,7 +29,9 @@ A conflict in a lockfile is not merged by hand: the session resolves the manifes
 flowchart TD
   S[next ready issue] --> W[worktree at origin/base]
   W --> A[fresh agent session: /deliver nr]
-  A -->|pull request| C[wait for required checks]
+  A -->|pull request| V[fresh review session: /deliver-review nr]
+  V -->|changes, at most 2 fix rounds| A
+  V -->|approve| C[wait for required checks]
   C -->|green| M[squash merge, merge commit into main]
   C -->|red| A
   M -->|more issues| S
@@ -50,6 +52,10 @@ Name the milestone `M<nnn>` (`M004`): the lookup finds the open `M004` and, afte
 
 With `--milestone`, once no PBI or Bug of the milestone is open (none set aside or waiting), the loop opens the release pull request from the base into the default branch and prints its URL. It never merges it. An open `release-test` issue is never started: it is listed as needs you. A missing `release/next` (the release merge deletes it) is cut from the default branch.
 
+## The review
+
+After the implementer session the loop starts `/deliver-review` in a fresh worktree at the head of the pull request, by default on the same harness with another model than the implementer. The verdict `approve` lets the checks and the guard of the merged commit follow, and the loop merges only the reviewed commit; a later push hands the pull request over (`pushed after the review`). On `changes` the implementer runs again with the verdict file, at most 2 fix rounds; a further `changes` sets the issue aside as `needs-decision: …` with the findings. A missing or invalid verdict, or a failed review session that left a verdict file, is retried once, then the issue is set aside (`review failed: …`); a session that fails without one is a harness failure. A red check gets one repair session, which is reviewed again. A pull request on protected paths is handed over to you without a review session. `results.jsonl` lists the rounds (`reviews`), the agent-events one step per round.
+
 ## Options
 
 | Option                       | Meaning                                                                                               |
@@ -58,6 +64,8 @@ With `--milestone`, once no PBI or Bug of the milestone is open (none set aside 
 | `--issues <nr,…>`            | These issues.                                                                                         |
 | `--base <branch>`            | Base branch. Default `deliver.base`, else `release/next` with `--milestone`, else the default branch. |
 | `--harness <name>`           | `claude` (default) or `copilot`. `--model <name>` passes a model of that harness.                     |
+| `--review-model <name>`      | Model of the review session. Default: another model than the implementer's.                           |
+| `--review-harness <name>`    | `claude` or `copilot` for the review. Default: the implementer's harness.                             |
 | `--max <n>`                  | Stops after `n` issues.                                                                               |
 | `--session-minutes <n>`      | Longest session. Default 90.                                                                          |
 | `--merge-minutes <n>`        | How long it waits for checks after a pull request. Default 30.                                        |
@@ -77,6 +85,7 @@ Optional, under `deliver` in `.agents/config.json` ([project config](../usage/pr
 | `base`           | `release/next` with `--milestone`, else the default branch   |
 | `tracker`        | `github` (`scripts/tracker/<name>.mts`)                      |
 | `harness`        | `claude`; a name only, a repository cannot set a command     |
+| `review`         | `{ "model", "harness", "effort" }` of the review session     |
 | `protectedPaths` | `.github/`, `.agents/`, `.claude/` and the package manifests |
 
 Other keys (`roles`, `loopThreshold`, `parallel`, `sessionTimeoutMinutes`) are ignored with one warning line. `DELIVER_MIN_<X>` variables are read as `DELIVER_<X>` for one more release, with a warning.
@@ -118,6 +127,14 @@ The launcher finds the installed `deliver` skill (project first, then your home)
 ## Resume and feedback
 
 State lives in GitHub (issue, branch, pull request, checks). After a crash, a closed terminal or a stop, run the same command again: closed issues are not selected, an existing pull request goes straight to its checks. A session that ends `needs-decision` or `blocked` is set aside for the rest of the run and listed at the end with its reason. Answer in the issue, remove the label (`gh issue edit 43 --remove-label needs-decision`) and run again. A pull request that changes protected paths is no failure: it is listed under `needs you` (yellow) with its URL; merge it yourself. When nothing else can start, the loop waits for you: it polls the pull requests every 60 s for up to `--handover-minutes` (default 120, `deliver.handoverMinutes`; `0` skips the wait), reports `blocked` (a question) with an `attention` naming them, and goes on with the unblocked PBIs after your merge. A pull request you close is set aside (`closed by a person`); one that gets a conflict meanwhile gets one repair session. `stop` and Ctrl-C end the wait. When the time is over, run `/deliver` again (or the same command). PBIs that are `blocked_by` a handed-over PBI cannot run until then: the report lists them per pull request (`waiting for the handed-over pull request of #N`), the last line reads `waiting for a handed-over PR`, `results.jsonl` ends with `{"run":"finished","status":"waiting-for-handed-over",…}` and the exit code is 3 (`done` is 0, `blocked` is 2, `failed` after three harness failures is 5).
+
+## Stage labels
+
+The board shows where each issue is: the loop keeps the stage in one `agent:*` label (`agent:implementing`, `agent:review`, `agent:changes`, `agent:approved`, `agent:handover`) and removes them all after the merge. Run the same command again after a stop, and an issue with an open pull request resumes at its label: `agent:approved` at the merge gate, `agent:review` with a review, the others with the implementer. Do not rely on a label you set yourself: `agent:approved` counts only with the review verdict the loop recorded as a pull request comment for the current commit, written by the login that runs the loop; anything else is reviewed again. The comment also keeps the risk level of the run and, after `changes`, the findings: a resumed high-risk pull request is still listed under `needs you`, and `agent:changes` starts the implementer with the findings of the last review. Without the GitHub App the sessions act with your login (or a token of your own account) and could write such a comment themselves: use the app for runs nobody watches. The loop creates missing labels at start (`node <skill-dir>/scripts/sync-labels.mts` does it by hand).
+
+## Comments on the issue
+
+Feature pull requests are transport; read the issue. After every review round with a verdict the loop comments the verdict, the number of blocking findings and unmet criteria and the pull request (the findings stay in the pull request comment). When it hands an issue over or sets it aside, and after it merged a pull request of risk `high`, it comments the reason, the pull request and your next step. Each comment starts with a marker (`<!-- deliver-handover: <reason> <sha> -->`) and is posted once per reason and commit, also when you run the loop again.
 
 ## Progress events
 

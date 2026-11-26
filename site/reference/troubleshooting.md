@@ -41,5 +41,5 @@ Common failure cases of the skills, each with symptom, cause and fix. The state 
 ## A red check blocks the merge
 
 - **Symptom:** the PBI is reported blocked, the PR stays open, or the merge is refused.
-- **Cause:** a required check is red or pending. `deliver` never merges on red and never uses `--admin`. A red caused by the diff gets fix rounds (at most 2 per PBI, shared with the review); a red for another reason (flake, `release/next` red too) blocks the PBI with a PR comment.
+- **Cause:** a required check is red or pending. `deliver` never merges on red and never uses `--admin`. A red caused by the diff gets fix rounds (`deliver-loop`: one repair session per issue, reviewed again); a red for another reason (flake, `release/next` red too) blocks the PBI with a PR comment.
 - **Fix:** read the failed check (`gh pr checks <pr>`), fix the cause (or re-run a flaky job), then `/deliver <nr>` again. Fix a red `release/next` first.

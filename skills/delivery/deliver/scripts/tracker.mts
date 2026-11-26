@@ -5,6 +5,8 @@
 
 import path from 'node:path';
 import { pathToFileURL } from 'node:url';
+import type { Stage } from './stage.mts';
+import type { ReviewMark, Verdict } from './review.mts';
 
 /** What a reader of the run sees: a milestone, an issue, a repository. */
 export type Subject = { kind: string; id: string; title: string; url?: string };
@@ -64,6 +66,16 @@ export interface Tracker {
   /** The open work items of the selection in delivery order. */
   items(): Item[];
   itemSubject(item: Item): Subject;
+  /** Sets the `agent:*` label of the stage and removes every other `agent:*` label; `undefined` removes all. */
+  setStage(item: Item, stage: Stage | undefined): void;
+  /** Creates the missing `agent:*` labels and returns their names. */
+  syncStageLabels(): string[];
+  /** Comments `body` on the item unless a comment of the login of the loop already starts with `marker`. */
+  commentOnce(item: Item, marker: string, body: string): void;
+  /** Marks on the pull request the verdict the loop accepted for the commit `head` (`markBody`), with the risk level. */
+  recordVerdict(pull: Pull, review: Verdict, head: string, risk?: string): void;
+  /** The marks the login of the loop recorded on the pull request, oldest first (`parseMark`); anyone else's are ignored. */
+  recordedVerdicts(pull: Pull): ReviewMark[];
   /** Why the item cannot start now (a hold label, an open blocker, an author without write access), else nothing. */
   waitReason(item: Item): string | undefined;
   /** The session asked a question instead of delivering. */

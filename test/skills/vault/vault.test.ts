@@ -87,6 +87,20 @@ describe('vault skills (#924)', () => {
       expect(Object.keys(r)).toEqual(['files', 'what', 'target', 'noteType', 'uncertain']);
   });
 
+  it('vault-pdf exports with nixe alone and names the minimum version (#1008)', () => {
+    const s = read('vault-pdf');
+    expect(s).toContain('nixe export <note> --format pdf --out <file>');
+    expect(s).toMatch(
+      /nixe export \$folder --format pdf --out <dir> --include '<glob>' .*@excludes/,
+    );
+    for (const r of ['inbox', 'templates', 'attachments', 'sources'])
+      expect(s).toContain(`$roles.${r}.path`);
+    expect(s).toContain('Nixe 1.16.0 or newer');
+    expect(s).toContain('update to 1.16.0');
+    expect(s).not.toMatch(/Export-VaultPdf|Chrom|PDF_BROWSER/);
+    expect(fs.existsSync(path.join(dir, 'vault-pdf/scripts'))).toBe(false);
+  });
+
   it('vault-recipe uses the role recipes and points to vault-setup when missing', () => {
     const s = read('vault-recipe');
     expect(s).toContain('`recipes`');

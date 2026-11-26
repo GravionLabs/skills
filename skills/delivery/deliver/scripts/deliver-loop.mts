@@ -1,7 +1,8 @@
 #!/usr/bin/env node
-// deliver loop: a fresh agent session per issue, merge its pull request, then the next issue.
+// deliver loop: a fresh agent session per issue, a review session for its pull request, merge, then the next issue.
 // The state is read from the tracker before every issue. The run only remembers what it set aside.
-// Tracker: tracker.mts. Progress events: events.mts. Everything else is in this file.
+// Tracker: tracker.mts. Progress events: events.mts. Review settings and verdict: review.mts. Issue stage: stage.mts.
+// Comments on the issue: handover.mts.
 import { execFileSync } from 'node:child_process';
 import {
   appendFileSync,
@@ -19,16 +20,27 @@ import { createInterface } from 'node:readline';
 import { parseArgs } from 'node:util';
 import { appSettings, tokenSource as makeSource } from './app-token.mts';
 import { type Emit, openEvents } from './events.mts';
+import { type Note, handoverNote, reviewNote } from './handover.mts';
 import { finishReport, programStatus } from './program-status.mts';
 import { cargoTomlKeys } from './cargo-toml.mts';
 import { directoryPackagesPropsKeys } from './directory-packages-props.mts';
 import { goModKeys } from './go-mod.mts';
 import { pyprojectTomlKeys } from './pyproject-toml.mts';
 import { pnpmWorkspaceKeys } from './pnpm-workspace.mts';
-import { HARNESSES } from './harness.mts';
+import { HARNESSES, type Harness } from './harness.mts';
 import { adoptLegacyEnv, unknownConfigKeys } from './legacy.mts';
 import { killTree, launch, promptPath } from './process.mts';
 import { progressLine } from './progress-bar.mts';
+import {
+  RISK_LEVELS,
+  type ReviewMark,
+  type ReviewSettings,
+  type Verdict,
+  findingsLine,
+  parseVerdict,
+  reviewSettings,
+} from './review.mts';
+import { type StageEvent, stageAfter, stageOf } from './stage.mts';
 import { type BaseState, type Gate, type Item, type Pull, loadTracker } from './tracker.mts';
 
 // before anything reads the environment; the warnings are printed once the log exists
@@ -45,6 +57,8 @@ const parsed = (() => {
         harness: { type: 'string' },
         max: { type: 'string', default: '0' },
         model: { type: 'string' },
+        'review-model': { type: 'string' },
+        'review-harness': { type: 'string' },
         'session-minutes': { type: 'string', default: '90' },
         'merge-minutes': { type: 'string', default: '30' },
         'handover-minutes': { type: 'string' },
@@ -57,7 +71,7 @@ const parsed = (() => {
     // an unknown option or a missing value: one line, no stack trace
     const message = (error as Error).message.split('\n')[0];
     console.error(
-      `deliver-loop: ${message}. Options: --milestone, --issues, --base, --tracker, --harness, --max, --model, --session-minutes, --merge-minutes, --handover-minutes, --dry-run, --allow-no-required-checks, --trust-authors.`,
+      `deliver-loop: ${message}. Options: --milestone, --issues, --base, --tracker, --harness, --max, --model, --review-model, --review-harness, --session-minutes, --merge-minutes, --handover-minutes, --dry-run, --allow-no-required-checks, --trust-authors.`,
     );
     process.exit(1);
   }
@@ -73,6 +87,8 @@ type Session = {
   timedOut?: boolean;
   /** The reason of a final `result: blocked <reason>` line of the session. */
   blocked?: string;
+  /** Set for a review session. */
+  role?: 'review';
 };
 type Tone = 'ok' | 'bad' | 'warn' | 'info' | 'dim' | 'bold';
 
@@ -156,6 +172,7 @@ let config: {
     tracker?: string;
     protectedPaths?: string[];
     handoverMinutes?: number;
+    review?: unknown;
   };
 } = {};
 try {
@@ -186,6 +203,19 @@ const harness =
   HARNESSES[harnessName] ??
   fail(`unknown harness "${harnessName}": one of ${Object.keys(HARNESSES).join(', ')}`, 64);
 const MODEL = opt.model ?? harness.defaultModel;
+const REVIEW: ReviewSettings = (() => {
+  try {
+    return reviewSettings({
+      flags: { model: opt['review-model'], harness: opt['review-harness'] },
+      config: config.deliver?.review,
+      implementer: { harnessName, model: MODEL },
+    });
+  } catch (error) {
+    return fail((error as Error).message, 64);
+  }
+})();
+// A fix round per `changes` verdict, at most this many per issue and run; the next `changes` sets the issue aside.
+const FIX_ROUNDS = 2;
 // Tests only: a command from the environment of the user (JSON array, the prompt is appended).
 const HARNESS_OVERRIDE: string[] | undefined = process.env.DELIVER_HARNESS
   ? JSON.parse(process.env.DELIVER_HARNESS)
@@ -497,7 +527,9 @@ function finishedResult(line: string): boolean {
     if (event?.type !== 'result' || event.is_error || typeof event.result !== 'string')
       return false;
     const last = event.result.trimEnd().split('\n').pop() ?? '';
-    return /^result: (pr \S+|needs-decision|blocked\b.*)$/.test(last.trim());
+    return /^result: (pr \S+|needs-decision|reviewed (approve|changes)|blocked\b.*)$/.test(
+      last.trim(),
+    );
   } catch {
     return false;
   }
@@ -547,7 +579,90 @@ function render(line: string, session: Session): void {
   }
 }
 
-const RISK_LEVELS = ['low', 'medium', 'high'];
+/** Writes the stage of the issue after the event. A failing call is logged: the label never decides about the run. */
+function mark(item: Item, event: StageEvent): void {
+  try {
+    tracker.setStage(item, stageAfter(event));
+  } catch (error) {
+    log(`#${item.id} stage label not written: ${firstLine(error)}`, 'warn');
+  }
+}
+
+/** Comments on the issue, once per marker. A failing call is logged, as for the label. */
+function note(item: Item, { marker, body }: Note): void {
+  try {
+    tracker.commentOnce(item, marker, body);
+  } catch (error) {
+    log(`#${item.id} issue comment not written: ${firstLine(error)}`, 'warn');
+  }
+}
+
+/** Tells the person on the issue why it is theirs now, once per reason and head of the pull request. */
+function tell(item: Item, pull: Pull | undefined, reason: string, planned: boolean): void {
+  let head = 'none';
+  if (pull) {
+    try {
+      head = tracker.compareRefs(pull).head;
+    } catch {
+      head = 'unknown';
+    }
+  }
+  const urls = pull ? [pull.url, ...(pull.others ?? [])] : [];
+  note(item, handoverNote({ reason, planned, head, urls, risk: risks.get(item.id) }));
+}
+
+/**
+ * The next step of an issue; `merge` names the approved commit, `reviewFile` holds the findings the implementer
+ * fixes.
+ */
+type Step =
+  | { step: 'implement'; reviewFile?: string }
+  | { step: 'review' }
+  | { step: 'merge'; head: string };
+
+/**
+ * Where the label of an earlier run lets the loop go on with an open pull request. `approved` counts only with the
+ * approving verdict the loop recorded for the current head, else the pull request is reviewed. The marks of the
+ * earlier run also give back its risk level and, for `changes`, the findings of the last review.
+ */
+function resumeAt(item: Item, pull: Pull): Step {
+  const stage = stageOf(item.labels);
+  let marks: ReviewMark[] | undefined;
+  try {
+    marks = tracker.recordedVerdicts(pull);
+  } catch (error) {
+    log(`#${item.id} review marks unreadable: ${firstLine(error)}`, 'warn');
+  }
+  const risk = [...(marks ?? [])].reverse().find((m) => m.risk)?.risk;
+  if (risk && !risks.has(item.id)) risks.set(item.id, risk);
+  if (stage === 'approved') {
+    if (marks) {
+      try {
+        const { head } = tracker.compareRefs(pull);
+        const latest = [...marks].reverse().find((m) => m.head === head);
+        if (latest?.verdict === 'approve') return { step: 'merge', head };
+        log(
+          `#${item.id} agent:approved without an approving review of ${head}: reviews it`,
+          'warn',
+        );
+      } catch (error) {
+        log(`#${item.id} review verdict unreadable: ${firstLine(error)}, reviews it`, 'warn');
+      }
+    }
+    return { step: 'review' };
+  }
+  if (stage === 'review') return { step: 'review' };
+  const last = marks?.at(-1);
+  if (stage === 'changes' && last?.review) {
+    const reviewFile = path.join(runDir, `${item.id}.review-recorded.json`);
+    writeFileSync(reviewFile, `${JSON.stringify(last.review, null, 2)}\n`);
+    return { step: 'implement', reviewFile };
+  }
+  if (stage === 'changes')
+    log(`#${item.id} no recorded findings: the implementer starts without them`, 'warn');
+  return { step: 'implement' };
+}
+
 const risks = new Map<number, string>();
 /** The implementer result the session writes (`risk.level`); the session never reports anything else to the loop. */
 const resultFile = (item: Item) => path.join(runDir, `${item.id}.result.json`);
@@ -560,14 +675,38 @@ function riskOf(item: Item): string | undefined {
   }
 }
 
-async function startSession(item: Item, cwd: string, file: string): Promise<Session> {
+/** What one session is for: the implementer of the issue, or the review of its pull request. */
+type Task = {
+  /** The slash command; the loop appends the issue file. */
+  prompt: string;
+  harness: Harness;
+  model?: string;
+  effort?: string;
+  /** The file the session writes its answer to, and the variable that names it. */
+  output: { name: 'DELIVER_RESULT_FILE' | 'DELIVER_REVIEW_FILE'; file: string };
+  /** A failed session that left its work behind is no harness failure. */
+  delivered(): boolean;
+  role?: 'review';
+};
+
+/** The implementer session; `reviewFile` is the verdict whose findings it fixes. */
+const implementer = (item: Item, reviewFile?: string): Task => ({
+  prompt: `/deliver ${item.id} --base ${BASE}${reviewFile ? ` --review-file ${promptPath(reviewFile)}` : ''}`,
+  harness,
+  model: opt.model,
+  output: { name: 'DELIVER_RESULT_FILE', file: resultFile(item) },
+  // a pull request means the session did its work: the normal rules for a failed session apply
+  delivered: () => Boolean(tracker.pullOf(item)),
+});
+
+async function startSession(item: Item, cwd: string, file: string, task: Task): Promise<Session> {
   // the session works from this text, not from what the tracker shows when it runs
   const issueFile = path.join(runDir, `${item.id}.issue.md`);
   writeFileSync(issueFile, `# ${item.title}\n\n${item.url}\n\n${item.body}\n`);
-  const prompt = `/deliver ${item.id} --base ${BASE} --issue-file ${promptPath(issueFile)}`;
+  const prompt = `${task.prompt} --issue-file ${promptPath(issueFile)}`;
   const argv = HARNESS_OVERRIDE
     ? [...HARNESS_OVERRIDE, prompt]
-    : harness.command({ prompt, model: opt.model });
+    : task.harness.command({ prompt, model: task.model, effort: task.effort });
   // an app token is renewed when less than the session timeout is left; the merge keeps the login of the user
   const sessionToken = tokenSource ? await tokenSource.current() : undefined;
   if (sessionToken?.renewed) log('app token minted for this session', 'dim');
@@ -577,7 +716,6 @@ async function startSession(item: Item, cwd: string, file: string): Promise<Sess
     CLAUDE_CODE_PRINT_BG_WAIT_CEILING_MS: '0',
     ...process.env,
     DELIVER_RUN: runId,
-    DELIVER_RESULT_FILE: resultFile(item),
     ...(token ? tracker.sessionEnv(token) : {}),
   };
   // the session gets the token, never the way to mint one
@@ -587,11 +725,21 @@ async function startSession(item: Item, cwd: string, file: string): Promise<Sess
     'DELIVER_APP_KEY_FILE',
     'DELIVER_APP_KEY_COMMAND',
     'DELIVER_APP_API_URL',
+    // a session gets only the file it writes
+    'DELIVER_RESULT_FILE',
+    'DELIVER_REVIEW_FILE',
   ])
     delete env[name];
-  // a result of an earlier session is not the result of this one
-  rmSync(resultFile(item), { force: true });
-  const session: Session = { exit: null, turns: 0, costUsd: 0, peakContext: 0 };
+  env[task.output.name] = task.output.file;
+  // the answer of an earlier session is not the answer of this one
+  rmSync(task.output.file, { force: true });
+  const session: Session = {
+    exit: null,
+    turns: 0,
+    costUsd: 0,
+    peakContext: 0,
+    ...(task.role && { role: task.role }),
+  };
   const out = createWriteStream(file);
   return new Promise((done) => {
     const child = launch(argv, {
@@ -622,7 +770,7 @@ async function startSession(item: Item, cwd: string, file: string): Promise<Sess
           killTree(child);
         }, RESULT_GRACE_MS);
       }
-      if (harness.claudeStream) render(line, session);
+      if (task.harness.claudeStream) render(line, session);
       else {
         // no stream format: the plain lines of the harness, without color codes and empty lines
         const plain = line.replace(/\u001b\[[0-9;]*[A-Za-z]/g, '').trimEnd();
@@ -659,12 +807,14 @@ async function runSession(
   item: Item,
   worktree: string,
   sessions: Session[],
+  task: Task = implementer(item),
 ): Promise<{ session: Session; reason?: string }> {
   for (;;) {
     const session = await startSession(
       item,
       worktree,
       path.join(runDir, `${item.id}-${sessions.length + 1}.jsonl`),
+      task,
     );
     sessions.push(session);
     if (stopped) return { session };
@@ -679,8 +829,7 @@ async function runSession(
       harnessFailures = 0;
       return { session };
     }
-    // a pull request means the session did its work: the normal rules for a failed session apply
-    if (tracker.pullOf(item)) return { session };
+    if (task.delivered()) return { session };
     harnessFailures += 1;
     if (harnessFailures >= HARNESS_WAITS_MINUTES.length) {
       harnessDead = { count: harnessFailures, exit: session.exit };
@@ -694,6 +843,61 @@ async function runSession(
     for (let half = 0; half < minutes * 2 && !stopped; half++) await sleep(30);
     if (stopped) return { session };
   }
+}
+
+// A review without a valid verdict gets one more session, then the issue is set aside.
+const REVIEW_ATTEMPTS = 2;
+
+type Review = { round: number; verdict: Verdict['verdict'] | 'failed' };
+type Reviewed = { verdict: Verdict; file: string; head: string } | { reason: string };
+
+/**
+ * One review round: a session of its own in a fresh worktree at the head of the pull request, which writes its
+ * verdict to a file. `head` is the commit that was reviewed: the only one the loop may merge.
+ */
+async function review(
+  item: Item,
+  pull: Pull,
+  round: number,
+  sessions: Session[],
+): Promise<Reviewed> {
+  const worktree = path.join(path.dirname(root), `${path.basename(root)}-wt-${item.id}-review`);
+  const drop = () => attempt('git', ['worktree', 'remove', '--force', worktree], root);
+  let problem = 'no valid verdict';
+  for (let tries = 1; tries <= REVIEW_ATTEMPTS; tries++) {
+    const file = path.join(runDir, `${item.id}.review-${round}-${tries}.json`);
+    try {
+      const { head } = tracker.compareRefs(pull);
+      // a failed fetch shows in the checkout: the commit is then missing
+      attempt('git', ['fetch', '--quiet', 'origin', pull.branch], root);
+      drop();
+      run('git', ['worktree', 'add', '--quiet', '--detach', worktree, head], root);
+      const ran = await runSession(item, worktree, sessions, {
+        prompt: `/deliver-review ${item.id} --base ${BASE} --pr ${pull.url}`,
+        harness: REVIEW.harness,
+        model: REVIEW.model,
+        effort: REVIEW.effort,
+        output: { name: 'DELIVER_REVIEW_FILE', file },
+        delivered: () => existsSync(file),
+        role: 'review',
+      });
+      if (stopped) return { reason: 'stopped' };
+      if (ran.reason) return { reason: ran.reason };
+      if (ran.session.exit !== 0) problem = `session failed (exit ${ran.session.exit})`;
+      else {
+        const verdict = existsSync(file) ? parseVerdict(readFileSync(file, 'utf8')) : undefined;
+        if (verdict) return { verdict, file, head };
+        problem = existsSync(file) ? 'invalid verdict' : 'no verdict';
+      }
+    } catch (error) {
+      problem = firstLine(error);
+    } finally {
+      drop();
+    }
+    if (stopped) return { reason: 'stopped' };
+    if (tries < REVIEW_ATTEMPTS) log(`#${item.id} review: ${problem}, one retry`, 'warn');
+  }
+  return { reason: `review failed: ${problem}` };
 }
 
 /**
@@ -730,6 +934,7 @@ async function repairConflict(
   if (read()?.state !== 'conflict') return undefined;
   conflictTried.add(item.id);
   log(`#${item.id} ${pull.url} has a conflict, one repair session`, 'warn');
+  mark(item, 'session-started');
   const ran = await runSession(item, worktree, sessions);
   if (stopped) return undefined;
   if (ran.reason) return `conflict not repaired: ${ran.reason}`;
@@ -740,8 +945,8 @@ async function repairConflict(
   return 'conflict repaired';
 }
 
-/** Waits for the gate and merges. Returns nothing when merged, else the reason. */
-async function merge(pull: Pull): Promise<string | undefined> {
+/** Waits for the gate and merges the reviewed commit. Returns nothing when merged, else the reason. */
+async function merge(pull: Pull, reviewed: string): Promise<string | undefined> {
   const start = Date.now();
   let problem = '';
   while (!stopped) {
@@ -761,6 +966,8 @@ async function merge(pull: Pull): Promise<string | undefined> {
     if (gate.state === 'ready' && (gate.reported || Date.now() - start > 90_000)) {
       await seeStop();
       if (stopped) break;
+      // only the approved commit is merged: what was pushed after the review was seen by nobody
+      if (gate.head !== reviewed) return `pushed after the review${HANDS_OFF}`;
       // the files of the commit that is merged, not of the one the session left: a later push is checked too.
       // The merge names gate.head, so a push after this read is refused by the tracker.
       const handsOff = await guard(pull, gate.head);
@@ -848,53 +1055,128 @@ async function deliver(item: Item): Promise<{ reason?: string; pull?: Pull }> {
     }
     if (stopped) return { reason: 'stopped', pull: earlier };
   }
-  for (let round = 1; round <= 2; round++) {
-    const ran = await runSession(item, worktree, sessions);
-    const session = ran.session;
-    reason = undefined;
-    pull = tracker.pullOf(item);
+  const reviews: Review[] = [];
+  let fixes = 0;
+  let reviewFile: string | undefined;
+  let repaired = false;
+  let announced = false;
+  // a pull request of an earlier run: the label says whether it is built, reviewed or merged next
+  let next: Step = earlier ? resumeAt(item, earlier) : { step: 'implement' };
+  if (next.step !== 'implement') log(`#${item.id} resumes at the ${next.step}`, 'info');
+  else if (next.reviewFile) {
+    log(`#${item.id} resumes with the recorded findings`, 'info');
+    reviewFile = next.reviewFile;
+  }
+  for (;;) {
+    const from = next;
+    next = { step: 'implement' };
+    let session: Session | undefined;
     const settle = () => {
-      if (reason) reason = withBlocked(reason, session);
+      if (reason && session) reason = withBlocked(reason, session);
     };
-    // a stopped or failed session never leads to a merge, also when a pull request is open
-    if (stopped) reason = 'stopped';
-    else if (ran.reason) reason = ran.reason;
-    else if (session.exit !== 0) reason = `session failed (exit ${session.exit})`;
-    // the session asked a question: a pull request of an earlier run is not its answer
-    else if (tracker.needsDecision(item)) reason = 'needs-decision';
-    else if (!pull) {
-      // merged by hand while the session ran: delivered, not set aside
-      const byOther = tracker.mergedPullOf(item);
-      if (byOther) {
-        log(`#${item.id} merged by someone else: ${byOther.url}`, 'info');
-        pull = byOther;
-        break;
+    reason = undefined;
+    if (from.step === 'implement') {
+      mark(item, 'session-started');
+      const ran = await runSession(item, worktree, sessions, implementer(item, reviewFile));
+      reviewFile = undefined;
+      // read after every implementer session: the next one (a fix round) starts without this file
+      const level = riskOf(item);
+      if (level) risks.set(item.id, level);
+      session = ran.session;
+      pull = tracker.pullOf(item);
+      // a stopped or failed session never leads to a merge, also when a pull request is open
+      if (stopped) reason = 'stopped';
+      else if (ran.reason) reason = ran.reason;
+      else if (session.exit !== 0) reason = `session failed (exit ${session.exit})`;
+      // the session asked a question: a pull request of an earlier run is not its answer
+      else if (tracker.needsDecision(item)) reason = 'needs-decision';
+      else if (!pull) {
+        // merged by hand while the session ran: delivered, not set aside
+        const byOther = tracker.mergedPullOf(item);
+        if (byOther) {
+          log(`#${item.id} merged by someone else: ${byOther.url}`, 'info');
+          pull = byOther;
+          break;
+        }
+        reason = 'session ended without a pull request';
       }
-      reason = 'session ended without a pull request';
+    } else {
+      pull = tracker.pullOf(item);
+      if (stopped) reason = 'stopped';
+      // closed or merged since the labels were read: the implementer looks at it
+      else if (!pull) continue;
     }
     if (reason || !pull) {
       settle();
       break;
     }
+    // before the review: a session never runs on a pull request the guard hands over, because a checkout of
+    // protected paths (agent settings, hooks) would run with the rights of the loop
     reason = morePulls(pull) ?? (await guard(pull));
     if (reason) {
       settle();
       break;
     }
-    if (round === 1) {
+    if (!announced) {
+      announced = true;
       emit('step.finished', {
         task,
-        step: { name: 'pr', text: 'pull request opened, waits for checks' },
+        step: { name: 'pr', text: 'pull request opened' },
         links: [{ rel: 'pull-request', url: pull.url, title: pull.title }],
       });
     }
-    log(`#${item.id} pr: ${pull.url}, waits for checks`, 'info');
-    reason = await merge(pull);
+    let head: string;
+    if (from.step === 'merge') head = from.head;
+    else {
+      const round = reviews.length + 1;
+      log(`#${item.id} pr: ${pull.url}, review round ${round}`, 'info');
+      mark(item, 'pull-opened');
+      const reviewed = await review(item, pull, round, sessions);
+      if ('reason' in reviewed) {
+        reason = reviewed.reason;
+        if (reason === 'stopped') break;
+      }
+      const verdict = 'reason' in reviewed ? 'failed' : reviewed.verdict.verdict;
+      reviews.push({ round, verdict });
+      emit(
+        'step.finished',
+        { task, step: { name: `review-${round}`, text: `review round ${round}: ${verdict}` } },
+        verdict === 'approve' ? 'success' : 'warning',
+      );
+      log(`#${item.id} review round ${round}: ${verdict}`, verdict === 'approve' ? 'ok' : 'warn');
+      if ('reason' in reviewed) {
+        settle();
+        break;
+      }
+      // the mark first: a run that dies in between reviews again
+      try {
+        tracker.recordVerdict(pull, reviewed.verdict, reviewed.head, risks.get(item.id));
+      } catch (error) {
+        log(`#${item.id} review verdict not recorded: ${firstLine(error)}`, 'warn');
+      }
+      mark(item, `verdict-${reviewed.verdict.verdict}`);
+      note(item, reviewNote(round, reviewed.verdict, reviewed.head, pull.url));
+      if (reviewed.verdict.verdict === 'changes') {
+        if (fixes >= FIX_ROUNDS) {
+          // the findings are text of an agent: it never ends the reason, whose ending decides about a hand-over
+          reason = `needs-decision: review still asks for changes after ${FIX_ROUNDS} fix rounds (${findingsLine(reviewed.verdict)})`;
+          settle();
+          break;
+        }
+        fixes += 1;
+        reviewFile = reviewed.file;
+        continue;
+      }
+      head = reviewed.head;
+    }
+    log(`#${item.id} approved, waits for checks`, 'info');
+    reason = await merge(pull, head);
     // a person closed it or has to look at it: no repair session
     if (!reason || reason === 'stopped' || reason === CLOSED || reason.endsWith(HANDS_OFF)) break;
-    log(`#${item.id} ${reason}${round === 1 ? ', one repair session' : ''}`, 'warn');
-    if (round === 1)
-      emit('step.finished', { task, step: { name: 'repair', text: reason } }, 'warning');
+    log(`#${item.id} ${reason}${repaired ? '' : ', one repair session'}`, 'warn');
+    if (repaired) break;
+    repaired = true;
+    emit('step.finished', { task, step: { name: 'repair', text: reason } }, 'warning');
   }
   if (pull && !reason) {
     // merged: the worktree and the branches can go
@@ -903,8 +1185,7 @@ async function deliver(item: Item): Promise<{ reason?: string; pull?: Pull }> {
     // not merged: the worktree may hold work that is not pushed
     log(`#${item.id} worktree kept: ${worktree}`, 'warn');
   }
-  const risk = riskOf(item);
-  if (risk) risks.set(item.id, risk);
+  const risk = risks.get(item.id);
   appendFileSync(
     path.join(runDir, 'results.jsonl'),
     `${JSON.stringify({
@@ -915,6 +1196,7 @@ async function deliver(item: Item): Promise<{ reason?: string; pull?: Pull }> {
       reason,
       pr: pull?.url,
       minutes: Math.round((Date.now() - started) / 60_000),
+      reviews,
       sessions,
     })}\n`,
   );
@@ -948,12 +1230,17 @@ async function repairHandedOver(nr: number): Promise<void> {
   if (!existsSync(worktree))
     run('git', ['worktree', 'add', '--detach', worktree, `origin/${BASE}`], root);
   const sessions: Session[] = [];
-  const note = await repairConflict(item, pull, worktree, sessions).catch(
+  const repaired = await repairConflict(item, pull, worktree, sessions).catch(
     (error) => `conflict not repaired: ${firstLine(error)}`,
   );
-  if (!note) return;
-  log(`#${nr} ${note}, handed over`, note.startsWith('conflict repaired') ? 'info' : 'warn');
-  handedOver.set(nr, `${note}, ${reason}`);
+  if (!repaired) return;
+  mark(item, 'handed-over');
+  log(
+    `#${nr} ${repaired}, handed over`,
+    repaired.startsWith('conflict repaired') ? 'info' : 'warn',
+  );
+  handedOver.set(nr, `${repaired}, ${reason}`);
+  tell(item, pull, `${repaired}, ${reason}`, true);
   // the line of the issue in results.jsonl says it too
   const file = path.join(runDir, 'results.jsonl');
   const rows = readFileSync(file, 'utf8')
@@ -963,7 +1250,7 @@ async function repairHandedOver(nr: number): Promise<void> {
       const row = JSON.parse(line) as Record<string, unknown>;
       if (row.issue !== nr || typeof row.reason !== 'string') return line;
       const all = [...((row.sessions as Session[]) ?? []), ...sessions];
-      return JSON.stringify({ ...row, reason: `${note}, ${row.reason}`, sessions: all });
+      return JSON.stringify({ ...row, reason: `${repaired}, ${row.reason}`, sessions: all });
     });
   writeFileSync(file, `${rows.join('\n')}\n`);
 }
@@ -1011,6 +1298,7 @@ async function awaitHandovers(): Promise<boolean> {
         handedPulls.delete(nr);
         merged.push(`#${nr} ${pull.url}`);
         log(`#${nr} merged by a person: ${pull.url}`, 'ok');
+        mark(item, 'merged');
         appendFileSync(file, `${JSON.stringify({ ...row, outcome: 'merged' })}\n`);
         cleanup(item, pull);
         emit('progress', { done: merged.length, total, label: 'PBIs' });
@@ -1021,6 +1309,7 @@ async function awaitHandovers(): Promise<boolean> {
         handedPulls.delete(nr);
         aside.set(nr, `closed by a person, ${pull.url}`);
         log(`#${nr} set aside: closed by a person, ${pull.url}`, 'bad');
+        tell(item, pull, CLOSED, false);
         appendFileSync(
           file,
           `${JSON.stringify({ ...row, outcome: 'aside', reason: 'closed by a person' })}\n`,
@@ -1074,6 +1363,9 @@ if (opt['dry-run']) {
   }
   console.log(
     `harness: ${harnessName} (${harness.command({ prompt: '/deliver <nr> …', model: opt.model }).join(' ')})`,
+  );
+  console.log(
+    `review: ${REVIEW.harnessName} (${REVIEW.harness.command({ prompt: '/deliver-review <nr> …', model: REVIEW.model, effort: REVIEW.effort }).join(' ')})`,
   );
   console.log(`tracker: ${tracker.name}, base: ${BASE}`);
   console.log(`required checks: ${required.join(', ') || 'none'}`);
@@ -1138,6 +1430,12 @@ const handedPulls = new Map<number, { item: Item; pull: Pull }>();
 const merged: string[] = [];
 let waiting: string[] = [];
 let total = 0;
+try {
+  const created = tracker.syncStageLabels();
+  if (created.length) log(`labels created: ${created.join(', ')}`, 'info');
+} catch (error) {
+  log(`agent:* labels not synced: ${firstLine(error)}`, 'warn');
+}
 process.on('SIGINT', requestStop);
 process.on('SIGBREAK', requestStop);
 setInterval(() => {
@@ -1260,6 +1558,8 @@ try {
         `#${next.id} ${pull?.url}${risks.has(next.id) ? ` (risk ${risks.get(next.id)})` : ''}`,
       );
       log(`#${next.id} merged: ${pull?.url}`, 'ok');
+      mark(next, 'merged');
+      if (risks.get(next.id) === 'high') tell(next, pull, 'high risk: merged', false);
       emit(
         'task.finished',
         { task: `issue-${next.id}`, outcome: 'succeeded', text: 'merged' },
@@ -1274,6 +1574,8 @@ try {
       const why = planned ? reason.slice(0, -HANDS_OFF.length) : reason;
       (planned ? handedOver : aside).set(next.id, `${why}${pull ? `, ${pull.url}` : ''}`);
       if (planned && pull) handedPulls.set(next.id, { item: next, pull });
+      mark(next, planned ? 'handed-over' : 'set-aside');
+      tell(next, pull, why, planned);
       log(
         planned
           ? `#${next.id} handed over: ${why}, merge it yourself`

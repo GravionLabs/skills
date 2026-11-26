@@ -103,6 +103,19 @@ export function create(): Tracker {
       return open.length > 0 ? `blocked by ${open.map((id) => `#${id}`).join(', ')}` : undefined;
     },
     needsDecision: () => scenario.needsDecision ?? false,
+    setStage: (item: Item, stage?: string) =>
+      appendFileSync(
+        path.join(dir, 'stages.jsonl'),
+        `${JSON.stringify({ id: item.id, stage: stage ?? null })}\n`,
+      ),
+    syncStageLabels: () => [],
+    commentOnce: (item: Item, marker: string, body: string) =>
+      appendFileSync(
+        path.join(dir, 'comments.jsonl'),
+        `${JSON.stringify({ id: item.id, marker, body })}\n`,
+      ),
+    recordVerdict: () => {},
+    recordedVerdicts: () => [],
     pullOf(item: Item): Pull | undefined {
       if (!existsSync(path.join(dir, `pr-${item.id}`))) return undefined;
       const id = 100 + item.id;
@@ -190,7 +203,8 @@ export function create(): Tracker {
       const files = reads > 1 ? (scenario.filesLater ?? scenario.files) : scenario.files;
       return files ?? ['src/a.ts'];
     },
-    compareRefs: (_pull: Pull, head?: string) => ({ base: 'base-sha', head: head ?? 'head-sha' }),
+    // `abc123` is a tag of the fixture repository: the loop checks the head out for the review
+    compareRefs: (_pull: Pull, head?: string) => ({ base: 'base-sha', head: head ?? 'abc123' }),
     fileAt(sha: string, file: string): string | undefined {
       const contents = /cargo\.toml$/i.test(file)
         ? scenario.cargoToml

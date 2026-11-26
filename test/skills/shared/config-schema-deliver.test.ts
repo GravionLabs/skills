@@ -12,7 +12,7 @@ const validate = new Ajv2020({ allErrors: true, strict: false }).compile(schema)
 
 // The deliver key of .agents/config.json holds the settings of deliver.
 describe('config schema: deliver', () => {
-  it('accepts base, tracker, harness, handoverMinutes and protectedPaths', () => {
+  it('accepts base, tracker, harness, handoverMinutes, protectedPaths and review', () => {
     expect(
       validate({
         deliver: {
@@ -21,6 +21,7 @@ describe('config schema: deliver', () => {
           harness: 'copilot',
           handoverMinutes: 30,
           protectedPaths: ['.github/'],
+          review: { model: 'opus', harness: 'claude', effort: 'high' },
         },
       }),
     ).toBe(true);
@@ -34,6 +35,9 @@ describe('config schema: deliver', () => {
     { handoverMinutes: 1.5 },
     { parallel: 3 },
     { roles: {} },
+    { review: { harness: 'codex' } },
+    { review: { effort: 'huge' } },
+    { review: { rounds: 3 } },
   ])('rejects %j', (deliver) => {
     expect(validate({ deliver })).toBe(false);
   });

@@ -1,6 +1,9 @@
 // GitHub tracker: issues, sub-issue dependencies, pull requests and checks through the gh CLI.
 import { execFileSync } from 'node:child_process';
 import { existsSync } from 'node:fs';
+import { LABEL_PREFIX, labelOf } from '../stage.mts';
+import { type ReviewMark, type Verdict, markBody, parseMark } from '../review.mts';
+import { syncLabels } from '../sync-labels.mts';
 import type { BaseState, Gate, Item, Pull, Subject, Tracker, TrackerContext } from '../tracker.mts';
 
 const HOLD = ['needs-decision', 'needs-refinement', 'interactive', 'release-test'];
@@ -83,6 +86,24 @@ export function baseVerdict(required: string[], runs: CheckRun[]): BaseState {
     .filter((run) => names.includes(run.name))
     .map((run) => ({ name: run.name, url: run.details_url ?? run.html_url ?? '' }));
   return { state: 'red', failed };
+}
+
+type Comment = {
+  body: string | null;
+  created_at: string;
+  updated_at: string;
+  user: { login: string } | null;
+};
+
+/**
+ * The marks (`<!-- deliver-review: approve <sha> risk=high -->`) of the comments, oldest first. Only a comment of
+ * `login` that starts with the mark and was never edited counts: anyone can write a comment.
+ */
+export function reviewMarks(comments: Comment[], login: string): ReviewMark[] {
+  return comments.flatMap((comment) => {
+    if (comment.user?.login !== login || comment.created_at !== comment.updated_at) return [];
+    return parseMark(comment.body ?? '') ?? [];
+  });
 }
 
 /** The body of a pull request closes issue `id` with a closing keyword (`Closes #12`, `fixes #12`, `Resolved #12`). */
@@ -339,6 +360,52 @@ export function create({
         title: `#${item.id} ${item.title}`,
         url: item.url,
       };
+    },
+
+    setStage(item: Item, stage: Parameters<Tracker['setStage']>[1]): void {
+      const route = `repos/${repo}/issues/${item.id}/labels`;
+      const names = list<{ name: string }>(`${route}?per_page=100`).map((l) =>
+        l.name.toLowerCase(),
+      );
+      const target = stage && labelOf(stage);
+      for (const name of names) {
+        if (!name.startsWith(LABEL_PREFIX) || name === target) continue;
+        try {
+          gh('api', '-X', 'DELETE', `${route}/${encodeURIComponent(name)}`);
+        } catch (error) {
+          // removed meanwhile
+          if (!/HTTP 404/.test((error as { stderr?: string }).stderr ?? '')) throw error;
+        }
+      }
+      if (target && !names.includes(target))
+        gh('api', '-X', 'POST', route, '-f', `labels[]=${target}`);
+    },
+
+    syncStageLabels(): string[] {
+      return syncLabels((...args) => gh(...args), repo);
+    },
+
+    commentOnce(item: Item, marker: string, body: string): void {
+      const route = `repos/${repo}/issues/${item.id}/comments`;
+      const login = gh('api', 'user', '--jq', '.login');
+      // anyone can write the marker: only the comment of the loop itself counts as posted
+      const posted = list<Comment>(`${route}?per_page=100`).some(
+        (c) => c.user?.login === login && (c.body ?? '').startsWith(marker),
+      );
+      if (!posted) gh('api', '-X', 'POST', route, '-f', `body=${body}`);
+    },
+
+    recordVerdict(pull: Pull, review: Verdict, head: string, risk?: string): void {
+      const body = markBody(review, head, risk);
+      gh('api', '-X', 'POST', `repos/${repo}/issues/${pull.id}/comments`, '-f', `body=${body}`);
+    },
+
+    recordedVerdicts(pull: Pull): ReviewMark[] {
+      const login = gh('api', 'user', '--jq', '.login');
+      return reviewMarks(
+        list<Comment>(`repos/${repo}/issues/${pull.id}/comments?per_page=100`),
+        login,
+      );
     },
 
     waitReason(item: Item): string | undefined {
