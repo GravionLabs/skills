@@ -5,6 +5,7 @@ From a milestone to a release on `main`: cut `release/next`, collect the work in
 ::: tip Prerequisites
 - `gh auth status` works, a clean `git status`, run from the repository root.
 - The ruleset on `release/next` below. It is the hard gate that `/deliver` checks for.
+- "Automatically delete head branches" off ([why](#keep-release-next-after-the-merge)).
 :::
 
 ## The path
@@ -75,7 +76,7 @@ Review the release PR, then merge it with a merge commit:
 gh pr merge <nr> --merge
 ```
 
-`deliver` and `finish` never merge it and never wait for it. `release/next` is never deleted. After the merge the next `github-release finish` (or `cut`) moves it to `main` by a fast-forward for the next release, and open PRs into it keep their base.
+`deliver` and `finish` never merge it and never wait for it. `release/next` is never deleted, provided "Automatically delete head branches" is off ([ruleset](#ruleset-on-release-next)). If GitHub deleted it anyway, the next `finish` recreates it from `main` and retargets the pull requests GitHub moved to `main`. After the merge the next `github-release finish` (or `cut`) moves it to `main` by a fast-forward for the next release, and open PRs into it keep their base.
 
 ## After a hotfix
 
@@ -104,7 +105,7 @@ Settings, in the UI under **Settings > Rules > Rulesets > New ruleset > New bran
 - **Target branches**: add target, include exactly `refs/heads/release/next` (a `release/**` pattern would also cover `release/<x.y>` maintenance branches).
 - **Require a pull request before merging**, allowed merge methods **Squash** only (PBI branches squash into the release branch).
 - **Require status checks to pass**: add your CI checks by name; leave "Require branches to be up to date" off unless you want a rebase per PBI.
-- **Block force pushes** on. Turn **Restrict deletions** on: `github-release` moves `release/next` by a fast-forward and never deletes it, and without the rule "Automatically delete head branches" deletes it when the release PR is merged and GitHub moves every open PR into `release/next` to `main` (#528). `Get-ReleaseState.ps1` warns when the rule is missing.
+- **Block force pushes** on. Turn **Restrict deletions** on: `github-release` moves `release/next` by a fast-forward and never deletes it. The rule alone does not keep the branch, see below.
 
 The same through the API (replace `build` with your check names; `integration_id` is optional):
 
@@ -136,6 +137,26 @@ gh api repos/{owner}/{repo}/rulesets --method POST --input - <<'JSON'
 JSON
 ```
 
+### Keep `release/next` after the merge
+
+Turn **Settings > General > Automatically delete head branches** off:
+
+```bash
+gh api repos/{owner}/{repo} -X PATCH -F delete_branch_on_merge=false
+```
+
+With it on, the `deletion` rule does not help: GitHub deletes the head branch as the person who merges, the owner bypasses the rule (admin role, mode always), and every open pull request into `release/next` moves to `main` (#528, #1038). Merged pull request branches are then no longer deleted automatically; delete them with `gh pr merge --delete-branch` or by hand.
+
+Observed on 2026-11-26 in the branch activity of GravionLabs repositories, release PR merged by the owner, ruleset with a `deletion` rule:
+
+| `delete_branch_on_merge` | Admin bypass mode | `release/next` after the merge        | Repository            |
+| :----------------------- | :---------------- | :------------------------------------ | :-------------------- |
+| on                       | `always`          | deleted seconds after the merge       | skills                |
+| off                      | `always`          | kept                                  | gantry, agent-scripts |
+| on or off                | `pull_request`    | not verified, do not rely on the mode |                       |
+
+`Get-ReleaseState.ps1` warns when the setting is on and the `deletion` rule is missing or bypassed by the admin role in mode `always` (it reads the bypass list, which needs admin rights).
+
 The `main` branch has its own ruleset that allows merge commits only, for the release PR. Check the result with the `gh api .../rules/branches/release/next` call above.
 
 ## Next
@@ -146,7 +167,7 @@ The `main` branch has its own ruleset that allows merge commits only, for the re
 
 The release job closes the milestone itself: once it has tagged `v1.3.0` (`close-milestones` of the `gh-release` action of GravionLabs/ci), every open milestone whose issues all shipped with the release is closed and renamed `M003 (1.3.0)`. A milestone with open issues stays open, and the job names it and the issues in a notice. Nothing is left to do after the merge except `/github-milestone create M004` when the next work starts.
 
-If the job did not close it (a failed step, a pre-release, a milestone with leftovers), repair it by hand. `github-release finish` (the run that deletes the merged `release/next`) prints this hint for the lowest open `M<nnn>`, with the version taken from the tag:
+If the job did not close it (a failed step, a pre-release, a milestone with leftovers), repair it by hand. `github-release finish` (the run after the merge) prints this hint for the lowest open `M<nnn>`, with the version taken from the tag:
 
 ```text
 /github-milestone create M004

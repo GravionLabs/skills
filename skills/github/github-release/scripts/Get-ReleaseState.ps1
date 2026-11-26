@@ -172,7 +172,7 @@ else {
 
 # #528: with `delete_branch_on_merge` and no `deletion` rule, merging the release PR deletes release/next and GitHub moves
 # the open PRs into it to the default branch. Fail soft: when gh cannot tell, the fields stay null / empty and no warning is set.
-$deleteOnMerge = $null; $deletionRule = $null; $retargetedPrs = @(); $ruleWarning = $null
+$deleteOnMerge = $null; $deletionRule = $null; $deletionBypassed = $null; $retargetedPrs = @(); $ruleWarning = $null
 if ($Branch -eq 'release/next' -and $onOrigin) {
   $raw = & gh repo view --json nameWithOwner --jq .nameWithOwner 2>$null
   $slug = if ($LASTEXITCODE -eq 0) { ([string]$raw).Trim() } else { '' }
@@ -181,7 +181,18 @@ if ($Branch -eq 'release/next' -and $onOrigin) {
     if ($LASTEXITCODE -eq 0 -and "$raw".Trim() -in 'true', 'false') { $deleteOnMerge = ("$raw".Trim() -eq 'true') }
     $raw = & gh api "repos/$slug/rules/branches/release/next" 2>$null
     if ($LASTEXITCODE -eq 0 -and $raw) {
-      $deletionRule = [bool](@($raw | ConvertFrom-Json) | Where-Object { $_.type -eq 'deletion' })
+      $deletions = @(@($raw | ConvertFrom-Json) | Where-Object { $_.type -eq 'deletion' })
+      $deletionRule = [bool]$deletions
+      # #1038: bypassed only when the admin role bypasses every deletion ruleset in mode always; bypass_actors is only
+      # returned to admins, so a ruleset without it leaves the answer unknown
+      $bypassed = @(foreach ($id in ($deletions.ruleset_id | Sort-Object -Unique)) {
+          $raw = & gh api "repos/$slug/rulesets/$id" 2>$null
+          $set = if ($LASTEXITCODE -eq 0 -and $raw) { $raw | ConvertFrom-Json }
+          if ($null -eq $set -or $set.PSObject.Properties.Name -notcontains 'bypass_actors') { $null; continue }
+          [bool](@($set.bypass_actors) | Where-Object { $_.actor_type -eq 'RepositoryRole' -and $_.actor_id -eq 5 -and $_.bypass_mode -eq 'always' })
+        })
+      if ($bypassed -contains $false) { $deletionBypassed = $false }
+      elseif ($bypassed.Count -gt 0 -and $bypassed -notcontains $null) { $deletionBypassed = $true }
     }
     $q = 'query($o:String!,$n:String!,$b:String!){repository(owner:$o,name:$n){pullRequests(baseRefName:$b,states:OPEN,first:50){nodes{number title url timelineItems(itemTypes:[BASE_REF_CHANGED_EVENT],last:1){nodes{... on BaseRefChangedEvent{previousRefName}}}}}}}'
     $owner, $name = $slug -split '/'
@@ -195,6 +206,9 @@ if ($Branch -eq 'release/next' -and $onOrigin) {
   $parts = @()
   if ($deleteOnMerge -eq $true -and $deletionRule -eq $false) {
     $parts += 'release/next has no deletion rule while delete_branch_on_merge is on: merging the release PR deletes it (add the `deletion` rule to its ruleset)'
+  }
+  if ($deleteOnMerge -eq $true -and $deletionBypassed -eq $true) {
+    $parts += "the deletion rule of release/next does not apply to the admin role (bypass mode always) while delete_branch_on_merge is on: merging the release PR deletes it (turn it off: gh api repos/$slug -X PATCH -F delete_branch_on_merge=false)"
   }
   if ($retargetedPrs.Count -gt 0) {
     $parts += 'open PRs moved from release/next to ' + $default + ': ' + (($retargetedPrs | ForEach-Object { '#' + $_.number }) -join ', ')
@@ -257,6 +271,6 @@ if ($ruleWarning) { $warning = if ($warning) { "$warning; $ruleWarning" } else {
 [ordered]@{
   default = $default; branch = $Branch; state = $state; openPrs = @($openPrs); localAhead = $localAhead
   staleLines = @($staleLines); fastForwardAllowed = $fastForwardAllowed; action = $action
-  hasMajorCommit = $major; deleteOnMerge = $deleteOnMerge; deletionRule = $deletionRule; retargetedPrs = @($retargetedPrs); defaultIsAncestor = $defaultIsAncestor; mergeConflicts = $mergeConflicts; releaseWorkflow = $workflow; releasePr = $releasePr
+  hasMajorCommit = $major; deleteOnMerge = $deleteOnMerge; deletionRule = $deletionRule; deletionBypassed = $deletionBypassed; retargetedPrs = @($retargetedPrs); defaultIsAncestor = $defaultIsAncestor; mergeConflicts = $mergeConflicts; releaseWorkflow = $workflow; releasePr = $releasePr
   releaseTest = $releaseTest; olderReleaseTests = @($olderReleaseTests); gate = $gate; warning = $warning
 } | ConvertTo-Json -Depth 4

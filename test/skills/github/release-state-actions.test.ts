@@ -27,6 +27,7 @@ describe('Get-ReleaseState.ps1', () => {
         if (a[0] === 'repo') return { rest: process.env.FAKE_SLUG || '' };
         if (a[0] === 'api' && a.includes('graphql')) return { rest: JSON.parse(process.env.FAKE_GRAPHQL || '{}') };
         if (a[0] === 'api' && /rules\\/branches/.test(a[1])) return { rest: JSON.parse(process.env.FAKE_RULES || '[]') };
+        if (a[0] === 'api' && /rulesets\\//.test(a[1])) return { rest: JSON.parse(process.env.FAKE_RULESET || '{}') };
         if (a[0] === 'api') return { rest: process.env.FAKE_DELETE_ON_MERGE || '' };
         return { rest: JSON.parse((a.includes('--head') ? process.env.FAKE_RELEASE_PR : process.env.FAKE_PRS) || '[]') };
       }`,
@@ -125,6 +126,27 @@ describe('Get-ReleaseState.ps1', () => {
       expect(r).toMatchObject({ deleteOnMerge: true, deletionRule: true, warning: null });
     });
 
+    it.each([
+      ['true', 'always', true, true],
+      ['true', 'pull_request', false, false],
+      ['false', 'always', true, false],
+    ])(
+      'delete_branch_on_merge %s, admin bypass %s: bypassed %s, warns %s (#1038)',
+      async (deleteOnMerge, mode, bypassed, warns) => {
+        setRef('release/next', 'release/legacy');
+        const bypass = { actor_id: 5, actor_type: 'RepositoryRole', bypass_mode: mode };
+        const r = await state('finish', 'release/next', {
+          ...repo,
+          FAKE_DELETE_ON_MERGE: deleteOnMerge,
+          FAKE_RULES: '[{"type":"deletion","ruleset_id":1}]',
+          FAKE_RULESET: JSON.stringify({ bypass_actors: [bypass] }),
+        });
+        expect(r).toMatchObject({ deletionRule: true, deletionBypassed: bypassed });
+        if (warns) expect(r.warning).toContain('delete_branch_on_merge=false');
+        else expect(r.warning).toBeNull();
+      },
+    );
+
     it('lists open PRs that GitHub moved from release/next to main', async () => {
       setRef('release/next', 'release/legacy');
       const graphql = {
@@ -159,6 +181,7 @@ describe('Get-ReleaseState.ps1', () => {
       expect(r).toMatchObject({
         deleteOnMerge: null,
         deletionRule: null,
+        deletionBypassed: null,
         retargetedPrs: [],
         warning: null,
       });
