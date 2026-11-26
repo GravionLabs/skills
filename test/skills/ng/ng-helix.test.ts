@@ -18,6 +18,7 @@ describe('ng-helix skill', () => {
       'references/components.md',
       'references/recipes.md',
       'references/desktop.md',
+      'references/migration.md',
     ]);
     for (const file of files) expect(existsSync(path.join(root, file)), file).toBe(true);
   });
@@ -37,6 +38,26 @@ describe('ng-helix skill', () => {
       .split(' ');
     for (const name of names) expect(desktop, name).toContain(name);
     expect(desktop).toContain('no window controls and no title bar');
+  });
+  it('loads the migration reference for migration, lint preset and allowlist', () => {
+    const row = skill.split('\n').find((line) => line.includes('`references/migration.md`'));
+    for (const word of ['Migrating an app', 'lint preset', 'allowlist'])
+      expect(row).toContain(word);
+  });
+  it('gives each migration step a check and names the lint exports', () => {
+    const migration = read(path.join(root, 'references/migration.md'));
+    const steps = migration.split(/^## (?=\d\. )/m).slice(1);
+    expect(steps).toHaveLength(5);
+    for (const step of steps) expect(step, step.split('\n')[0]).toMatch(/^Check: /m);
+    const names = [
+      '`helixAllow({ files, rules, reason })`',
+      '`helix/no-raw-control`',
+      '@gravionlabs/helix-lint/eslint',
+      '@gravionlabs/helix-lint/stylelint',
+    ];
+    for (const name of names) expect(migration, name).toContain(name);
+    expect(migration).toContain('`references/style-lint.md`');
+    expect(migration).not.toContain('pnpm add');
   });
   it('links the UX rules and the style guide of the project', () => {
     expect(skill).toContain('https://github.com/GravionLabs/helix/blob/main/docs/UX-RULES.md');
