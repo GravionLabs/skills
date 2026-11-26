@@ -150,4 +150,54 @@ describe('ui-styleguide', () => {
       expect(sync).toContain('Apply an approved diff as shown');
     });
   });
+
+  it('SKILL.md names the audit mode with its trigger words and links references/audit.md', () => {
+    const skill = read('SKILL.md');
+    const modes = skill.split(/^## Modes$/m)[1]?.split(/^## /m)[0];
+    expect(modes).toContain('/ui-styleguide audit [<names>…]');
+    expect(modes).toContain('"audit the UI against the style guide"');
+    expect(modes).toContain('(references/audit.md)');
+    expect(skill.match(/^description: .*$/m)?.[0]).toContain(
+      '"audit the UI against the style guide"',
+    );
+  });
+
+  describe('references/audit.md', () => {
+    const audit = read('references/audit.md');
+
+    it('resolves the input without driving a browser', () => {
+      expect(audit).toContain('screenshot folder');
+      expect(audit).toContain('pnpm screenshots');
+      expect(audit).toContain('package.json');
+      expect(audit).toContain('No browser is driven');
+    });
+
+    it('looks up the project rubric before the template and does not copy it', () => {
+      const project = audit.indexOf('docs/styleguide/ux-review-rubric.md');
+      const template = audit.indexOf('(../templates/styleguide/ux-review-rubric.md)');
+      expect(project).toBeGreaterThanOrEqual(0);
+      expect(template).toBeGreaterThan(project);
+      expect(audit).not.toContain('What is the one thing the user came to do');
+    });
+
+    it('reports the five rubric headings per view in the rubric order', () => {
+      const rubric = read('templates/styleguide/ux-review-rubric.md');
+      const headings = rubric.match(/^### .+$/gm) ?? [];
+      expect(headings).toHaveLength(5);
+      const positions = headings.map((h) => audit.indexOf(`\`${h}\``));
+      expect(positions.every((i) => i >= 0)).toBe(true);
+      expect([...positions].sort((a, b) => a - b)).toEqual(positions);
+      expect(audit).toContain('Write "None"');
+      expect(audit).toContain('names the file and the section');
+      expect(audit).toContain('only from the markup');
+    });
+
+    it('ranks the top fixes and creates drafts only after approval', () => {
+      expect(audit).toContain('`## Top fixes across views`, ranked');
+      expect(audit).toContain('PBI draft');
+      expect(audit).toContain('`github-issue` format');
+      expect(audit).toContain('Show every draft in full');
+      expect(audit).toContain('Create nothing before the user approves');
+    });
+  });
 });
