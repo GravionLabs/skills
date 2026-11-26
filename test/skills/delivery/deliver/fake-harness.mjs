@@ -5,8 +5,39 @@ import { appendFileSync, existsSync, readFileSync, writeFileSync } from 'node:fs
 import path from 'node:path';
 
 const [dir, prompt] = process.argv.slice(2);
-const id = /^\/deliver (\d+)/.exec(prompt)?.[1];
+const [, command, id] = /^\/(deliver|deliver-review) (\d+)/.exec(prompt) ?? [];
 const scenario = JSON.parse(readFileSync(path.join(dir, 'scenario.json'), 'utf8'));
+if (command === 'deliver-review') {
+  // a review session is recorded in reviews.jsonl; scenario.verdicts (by review index, default approve):
+  // 'approve', 'changes', 'invalid', 'none' (no file) or 'fail' (exit 1 without a file)
+  const reviews = path.join(dir, 'reviews.jsonl');
+  const nr = existsSync(reviews) ? readFileSync(reviews, 'utf8').trim().split('\n').length : 0;
+  appendFileSync(
+    reviews,
+    `${JSON.stringify({
+      id: Number(id),
+      prompt,
+      cwd: process.cwd(),
+      hasResultFileVariable: 'DELIVER_RESULT_FILE' in process.env,
+    })}\n`,
+  );
+  const verdict = scenario.verdicts?.[nr] ?? 'approve';
+  if (verdict === 'fail') process.exit(1);
+  const finding = { severity: 'blocking', file: 'src/a.ts', summary: scenario.summary ?? 'broken' };
+  const answers = {
+    approve: { verdict: 'approve', findings: [], unmet: [] },
+    changes: {
+      verdict: 'changes',
+      findings: [finding],
+      unmet: scenario.summary ? [] : ['it works'],
+    },
+    invalid: { verdict: 'maybe' },
+  };
+  if (verdict !== 'none')
+    writeFileSync(process.env.DELIVER_REVIEW_FILE, JSON.stringify(answers[verdict]));
+  console.log(`result: reviewed ${verdict}`);
+  process.exit(0);
+}
 const log = path.join(dir, 'sessions.jsonl');
 const index = existsSync(log) ? readFileSync(log, 'utf8').trim().split('\n').length : 0;
 appendFileSync(
@@ -29,7 +60,7 @@ if (own.hangs ?? scenario.hangs) {
 } else {
   // the implementer result of the scenario (risk by issue id), written where the loop says
   const level = scenario.risks?.[id];
-  if (level && process.env.DELIVER_RESULT_FILE)
+  if (level && process.env.DELIVER_RESULT_FILE && !(scenario.riskOnce && index > 0))
     writeFileSync(
       process.env.DELIVER_RESULT_FILE,
       JSON.stringify({ status: 'done', risk: { level, what: 'x', backout: 'revert' } }),

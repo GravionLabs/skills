@@ -220,9 +220,9 @@ describe('spec section', () => {
       expect(ref).toContain(`\`${k}\``);
   });
 
-  it('deliver step 4 returns unrequested behavior', () => {
+  it('deliver-review returns unrequested behavior', () => {
     const deliver = fs.readFileSync(
-      path.resolve(__dirname, '../../../skills/delivery/deliver/SKILL.md'),
+      path.resolve(__dirname, '../../../skills/delivery/deliver-review/SKILL.md'),
       'utf-8',
     );
     expect(deliver).toMatch(/unrequested behavior/);

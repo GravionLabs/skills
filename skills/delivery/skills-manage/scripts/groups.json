@@ -1,6 +1,7 @@
 {
   "delivery": [
     "deliver",
+    "deliver-review",
     "grill-me",
     "handoff",
     "planner",
