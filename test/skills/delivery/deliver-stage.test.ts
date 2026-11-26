@@ -6,7 +6,12 @@ import path from 'node:path';
 import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 import { STAGES, stageAfter, stageOf } from '../../../skills/delivery/deliver/scripts/stage.mts';
 import { syncLabels } from '../../../skills/delivery/deliver/scripts/sync-labels.mts';
-import { create, markedVerdict } from '../../../skills/delivery/deliver/scripts/tracker/github.mts';
+import {
+  type Verdict,
+  markBody,
+  parseMark,
+} from '../../../skills/delivery/deliver/scripts/review.mts';
+import { create, reviewMarks } from '../../../skills/delivery/deliver/scripts/tracker/github.mts';
 import { createFakeGh } from '../../helpers/fake-gh';
 import { type Scenario, fixture, loop, skill } from './deliver/run-loop';
 
@@ -98,12 +103,19 @@ const handler = `(call, ctx) => {
   return { rest: issue };
 }`;
 
-const mark = (sha: string, login = 'loop-user', edited = false) => ({
-  body: `<!-- deliver-review: approve ${sha} -->\nrecorded`,
+const comment = (body: string, login = 'loop-user', edited = false) => ({
+  body,
   created_at: '2026-01-02T00:00:00Z',
   updated_at: edited ? '2026-01-03T00:00:00Z' : '2026-01-02T00:00:00Z',
   user: { login },
 });
+const mark = (sha: string, login = 'loop-user', edited = false) =>
+  comment(`<!-- deliver-review: approve ${sha} -->\nrecorded`, login, edited);
+const changes: Verdict = {
+  verdict: 'changes',
+  findings: [{ severity: 'blocking', file: 'src/a.ts', summary: 'closes the comment --> here' }],
+  unmet: [],
+};
 
 describe('deliver loop: resume by label (fake gh)', () => {
   let dir: string;
@@ -135,9 +147,13 @@ describe('deliver loop: resume by label (fake gh)', () => {
     };
   };
 
-  it('agent:approved with the recorded verdict goes straight to the merge gate', async () => {
-    const { out, merged, added, calls } = await resume('agent:approved', [mark('abc123')]);
+  it('agent:approved with the recorded verdict goes straight to the merge gate, with its risk', async () => {
+    const { out, merged, added, calls } = await resume('agent:approved', [
+      comment('<!-- deliver-review: approve abc123 risk=high -->\nrecorded'),
+    ]);
     expect(out.status).toBe(0);
+    expect(out.results[0]?.risk).toBe('high');
+    expect(out.stdout).toContain('(risk high)');
     expect(out.sessions).toEqual([]);
     expect(out.reviews).toEqual([]);
     expect(merged).toBe(true);
@@ -171,8 +187,77 @@ describe('deliver loop: resume by label (fake gh)', () => {
   it.each(['agent:implementing', 'agent:changes'])('%s starts the implementer', async (label) => {
     const { out, added } = await resume(label);
     expect(out.sessions).toHaveLength(1);
+    expect(out.sessions[0]?.prompt).not.toContain('--review-file');
     expect(out.reviews).toHaveLength(1);
     expect(added.slice(-2)).toEqual(['agent:review', 'agent:approved']);
+  });
+
+  it('agent:changes hands the recorded findings to the implementer', async () => {
+    const { out, calls } = await resume('agent:changes', [comment(markBody(changes, 'abc123'))]);
+    const file = /--review-file (\S+)/.exec(out.sessions[0]?.prompt ?? '')?.[1];
+    expect(file).toBeDefined();
+    expect(JSON.parse(readFileSync(file as string, 'utf8'))).toEqual(changes);
+    // the new approval is recorded without a risk: the fake session wrote none
+    expect(calls.some((c) => c.includes('<!-- deliver-review: approve abc123 -->'))).toBe(true);
+  });
+});
+
+describe('review marks', () => {
+  it('writes the risk and, for changes, the verdict, and reads both back', () => {
+    const body = markBody(changes, 'abc123', 'high');
+    expect(body.split('\n')[0]).toBe('<!-- deliver-review: changes abc123 risk=high -->');
+    expect(body).not.toMatch(/here -->/);
+    expect(parseMark(body)).toEqual({
+      verdict: 'changes',
+      head: 'abc123',
+      risk: 'high',
+      review: changes,
+    });
+    expect(markBody({ verdict: 'approve', findings: [], unmet: [] }, 'abc123', 'bogus')).toMatch(
+      /^<!-- deliver-review: approve abc123 -->\n[^<]*$/,
+    );
+  });
+
+  it.each([
+    [
+      'an old mark without risk',
+      '<!-- deliver-review: approve abc -->',
+      { verdict: 'approve', head: 'abc' },
+    ],
+    [
+      'an unknown risk',
+      '<!-- deliver-review: approve abc risk=huge -->',
+      { verdict: 'approve', head: 'abc' },
+    ],
+    [
+      'broken base64',
+      '<!-- deliver-review: changes abc -->\n<!-- deliver-review-verdict: !!! -->',
+      { verdict: 'changes', head: 'abc' },
+    ],
+    [
+      'a verdict line that is no valid verdict',
+      `<!-- deliver-review: changes abc -->\n<!-- deliver-review-verdict: ${Buffer.from('{"verdict":"approve","findings":[],"unmet":[]}').toString('base64')} -->`,
+      { verdict: 'changes', head: 'abc' },
+    ],
+    ['text before the mark', 'see <!-- deliver-review: approve abc -->', undefined],
+  ])('reads %s', (_name, body, expected) => {
+    expect(parseMark(body)).toEqual(expected);
+  });
+
+  it('counts only unedited comments of the login of the loop, oldest first', () => {
+    const marks = reviewMarks(
+      [
+        mark('abc'),
+        mark('abc', 'someone'),
+        mark('abc', 'loop-user', true),
+        comment('<!-- deliver-review: changes def risk=low -->'),
+      ],
+      'loop-user',
+    );
+    expect(marks).toEqual([
+      { verdict: 'approve', head: 'abc' },
+      { verdict: 'changes', head: 'def', risk: 'low' },
+    ]);
   });
 });
 
@@ -226,11 +311,6 @@ describe('GitHub tracker: labels', () => {
     );
     expect(calls[1]).toEqual(expect.arrayContaining(['--color', '--description']));
     expect(syncLabels(gh, 'o/r')).toEqual([]);
-  });
-
-  it('the latest mark of the commit wins', () => {
-    const changes = { ...mark('abc'), body: '<!-- deliver-review: changes abc -->' };
-    expect(markedVerdict([mark('abc'), changes], 'loop-user', 'abc')).toBe('changes');
   });
 });
 

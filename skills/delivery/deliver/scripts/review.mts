@@ -45,6 +45,61 @@ export function findingsLine(verdict: Verdict): string {
   return line.length > 500 ? `${line.slice(0, 500)}…` : line;
 }
 
+/** The risk levels of an implementer result (`risk.level`). */
+export const RISK_LEVELS = ['low', 'medium', 'high'];
+
+/** A verdict the loop recorded on a pull request; `review` is the validated verdict of a `changes` mark. */
+export type ReviewMark = {
+  verdict: Verdict['verdict'];
+  head: string;
+  risk?: string;
+  review?: Verdict;
+};
+
+const MARK = /^<!-- deliver-review: (approve|changes) (\S+?)(?: risk=([a-z]+))? -->/;
+const VERDICT_LINE = /^<!-- deliver-review-verdict: ([A-Za-z0-9+/]+={0,2}) -->$/m;
+// a comment holds at most 65536 characters: a longer verdict line is left out
+const VERDICT_LINE_MAX = 60_000;
+
+/**
+ * The comment that records a verdict: the mark line, for `changes` the verdict as base64 JSON (agent text could
+ * close an HTML comment), then one readable line. The risk token is left out without a level.
+ */
+export function markBody(review: Verdict, head: string, risk?: string): string {
+  const level = risk && RISK_LEVELS.includes(risk) ? ` risk=${risk}` : '';
+  const lines = [`<!-- deliver-review: ${review.verdict} ${head}${level} -->`];
+  if (review.verdict === 'changes') {
+    const { verdict, unmet } = review;
+    const findings = review.findings.map(({ severity, file, summary }) => ({
+      severity,
+      file,
+      summary,
+    }));
+    const encoded = Buffer.from(JSON.stringify({ verdict, findings, unmet })).toString('base64');
+    if (encoded.length <= VERDICT_LINE_MAX)
+      lines.push(`<!-- deliver-review-verdict: ${encoded} -->`);
+  }
+  lines.push(`The deliver loop recorded the review verdict \`${review.verdict}\` for ${head}.`);
+  return lines.join('\n');
+}
+
+/**
+ * The mark of a comment body, `undefined` when it does not start with one. An unknown risk and a verdict line that
+ * is not a valid verdict of the same kind are left out: the body is read, never trusted.
+ */
+export function parseMark(body: string): ReviewMark | undefined {
+  const mark = MARK.exec(body);
+  if (!mark) return undefined;
+  const result: ReviewMark = { verdict: mark[1] as Verdict['verdict'], head: mark[2] as string };
+  if (mark[3] && RISK_LEVELS.includes(mark[3])) result.risk = mark[3];
+  const line = VERDICT_LINE.exec(body);
+  if (result.verdict === 'changes' && line) {
+    const review = parseVerdict(Buffer.from(line[1] as string, 'base64').toString('utf8'));
+    if (review?.verdict === 'changes') result.review = review;
+  }
+  return result;
+}
+
 export const REVIEW_KEYS = ['model', 'harness', 'effort'];
 
 export type ReviewSettings = {

@@ -32,6 +32,8 @@ import { adoptLegacyEnv, unknownConfigKeys } from './legacy.mts';
 import { killTree, launch, promptPath } from './process.mts';
 import { progressLine } from './progress-bar.mts';
 import {
+  RISK_LEVELS,
+  type ReviewMark,
   type ReviewSettings,
   type Verdict,
   findingsLine,
@@ -609,29 +611,58 @@ function tell(item: Item, pull: Pull | undefined, reason: string, planned: boole
   note(item, handoverNote({ reason, planned, head, urls, risk: risks.get(item.id) }));
 }
 
-/** The next step of an issue; `merge` names the approved commit. */
-type Step = { step: 'implement' | 'review' } | { step: 'merge'; head: string };
+/**
+ * The next step of an issue; `merge` names the approved commit, `reviewFile` holds the findings the implementer
+ * fixes.
+ */
+type Step =
+  | { step: 'implement'; reviewFile?: string }
+  | { step: 'review' }
+  | { step: 'merge'; head: string };
 
 /**
  * Where the label of an earlier run lets the loop go on with an open pull request. `approved` counts only with the
- * approving verdict the loop recorded for the current head, else the pull request is reviewed.
+ * approving verdict the loop recorded for the current head, else the pull request is reviewed. The marks of the
+ * earlier run also give back its risk level and, for `changes`, the findings of the last review.
  */
 function resumeAt(item: Item, pull: Pull): Step {
   const stage = stageOf(item.labels);
+  let marks: ReviewMark[] | undefined;
+  try {
+    marks = tracker.recordedVerdicts(pull);
+  } catch (error) {
+    log(`#${item.id} review marks unreadable: ${firstLine(error)}`, 'warn');
+  }
+  const risk = [...(marks ?? [])].reverse().find((m) => m.risk)?.risk;
+  if (risk && !risks.has(item.id)) risks.set(item.id, risk);
   if (stage === 'approved') {
-    try {
-      const { head } = tracker.compareRefs(pull);
-      if (tracker.recordedVerdict(pull, head) === 'approve') return { step: 'merge', head };
-      log(`#${item.id} agent:approved without an approving review of ${head}: reviews it`, 'warn');
-    } catch (error) {
-      log(`#${item.id} review verdict unreadable: ${firstLine(error)}, reviews it`, 'warn');
+    if (marks) {
+      try {
+        const { head } = tracker.compareRefs(pull);
+        const latest = [...marks].reverse().find((m) => m.head === head);
+        if (latest?.verdict === 'approve') return { step: 'merge', head };
+        log(
+          `#${item.id} agent:approved without an approving review of ${head}: reviews it`,
+          'warn',
+        );
+      } catch (error) {
+        log(`#${item.id} review verdict unreadable: ${firstLine(error)}, reviews it`, 'warn');
+      }
     }
     return { step: 'review' };
   }
-  return { step: stage === 'review' ? 'review' : 'implement' };
+  if (stage === 'review') return { step: 'review' };
+  const last = marks?.at(-1);
+  if (stage === 'changes' && last?.review) {
+    const reviewFile = path.join(runDir, `${item.id}.review-recorded.json`);
+    writeFileSync(reviewFile, `${JSON.stringify(last.review, null, 2)}\n`);
+    return { step: 'implement', reviewFile };
+  }
+  if (stage === 'changes')
+    log(`#${item.id} no recorded findings: the implementer starts without them`, 'warn');
+  return { step: 'implement' };
 }
 
-const RISK_LEVELS = ['low', 'medium', 'high'];
 const risks = new Map<number, string>();
 /** The implementer result the session writes (`risk.level`); the session never reports anything else to the loop. */
 const resultFile = (item: Item) => path.join(runDir, `${item.id}.result.json`);
@@ -1032,6 +1063,10 @@ async function deliver(item: Item): Promise<{ reason?: string; pull?: Pull }> {
   // a pull request of an earlier run: the label says whether it is built, reviewed or merged next
   let next: Step = earlier ? resumeAt(item, earlier) : { step: 'implement' };
   if (next.step !== 'implement') log(`#${item.id} resumes at the ${next.step}`, 'info');
+  else if (next.reviewFile) {
+    log(`#${item.id} resumes with the recorded findings`, 'info');
+    reviewFile = next.reviewFile;
+  }
   for (;;) {
     const from = next;
     next = { step: 'implement' };
@@ -1115,7 +1150,7 @@ async function deliver(item: Item): Promise<{ reason?: string; pull?: Pull }> {
       }
       // the mark first: a run that dies in between reviews again
       try {
-        tracker.recordVerdict(pull, reviewed.verdict.verdict, reviewed.head);
+        tracker.recordVerdict(pull, reviewed.verdict, reviewed.head, risks.get(item.id));
       } catch (error) {
         log(`#${item.id} review verdict not recorded: ${firstLine(error)}`, 'warn');
       }

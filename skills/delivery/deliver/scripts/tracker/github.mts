@@ -2,6 +2,7 @@
 import { execFileSync } from 'node:child_process';
 import { existsSync } from 'node:fs';
 import { LABEL_PREFIX, labelOf } from '../stage.mts';
+import { type ReviewMark, type Verdict, markBody, parseMark } from '../review.mts';
 import { syncLabels } from '../sync-labels.mts';
 import type { BaseState, Gate, Item, Pull, Subject, Tracker, TrackerContext } from '../tracker.mts';
 
@@ -95,21 +96,14 @@ type Comment = {
 };
 
 /**
- * The verdict of the newest mark (`<!-- deliver-review: approve <sha> -->`) for `head`. Only a comment of `login`
- * that starts with the mark and was never edited counts: anyone can write a comment.
+ * The marks (`<!-- deliver-review: approve <sha> risk=high -->`) of the comments, oldest first. Only a comment of
+ * `login` that starts with the mark and was never edited counts: anyone can write a comment.
  */
-export function markedVerdict(
-  comments: Comment[],
-  login: string,
-  head: string,
-): 'approve' | 'changes' | undefined {
-  let verdict: 'approve' | 'changes' | undefined;
-  for (const comment of comments) {
-    if (comment.user?.login !== login || comment.created_at !== comment.updated_at) continue;
-    const mark = /^<!-- deliver-review: (approve|changes) (\S+) -->/.exec(comment.body ?? '');
-    if (mark?.[2] === head) verdict = mark[1] as 'approve' | 'changes';
-  }
-  return verdict;
+export function reviewMarks(comments: Comment[], login: string): ReviewMark[] {
+  return comments.flatMap((comment) => {
+    if (comment.user?.login !== login || comment.created_at !== comment.updated_at) return [];
+    return parseMark(comment.body ?? '') ?? [];
+  });
 }
 
 /** The body of a pull request closes issue `id` with a closing keyword (`Closes #12`, `fixes #12`, `Resolved #12`). */
@@ -401,17 +395,16 @@ export function create({
       if (!posted) gh('api', '-X', 'POST', route, '-f', `body=${body}`);
     },
 
-    recordVerdict(pull: Pull, verdict: 'approve' | 'changes', head: string): void {
-      const body = `<!-- deliver-review: ${verdict} ${head} -->\nThe deliver loop recorded the review verdict \`${verdict}\` for ${head}.`;
+    recordVerdict(pull: Pull, review: Verdict, head: string, risk?: string): void {
+      const body = markBody(review, head, risk);
       gh('api', '-X', 'POST', `repos/${repo}/issues/${pull.id}/comments`, '-f', `body=${body}`);
     },
 
-    recordedVerdict(pull: Pull, head: string): 'approve' | 'changes' | undefined {
+    recordedVerdicts(pull: Pull): ReviewMark[] {
       const login = gh('api', 'user', '--jq', '.login');
-      return markedVerdict(
+      return reviewMarks(
         list<Comment>(`repos/${repo}/issues/${pull.id}/comments?per_page=100`),
         login,
-        head,
       );
     },
 
