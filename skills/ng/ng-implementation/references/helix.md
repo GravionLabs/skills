@@ -27,6 +27,10 @@ For projects whose `package.json` depends on `@gravionlabs/helix-ui`. Selectors 
 
 Buttons as list items: until Helix has a list row, use `hx-button variant="text"`.
 
+## Enforcement
+
+The lint preset `@gravionlabs/helix-lint` reports raw controls and raw colors and font sizes: set it up per [style-lint.md](style-lint.md#helix-projects).
+
 ## See also
 
 - [Helix UX rules](https://github.com/GravionLabs/helix/blob/main/docs/UX-RULES.md): which element for which feedback, confirm or undo.

@@ -81,3 +81,40 @@ describe('ng-implementation links the style-lint reference', () => {
     expect(reference).toMatch(/Token file/);
   });
 });
+
+describe('ng-implementation style-lint Helix branch', () => {
+  const section = reference.split('\n## Helix projects\n')[1].split('\n## Install\n')[0];
+  const helix = readFileSync(path.join(root, 'references/helix.md'), 'utf8');
+
+  it('selects it by the helix-ui dependency and keeps the procedure for other projects', () => {
+    expect(reference).toContain('depends on `@gravionlabs/helix-ui`');
+    expect(reference).toContain('Every other project');
+    expect(reference).toContain('Copy `stylelint.config.mjs` from the `setup-oxc-husky` templates');
+  });
+  it('names the package, configs, rule and helper of the preset', () => {
+    for (const name of [
+      '@gravionlabs/helix-lint',
+      '@gravionlabs/helix-lint/stylelint',
+      '@gravionlabs/helix-lint/eslint',
+      '@angular-eslint/template-parser',
+      'helix/no-raw-control',
+      'helixAllow({ files, rules, reason })',
+    ])
+      expect(section).toContain(name);
+    expect(section).toContain('empty placeholders');
+  });
+  it('adds both commands to pnpm lint and the fast checks', () => {
+    expect(section).toContain('`pnpm lint` runs both commands');
+    const config = JSON.parse(section.split('```json\n')[1].split('```')[0]) as {
+      checks: { command: string; fast: boolean }[];
+    };
+    expect(config.checks.map((check) => check.command)).toEqual([
+      'npx --no-install stylelint "**/*.{css,scss}"',
+      'npx --no-install eslint "**/*.html"',
+    ]);
+    expect(config.checks.every((check) => check.fast)).toBe(true);
+  });
+  it('is linked from references/helix.md', () => {
+    expect(helix).toContain('(style-lint.md#helix-projects)');
+  });
+});
