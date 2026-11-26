@@ -6,6 +6,17 @@ Compare the guide with the code and the template, then propose the changes. Read
 
 Read `docs/STYLEGUIDE.md` and every `docs/styleguide/*.md`. Without `docs/STYLEGUIDE.md` there is nothing to sync: say so and offer the steps of `SKILL.md`.
 
+## Base guide
+
+A guide that starts with `Extends: <path>` extends a base guide ([extends.md](extends.md)). Read the base core file and its deep dives; `<path>` is relative to the repository root. The path does not exist: report `base guide not found: <path>`, never guess another file, run the checks that need no base and list the base comparison as `not checked`. A proposed diff never changes the base.
+
+With a base, add two checks:
+
+- **Repeats the base.** A project rule that says the same as a base rule is flagged for removal, with both files and lines. A stricter rule is not a repeat.
+- **Deviation without a reason.** An entry of `## Deviations` with an empty, placeholder or `Open:` reason is flagged. The diff never invents a reason: it asks for one.
+
+Check 3 is then `not needed: extends a base`: parts the base has are not missing. Checks 2 and 4 count what neither the guide nor the base covers, and apply the base rules unless `## Deviations` replaces them.
+
 ## Checks
 
 Run all four with grep and file reads. Every finding names the file (and line) and the evidence. A check without a finding is reported as `none`; a check you could not run is reported as `not checked: <reason>`.
@@ -17,7 +28,7 @@ Run all four with grep and file reads. Every finding names the file (and line) a
 
 ## Output
 
-1. **List**: the findings grouped by the four checks, each with file and evidence.
+1. **List**: the findings grouped by the checks, each with file and evidence.
 2. **Proposed diff**: one unified diff of the guide files only.
    - Follow `fill.md`: nothing is invented, roles not values, an unsettled point is an `Open: <question>` line.
    - A broken rule stays in the guide: the code is what deviates. Change or drop the rule only when the user says the code is right.

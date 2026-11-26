@@ -345,7 +345,8 @@
       "Add a UI style guide to this project so agents stop drifting from our design",
       "Create docs/STYLEGUIDE.md with deep-dive files for color and components",
       "Update the style guide: our UI code has moved on since it was written",
-      "Audit the UI against the style guide"
+      "Audit the UI against the style guide",
+      "Add a style guide on Helix to this app"
     ],
     "shouldNotTrigger": [
       "Record the decision to use Postgres as an ADR",
