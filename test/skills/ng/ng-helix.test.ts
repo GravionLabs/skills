@@ -19,6 +19,7 @@ describe('ng-helix skill', () => {
       'references/recipes.md',
       'references/desktop.md',
       'references/migration.md',
+      'references/testing.md',
     ]);
     for (const file of files) expect(existsSync(path.join(root, file)), file).toBe(true);
   });
@@ -58,6 +59,21 @@ describe('ng-helix skill', () => {
     for (const name of names) expect(migration, name).toContain(name);
     expect(migration).toContain('`references/style-lint.md`');
     expect(migration).not.toContain('pnpm add');
+  });
+  it('loads the testing reference for tests and links ng-test and the harness issue', () => {
+    const row = skill.split('\n').find((line) => line.includes('`references/testing.md`'));
+    expect(row).toContain('Tests of Helix-based components');
+    const testing = read(path.join(root, 'references/testing.md'));
+    expect(testing).toContain('`ng-test`');
+    expect(testing).toContain('no component test harnesses and no `testing` entry point');
+    expect(testing).toContain('https://github.com/GravionLabs/helix/issues/1226');
+  });
+  it('selects no element by a Helix class or CSS query in any example', () => {
+    const testing = read(path.join(root, 'references/testing.md'));
+    const examples = [...testing.matchAll(/```ts\n([\s\S]*?)```/g)].map(([, code]) => code);
+    expect(examples.length).toBeGreaterThan(0);
+    for (const code of examples)
+      expect(code).not.toMatch(/\.hx-|querySelector|By\.css|getElementsByClassName/);
   });
   it('links the UX rules and the style guide of the project', () => {
     expect(skill).toContain('https://github.com/GravionLabs/helix/blob/main/docs/UX-RULES.md');
