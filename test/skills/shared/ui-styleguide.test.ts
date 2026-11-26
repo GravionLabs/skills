@@ -66,6 +66,38 @@ describe('ui-styleguide', () => {
     expect([...positions].sort((a, b) => a - b)).toEqual(positions);
   });
 
+  it('ux-rules.md has the field and dialog anatomy', () => {
+    const rules = read('templates/styleguide/ux-rules.md');
+    for (const h of ['Field anatomy', 'Dialog anatomy']) {
+      expect(rules).toMatch(new RegExp(`^### ${h}$`, 'm'));
+    }
+    for (const s of ['aria-invalid', 'aria-describedby', 'input group', '<platform order>']) {
+      expect(rules).toContain(s);
+    }
+    expect(rules).toMatch(/exactly one primary action/);
+    expect(rules).toMatch(/Cancel never uses the danger role/);
+  });
+
+  it('components.md has the form and dialog rows and the button hierarchy', () => {
+    const components = read('templates/styleguide/components.md');
+    for (const row of ['FormField', 'InputGroup', 'DialogFooter']) {
+      expect(components).toMatch(new RegExp(`^\\| \`<${row}>\` +\\|`, 'm'));
+    }
+    expect(components).toMatch(/^## Button hierarchy$/m);
+    for (const v of ['primary', 'secondary', 'quiet / toolbar', 'icon-only', 'link', 'danger']) {
+      expect(components).toMatch(new RegExp(`^\\| ${v} +\\|`, 'm'));
+    }
+  });
+
+  it('fill.md reads the form and dialog components and leaves gaps open', () => {
+    const step = read('references/fill.md')
+      .split('\n')
+      .find((l) => l.includes('**Read the form and dialog components.**'));
+    for (const s of ['field wrapper', 'footer', 'button variants', 'Open: …', 'never invented']) {
+      expect(step).toContain(s);
+    }
+  });
+
   it('agents-styleguide.md holds the binding paragraph', () => {
     const p = read('templates/agents-styleguide.md');
     expect(p).toContain('docs/STYLEGUIDE.md');
