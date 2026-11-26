@@ -103,6 +103,14 @@ export function create(): Tracker {
       return open.length > 0 ? `blocked by ${open.map((id) => `#${id}`).join(', ')}` : undefined;
     },
     needsDecision: () => scenario.needsDecision ?? false,
+    setStage: (item: Item, stage?: string) =>
+      appendFileSync(
+        path.join(dir, 'stages.jsonl'),
+        `${JSON.stringify({ id: item.id, stage: stage ?? null })}\n`,
+      ),
+    syncStageLabels: () => [],
+    recordVerdict: () => {},
+    recordedVerdict: () => undefined,
     pullOf(item: Item): Pull | undefined {
       if (!existsSync(path.join(dir, `pr-${item.id}`))) return undefined;
       const id = 100 + item.id;

@@ -63,6 +63,8 @@ export type Outcome = {
   stdout: string;
   stderr: string;
   merges: { pull: number; head: string }[];
+  /** The stages the loop wrote, in order; `null` removes the label. */
+  stages: { id: number; stage: string | null }[];
   releasePulls: number;
   calls: string[];
   sessions: {
@@ -175,6 +177,7 @@ export function loop(
           (call) => call.call === 'releasePull',
         ).length,
         calls: lines<{ call: string }>(path.join(dir, 'calls.jsonl')).map((call) => call.call),
+        stages: lines(path.join(dir, 'stages.jsonl')),
         sessions: lines(path.join(dir, 'sessions.jsonl')),
         reviews: lines(path.join(dir, 'reviews.jsonl')),
         results: results
