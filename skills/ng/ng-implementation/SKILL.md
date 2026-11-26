@@ -74,6 +74,7 @@ Run `pnpm check:changed` once when the work is done (the gate of this stack; `im
 - Library code exported only through `public-api.ts`
 - 🟡 A new file or class named differently from what `angular.json` or the ADR of a drift case declares (File naming), or a class name that shadows a DOM/JS global
 - New or changed behavior has tests per `ng-test`
+- If the project depends on `@gravionlabs/helix-ui` → read `references/helix.md` before writing or reviewing templates and component CSS (Helix primitives, no raw controls)
 
 ## Scaffolding
 
