@@ -11,31 +11,43 @@ Resolve the vault first: `pwsh ../vault-inbox/scripts/Get-VaultRoles.ps1 -Vault 
 
 ## Steps
 
-1. **Check the tools.** `nixe` (the command line of GravionLabs/nixe) and Chrome, Chromium or Edge. Missing: say what to install and stop. The script finds the browser itself; `PDF_BROWSER` or `-Browser` names another one.
+1. **Check Nixe.** Needs Nixe 1.16.0 or newer (`nixe`, the command line of GravionLabs/nixe); no browser. `nixe export --help` prints the usage (exit 2 is expected). `nixe` missing: say to install it and stop. No line `nixe export <folder> --format pdf` in the usage: the Nixe is too old; tell the user to update to 1.16.0 or newer and stop.
 2. **Pick the notes.**
    - A note or folder named by the user: that.
-   - A school topic (school profile): the topic folder below the `subjects` role, only the summary and the timeline, with the name patterns of the vault's language (`../school-summary/references/school-vault.md`): German `'* – Zusammenfassung.md','* – Zeitstrahl.md'`, English `'* - Summary.md','* - Timeline.md'`.
+   - A school topic (school profile): the topic folder below the `subjects` role, only the summary and the timeline, with these `--include` globs in the vault's language (`../school-summary/references/school-vault.md`): German `'* – Zusammenfassung.md'`, `'* – Zeitstrahl.md'`, English `'* - Summary.md'`, `'* - Timeline.md'`.
    - Unclear what is meant: ask, do not print the whole vault.
-3. **Print.**
+3. **Print one note.** `<note>` is its path below the vault root, `<file>` an absolute path: next to the note (`.pdf` instead of `.md`), with `--out` in that folder.
 
    ```powershell
-   pwsh scripts/Export-VaultPdf.ps1 -Vault <vault root> -Path <note or folder> [-Filter <patterns>] [-OutDir <folder>]
+   nixe export <note> --format pdf --out <file> --vault <vault root>
    ```
 
-   A folder skips the roles `inbox`, `templates`, `attachments`, the `sources` folder of each topic and hidden folders; `-Exclude` adds more (a name without slash matches at any depth). Each PDF lands next to its note, with `--out` in that folder.
+4. **Or print a folder.** `--out .` writes each PDF next to its note; with `--out <dir>` (absolute) the paths below the folder are kept. One `--include` per file name glob; without any, every note. `--exclude` takes one folder path, no name or glob, so list the role folders, hidden folders and the `sources` folder of each topic:
 
-4. **Check the warnings.** "timeline too wide": the Mermaid timeline prints too small. Offer to split it into one `timeline` block per section (2 to 5 periods each); the table of the timeline note prints fine.
+   ```powershell
+   $vault = '<vault root>'; $folder = '<absolute folder>'
+   $roles = (pwsh ../vault-inbox/scripts/Get-VaultRoles.ps1 -Vault $vault | ConvertFrom-Json).folders
+   $skip = @($roles.inbox.path, $roles.templates.path, $roles.attachments.path)
+   $skip += Get-ChildItem -LiteralPath $folder -Directory -Recurse -Force |
+     Where-Object { $_.Name -eq (Split-Path -Leaf $roles.sources.path) -or $_.Name.StartsWith('.') } |
+     ForEach-Object { [IO.Path]::GetRelativePath($vault, $_.FullName) -replace '\\', '/' }
+   $here = [IO.Path]::GetRelativePath($vault, $folder) -replace '\\', '/'
+   # A folder the user named is printed, even when it is or lies in one of these.
+   $excludes = $skip | Where-Object { -not "$here/".StartsWith("$_/") } | ForEach-Object { '--exclude', $_ }
+   nixe export $folder --format pdf --out <dir> --include '<glob>' --vault $vault @excludes
+   ```
+
+   Notes with `publish: false` and files ignored by Git are skipped. stdout lists the written PDFs, stderr the progress; exit 1 means at least one note failed, the others are written. No path on stdout and exit 0: nothing matched. On Linux without a display run it under `xvfb-run`.
+
 5. **Keep PDFs out of Git.** They are generated. Check `.gitignore`; propose the entries and add them only after the user agrees:
    - school vault (German): `**/* – Zusammenfassung.pdf` and `**/* – Zeitstrahl.pdf`; English: `**/* - Summary.pdf`, `**/* - Timeline.pdf`
    - with `--out <folder>`: `<folder>/`
 
    Never ignore `*.pdf` as a whole: PDFs in `attachments` and `sources` are originals.
 
-6. **Report** the written PDFs (paths), the warnings and what was skipped.
+6. **Report** the written PDFs (paths), the failed notes and what was skipped.
 
 ## Rules
 
-- Never change a note to make it print; propose the change (e.g. splitting a timeline) and wait.
-- Never delete a PDF the script did not write; it overwrites only its own output path.
-- The script prints one vault-relative path per PDF; a failure stops with the note that failed.
-- Bridge: once Nixe writes PDFs itself (GravionLabs/nixe#598), the script is replaced by `nixe export <note> --format pdf --out <file>`.
+- Never change a note to make it print; propose the change and wait.
+- Never delete a PDF. An export overwrites its output path: when a PDF there is not an earlier export, ask first.
