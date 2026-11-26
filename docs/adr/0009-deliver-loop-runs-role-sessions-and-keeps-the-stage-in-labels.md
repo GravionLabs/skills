@@ -14,6 +14,7 @@ One `/deliver` session implemented an issue, reviewed it with a subagent (at mos
 
 - The implementer (`/deliver`) implements, verifies, pushes and opens the pull request. It does not review itself.
 - The reviewer (`/deliver-review`) runs in a fresh worktree at the head of the pull request, with its own model, harness and effort (`deliver.review.*`; default: the implementer's harness with another model). It reads the issue file and the diff, writes a verdict file and comments on the pull request. It never pushes.
+- No review session runs on a pull request the guard hands over (protected paths, several open pull requests): its checkout could carry agent settings and hooks.
 - Roles talk through files the loop owns: the verdict file is validated by the loop and handed to the implementer as `--review-file`. The count of fix rounds (at most 2) lives in the run.
 - The loop merges only the commit that was approved, in addition to the guard and the required checks.
 

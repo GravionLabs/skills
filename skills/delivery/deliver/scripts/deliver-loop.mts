@@ -1003,7 +1003,9 @@ async function deliver(item: Item): Promise<{ reason?: string; pull?: Pull }> {
       settle();
       break;
     }
-    reason = morePulls(pull);
+    // before the review: a session never runs on a pull request the guard hands over, because a checkout of
+    // protected paths (agent settings, hooks) would run with the rights of the loop
+    reason = morePulls(pull) ?? (await guard(pull));
     if (reason) {
       settle();
       break;
@@ -1016,7 +1018,6 @@ async function deliver(item: Item): Promise<{ reason?: string; pull?: Pull }> {
         links: [{ rel: 'pull-request', url: pull.url, title: pull.title }],
       });
     }
-    // also a pull request the guard hands over is reviewed: the person who merges it reads the findings
     const round = reviews.length + 1;
     log(`#${item.id} pr: ${pull.url}, review round ${round}`, 'info');
     const reviewed = await review(item, pull, round, sessions);
@@ -1040,16 +1041,12 @@ async function deliver(item: Item): Promise<{ reason?: string; pull?: Pull }> {
       if (fixes >= FIX_ROUNDS) {
         // the findings are text of an agent: it never ends the reason, whose ending decides about a hand-over
         reason = `needs-decision: review still asks for changes after ${FIX_ROUNDS} fix rounds (${findingsLine(reviewed.verdict)})`;
+        settle();
         break;
       }
       fixes += 1;
       reviewFile = reviewed.file;
       continue;
-    }
-    reason = await guard(pull);
-    if (reason) {
-      settle();
-      break;
     }
     log(`#${item.id} approved, waits for checks`, 'info');
     reason = await merge(pull, reviewed.head);

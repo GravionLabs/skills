@@ -120,6 +120,13 @@ describe('deliver loop: review session (#1013)', () => {
     expect(out.reviews).toHaveLength(2);
   });
 
+  it('starts no review session for a pull request on protected paths', async () => {
+    const out = await run(313, [], { files: ['.claude/settings.json'] });
+    expect(out.reviews).toEqual([]);
+    expect(out.merges).toEqual([]);
+    expect(out.stdout).toContain('#313 handed over: changes protected paths');
+  });
+
   it('does not merge a commit that was pushed after the review', async () => {
     const out = await run(309, [], { gates: [{ ...READY, head: 'def456' }] });
     expect(out.merges).toEqual([]);
