@@ -5,6 +5,42 @@ Versioning follows [Semantic Versioning](https://semver.org/).
 
 ---
 
+## [6.0.0] — 2026-11-27
+
+### Bug Fixes
+- **github-release**: The changelog skips the release tooling's own commits (#1089)
+- ⚠️ **Breaking**: **deliver**: Deliver and publish events follow the agent-events profile rule (#1112) (#1113)
+
+
+### Documentation
+- **adr**: Milestones hold Features as a roadmap and record what a release shipped (#1076) (#1068)
+- **github-issue**: The milestone rule of ADR 0010 and Requires on a Feature (#1069) (#1099)
+- **adr**: Objective runs in three layers: loop code, deliver-triage, poimen as host (#1081) (#1105)
+- **deliver**: An orchestrator starts subagents and panes with the resolved model (#1087) (#1108)
+- **site**: The delivery model from Objective to release, guides and references updated (#1083) (#1111)
+
+
+### Features
+- **retro**: The deliver run folder as the metrics source (#1057) (#1088)
+- **retro**: Escaped findings per milestone (#1058) (#1091)
+- **deliver**: A retro session before the release PR posts its drafts as a checklist (#1059) (#1092)
+- **retro**: An Objective retro aggregates the milestone retros (#1060) (#1093)
+- **retro**: File the ticked drafts of a retro comment (#1061) (#1094)
+- **deliver-review**: Review against the parent Feature and the style guide rubric (#1062) (#1095)
+- **github-release**: Finish checks the publish run and the tag before it closes the milestone (#1064) (#1096)
+- **planner**: Protected paths checked against the planned files (#1065) (#1097)
+- **deliver**: Events for merge, hand-over, set-aside and the end of a milestone (#1066) (#1098)
+- **github-milestone**: Assign Features without their PBIs, PBIs get their milestone at merge (#1070) (#1100)
+- **planner**: Planner and roadmap plan Features into milestones, never PBIs (#1071) (#1101)
+- **deliver**: --milestone works the PBIs below its Features, --feature works one Feature (#1072) (#1102)
+- **github-release**: Cut makes sure an open milestone exists (#1073) (#1103)
+- **deliver**: A models setting and a resolver for the model of a role (#1085) (#1106)
+- **deliver**: The loop picks the implementer model by the PBI tier and the other roles by the resolver (#1086) (#1107)
+- **github-milestone**: Migrate mode moves open milestones to Features only (#1074) (#1104)
+- **deliver**: A risk-high pull request is handed over instead of merged (#1063) (#1109)
+- **deliver**: Events in the per-user directory with their origin (#1078) (#1110)
+
+
 ## [5.16.0] — 2026-11-26
 
 ### Documentation
@@ -32,10 +68,6 @@ Versioning follows [Semantic Versioning](https://semver.org/).
 
 ## [5.14.0] — 2026-11-26
 
-### Documentation
-- Update CHANGELOG.md for v5.14.0 [skip ci]
-
-
 ### Features
 - **deliver**: Review runs as its own session with its own model (#1013) (#1018)
 - **deliver**: The loop keeps the issue stage in agent labels (#1014) (#1020)
@@ -50,19 +82,11 @@ Versioning follows [Semantic Versioning](https://semver.org/).
 
 ## [5.13.0] — 2026-11-25
 
-### Documentation
-- Update CHANGELOG.md for v5.13.0 [skip ci]
-
-
 ### Features
 - **vault**: Vault-pdf writes notes as PDF through nixe and a headless browser (#1006) (#1007)
 
 
 ## [5.12.0] — 2026-11-25
-
-### Documentation
-- Update CHANGELOG.md for v5.12.0 [skip ci]
-
 
 ### Features
 - **vault**: Vault-inbox proposes the import and files only after the approval (#999) (#1002)
@@ -71,10 +95,6 @@ Versioning follows [Semantic Versioning](https://semver.org/).
 
 
 ## [5.11.0] — 2026-11-24
-
-### Documentation
-- Update CHANGELOG.md for v5.11.0 [skip ci]
-
 
 ### Features
 - **github**: Github-triage for issues filed by others (#957) (#992)
@@ -89,7 +109,6 @@ Versioning follows [Semantic Versioning](https://semver.org/).
 
 ### Documentation
 - **github-issue**: Gh 2.94 shortcuts, open-blocker count and the close --comment trap (#954) (#989)
-- Update CHANGELOG.md for v5.10.0 [skip ci]
 
 
 ### Features
@@ -102,10 +121,6 @@ Versioning follows [Semantic Versioning](https://semver.org/).
 
 ## [5.9.0] — 2026-11-24
 
-### Documentation
-- Update CHANGELOG.md for v5.9.0 [skip ci]
-
-
 ### Features
 - **deliver**: A dependency-only change of Cargo.toml is not protected (#970) (#979)
 - **deliver**: A catalog-only change of pnpm-workspace.yaml is not protected (#971) (#981)
@@ -115,10 +130,6 @@ Versioning follows [Semantic Versioning](https://semver.org/).
 
 
 ## [5.8.0] — 2026-11-24
-
-### Documentation
-- Update CHANGELOG.md for v5.8.0 [skip ci]
-
 
 ### Features
 - **deliver**: Repair the conflict of a handed-over pull request before handing it over (#965) (#969)
@@ -131,7 +142,6 @@ Versioning follows [Semantic Versioning](https://semver.org/).
 
 ### Documentation
 - **site**: Evaluate mattpocock/skills on the frameworks page (#950) (#963)
-- Update CHANGELOG.md for v5.7.0 [skip ci]
 
 
 ### Features
@@ -141,28 +151,12 @@ Versioning follows [Semantic Versioning](https://semver.org/).
 - **skills-manage**: The groups vault and school (#927) (#944)
 
 
-## [5.6.2] — 2026-11-23
-
-### Documentation
-- Update CHANGELOG.md for v5.6.2 [skip ci]
-
-
-## [5.6.1] — 2026-11-23
-
-### Documentation
-- Update CHANGELOG.md for v5.6.1 [skip ci]
-
-
 ## [5.6.0] — 2026-11-23
 
 ### Bug Fixes
 - Deliver opens a second pull request for an issue that already has one (#928) (#935)
 - **deliver-loop**: Merged PR that does not close the PBI makes the loop stall (#893) (#936)
 - **deliver**: An incomplete run reports done with a warning, not error, over OSC 7501 (#921) (#937)
-
-
-### Documentation
-- Update CHANGELOG.md for v5.6.0 [skip ci]
 
 
 ### Features
@@ -176,10 +170,6 @@ Versioning follows [Semantic Versioning](https://semver.org/).
 
 ## [5.5.0] — 2026-11-21
 
-### Documentation
-- Update CHANGELOG.md for v5.5.0 [skip ci]
-
-
 ### Features
 - **deliver**: The loop repeats its OSC 7501 status as a heartbeat (#912) (#913)
 
@@ -188,10 +178,6 @@ Versioning follows [Semantic Versioning](https://semver.org/).
 
 ### Bug Fixes
 - **ci**: The release job gets 30 minutes (#909) (#910)
-
-
-### Documentation
-- Update CHANGELOG.md for v5.4.1 [skip ci]
 
 
 ## [5.4.0] — 2026-11-21
@@ -208,7 +194,6 @@ Versioning follows [Semantic Versioning](https://semver.org/).
 - Language implementation skills name the gate (#810) (#863)
 - Derive a first style guide from an existing UI repository (#822) (#873)
 - .agents/proof/ is gitignored in this repository and named in after-install (#832) (#883)
-- Update CHANGELOG.md for v5.4.0 [skip ci]
 
 
 ### Features
@@ -266,19 +251,9 @@ Versioning follows [Semantic Versioning](https://semver.org/).
 - **shared**: Implementation runs fast static checks first and limits the full-suite rerun (#794) (#797)
 
 
-### Documentation
-- Update CHANGELOG.md for v5.3.0 [skip ci]
-
-
 ### Features
 - **deliver**: Report the loop state with OSC 7501 (#581) (#787)
 - **deliver**: The TypeScript loop applies the harness failure and session timeout rules (#681) (#795)
-
-
-## [5.2.1] — 2026-11-20
-
-### Documentation
-- Update CHANGELOG.md for v5.2.1 [skip ci]
 
 
 ## [5.2.0] — 2026-11-20
@@ -290,7 +265,6 @@ Versioning follows [Semantic Versioning](https://semver.org/).
 
 ### Documentation
 - **adr**: Oxlint and oxfmt are the lint and format standard (#769) (#782)
-- Update CHANGELOG.md for v5.2.0 [skip ci]
 
 
 ### Features
@@ -299,12 +273,6 @@ Versioning follows [Semantic Versioning](https://semver.org/).
 - **deliver**: The report names the PBIs that wait for a handed-over PR (#753) (#776)
 - **deliver**: Progress bar with x of y at the start of each issue in the loop output (#780) (#781)
 - **ts**: Setup-oxc-husky replaces the Biome and the Prettier/ESLint setup skills (#770) (#783)
-
-
-## [5.1.1] — 2026-11-19
-
-### Documentation
-- Update CHANGELOG.md for v5.1.1 [skip ci]
 
 
 ## [5.1.0] — 2026-11-18
@@ -320,10 +288,6 @@ Versioning follows [Semantic Versioning](https://semver.org/).
 - **deliver**: The loop merges into the default branch with a merge commit (#740) (#742)
 
 
-### Documentation
-- Update CHANGELOG.md for v5.1.0 [skip ci]
-
-
 ### Features
 - **deliver**: A pull request handed over for protected paths does not look like a failure (#713) (#723)
 - **deliver**: The loop checks release/next before every PBI and repairs a red one (#674) (#731)
@@ -336,18 +300,10 @@ Versioning follows [Semantic Versioning](https://semver.org/).
 - **deps**: Renovate opens its pull requests against the default branch (#737)
 
 
-### Documentation
-- Update CHANGELOG.md for v5.0.2 [skip ci]
-
-
 ## [5.0.1] — 2026-11-18
 
 ### Bug Fixes
 - **deps**: 7-day minimum release age (#730)
-
-
-### Documentation
-- Update CHANGELOG.md for v5.0.1 [skip ci]
 
 
 ## [5.0.0] — 2026-11-16
@@ -363,7 +319,6 @@ Versioning follows [Semantic Versioning](https://semver.org/).
 ### Documentation
 - **deliver**: Merge row of the preflight table names the missing release/next (#649) (#665)
 - **deliver**: Site, shim and installer describe the new loop (#695) (#711)
-- Update CHANGELOG.md for v5.0.0 [skip ci]
 
 
 ### Features
@@ -409,7 +364,6 @@ Versioning follows [Semantic Versioning](https://semver.org/).
 - **deliver**: Document ignored invalid Requires refs and stale context.md removal (#596) (#627)
 - Refresh ROADMAP.md with M015 to M017 and the releases up to v4.3.1 (#638) (#639)
 - **adr**: The deliver loop runs as TypeScript on Node behind a host interface (#612) (#622)
-- Update CHANGELOG.md for v4.4.0 [skip ci]
 
 
 ### Features
@@ -435,7 +389,6 @@ Versioning follows [Semantic Versioning](https://semver.org/).
 
 ### Documentation
 - **implementation**: One wording for the background-persistence rule (#579) (#591)
-- Update CHANGELOG.md for v4.3.1 [skip ci]
 
 
 ### Performance
@@ -446,10 +399,6 @@ Versioning follows [Semantic Versioning](https://semver.org/).
 
 ### Bug Fixes
 - Contract-change rule reads the label from the PR, deliver sets it on the PBI (#570) (#571)
-
-
-### Documentation
-- Update CHANGELOG.md for v4.3.0 [skip ci]
 
 
 ### Features
@@ -471,7 +420,6 @@ Versioning follows [Semantic Versioning](https://semver.org/).
 
 ### Documentation
 - **adr**: ADR 0004 Objectives coordinate milestones across repositories (#533) (#549)
-- Update CHANGELOG.md for v4.2.0 [skip ci]
 
 
 ### Features
@@ -491,10 +439,6 @@ Versioning follows [Semantic Versioning](https://semver.org/).
 - **github-release**: Move release/next by fast-forward instead of deleting it (#530)
 
 
-### Documentation
-- Update CHANGELOG.md for v4.1.3 [skip ci]
-
-
 ## [4.1.2] — 2026-11-10
 
 ### Bug Fixes
@@ -502,15 +446,7 @@ Versioning follows [Semantic Versioning](https://semver.org/).
 - **deliver**: Control-session run test uses its own events dir, Select and Watch event ownership stated (#517)
 
 
-### Documentation
-- Update CHANGELOG.md for v4.1.2 [skip ci]
-
-
 ## [4.1.1] — 2026-11-10
-
-### Documentation
-- Update CHANGELOG.md for v4.1.1 [skip ci]
-
 
 ### Refactoring
 - **deliver**: Emit agent-events core plus deliver profile (#452) (#518)
@@ -522,10 +458,6 @@ Versioning follows [Semantic Versioning](https://semver.org/).
 - **github-release**: Recognize the local path of release-branch.yml (#506)
 - **deliver**: A nested session's run.finished no longer sets the loop result to done (#463)
 - **deliver**: Loop sets a wait ceiling that does not cut a subagent off (#461)
-
-
-### Documentation
-- Update CHANGELOG.md for v4.1.0 [skip ci]
 
 
 ### Features
@@ -545,7 +477,6 @@ Versioning follows [Semantic Versioning](https://semver.org/).
 
 ### Documentation
 - **github-issue**: The RC of a desktop app installs side by side (#504)
-- Update CHANGELOG.md for v4.0.0 [skip ci]
 
 
 ### Features
@@ -581,7 +512,6 @@ Versioning follows [Semantic Versioning](https://semver.org/).
 - Set milestones only through github-milestone assign (#440) (#449)
 - **adr**: The progress event format lives in agent-events (#451) (#456)
 - M<nnn> milestone format in skills and guides (#436) (#444)
-- Update CHANGELOG.md for v3.4.0 [skip ci]
 
 
 ### Features
@@ -601,10 +531,6 @@ Versioning follows [Semantic Versioning](https://semver.org/).
 ### Bug Fixes
 - **docs**: AGENTS.md says github-project is not in this repository (#428) (#430)
 - Github-project live tests exceed the time budget and hit the worker timeout (#429) (#431)
-
-
-### Documentation
-- Update CHANGELOG.md for v3.3.0 [skip ci]
 
 
 ### Features
@@ -631,7 +557,6 @@ Versioning follows [Semantic Versioning](https://semver.org/).
 - **adr**: Agent progress events replace status.json (#381) (#380)
 - **github-release**: Issues close on merge into release/next (#382) (#396)
 - **adr**: Displays read the progress events (#420) (#418)
-- Update CHANGELOG.md for v3.2.0 [skip ci]
 
 
 ### Features
@@ -664,10 +589,6 @@ Versioning follows [Semantic Versioning](https://semver.org/).
 - **delivery**: Control session handles the loop result max reached (#360) (#365)
 
 
-### Documentation
-- Update CHANGELOG.md for v3.1.0 [skip ci]
-
-
 ### Features
 - **shared**: Project-setup with format per language and .editorconfig (#306) (#315)
 - **shared**: Lint key in the project config, runner and project-setup choice (#307) (#317)
@@ -695,10 +616,6 @@ Versioning follows [Semantic Versioning](https://semver.org/).
 
 ## [3.0.0] — 2026-11-05
 
-### Documentation
-- Update CHANGELOG.md for v3.0.0 [skip ci]
-
-
 ### Refactoring
 - **delivery**: Rename skill-manage to skills-manage (#299) (#300)
 - **skills**: Remove the obsolete group (#302) (#303)
@@ -708,7 +625,6 @@ Versioning follows [Semantic Versioning](https://semver.org/).
 
 ### Documentation
 - README, AGENTS and docs name skill-manage (#293) (#298)
-- Update CHANGELOG.md for v2.2.0 [skip ci]
 
 
 ### Features
@@ -725,10 +641,6 @@ Versioning follows [Semantic Versioning](https://semver.org/).
 - **skills-install**: -Update reports a failing newMembers child process (#286) (#288)
 
 
-### Documentation
-- Update CHANGELOG.md for v2.1.0 [skip ci]
-
-
 ### Features
 - **statusline**: Context warning threshold follows the context window size (#289) (#294)
 
@@ -737,7 +649,6 @@ Versioning follows [Semantic Versioning](https://semver.org/).
 
 ### Documentation
 - **skills-install**: After-install.md names the ng-ag-grid rename (#279) (#280)
-- Update CHANGELOG.md for v2.0.1 [skip ci]
 
 
 ## [2.0.0] — 2026-11-04
@@ -759,7 +670,6 @@ Versioning follows [Semantic Versioning](https://semver.org/).
 - Stale loop and milestone wording, group table cell test (#229) (#260)
 - Migrating legacy x.y.z milestones to M<n>, tamias as example (#243) (#263)
 - Refresh ROADMAP.md to M<n> and 1.6.0 with the roadmap skill (#248) (#268)
-- Update CHANGELOG.md for v2.0.0 [skip ci]
 
 
 ### Features
@@ -788,9 +698,7 @@ Versioning follows [Semantic Versioning](https://semver.org/).
 
 ### Documentation
 - Herdr page with the GravionLabs herdr plugins (#177) (#208)
-- Update CHANGELOG.md for v1.4.1 [skip ci]
 - Guides and AGENTS.md mention the loop features of 1.5.0 (#219) (#225)
-- Update CHANGELOG.md for v1.5.0 [skip ci]
 
 
 ### Features
@@ -809,10 +717,6 @@ Versioning follows [Semantic Versioning](https://semver.org/).
 - **deliver**: Loop console output is cut at 120 characters and uncolored (#202)
 
 
-### Documentation
-- Update CHANGELOG.md for v1.4.1 [skip ci]
-
-
 ## [1.4.0] — 2026-11-02
 
 ### Documentation
@@ -826,7 +730,6 @@ Versioning follows [Semantic Versioning](https://semver.org/).
 - Concept pages for the issue model and skill composition (#178) (#195)
 - Troubleshooting page (#179) (#196)
 - Guide for learning from runs with retro and lessons (#176) (#198)
-- Update CHANGELOG.md for v1.4.0 [skip ci]
 
 
 ### Features
@@ -840,18 +743,10 @@ Versioning follows [Semantic Versioning](https://semver.org/).
 - **deliver**: Name PRs and issues as full URLs (#199)
 
 
-### Documentation
-- Update CHANGELOG.md for v1.3.2 [skip ci]
-
-
 ## [1.3.1] — 2026-11-02
 
 ### Bug Fixes
 - **deliver**: Propose a space-first herdr sidebar layout (#158)
-
-
-### Documentation
-- Update CHANGELOG.md for v1.3.1 [skip ci]
 
 
 ## [1.3.0] — 2026-11-01
@@ -863,7 +758,6 @@ Versioning follows [Semantic Versioning](https://semver.org/).
 
 ### Documentation
 - **delivery**: Herdr sidebar layout starts with the repo (#149) (#150)
-- Update CHANGELOG.md for v1.3.0 [skip ci]
 
 
 ### Features
@@ -887,10 +781,6 @@ Versioning follows [Semantic Versioning](https://semver.org/).
 - **ci**: Recreate release/next after the release (#133)
 
 
-### Documentation
-- Update CHANGELOG.md for v1.2.1 [skip ci]
-
-
 ## [1.2.0] — 2026-11-01
 
 ### Bug Fixes
@@ -905,7 +795,6 @@ Versioning follows [Semantic Versioning](https://semver.org/).
 ### Documentation
 - Roadmap records v1.1.0 and plans 1.2.0 (#85)
 - Overview, roadmap and governance page for 1.2.0 (#112) (#129)
-- Update CHANGELOG.md for v1.2.0 [skip ci]
 
 
 ### Features
@@ -939,7 +828,6 @@ Versioning follows [Semantic Versioning](https://semver.org/).
 - Roadmap records v1.0.2 and plans 1.1.0 (#73) (#74)
 - Roadmap moves the herdr plugin of #17 to herdr-plugins (#17) (#75)
 - Roadmap plans Node.js 26 in 1.1.0 and lists the open issues (#72) (#76)
-- Update CHANGELOG.md for v1.1.0 [skip ci]
 
 
 ### Features
@@ -967,7 +855,6 @@ Versioning follows [Semantic Versioning](https://semver.org/).
 - Roadmap lists the lessons PBIs and puts herdr in 1.2.0 (#14) (#31)
 - **delivery**: Skills-install warns that a global skill copy can shadow the project install (#48) (#51)
 - Roadmap records retro #6 and the workflow.js decision (#6) (#58)
-- Update CHANGELOG.md for v1.0.2 [skip ci]
 
 
 ### Features
@@ -990,10 +877,6 @@ Versioning follows [Semantic Versioning](https://semver.org/).
 - **test**: Group paths in the ported routing test; trigger evals are not ported yet
 
 
-### Documentation
-- Update CHANGELOG.md for v1.0.1 [skip ci]
-
-
 ### Features
 - Port the unreleased apm-hub release/next (#881-#907)
 
@@ -1004,10 +887,6 @@ Versioning follows [Semantic Versioning](https://semver.org/).
 - Dead runner link in working mode; vitest failures as CI annotations
 - **test**: Group paths in the remaining tests; skill names in backticks stay bare
 - **statusline**: Installed skill path stays flat (.claude/skills/context-statusline)
-
-
-### Documentation
-- Update CHANGELOG.md for v1.0.0 [skip ci]
 
 
 ### Features
