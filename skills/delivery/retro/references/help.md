@@ -14,7 +14,7 @@ Retrospective on a finished run: measures it, ranks improvements to the agent en
 - `#<issue>` (or the bare number): analyse the PRs of that issue.
 - `<session-id>`: analyse that session.
 - `--run <path>`: analyse that `deliver` run folder (`<git-common-dir>/deliver/<run>/`); repeatable.
-- `--milestone <M>`: analyse the newest run folders with issues of that milestone; several runs merge by issue, the last result per issue wins.
+- `--milestone <M>`: analyse the newest run folders with issues of that milestone; several runs merge by issue, the last result per issue wins. Adds the row `loop review: <x> changes requested, <y> escaped` with links to the escaped findings (other reviews, follow-up PBIs and Bugs, Bugs within 7 days of the release).
 - nothing: the newest run folder; without one the skill asks for the issue number.
 - `help` (also `--help`, `-h`): print this text.
 

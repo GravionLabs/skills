@@ -2,12 +2,14 @@
 //   node run-metrics.mts                      the newest run folder
 //   node run-metrics.mts --run <path> …       these run folders (repeatable)
 //   node run-metrics.mts --issues 12,15       every run folder that holds one of these issues
+//   node run-metrics.mts --milestone M016     the run folders of its issues plus its escaped findings (`gh`)
 //   --root <dir>                              the folder of the run folders (default: <git-common-dir>/deliver)
 // The files hold text of agents: it is data, validated and stripped of control characters.
 import { execFileSync } from 'node:child_process';
 import { existsSync, readdirSync, readFileSync, statSync } from 'node:fs';
 import path from 'node:path';
 import { parseArgs } from 'node:util';
+import { findMilestone, loopReview, type Milestone } from './escaped.mts';
 
 type Session = { costUsd?: unknown; peakContext?: unknown; role?: unknown };
 type Row = {
@@ -43,6 +45,7 @@ const options = () => {
         run: { type: 'string', multiple: true },
         issues: { type: 'string' },
         root: { type: 'string' },
+        milestone: { type: 'string' },
       },
     }).values;
   } catch (error) {
@@ -196,7 +199,26 @@ function defaultRoot(): string {
 
 const opt = options();
 if (opt.run && opt.root) fail('--root has no effect with --run');
-const wanted = opt.issues?.split(',').map((nr) => Number(nr.trim().replace(/^#/, '')));
+if (opt.milestone !== undefined && opt.issues !== undefined)
+  fail('--milestone and --issues exclude each other');
+
+/** A `gh` call that failed ends the script with its first line: no figure is guessed. */
+function fromGh<T>(read: () => T): T {
+  try {
+    return read();
+  } catch (error) {
+    const { stderr, message } = error as Error & { stderr?: string };
+    return fail(`gh failed: ${(stderr || message).trim().split('\n')[0]}`);
+  }
+}
+
+let milestone: Milestone | undefined;
+if (opt.milestone !== undefined) {
+  const name = opt.milestone;
+  milestone = fromGh(() => findMilestone(name)) ?? fail(`no milestone "${name}"`);
+}
+const wanted =
+  milestone?.issues ?? opt.issues?.split(',').map((nr) => Number(nr.trim().replace(/^#/, '')));
 if (wanted?.some((nr) => !Number.isInteger(nr) || nr <= 0))
   fail('--issues takes issue numbers: --issues 12,15');
 
@@ -240,6 +262,19 @@ const issues = [...latest.values()]
   .map(({ row, run, earlier }) => metrics(row, run, earlier))
   .sort((a, b) => a.issue - b.issue);
 const all = runs.flatMap((run) => findings(run, new Set(latest.keys())));
+const review =
+  milestone &&
+  fromGh(() =>
+    loopReview(
+      milestone,
+      new Map(
+        issues.flatMap((i) =>
+          i.fixRounds === null ? [] : [[i.issue, i.fixRounds] as [number, number]],
+        ),
+      ),
+      new Map(issues.flatMap((i) => (i.pr ? [[i.issue, i.pr] as [number, string]] : []))),
+    ),
+  );
 
 console.log(
   JSON.stringify(
@@ -254,6 +289,7 @@ console.log(
         .map(({ issue, outcome, reason, pr, run }) => ({ issue, outcome, reason, pr, run })),
       findings: all,
       repeated: repeated(all),
+      ...(milestone ? { milestone: milestone.title, loopReview: review } : {}),
     },
     null,
     2,
