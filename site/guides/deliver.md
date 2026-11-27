@@ -40,6 +40,7 @@ flowchart TD
 
 ```powershell
 deliver-loop --milestone M004
+deliver-loop --feature 40
 deliver-loop --issues 12,15 --max 3
 deliver-loop --milestone M004 --dry-run
 ```
@@ -47,6 +48,8 @@ deliver-loop --milestone M004 --dry-run
 Install the `deliver-loop` command with `skills-manage` ([launcher](#the-deliver-loop-command)). Without it: `node <skill-dir>/scripts/deliver-loop.mts --milestone M004`.
 
 The loop reads the state from the tracker before every issue and remembers only what it set aside, so it can be stopped and started again. It orders the issues by their blocked-by links, skips those with `needs-decision`, `needs-refinement` or an open blocker, and merges one pull request before the next issue starts. The merge method follows the base: a merge commit when the base is the default branch (its ruleset allows only merge commits, so the Conventional Commits stay visible to GitVersion and git-cliff), squash for every other base. `--dry-run` prints the order, the required checks and the session token source and starts nothing.
+
+`--milestone` works the open PBIs and Bugs in the milestone and the open ones below its open Features (sub-issues of the same repository, each once, by number; [ADR 0010](https://github.com/GravionLabs/skills/blob/main/docs/adr/0010-milestones-hold-features-as-a-roadmap-and-record-what-a-release-shipped.md)). `--feature <nr>` works the open PBIs and Bugs below one Feature, into `release/next`, without retro and release pull request. An issue added to the selection during the run is picked up, and `--dry-run` names the Feature of each issue.
 
 Name the milestone `M<nnn>` (`M004`): the lookup finds the open `M004` and, after `/github-milestone close M004` renamed it, `M004 (0.2.0)`. A legacy title such as `1.3.0` works as before; to move a repository to `M<nnn>` see [Migrate legacy milestones](release.md#migrate-legacy-milestones).
 
@@ -60,22 +63,23 @@ After the implementer session the loop starts `/deliver-review` in a fresh workt
 
 ## Options
 
-| Option                       | Meaning                                                                                               |
-| :--------------------------- | :---------------------------------------------------------------------------------------------------- |
-| `--milestone <M>`            | The open work items of a milestone. Exactly one of `--milestone` and `--issues`.                      |
-| `--issues <nr,…>`            | These issues.                                                                                         |
-| `--base <branch>`            | Base branch. Default `deliver.base`, else `release/next` with `--milestone`, else the default branch. |
-| `--harness <name>`           | `claude` (default) or `copilot`. `--model <name>` passes a model of that harness.                     |
-| `--review-model <name>`      | Model of the review session. Default: another model than the implementer's.                           |
-| `--review-harness <name>`    | `claude` or `copilot` for the review. Default: the implementer's harness.                             |
-| `--no-retro`                 | No retro session after the milestone.                                                                 |
-| `--max <n>`                  | Stops after `n` issues.                                                                               |
-| `--session-minutes <n>`      | Longest session. Default 90.                                                                          |
-| `--merge-minutes <n>`        | How long it waits for checks after a pull request. Default 30.                                        |
-| `--handover-minutes <n>`     | How long it waits for handed-over pull requests to be merged. Default 120; `0` ends the run at once.  |
-| `--dry-run`                  | Print the plan, start nothing.                                                                        |
-| `--allow-no-required-checks` | Deliver into a base without required checks.                                                          |
-| `--trust-authors`            | Also deliver issues of authors without write access.                                                  |
+| Option                       | Meaning                                                                                                              |
+| :--------------------------- | :------------------------------------------------------------------------------------------------------------------- |
+| `--milestone <M>`            | The open PBIs and Bugs in a milestone and below its Features. One of these three, exactly.                           |
+| `--feature <nr>`             | The open PBIs and Bugs below a Feature.                                                                              |
+| `--issues <nr,…>`            | These issues.                                                                                                        |
+| `--base <branch>`            | Base branch. Default `deliver.base`, else `release/next` with `--milestone` or `--feature`, else the default branch. |
+| `--harness <name>`           | `claude` (default) or `copilot`. `--model <name>` passes a model of that harness.                                    |
+| `--review-model <name>`      | Model of the review session. Default: another model than the implementer's.                                          |
+| `--review-harness <name>`    | `claude` or `copilot` for the review. Default: the implementer's harness.                                            |
+| `--no-retro`                 | No retro session after the milestone.                                                                                |
+| `--max <n>`                  | Stops after `n` issues.                                                                                              |
+| `--session-minutes <n>`      | Longest session. Default 90.                                                                                         |
+| `--merge-minutes <n>`        | How long it waits for checks after a pull request. Default 30.                                                       |
+| `--handover-minutes <n>`     | How long it waits for handed-over pull requests to be merged. Default 120; `0` ends the run at once.                 |
+| `--dry-run`                  | Print the plan, start nothing.                                                                                       |
+| `--allow-no-required-checks` | Deliver into a base without required checks.                                                                         |
+| `--trust-authors`            | Also deliver issues of authors without write access.                                                                 |
 
 Exit codes: 0 everything done or `--max` reached, 2 open issues remain and none is ready or the base stayed red (see below), 3 the base is missing or has no required checks, 64 wrong arguments or settings, 130 stopped with Ctrl+C. Colored progress goes to the terminal (`NO_COLOR` turns it off) and to `<git-common-dir>/deliver/loop.log`; to stop from another terminal create the file `stop` in the run folder `<git-common-dir>/deliver/<run>/`.
 
@@ -96,7 +100,7 @@ Other keys (`roles`, `loopThreshold`, `parallel`, `sessionTimeoutMinutes`) are i
 
 ## What the loop refuses
 
-- **A red base.** Before every issue the loop reads the checks of the head of the base branch. Red: it reruns the failed jobs once and waits (`release/next: green after rerun (flake)`). Still red: it files `[Bug] fix: release/next is red (<checks>)` in the milestone of the run (the first target with `--issues`) with the failed checks and their run URLs, reuses an open Bug with the marker `<!-- deliver-base-red -->`, and delivers it first. Green after its merge, the run goes on. A Bug that is set aside, or a base that is red again after the repair, ends the run `blocked` with exit 2; the last lines name the failed checks and the Bug URL, and no further issue starts. At most 2 repairs per run. A failing tracker call is no verdict: the issue starts.
+- **A red base.** Before every issue the loop reads the checks of the head of the base branch. Red: it reruns the failed jobs once and waits (`release/next: green after rerun (flake)`). Still red: it files `[Bug] fix: release/next is red (<checks>)` without a milestone, with the failed checks and their run URLs, reuses an open Bug with the marker `<!-- deliver-base-red -->`, and delivers it first. Green after its merge, the run goes on. A Bug that is set aside, or a base that is red again after the repair, ends the run `blocked` with exit 2; the last lines name the failed checks and the Bug URL, and no further issue starts. At most 2 repairs per run. A failing tracker call is no verdict: the issue starts.
 - **A base without required checks.** Nothing would guard the merge. Add a ruleset with required checks, or pass `--allow-no-required-checks`. Exit 3.
 - **Issues of authors without write access.** Anyone can open an issue, and its text becomes the task of an agent. Such an issue is listed as waiting (`author has no write access`); `--trust-authors` delivers it.
 - **Pull requests that change protected paths.** The loop does not merge a pull request that touches `.github/`, `.agents/`, `.claude/` or a package manifest (a workflow or an agent setting would let a change run with more rights). It says why and leaves the merge to you. `deliver.protectedPaths` replaces the list. A `package.json` whose file at the merge base and at the merged commit differs only in the values of `dependencies`, `devDependencies`, `peerDependencies` and `optionalDependencies` is no hit (key order does not count; the list is fixed, a repository cannot widen it); any other key, an added, deleted or renamed file, invalid JSON or a failed read is, and the reason names the keys (`package.json: scripts`). A `Cargo.toml` that differs only in dependency entries is no hit either: entries of `[dependencies]`, `[dev-dependencies]`, `[build-dependencies]`, their `[target.<cfg>.…]` forms and `[workspace.dependencies]`, added, removed or changed (`name = "1"`, an inline table or `[dependencies.name]`), but not an entry with `path`, `git` or `registry`; any other difference, an added, deleted or renamed file or a file the strict parser (`scripts/cargo-toml.mts`) does not understand is a hit, and the reason names the part (`Cargo.toml: patch`). A `pnpm-workspace.yaml` that differs only in catalog entries is no hit either: entries of `catalog` and of every named catalog under `catalogs`, added, removed or changed, as long as the version is a plain semver range or `workspace:` (not `link:`, `file:`, `git+`, a URL or an alias); any other difference (`packages`, `onlyBuiltDependencies`, `minimumReleaseAge`, `minimumReleaseAgeExclude`, `overrides`, a new top-level key, …), an added, deleted or renamed file or a file the strict parser (`scripts/pnpm-workspace.mts`) does not understand is a hit, and the reason names the part (`pnpm-workspace.yaml: onlyBuiltDependencies`). A `pyproject.toml` that differs only in requirement lists is no hit either: items of `project.dependencies`, of each list under `project.optional-dependencies`, of each group under `[dependency-groups]` and of `tool.uv.dev-dependencies`, added, removed or changed, as plain PEP 508 strings (not a direct reference: `name @ <url>`, `git+`, a path); `tool.uv.sources`, `tool.uv.index`, `tool.poetry.source` and any other difference (`build-system`, `project.scripts`, `requires-python`, every other `[tool.*]`), an added, deleted or renamed file or a file the strict parser (`scripts/pyproject-toml.mts`) does not understand (`[[array tables]]`, multi-line strings) is a hit, and the reason names the part (`pyproject.toml: build-system`). A `go.mod` that differs only in `require` lines is no hit either: lines of `require` (single line and block, with or without `// indirect`), added, removed or changed; any other difference (`replace`, `toolchain`, `go`, `exclude`, `retract`, `tool`, `godebug`, the `module` line, a new directive), an added, deleted or renamed file or a file the strict parser (`scripts/go-mod.mts`) does not understand (quotes, backticks) is a hit, and the reason names the directive (`go.mod: replace`); `go.sum` stays unprotected. A `Directory.Packages.props` that differs only in `PackageVersion` items is no hit either: `<PackageVersion Include="<id>" Version="<version>" />` on one line in an existing `<ItemGroup>` (no attribute but `Label`) of `<Project>`, added, removed or changed; any other difference (`PropertyGroup` content, `GlobalPackageReference`, `Import`, `Target`, a `Condition`, a `VersionOverride`, an item with more attributes, a new `ItemGroup`), an added, deleted or renamed file or a file the strict parser (`scripts/directory-packages-props.mts`) does not understand (an item over several lines, CDATA, a comment that holds markup) is a hit, and the reason names the part (`Directory.Packages.props: GlobalPackageReference`).

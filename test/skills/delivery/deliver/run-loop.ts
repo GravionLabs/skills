@@ -21,7 +21,7 @@ const helpers = __dirname;
 export type Result = { issue: number; outcome: string; reason?: string; risk?: string };
 
 export type Scenario = {
-  items: { id: number; title: string; blockedBy?: number[] }[];
+  items: { id: number; title: string; blockedBy?: number[]; feature?: number }[];
   gates?: unknown[];
   files?: string[];
   filesLater?: string[];
@@ -65,6 +65,8 @@ export type Outcome = {
   status: number | null;
   stdout: string;
   stderr: string;
+  /** The selection the loop handed to the tracker. */
+  selection?: { milestone?: string; feature?: string; issues?: string[] };
   merges: { pull: number; head: string }[];
   /** The stages the loop wrote, in order; `null` removes the label. */
   stages: { id: number; stage: string | null }[];
@@ -117,6 +119,8 @@ export function loop(
   options: {
     args?: string[];
     milestone?: boolean;
+    /** `--feature <nr>` instead of `--issues`. */
+    feature?: number;
     env?: Record<string, string>;
     whenStdout?: (out: string, stop: () => void) => void;
   } = {},
@@ -149,7 +153,11 @@ export function loop(
         loopScript,
         '--tracker',
         'fake',
-        ...(options.milestone ? ['--milestone', 'M001'] : ['--issues', issues]),
+        ...(options.milestone
+          ? ['--milestone', 'M001']
+          : options.feature
+            ? ['--feature', String(options.feature)]
+            : ['--issues', issues]),
         // no wait for handed-over pull requests unless a test asks for one
         ...(options.args?.includes('--handover-minutes') ? [] : ['--handover-minutes', '0']),
         ...(options.args ?? []),
@@ -182,6 +190,9 @@ export function loop(
         status,
         stdout,
         stderr,
+        selection: existsSync(path.join(dir, 'selection.json'))
+          ? JSON.parse(readFileSync(path.join(dir, 'selection.json'), 'utf8'))
+          : undefined,
         merges: lines<{ call: string; pull: number; head: string }>(
           path.join(dir, 'calls.jsonl'),
         ).filter((call) => call.call === 'merge'),

@@ -12,7 +12,15 @@ import type { ReviewMark, Verdict } from './review.mts';
 export type Subject = { kind: string; id: string; title: string; url?: string };
 
 /** `body` is the text the session works from: the loop hands it over, the session does not fetch it. */
-export type Item = { id: number; title: string; url: string; labels: string[]; body: string };
+/** `feature`: the Feature the selection took the item from (`items()` of a milestone or a Feature). */
+export type Item = {
+  id: number;
+  title: string;
+  url: string;
+  labels: string[];
+  body: string;
+  feature?: number;
+};
 
 /** `others`: the URLs of further open pull requests of the same item (`pullOf` only); the loop merges none of them. */
 export type Pull = { id: number; title: string; url: string; branch: string; others?: string[] };
@@ -36,7 +44,8 @@ export type BaseState = {
   failed: { name: string; url: string }[];
 };
 
-export type Selection = { milestone?: string; issues?: string[] };
+/** Exactly one is set. `feature`: the number of a Feature. */
+export type Selection = { milestone?: string; feature?: string; issues?: string[] };
 
 export type TrackerContext = {
   /** The checkout the loop runs in. */
@@ -61,9 +70,13 @@ export interface Tracker {
   readonly name: string;
   /** The repository as the tracker names it, for example `GravionLabs/poimen`. */
   readonly repo: string;
-  /** What the whole run delivers: the milestone, or the repository for a list of issues. */
+  /** What the whole run delivers: the milestone, the Feature, or the repository for a list of issues. */
   subject(): Subject;
-  /** The open work items of the selection in delivery order. */
+  /**
+   * The open work items of the selection in delivery order. Milestone: the open PBIs and Bugs in it and those below
+   * its open Features (same repository, each once, with `feature`). Feature: its open PBI and Bug sub-issues. Both
+   * also list the Bug of a red base this run got from `reportBaseRed`, while it is open.
+   */
   items(): Item[];
   itemSubject(item: Item): Subject;
   /**
@@ -104,7 +117,7 @@ export interface Tracker {
   baseState(): BaseState;
   /** Reruns the failed jobs of the last red `baseState()`. `env` is the environment of the session token. */
   rerunFailed(env: Record<string, string>): void;
-  /** The open Bug about a red base (marker `<!-- deliver-base-red -->`), reused, else filed in the milestone of the run. */
+  /** The open Bug about a red base (marker `<!-- deliver-base-red -->`), reused, else filed without a milestone. */
   reportBaseRed(failed: BaseState['failed'], env: Record<string, string>): Item;
   /** The paths the pull request changes, a rename with both names. */
   changedFiles(pull: Pull): string[];

@@ -67,6 +67,13 @@ describe('deliver loop: base check', () => {
     expect(out.sessions.map((s) => s.id)).toEqual([900, 81]);
   });
 
+  it('works the Bug of a red base in a milestone run although the milestone does not hold it', async () => {
+    const out = await loop({ items, base: ['red', 'red', 'green'] }, { milestone: true });
+    expect(out.status).toBe(0);
+    expect(out.sessions.map((s) => s.id)).toEqual([900, 81]);
+    expect(out.releasePulls).toBe(1);
+  });
+
   it('ends blocked (exit 2) when the base is red after its repair', async () => {
     const out = await loop({ items, base: ['red', 'red', 'red'] });
     expect(out.status).toBe(2);
@@ -1517,7 +1524,8 @@ describe('deliver loop', () => {
 
   it.each([
     ['no selection', []],
-    ['both selections', ['--milestone', 'M001']],
+    ['--milestone with --issues', ['--milestone', 'M001']],
+    ['--feature with --issues', ['--feature', '7']],
     ['--max that is no number', ['--max', 'abc']],
     ['an unknown harness', ['--harness', 'nope']],
   ])('ends with a usage error for %s', (_name, args) => {
@@ -1530,6 +1538,45 @@ describe('deliver loop', () => {
     }
     expect(status).toBe(64);
   });
+  it.each([
+    ['--milestone with --feature', ['--milestone', 'M001', '--feature', '7']],
+    ['--feature that is no number', ['--feature', 'seven']],
+  ])('ends with a usage error for %s', (_name, args) => {
+    let status = 0;
+    try {
+      execFileSync('node', [loopScript, ...args], { cwd: repo, stdio: 'pipe' });
+    } catch (error) {
+      status = (error as { status: number }).status;
+    }
+    expect(status).toBe(64);
+  });
+
+  describe('--feature', () => {
+    it('delivers its items into release/next and opens no release pull request', async () => {
+      const out = await loop(
+        { items: [{ id: 55, title: '[PBI] feat: below', feature: 7 }] },
+        { feature: 7 },
+      );
+      expect(out.status).toBe(0);
+      expect(out.selection).toEqual({ feature: '7' });
+      expect(out.sessions[0]?.prompt).toMatch(/^\/deliver 55 --base release\/next /);
+      expect(out.merges).toHaveLength(1);
+      expect(out.releasePulls).toBe(0);
+      expect(out.retros).toEqual([]);
+      expect(out.events.some((e) => e.type === 'milestone-done')).toBe(false);
+    });
+
+    it('prints the Feature of each item with --dry-run', async () => {
+      const items = [
+        { id: 56, title: '[PBI] feat: below', feature: 7 },
+        { id: 57, title: '[PBI] feat: direct' },
+      ];
+      const out = await loop({ items }, { milestone: true, args: ['--dry-run'] });
+      expect(out.stdout).toContain('#56 ready (Feature #7): [PBI] feat: below');
+      expect(out.stdout).toContain('#57 ready (milestone): [PBI] feat: direct');
+    });
+  });
+
   describe('end of a milestone', () => {
     it('opens the release pull request once everything is merged and reports an open release-test as needs you', async () => {
       const out = await loop(

@@ -1,7 +1,7 @@
 // A tracker for the tests of the deliver loop: the scenario comes from $FAKE_DIR/scenario.json, the
 // pull request of an item exists once the fake harness wrote $FAKE_DIR/pr-<id>, and every merge is
 // appended to $FAKE_DIR/calls.jsonl. The loop loads it through DELIVER_TRACKER_DIR.
-import { appendFileSync, existsSync, readFileSync } from 'node:fs';
+import { appendFileSync, existsSync, readFileSync, writeFileSync } from 'node:fs';
 import path from 'node:path';
 import type {
   BaseState,
@@ -10,10 +10,11 @@ import type {
   Pull,
   Subject,
   Tracker,
+  TrackerContext,
 } from '../../../../../skills/delivery/deliver/scripts/tracker.mts';
 
 type Scenario = {
-  items: { id: number; title: string; blockedBy?: number[] }[];
+  items: { id: number; title: string; blockedBy?: number[]; feature?: number }[];
   /** One entry per gate() call, the last one repeats. `throw` is a failing tracker call. */
   gates?: (Gate | 'throw')[];
   files?: string[];
@@ -61,8 +62,11 @@ type Scenario = {
   twoPulls?: number[];
 };
 
-export function create(): Tracker {
+export function create({ selection }: TrackerContext): Tracker {
   const dir = String(process.env.FAKE_DIR);
+  writeFileSync(path.join(dir, 'selection.json'), JSON.stringify(selection));
+  // like the GitHub tracker: the Bug of a red base is one of the items from its filing until it is merged
+  let baseBug: Item | undefined;
   const scenario: Scenario = JSON.parse(readFileSync(path.join(dir, 'scenario.json'), 'utf8'));
   const record = (call: Record<string, unknown>) =>
     appendFileSync(path.join(dir, 'calls.jsonl'), `${JSON.stringify(call)}\n`);
@@ -92,7 +96,9 @@ export function create(): Tracker {
           url: `https://example.test/issues/${item.id}`,
           labels: ['pbi'],
           body: 'body of the issue',
-        }));
+          ...(item.feature && { feature: item.feature }),
+        }))
+        .concat(baseBug && !closed.has(baseBug.id) ? [baseBug] : []);
     },
     itemSubject: (item: Item): Subject => ({
       kind: 'fake.issue',
@@ -199,13 +205,14 @@ export function create(): Tracker {
     rerunFailed: () => record({ call: 'rerun' }),
     reportBaseRed(): Item {
       record({ call: 'baseBug' });
-      return {
+      baseBug = {
         id: 900,
         title: '[Bug] fix: release/next is red (ci)',
         url: 'https://example.test/issues/900',
         labels: ['bug'],
         body: 'body of the bug',
       };
+      return baseBug;
     },
     changedFiles(): string[] {
       if (scenario.stopInChangedFiles) {
