@@ -44,7 +44,7 @@ Link every created issue to `parent_issue` (`sub-issues.md`, "Link a child to a
 parent"); with `parent_repo` (the Objective) the child's database id comes from its own repository and the POST goes to the foreign parent: `gh api -X POST repos/<parent_repo>/issues/<parent_issue>/sub_issues -F sub_issue_id=$childId`; in a split, to the Feature of the body's first line (no line: no link). A plan from a
 description creates no issues.
 
-Milestone: a created PBI or Bug gets the milestone of the plan with `github-milestone assign M<nnn> #<nr> …` (`milestones.md`, "Setting a milestone"), never `gh issue edit --milestone`; a Feature only when all its PBIs are in it. A Feature of an `objective` plan gets one only when the user names a milestone of its target repository: `github-milestone assign` there (`Get-Milestones.ps1 -Mode assign -Repo <repo> -Name M<nnn> -Issues <nr>`); never the Objective.
+Milestone ([ADR 0010](https://github.com/GravionLabs/skills/blob/main/docs/adr/0010-milestones-hold-features-as-a-roadmap-and-record-what-a-release-shipped.md)): a created Feature gets the milestone of the plan, when it has one, with `github-milestone assign M<nnn> #<nr> …` (`milestones.md`, "Setting a milestone"), never `gh issue edit --milestone`; created PBIs and Bugs get none (set at merge). A Feature of an `objective` plan gets one only when the user names a milestone of its target repository: `github-milestone assign` there (`Get-Milestones.ps1 -Mode assign -Repo <repo> -Name M<nnn> -Issues <nr>`); never the Objective.
 
 ## 4. Blocked-by links
 

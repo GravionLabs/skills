@@ -4,6 +4,8 @@
 
 with `governance`: also `references/governance.md`
 
+Milestone points follow [ADR 0010](https://github.com/GravionLabs/skills/blob/main/docs/adr/0010-milestones-hold-features-as-a-roadmap-and-record-what-a-release-shipped.md) (`github-issue` `references/milestones.md`).
+
 ## Objective
 
 `refine <owner/repo#nr>` of an `[Objective]` (`github-issue` `references/objectives.md`); the children are read across the affected repositories.
@@ -12,7 +14,7 @@ with `governance`: also `references/governance.md`
 - Every repository of `## Affected repos` has at least one child (Feature or Epic) as sub-issue.
 - Acceptance criteria present as a checklist a human verifies.
 - No implementation details in the body.
-- Every child issue that pulls in a pin (`SOURCE.txt`, a tag in a dependency) has a `Requires: <owner>/<repo>@<milestone> released|rc` edge, in the child or in the Objective's `## Requires` (a code dependency stays a native `blocked-by` link). A pin without an edge is a gap.
+- Every child issue that pulls in a pin (`SOURCE.txt`, a tag in a dependency) has a `Requires: <owner>/<repo>#<feature>` or `Requires: <owner>/<repo>@<milestone> released|rc` edge, in the child or in the Objective's `## Requires` (a code dependency stays a native `blocked-by` link). A pin without an edge is a gap.
 - No milestone on the Objective.
 
 ## Epic
@@ -26,11 +28,11 @@ with `governance`: also `references/governance.md`
 - Goal.
 - Acceptance criteria, testable.
 - PBIs as sub-issues with blocked-by links.
-- Milestone: none, or the one all its PBIs are in (`github-issue` `references/milestones.md`).
+- Milestone: the release it is planned for, or none.
 
 ## PBI
 
-- Milestone set.
+- No milestone (set at merge).
 - Testable acceptance criteria.
 - `## Current behavior` and `## Desired behavior`, stated as behavior (not as steps).
 - Files and symbols named, never line numbers (the body must stay valid while the code moves).
@@ -42,7 +44,7 @@ with `governance`: also `references/governance.md`
 
 ## Bug
 
-All PBI points (milestone included), plus repro steps or a failing test to write first.
+All PBI points (no milestone included), plus repro steps or a failing test to write first.
 
 ## Protected paths
 
