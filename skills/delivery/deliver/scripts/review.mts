@@ -45,6 +45,30 @@ export function findingsLine(verdict: Verdict): string {
   return line.length > 500 ? `${line.slice(0, 500)}…` : line;
 }
 
+// the sections of a Feature the review reads; `In scope` and `Out of scope` also come as headings of their own
+const FEATURE_SECTION = /^##\s+(scope|in scope|out of scope|acceptance criteria)\b/i;
+
+/**
+ * The text of `<nr>.feature.md`: title, URL and the Scope (with Out of scope) and Acceptance Criteria sections of
+ * the parent Feature. Everything else of its body is left out; a `## ` line in a code fence is no heading.
+ */
+export function featureText(feature: { title: string; url: string; body: string }): string {
+  const kept: string[] = [];
+  let keep = false;
+  let fence: string | undefined;
+  for (const line of feature.body.split(/\r?\n/)) {
+    const marker = /^\s*(`{3,}|~{3,})/.exec(line)?.[1];
+    if (marker) {
+      if (!fence) fence = marker;
+      else if (marker.startsWith(fence)) fence = undefined;
+    } else if (!fence && /^##?\s/.test(line)) keep = FEATURE_SECTION.test(line);
+    if (keep) kept.push(line);
+  }
+  const sections =
+    kept.join('\n').trim() || 'The Feature has no Scope or Acceptance Criteria section.';
+  return `# ${feature.title}\n\n${feature.url}\n\n${sections}\n`;
+}
+
 /** The risk levels of an implementer result (`risk.level`). */
 export const RISK_LEVELS = ['low', 'medium', 'high'];
 

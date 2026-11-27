@@ -37,6 +37,7 @@ import {
   type ReviewSettings,
   type Verdict,
   findingsLine,
+  featureText,
   parseVerdict,
   retroSettings,
   reviewSettings,
@@ -915,8 +916,16 @@ async function review(
       attempt('git', ['fetch', '--quiet', 'origin', pull.branch], root);
       drop();
       run('git', ['worktree', 'add', '--quiet', '--detach', worktree, head], root);
+      // the parent Feature as context of the review; the session never reads it from the tracker
+      let prompt = `/deliver-review ${item.id} --base ${BASE} --pr ${pull.url}`;
+      const feature = tracker.parentFeature(item);
+      if (feature) {
+        const featureFile = path.join(runDir, `${item.id}.feature.md`);
+        writeFileSync(featureFile, featureText(feature));
+        prompt += ` --feature-file ${promptPath(featureFile)}`;
+      }
       const ran = await runSession(item, worktree, sessions, {
-        prompt: `/deliver-review ${item.id} --base ${BASE} --pr ${pull.url}`,
+        prompt,
         harness: REVIEW.harness,
         model: REVIEW.model,
         effort: REVIEW.effort,

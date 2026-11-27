@@ -19,7 +19,7 @@ Feature pull requests are transport: the issue and the release pull request are 
 
 ## The review
 
-`/deliver-review <nr> --base <base> --pr <url> [--issue-file <path>]` (skill `deliver-review`) reviews the pull request against the acceptance criteria in a session of its own. It writes `{ "verdict": "approve" | "changes", "findings": [{ "severity": "blocking", "file", "summary" }], "unmet": [<criterion>] }` to the file in `DELIVER_REVIEW_FILE`, posts one comment on the pull request and never pushes. Why it is separate: [ADR 0009](https://github.com/GravionLabs/skills/blob/main/docs/adr/0009-deliver-loop-runs-role-sessions-and-keeps-the-stage-in-labels.md).
+`/deliver-review <nr> --base <base> --pr <url> [--issue-file <path>] [--feature-file <path>]` (skill `deliver-review`) reviews the pull request against the acceptance criteria in a session of its own. It also checks the diff against the scope and criteria of the parent Feature (`--feature-file`, written by the loop) and, for a UI change in a repository with `docs/STYLEGUIDE.md`, against the review rubric; a violation of either blocks, and the comment names the source of each finding (PBI, Feature, rubric). It writes `{ "verdict": "approve" | "changes", "findings": [{ "severity": "blocking", "file", "summary" }], "unmet": [<criterion>] }` to the file in `DELIVER_REVIEW_FILE`, posts one comment on the pull request and never pushes. Why it is separate: [ADR 0009](https://github.com/GravionLabs/skills/blob/main/docs/adr/0009-deliver-loop-runs-role-sessions-and-keeps-the-stage-in-labels.md).
 
 ## The loop
 

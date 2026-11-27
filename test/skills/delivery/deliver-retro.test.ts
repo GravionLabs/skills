@@ -159,6 +159,22 @@ describe('GitHub tracker: retro (fake gh)', () => {
     expect(made.hasRetroFeature()).toBe(found);
   });
 
+  it.each([
+    ['a Feature of a member', 'MEMBER', 'feature', true],
+    ['a Feature of an author without write access', 'NONE', 'feature', false],
+    ['a parent that is no Feature', 'MEMBER', 'epic', false],
+  ])('reads the parent Feature of an item: %s', (_name, association, label, found) => {
+    const { made } = tracker(`(call) => {
+      if (call.args[0] === 'repo') return { rest: 'o/r' };
+      if (!call.args[1].endsWith('/issues/3/parent')) throw new Error('gh: Not Found (HTTP 404)');
+      return { rest: { number: 1, title: 'F', body: 'b', html_url: 'u', author_association: '${association}',
+        labels: [{ name: '${label}' }], repository_url: 'https://api.github.com/repos/o/r' } };
+    }`);
+    const item = { id: 3, title: 't', url: 'u', labels: [], body: '' };
+    expect(made.parentFeature(item)?.body).toBe(found ? 'b' : undefined);
+    expect(made.parentFeature({ ...item, id: 4 })).toBeUndefined();
+  });
+
   it('accepts only a comment of this repository that starts with the marker', () => {
     const url = 'https://github.com/o/r/issues/7#issuecomment-5';
     const { made } = tracker(`(call) => {

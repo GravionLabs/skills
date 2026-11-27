@@ -288,6 +288,20 @@ export function create({
     };
   };
 
+  /** The parent issue of `id` when it is a Feature of this repository. */
+  const featureAbove = (id: number): Issue | undefined => {
+    try {
+      const parent = api<Issue & { repository_url: string }>(`repos/${repo}/issues/${id}/parent`);
+      return parent.repository_url.endsWith(`/repos/${repo}`) && isFeature(parent)
+        ? parent
+        : undefined;
+    } catch (error) {
+      // no parent
+      if (/HTTP 404/.test((error as { stderr?: string }).stderr ?? '')) return undefined;
+      throw error;
+    }
+  };
+
   const checksOf = (id: number): Check[] => {
     try {
       return JSON.parse(gh('pr', 'checks', String(id), '--repo', repo, '--json', 'name,bucket'));
@@ -371,6 +385,16 @@ export function create({
         title: `#${item.id} ${item.title}`,
         url: item.url,
       };
+    },
+
+    parentFeature(item: Item): Item | undefined {
+      const parent = featureAbove(item.id);
+      if (!parent) return undefined;
+      if (!trustAuthors && !TRUSTED.includes(parent.author_association)) {
+        log?.(`#${item.id} parent #${parent.number} ignored: its author has no write access`);
+        return undefined;
+      }
+      return toItem(parent);
     },
 
     setStage(item: Item, stage: Parameters<Tracker['setStage']>[1]): void {
@@ -716,19 +740,7 @@ export function create({
       const issues = list<Issue>(
         `repos/${repo}/issues?milestone=${milestone().number}&state=all&per_page=100`,
       );
-      return issues.some((issue) => {
-        if (issue.pull_request) return false;
-        try {
-          const parent = api<Issue & { repository_url: string }>(
-            `repos/${repo}/issues/${issue.number}/parent`,
-          );
-          return parent.repository_url.endsWith(`/repos/${repo}`) && isFeature(parent);
-        } catch (error) {
-          // no parent
-          if (/HTTP 404/.test((error as { stderr?: string }).stderr ?? '')) return false;
-          throw error;
-        }
-      });
+      return issues.some((issue) => !issue.pull_request && !!featureAbove(issue.number));
     },
 
     isRetroComment(url: string, marker: string): boolean {
