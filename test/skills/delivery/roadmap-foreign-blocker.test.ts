@@ -87,10 +87,10 @@ describe('roadmap foreign blocker (#272)', () => {
 
   const issue = (number: number, extra: Record<string, unknown> = {}) => ({
     number,
-    level: 'pbi',
-    title: `[PBI] t${number}`,
+    level: 'feature',
+    title: `[Feature] t${number}`,
     size: 'M',
-    labels: ['pbi'],
+    labels: ['feature'],
     parent: null,
     blockedBy: [],
     milestone: null,
@@ -123,9 +123,11 @@ describe('roadmap foreign blocker (#272)', () => {
     expect(r.stderr).toBe('');
     expect(r.status).toBe(0);
     const text = fs.readFileSync(path.join(dir, 'ROADMAP.md'), 'utf8').replace(/ {2,}/g, ' ');
-    expect(text).toContain('| #232 | [PBI] t232 | blocked by GravionLabs/poimen#246 |');
+    expect(text).toContain('| #232 | [Feature] t232 | blocked by GravionLabs/poimen#246 |');
     // #240 stays first: its blocker poimen#250 is not the local #250
-    expect(text).toContain('| 1 | #240 | [PBI] t240 | M | blocked by GravionLabs/poimen#250 |');
+    expect(text).toContain(
+      '| 1 | #240 | [Feature] t240 | M | | blocked by GravionLabs/poimen#250 |',
+    );
     expect(text).toContain('| 2 | #250 |');
   });
 });

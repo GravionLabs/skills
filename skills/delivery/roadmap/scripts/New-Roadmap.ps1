@@ -7,6 +7,8 @@
   `<!-- roadmap:begin <key> -->` and `<!-- roadmap:end -->` is replaced (keys: intro, where, later, plan <M>, done <M>); everything
   else is hand-written and kept. A plan block of a milestone that is no longer open is removed, and the milestone's done block is
   inserted at `<!-- roadmap:slot done -->` (no slot: before `## Later`, else at the end). New plan blocks go to `<!-- roadmap:slot plan -->`.
+  Plan blocks list Features only (ADR 0010); their open PBIs and Bugs add size, `needs-decision` and blockers to the Feature row.
+  `later` lists the Features without milestone and the PBIs and Bugs without an open Feature ("unplanned, ships at merge").
   Output: the unified diff on stdout; the file is written only with -Write. Details: references/roadmap-md.md.
 .PARAMETER State
   JSON string or file path.
@@ -71,10 +73,53 @@ function Get-Why($i) {
   $w -join '; '
 }
 
-# an issue with an open child is listed through the child
-$parents = @{}
-foreach ($i in $issues) { if ($i.parent) { $parents[[int]$i.parent] = $true } }
-function Test-Leaf($i) { -not $parents.ContainsKey([int]$i.number) }
+# only Features are planned (ADR 0010): a PBI or Bug counts towards the open Feature above it, when there is one
+$byNumber = @{}
+foreach ($i in $issues) { $byNumber[[int]$i.number] = $i }
+function Get-Feature($i) {
+  $seen = @{}
+  $p = $i.parent
+  while ($p -and $byNumber.ContainsKey([int]$p) -and -not $seen.ContainsKey([int]$p)) {
+    $x = $byNumber[[int]$p]
+    if ($x.level -eq 'feature') { return $x }
+    $seen[[int]$p] = $true
+    $p = $x.parent
+  }
+}
+$kidsOf = @{}
+$featureOf = @{}
+foreach ($i in ($issues | Where-Object { $_.level -in 'pbi', 'bug' } | Sort-Object number)) {
+  $f = Get-Feature $i
+  if (-not $f) { continue }
+  $featureOf[[int]$i.number] = [int]$f.number
+  if (-not $kidsOf.ContainsKey([int]$f.number)) { $kidsOf[[int]$f.number] = [System.Collections.Generic.List[object]]::new() }
+  $kidsOf[[int]$f.number].Add($i)
+}
+
+# a Feature with the labels and blockers of its open PBIs and Bugs: a blocker below another Feature names that Feature, one below itself is dropped
+function Get-Rollup($f) {
+  $kids = @(if ($kidsOf.ContainsKey([int]$f.number)) { $kidsOf[[int]$f.number] })
+  $all = @($f) + $kids
+  $blocked = @(foreach ($b in ($all | ForEach-Object { @($_.blockedBy) })) {
+      if ($b -is [string]) { $b; continue }
+      $n = if ($featureOf.ContainsKey([int]$b)) { $featureOf[[int]$b] } else { [int]$b }
+      if ($n -ne [int]$f.number) { $n }
+    }) | Select-Object -Unique
+  $sizes = @(foreach ($s in 'S', 'M', 'L', '?') {
+      $c = @($kids | Where-Object { $(if ($_.size) { $_.size } else { '?' }) -eq $s }).Count
+      if ($c) { "$c $s" }
+    })
+  [pscustomobject]@{
+    number    = [int]$f.number
+    title     = $f.title
+    size      = if ($kids.Count) { $sizes -join ', ' } elseif ($f.size) { $f.size } else { '?' }
+    open      = ($kids | ForEach-Object { "#$($_.number)" }) -join ', '
+    labels    = @($all | ForEach-Object { @($_.labels) })
+    blockedBy = @($blocked)
+    milestone = $f.milestone
+  }
+}
+$features = @($issues | Where-Object { $_.level -eq 'feature' } | Sort-Object number | ForEach-Object { Get-Rollup $_ })
 
 $blocks = [ordered]@{}
 $blocks['intro'] = "Updated $Date. Last release " + $(if ($st.latestTag) { "``$($st.latestTag)``" } else { 'none yet' }) + '.'
@@ -85,10 +130,16 @@ $rows = @(foreach ($i in ($issues | Where-Object { $_.level -in 'epic', 'feature
 })
 $blocks['where'] = if ($rows.Count) { Get-Table @('Epic / Feature', 'State', 'Milestone') $rows } else { 'No open Epic or Feature.' }
 
-$later = @(foreach ($i in ($issues | Where-Object { -not $_.milestone -and (Test-Leaf $_) })) {
-  $why = Get-Why $i
-  , @("#$($i.number)", $i.title, $(if ($why) { $why } else { 'no milestone' }))
-})
+# Features without a milestone, then the PBIs and Bugs without a Feature (a release-test in its milestone stays there)
+$later = @(
+  foreach ($f in ($features | Where-Object { -not $_.milestone })) {
+    $why = Get-Why $f
+    , @("#$($f.number)", $f.title, $(if ($why) { $why } else { 'no milestone' }))
+  }
+  foreach ($i in ($issues | Where-Object { $_.level -in 'pbi', 'bug' -and -not $featureOf.ContainsKey([int]$_.number) -and -not ($_.milestone -and @($_.labels) -contains 'release-test') })) {
+    , @("#$($i.number)", $i.title, ((@('unplanned, ships at merge', (Get-Why $i)) | Where-Object { $_ }) -join '; '))
+  }
+)
 $blocks['later'] = if ($later.Count) { Get-Table @('Issue', 'Title', 'Why later') $later } else { 'Nothing waits without a milestone.' }
 
 # blockers inside the milestone first, otherwise by number
@@ -116,14 +167,14 @@ foreach ($m in ($milestones | Sort-Object { Get-Num $_.title }, { $_.title })) {
     $blocks["done $key"] = "## Done in $($m.title)`n`n$body"
   }
   else {
-    $items = @($issues | Where-Object { $_.milestone -eq $m.title -and (Test-Leaf $_) })
+    $items = @($features | Where-Object { $_.milestone -eq $m.title })
     $n = 0
     $plan = @(foreach ($i in (Get-PlanOrder $items)) {
       $n++
-      , @($n, "#$($i.number)", $i.title, $(if ($i.size) { $i.size } else { '?' }), (Get-Why $i))
+      , @($n, "#$($i.number)", $i.title, $i.size, $i.open, (Get-Why $i))
     })
     $prog = "Progress: $($m.progress) % ($($m.closed) of $($m.open + $m.closed) issues closed)."
-    $body = if ($plan.Count) { Get-Table @('Order', 'Issue', 'Title', 'Size', 'Depends on / decision') $plan } else { 'No open issues.' }
+    $body = if ($plan.Count) { Get-Table @('Order', 'Feature', 'Title', 'Size', 'Open PBIs and Bugs', 'Depends on / decision') $plan } else { 'No open Features.' }
     $blocks["plan $key"] = "## $($m.title)`n`n$prog`n`n$body"
   }
 }

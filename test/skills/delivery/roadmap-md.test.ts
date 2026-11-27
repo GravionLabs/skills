@@ -53,9 +53,16 @@ describe('New-Roadmap.ps1', () => {
     issues: [
       issue(1, 'epic'),
       issue(2, 'feature', { parent: 1, milestone: 'M3 Roadmap' }),
-      issue(5, 'pbi', { parent: 2, milestone: 'M3 Roadmap', blockedBy: [4] }),
-      issue(4, 'pbi', { parent: 2, milestone: 'M3 Roadmap', size: null }),
+      issue(3, 'feature', { parent: 1, milestone: 'M3 Roadmap', size: 'L' }),
+      // below Feature 2: still in an older milestone, without size, blocked by a PBI of Feature 3
+      issue(4, 'pbi', { parent: 2, milestone: 'M2', size: null, blockedBy: [6] }),
+      issue(5, 'pbi', { parent: 2, blockedBy: [4], labels: ['pbi', 'needs-decision'] }),
+      issue(6, 'pbi', { parent: 3, size: 'S' }),
+      issue(7, 'feature'),
+      issue(8, 'bug', { parent: 7, blockedBy: [2] }),
       issue(9, 'pbi', { labels: ['pbi', 'needs-decision'] }),
+      issue(10, 'bug', { milestone: 'M3 Roadmap' }),
+      issue(11, 'pbi', { milestone: 'M3 Roadmap', labels: ['pbi', 'release-test'] }),
     ],
     milestones: [ms(3, 'M3 Roadmap')],
   };
@@ -67,14 +74,21 @@ describe('New-Roadmap.ps1', () => {
     expect(r.status).toBe(0);
     const text = flat(fs.readFileSync(file(), 'utf8'));
     expect(text).toContain('Updated 2026-11-04. Last release `v1.5.0`.');
-    expect(text).toContain('| #1 [epic] title 1 | open: #2 | not scheduled |');
+    expect(text).toContain('| #1 [epic] title 1 | open: #2, #3 | not scheduled |');
     expect(text).toContain('## M3 Roadmap');
-    expect(text).toContain('| Order | Issue | Title | Size | Depends on / decision |');
-    // blocker #4 comes before #5 although its number is higher in the list order
-    expect(text.indexOf('| 1 | #4 |')).toBeGreaterThan(-1);
-    expect(text).toContain('| 2 | #5 | [pbi] title 5 | M | blocked by #4 |');
-    expect(text).toContain('| 1 | #4 | [pbi] title 4 | ? |');
-    expect(text).toContain('| #9 | [pbi] title 9 | `needs-decision` |');
+    // Features only: #3 blocks #2 through their PBIs, so it comes first; a blocker inside #2 is left out
+    expect(text).toContain('| Order | Feature | Title | Size | Open PBIs and Bugs |');
+    expect(text).toContain('| 1 | #3 | [feature] title 3 | 1 S | #6 | |');
+    expect(text).toContain(
+      '| 2 | #2 | [feature] title 2 | 1 M, 1 ? | #4, #5 | `needs-decision`; blocked by #3 |',
+    );
+    expect(text).not.toMatch(/\| \d \| #(4|5|6|10|11) \|/);
+    // later: the unscheduled Feature and the PBIs and Bugs without a Feature
+    expect(text).toContain('| #7 | [feature] title 7 | blocked by #2 |');
+    expect(text).toContain('| #9 | [pbi] title 9 | unplanned, ships at merge; `needs-decision` |');
+    expect(text).toContain('| #10 | [bug] title 10 | unplanned, ships at merge |');
+    expect(text).not.toContain('| #8 | [bug]');
+    expect(text).not.toContain('| #11 |');
     expect(text).toContain('## Risks');
     expect(r.stdout).toContain('wrote ROADMAP.md');
   });
@@ -85,13 +99,13 @@ describe('New-Roadmap.ps1', () => {
       .replace('## Risks', 'Hand-written note about M3.\n\n## Risks')
       .replace('Order of work', 'My own intro. Order of work');
     fs.writeFileSync(file(), before);
-    const next = { ...open, issues: open.issues.filter((i) => i.number !== 4) };
+    const next = { ...open, issues: open.issues.filter((i) => i.number !== 3) };
     const r = await run(next, ['-Write']);
     expect(r.status).toBe(0);
     const text = fs.readFileSync(file(), 'utf8');
     expect(text).toContain('Hand-written note about M3.');
     expect(text).toContain('My own intro.');
-    expect(text).not.toContain('title 4');
+    expect(text).not.toContain('title 3');
     expect(text.match(/<!-- roadmap:begin plan M3 -->/g)).toHaveLength(1);
   });
 
