@@ -18,10 +18,22 @@ export const skill = path.resolve(__dirname, '../../../../skills/delivery/delive
 export const loopScript = path.join(skill, 'scripts/deliver-loop.mts');
 const helpers = __dirname;
 
-export type Result = { issue: number; outcome: string; reason?: string; risk?: string };
+export type Result = {
+  issue: number;
+  outcome: string;
+  reason?: string;
+  risk?: string;
+  sessions?: { role?: string; model: string; tier: string }[];
+};
 
 export type Scenario = {
-  items: { id: number; title: string; blockedBy?: number[]; feature?: number }[];
+  items: {
+    id: number;
+    title: string;
+    body?: string;
+    blockedBy?: number[];
+    feature?: number;
+  }[];
   gates?: unknown[];
   files?: string[];
   filesLater?: string[];
@@ -135,6 +147,9 @@ export function loop(
     ...process.env,
     NO_COLOR: '1',
     FAKE_DIR: dir,
+    // `models` is also read from the home directory: never the one of the user
+    HOME: dir,
+    USERPROFILE: dir,
     AGENT_EVENTS_DIR: path.join(dir, 'events'),
     DELIVER_TRACKER_DIR: path.join(helpers, 'tracker'),
     DELIVER_HARNESS: JSON.stringify(['node', path.join(helpers, 'fake-harness.mjs'), dir]),

@@ -71,19 +71,19 @@ describe('retro after a milestone (fake harness)', () => {
 });
 
 describe('retro settings', () => {
-  it('defaults to enabled with the review model; config and --no-retro change it', () => {
-    expect(retroSettings({ config: undefined, reviewModel: 'opus' })).toEqual({
+  it('defaults to enabled with the model of the role; config and --no-retro change it', () => {
+    expect(retroSettings({ config: undefined, defaultModel: 'opus' })).toEqual({
       enabled: true,
       model: 'opus',
     });
     expect(
-      retroSettings({ config: { enabled: false, model: 'haiku' }, reviewModel: 'opus' }),
+      retroSettings({ config: { enabled: false, model: 'haiku' }, defaultModel: 'opus' }),
     ).toEqual({ enabled: false, model: 'haiku' });
-    expect(retroSettings({ disabled: true, config: {}, reviewModel: 'opus' }).enabled).toBe(false);
-    expect(() => retroSettings({ config: { model: '--x' }, reviewModel: 'opus' })).toThrow(
+    expect(retroSettings({ disabled: true, config: {}, defaultModel: 'opus' }).enabled).toBe(false);
+    expect(() => retroSettings({ config: { model: '--x' }, defaultModel: 'opus' })).toThrow(
       'deliver.retro.model',
     );
-    expect(() => retroSettings({ config: { enabled: 'no' }, reviewModel: 'opus' })).toThrow(
+    expect(() => retroSettings({ config: { enabled: 'no' }, defaultModel: 'opus' })).toThrow(
       'deliver.retro.enabled',
     );
   });

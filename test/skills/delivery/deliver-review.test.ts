@@ -151,8 +151,9 @@ describe('deliver loop: review session (#1013)', () => {
       }
     };
     expect((await dry([])).stdout).toMatch(/^review: claude \(claude .*--model opus /m);
+    // an implementer on the strong model: there is no stronger one, the review stays strong
     expect((await dry(['--model', 'claude-opus-5-5'])).stdout).toMatch(
-      /^review: claude .*--model sonnet /m,
+      /^review: claude .*--model opus /m,
     );
     const config = { harness: 'copilot', model: 'gpt-x', effort: 'high', rounds: 3 };
     const fromConfig = await dry([], config);

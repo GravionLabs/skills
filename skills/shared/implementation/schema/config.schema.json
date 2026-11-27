@@ -226,14 +226,14 @@
               "type": "boolean"
             },
             "model": {
-              "description": "Model of the retro session (default the review model).",
+              "description": "Model of the retro session (default the model of the role retro).",
               "type": "string",
               "minLength": 1
             }
           }
         },
         "review": {
-          "description": "The review session of deliver-loop (deliver-review). Default: the implementer's harness with another model.",
+          "description": "The review session of deliver-loop (deliver-review). Default: the implementer's harness and the model of the role review.",
           "type": "object",
           "additionalProperties": false,
           "properties": {

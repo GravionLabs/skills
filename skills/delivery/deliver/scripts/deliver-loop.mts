@@ -2,6 +2,7 @@
 // deliver loop: a fresh agent session per issue, a review session for its pull request, merge, then the next issue.
 // The state is read from the tracker before every issue. The run only remembers what it set aside.
 // Tracker: tracker.mts. Progress events: events.mts. Review settings and verdict: review.mts. Issue stage: stage.mts.
+// Model of each session: session-models.mts.
 // Comments on the issue: handover.mts.
 import { execFileSync } from 'node:child_process';
 import {
@@ -43,6 +44,8 @@ import {
   retroSettings,
   reviewSettings,
 } from './review.mts';
+import { type HarnessName, type Tier, readLayers } from './resolve-model.mts';
+import { type Pick, sessionModels } from './session-models.mts';
 import { type StageEvent, stageAfter, stageOf } from './stage.mts';
 import { type BaseState, type Gate, type Item, type Pull, loadTracker } from './tracker.mts';
 
@@ -94,6 +97,8 @@ type Session = {
   blocked?: string;
   /** Set for a review session. */
   role?: 'review';
+  model: string;
+  tier: Tier;
 };
 type Retro = { url?: string; failed?: string };
 type Tone = 'ok' | 'bad' | 'warn' | 'info' | 'dim' | 'bold';
@@ -212,29 +217,46 @@ const harnessName = String(opt.harness ?? config.deliver?.harness ?? 'claude');
 const harness =
   HARNESSES[harnessName] ??
   fail(`unknown harness "${harnessName}": one of ${Object.keys(HARNESSES).join(', ')}`, 64);
-const MODEL = opt.model ?? harness.defaultModel;
 const REVIEW: ReviewSettings = (() => {
   try {
     return reviewSettings({
       flags: { model: opt['review-model'], harness: opt['review-harness'] },
       config: config.deliver?.review,
-      implementer: { harnessName, model: MODEL },
+      implementer: { harnessName },
     });
   } catch (error) {
     return fail((error as Error).message, 64);
   }
 })();
+// --model, --review-model and deliver.review.model win; else the top-level key `models` decides per role
+const MODELS = (() => {
+  try {
+    return sessionModels({
+      layers: readLayers(root),
+      harness: harnessName as HarnessName,
+      reviewHarness: REVIEW.harnessName as HarnessName,
+      model: opt.model,
+      reviewModel: REVIEW.model,
+    });
+  } catch (error) {
+    return fail(`models: ${(error as Error).message}`, 64);
+  }
+})();
+for (const warning of MODELS.warnings) log(warning, 'warn');
+// what a run starts with: an issue of tier standard; the tier of each issue decides its own sessions
+const STANDARD = { implement: MODELS.implement(''), review: MODELS.review('') };
 const RETRO = (() => {
   try {
     return retroSettings({
       disabled: opt['no-retro'],
       config: config.deliver?.retro,
-      reviewModel: REVIEW.model,
+      defaultModel: MODELS.retro.model,
     });
   } catch (error) {
     return fail((error as Error).message, 64);
   }
 })();
+const MODEL_LINE = `implement ${opt.model ?? `by the issue's tier (standard ${STANDARD.implement.model})`}, review ${STANDARD.review.model}, retro ${RETRO.enabled ? RETRO.model : 'off'}`;
 // the retro session reads and writes one comment (through its script): it never pushes or changes issues and pull requests
 const RETRO_DENY = [
   'git push',
@@ -696,7 +718,9 @@ type Task = {
   /** The slash command; the loop appends the issue file. */
   prompt: string;
   harness: Harness;
-  model?: string;
+  model: string;
+  /** The tier of the role for this session, also when a flag or setting names the model. */
+  tier: Tier;
   effort?: string;
   /** Commands the session may not run (`HarnessInput.deny`). */
   deny?: string[];
@@ -710,11 +734,22 @@ type Task = {
   role?: 'review';
 };
 
+// a note about the model of an issue is logged once per run
+const modelNotes = new Set<string>();
+function picked(item: Item, { model, tier, note }: Pick): { model: string; tier: Tier } {
+  const line = note && `#${item.id} ${note}`;
+  if (line && !modelNotes.has(line)) {
+    modelNotes.add(line);
+    log(line, 'warn');
+  }
+  return { model, tier };
+}
+
 /** The implementer session; `reviewFile` is the verdict whose findings it fixes. */
 const implementer = (item: Item, reviewFile?: string): Task => ({
   prompt: `/deliver ${item.id} --base ${BASE}${reviewFile ? ` --review-file ${promptPath(reviewFile)}` : ''}`,
   harness,
-  model: opt.model,
+  ...picked(item, MODELS.implement(item.body)),
   output: { name: 'DELIVER_RESULT_FILE', file: resultFile(item) },
   // a pull request means the session did its work: the normal rules for a failed session apply
   delivered: () => Boolean(tracker.pullOf(item)),
@@ -772,6 +807,8 @@ async function startSession(
     costUsd: 0,
     peakContext: 0,
     ...(task.role && { role: task.role }),
+    model,
+    tier: task.tier,
   };
   const out = createWriteStream(file);
   return new Promise((done) => {
@@ -916,7 +953,7 @@ async function review(
       const ran = await runSession(item, worktree, sessions, {
         prompt,
         harness: REVIEW.harness,
-        model: REVIEW.model,
+        ...picked(item, MODELS.review(item.body)),
         effort: REVIEW.effort,
         output: { name: 'DELIVER_REVIEW_FILE', file },
         delivered: () => existsSync(file),
@@ -1005,6 +1042,7 @@ async function retro(milestone: string, release: Pull | undefined): Promise<Retr
       prompt: `/retro --milestone ${name} --post${release ? ` --release-pr ${release.url}` : ''}`,
       harness: REVIEW.harness,
       model: RETRO.model,
+      tier: MODELS.retro.tier,
       effort: REVIEW.effort,
       deny: RETRO_DENY,
       output: { name: 'DELIVER_RETRO_FILE', file },
@@ -1451,11 +1489,12 @@ if (opt['dry-run']) {
     fail(`tracker: ${firstLine(error)}`, 64);
   }
   console.log(
-    `harness: ${harnessName} (${harness.command({ prompt: '/deliver <nr> …', model: opt.model }).join(' ')})`,
+    `harness: ${harnessName} (${harness.command({ prompt: '/deliver <nr> …', model: STANDARD.implement.model }).join(' ')})`,
   );
   console.log(
-    `review: ${REVIEW.harnessName} (${REVIEW.harness.command({ prompt: '/deliver-review <nr> …', model: REVIEW.model, effort: REVIEW.effort }).join(' ')})`,
+    `review: ${REVIEW.harnessName} (${REVIEW.harness.command({ prompt: '/deliver-review <nr> …', model: STANDARD.review.model, effort: REVIEW.effort }).join(' ')})`,
   );
+  console.log(`models: ${MODEL_LINE}`);
   if (opt.milestone)
     console.log(`retro: ${RETRO.enabled ? `after the last merge, model ${RETRO.model}` : 'off'}`);
   console.log(`tracker: ${tracker.name}, base: ${BASE}`);
@@ -1507,7 +1546,10 @@ emit = (type, body, tone) => {
     report(finishReport(body, statusTitle, needsYou.length));
   }
 };
-log(`run ${runId} in ${tracker.repo}, results: ${path.join(runDir, 'results.jsonl')}`, 'dim');
+log(
+  `run ${runId} in ${tracker.repo}, models: ${MODEL_LINE}, results: ${path.join(runDir, 'results.jsonl')}`,
+  'dim',
+);
 log(`events: run ${eventRun}`, 'dim');
 if (cutNote) log(cutNote, 'info');
 if (!TOKEN_SOURCE) {
@@ -1524,7 +1566,7 @@ emit('run.started', {
       ? { 'poimen.terminal': process.env.POIMEN_TERMINAL_ID }
       : {}),
   },
-  agent: { harness: harnessName, model: MODEL },
+  agent: { harness: harnessName, model: STANDARD.implement.model },
   subject: tracker.subject(),
 });
 

@@ -59,7 +59,7 @@ Before that pull request the loop runs the [retro](learn-from-runs.md#after-a-mi
 
 ## The review
 
-After the implementer session the loop starts `/deliver-review` in a fresh worktree at the head of the pull request, by default on the same harness with another model than the implementer. An issue with a parent Feature gets its title, Scope and Acceptance Criteria as context (`--feature-file`), and a UI change is held to the review rubric of `docs/STYLEGUIDE.md`. The verdict `approve` lets the checks and the guard of the merged commit follow, and the loop merges only the reviewed commit; a later push hands the pull request over (`pushed after the review`). On `changes` the implementer runs again with the verdict file, at most 2 fix rounds; a further `changes` sets the issue aside as `needs-decision: …` with the findings. A missing or invalid verdict, or a failed review session that left a verdict file, is retried once, then the issue is set aside (`review failed: …`); a session that fails without one is a harness failure. A red check gets one repair session, which is reviewed again. A pull request on protected paths is handed over to you without a review session. `results.jsonl` lists the rounds (`reviews`), the agent-events one step per round.
+After the implementer session the loop starts `/deliver-review` in a fresh worktree at the head of the pull request, by default on the same harness with the model of the role `review`, a stronger one when the implementer runs it. An issue with a parent Feature gets its title, Scope and Acceptance Criteria as context (`--feature-file`), and a UI change is held to the review rubric of `docs/STYLEGUIDE.md`. The verdict `approve` lets the checks and the guard of the merged commit follow, and the loop merges only the reviewed commit; a later push hands the pull request over (`pushed after the review`). On `changes` the implementer runs again with the verdict file, at most 2 fix rounds; a further `changes` sets the issue aside as `needs-decision: …` with the findings. A missing or invalid verdict, or a failed review session that left a verdict file, is retried once, then the issue is set aside (`review failed: …`); a session that fails without one is a harness failure. A red check gets one repair session, which is reviewed again. A pull request on protected paths is handed over to you without a review session. `results.jsonl` lists the rounds (`reviews`), the agent-events one step per round.
 
 ## Options
 
@@ -69,8 +69,8 @@ After the implementer session the loop starts `/deliver-review` in a fresh workt
 | `--feature <nr>`             | The open PBIs and Bugs below a Feature.                                                                              |
 | `--issues <nr,…>`            | These issues.                                                                                                        |
 | `--base <branch>`            | Base branch. Default `deliver.base`, else `release/next` with `--milestone` or `--feature`, else the default branch. |
-| `--harness <name>`           | `claude` (default) or `copilot`. `--model <name>` passes a model of that harness.                                    |
-| `--review-model <name>`      | Model of the review session. Default: another model than the implementer's.                                          |
+| `--harness <name>`           | `claude` (default) or `copilot`. `--model <name>`: one model for every implementer session.                          |
+| `--review-model <name>`      | Model of the review session. Default: the role `review` of `models`.                                                 |
 | `--review-harness <name>`    | `claude` or `copilot` for the review. Default: the implementer's harness.                                            |
 | `--no-retro`                 | No retro session after the milestone.                                                                                |
 | `--max <n>`                  | Stops after `n` issues.                                                                                              |
@@ -96,7 +96,7 @@ Optional, under `deliver` in `.agents/config.json` ([project config](../usage/pr
 | `retro`          | `{ "enabled", "model" }` of the retro session after a milestone |
 | `protectedPaths` | `.github/`, `.agents/`, `.claude/` and the package manifests    |
 
-The top-level key [`models`](../usage/project-config.md#models) maps roles to models for `scripts/resolve-model.mts`; the loop does not read it yet.
+The top-level key [`models`](../usage/project-config.md#models) maps roles to models for `scripts/resolve-model.mts`; the loop picks the model of every session with it (the implementer by the `Tier:` line of the issue).
 
 Other keys (`roles`, `loopThreshold`, `parallel`, `sessionTimeoutMinutes`) are ignored with one warning line. `DELIVER_MIN_<X>` variables are read as `DELIVER_<X>` for one more release, with a warning.
 
