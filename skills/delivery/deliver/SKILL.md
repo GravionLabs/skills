@@ -6,7 +6,7 @@ metadata:
   opencode/autoinvoke: 'false'
 ---
 
-Delivers one issue (PBI or Bug) as a pull request into the base branch. You already know how to implement, test and open a pull request. This file only lists what is different in this organisation. The project's own rules and verify commands are in its `AGENTS.md`.
+Delivers one issue (PBI or Bug) as a pull request into the base branch. You already know how to implement, test and open a pull request. This file only lists what is different in this organisation. The project's own rules and verify commands are in its `AGENTS.md`. Overview from Objective to release: [delivery model](https://gravionlabs.github.io/skills/delivery/model).
 
 Input: `/deliver <nr> [--base <branch>] [--issue-file <path>] [--review-file <path>]`. `<base>` is the branch `--base` names (the loop always passes it), else the default branch. You run unattended in your own worktree, detached at `origin/<base>`. Nobody answers questions.
 

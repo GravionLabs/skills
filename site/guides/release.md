@@ -1,21 +1,23 @@
 # Release a milestone
 
-From a milestone to a release on `main`: cut `release/next`, collect the work in a milestone, deliver it, review it and let a person merge the release PR. Each step is one prompt.
+From a milestone to a release on `main`: plan Features into it, cut `release/next`, deliver the work, let a person merge the release PR and check the publish. Where this sits in the whole path: [delivery model](../delivery/model.md).
 
 ::: tip Prerequisites
 - `gh auth status` works, a clean `git status`, run from the repository root.
-- The ruleset on `release/next` below. It is the hard gate that `/deliver` checks for.
+- The ruleset on `release/next` below. It is the hard gate: `deliver-loop` refuses a base without required checks.
 :::
 
 ## The path
 
 ```mermaid
 flowchart LR
-  C[cut release/next] --> M[milestone M003]
-  M --> D["/deliver --milestone"]
-  D --> RR[release review]
-  RR --> F[finish: release PR]
+  C[cut release/next] --> M[Features in milestone M003]
+  M --> D["deliver-loop --milestone M003"]
+  D --> T[retro]
+  T --> F[release PR]
   F --> P[a person merges into main]
+  P --> G[publish gate]
+  G --> X[milestone closed]
 ```
 
 ## 1. Cut `release/next`
@@ -30,7 +32,7 @@ Cut a release.
 
 To spread many open issues over several releases first, plan them with [`/roadmap`](roadmap.md); it sets the `M<nnn>` milestones and keeps `ROADMAP.md`.
 
-Milestones are the releases. Name them `M<nnn>` or `M<nnn> <Topic>` (`nnn` a three-digit number, `M001` to `M999`; optional topic, no version; `M003 Market data`; the lookup accepts `M11` for `M011`, and `create -Name M15` creates `M015`); on close the version is added at the end (`M003 Market data (x.y.z)`). The number sets the order, the topic is ignored for it and `M003` finds `M003 Market data`. Existing `x.y.z` titles stay valid.
+Milestones are the releases: the planned ones hold Features as a roadmap, and every merge records what shipped ([milestones](../delivery/model.md#issue-levels-and-milestones)). Name them `M<nnn>` or `M<nnn> <Topic>` (`nnn` a three-digit number, `M001` to `M999`; optional topic, no version; `M003 Market data`; the lookup accepts `M11` for `M011`, and `create -Name M15` creates `M015`); on close the version is added at the end (`M003 Market data (x.y.z)`). The number sets the order, the topic is ignored for it and `M003` finds `M003 Market data`. Existing `x.y.z` titles stay valid.
 
 To put a milestone between two open ones, use a sub-number: `/github-milestone create M001.1` sorts between `M001` and `M002` (numerically per part: 1, 1.1, 1.2, 2, 10), `M001` never finds `M001.1`, and `current` stays the lowest open one. For a clean sequence use `/github-milestone insert M002 --dry-run`, then `/github-milestone insert M002`: every open `M<kkk>` with k ≥ 2 (and its sub-numbered ones) moves up by one, from the highest down, then `M002` is created. Closed milestones are never renamed (`M001 (0.1.0)` carries its version, nothing can come before it). `insert` lists what it does not rewrite: old names in issue bodies, `ROADMAP.md` and `release-review-M<n>.json` state files; you decide. `deliver` uses the sub-number as state key (`M001.1`, not `M001`).
 
@@ -39,23 +41,23 @@ To put a milestone between two open ones, use a sub-number: `/github-milestone c
 /github-milestone current
 ```
 
-`current` is the lowest open `M<nnn>` (a legacy `x.y.z` milestone above the latest `v<x.y.z>` tag comes first). It lists its open issues grouped as ready, blocked, `needs-decision`, `needs-refinement` and claimed, including the open PBIs and Bugs below its Features (`via #<feature>`), plus the shipped ones and the release PR. Assign the planned Features to the milestone before you deliver: `/github-milestone assign M3 #12 #13` (`none` clears it). A PBI or Bug gets its milestone at merge. Set milestones only this way, never with `gh issue edit --milestone`.
+`current` is the lowest open `M<nnn>` (a legacy `x.y.z` milestone above the latest `v<x.y.z>` tag comes first). It lists its open issues grouped as ready, blocked, `needs-decision`, `needs-refinement` and claimed, including the open PBIs and Bugs below its Features (`via #<feature>`), plus the shipped ones and the release PR. Assign the planned Features to the milestone before you deliver: `/github-milestone assign M003 #12 #13` (`none` clears it). A PBI or Bug is not planned into a milestone: it gets one at merge. Set milestones only this way, never with `gh issue edit --milestone`.
 
 ## 3. Deliver the milestone
 
-```text
-/deliver --milestone M003
+```powershell
+deliver-loop --milestone M003
 ```
 
-Every open PBI and Bug of the milestone is delivered into `release/next` (`deliver-loop --milestone M003`, [deliver guide](deliver.md#the-loop)): a fresh session per PBI, each pull request merged once its required checks passed.
+The open PBIs and Bugs below the Features of the milestone are delivered into `release/next` ([deliver guide](deliver.md#the-loop)): a fresh session per issue, a review session per pull request, and a merge once the review approved and the [gates](../delivery/model.md#gates) passed. Pull requests on protected paths or of risk `high` are handed to you. `deliver-loop --feature <nr>` delivers one Feature, without retro and release pull request.
 
-## 4. Release pull request
+## 4. Retro and release pull request
 
-When nothing is left, the loop opens the release pull request from `release/next` into `main` and prints its URL; it never merges it. Review the whole diff `origin/main...origin/release/next` there (`code-review` can do it). Details: [delivery reference](../delivery.md#release-pull-request).
+When nothing is left, the loop runs the [retro](learn-from-runs.md#after-a-milestone) of the milestone, then opens the release pull request from `release/next` into `main` and prints its URL; it never merges it. Its body links the retro comment: tick the drafts and lessons you want and run `retro file <comment url>`. Review the whole diff `origin/main...origin/release/next` there (`code-review` can do it). Details: [delivery reference](../delivery.md#release-pull-request).
 
 ## 5. Finish: release PR and changelog
 
-`deliver` runs `finish` for a fully delivered milestone. By hand:
+The loop has opened the release PR for a fully delivered milestone and CI keeps it current. To open it by hand:
 
 ```text
 Finish the release with an updated changelog.
@@ -75,7 +77,17 @@ Review the release PR, then merge it with a merge commit:
 gh pr merge <nr> --merge
 ```
 
-`deliver` and `finish` never merge it and never wait for it. `release/next` is never deleted. After the merge the next `github-release finish` (or `cut`) moves it to `main` by a fast-forward for the next release, and open PRs into it keep their base.
+The loop and `finish` never merge it and never wait for it. `release/next` is never deleted. After the merge the next `github-release finish` (or `cut`) moves it to `main` by a fast-forward for the next release, and open PRs into it keep their base.
+
+## Publish gate
+
+A merged release PR is not yet a release. Run `finish` again after the merge:
+
+```text
+Finish the release.
+```
+
+It runs `Get-PublishState.ps1` on the merge commit: the workflow runs, the tag and the published GitHub Release. It re-runs failed jobs once. Only when all is well does it go on to the [milestone](#_7-close-the-milestone); a failed publish stops it and the milestone stays open. The result is written as [events](../delivery/model.md#events) (`publish-ok` or `publish-failed`), so a host shows it with the runs.
 
 ## When the release job fails
 
@@ -105,13 +117,13 @@ The skill never changes the ruleset; the decision is per back-merge, not a perma
 
 ## Ruleset on `release/next`
 
-`/deliver` squash merges without asking when the review is clean and the checks are green. The ruleset is what makes that safe: a red or missing required check blocks the merge whatever the session does. At the start `deliver` runs
+`deliver-loop` squash merges into `release/next` without asking once the review approved and the checks are green. The ruleset is what makes that safe: a red or missing required check blocks the merge whatever a session does. At the start the loop reads the required checks of the base; to see them yourself:
 
 ```bash
 gh api repos/{owner}/{repo}/rules/branches/release/next --jq '.[].type'
 ```
 
-and warns when `required_status_checks` is not in the output.
+Without `required_status_checks` in the output the loop ends with exit 3 (`--allow-no-required-checks` overrides).
 
 Settings, in the UI under **Settings > Rules > Rulesets > New ruleset > New branch ruleset**:
 
@@ -154,17 +166,13 @@ JSON
 
 The `main` branch has its own ruleset that allows merge commits only, for the release PR. Check the result with the `gh api .../rules/branches/release/next` call above.
 
-## Next
-
-[Deliver issues](deliver.md), [delivery reference](../delivery.md).
-
 ## 7. Close the milestone
 
 The release job closes the milestone itself: once it has tagged `v1.3.0` (`close-milestones` of the `gh-release` action of GravionLabs/ci), every open milestone whose issues all shipped with the release is closed and renamed `M003 (1.3.0)`. A milestone with open issues stays open, and the job names it and the issues in a notice. Nothing is left to do after the merge except `/github-milestone create M004` when the next work starts.
 
 `github-release finish` first checks the publish (`Get-PublishState.ps1`: the workflow runs on the merge commit, the tag and the GitHub Release; failed jobs are re-run once) and leaves the milestone open when it did not succeed.
 
-If the job did not close it (a failed step, a pre-release, a milestone with leftovers), repair it by hand. `github-release finish` (the run that deletes the merged `release/next`) prints this hint for the lowest open `M<nnn>`, with the version taken from the tag:
+If the job did not close it (a failed step, a pre-release, a milestone with leftovers), repair it by hand. The later `github-release finish` after the merge prints this hint for the lowest open `M<nnn>`, with the version taken from the tag:
 
 ```text
 /github-milestone create M004
@@ -190,6 +198,10 @@ A repository with `x.y.z` milestones moves to `M<nnn>` in one pass; no flag day 
 2. Close the shipped milestones and move their open issues: `/github-milestone close M001 --version 0.1.0` and `/github-milestone close M002 --version 0.1.1 --move-to M003`. The target must exist and be open before `close --move-to` (#226), so the renames come first; without `--move-to` a milestone with open issues stays open and unchanged.
 3. Check with `/github-milestone list`, then create the next milestone with `/github-milestone create M005` when work starts.
 
-`deliver` keeps its state in `release-review-<title>.json` (`<git-common-dir>/.agents/state/`). The files of the old titles (`release-review-0.3.0.json`) stay as history and are not read again; new runs use the unpadded `M<n>` key (`M003` is `M3`: `release-review-M3.json`), the same before and after `close`.
+Older versions of `deliver` kept state in `release-review-<title>.json` (`<git-common-dir>/.agents/state/`). Such files (`release-review-0.3.0.json`) stay as history; `deliver-loop` does not read them.
 
-Also update the places of the migrated repository that name a milestone by version. In tamias these are the headings of `docs/roadmap.md` (`## 0.3.0` becomes `## M003`), plus any `--milestone 0.3.0` in scripts, notes or issue templates; run `/deliver --milestone M003` from then on.
+Also update the places of the migrated repository that name a milestone by version. In tamias these are the headings of `docs/roadmap.md` (`## 0.3.0` becomes `## M003`), plus any `--milestone 0.3.0` in scripts, notes or issue templates; run `deliver-loop --milestone M003` from then on.
+
+## Next
+
+[Delivery model](../delivery/model.md), [deliver issues](deliver.md), [delivery reference](../delivery.md).

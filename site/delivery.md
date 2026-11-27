@@ -1,6 +1,6 @@
 # Delivery
 
-Reference for the skill `deliver` (group `delivery`) and its loop `deliver-loop`, the same on Claude Code and Copilot CLI. New to it? Start with the [step-by-step guide](guides/deliver.md). Coming from the PowerShell loop: [migrating](guides/migrate-powershell-loop.md).
+Reference for the skill `deliver` (group `delivery`) and its loop `deliver-loop`, the same on Claude Code and Copilot CLI. New to it? Start with the [delivery model](delivery/model.md) (Objective to release) and the [step-by-step guide](guides/deliver.md). Coming from the PowerShell loop: [migrating](guides/migrate-powershell-loop.md).
 
 ## The skill
 
@@ -23,23 +23,36 @@ Feature pull requests are transport: the issue and the release pull request are 
 
 ## The loop
 
-`deliver-loop --milestone <M>`, `--feature <nr>` or `--issues <nr,…>` starts one fresh session per ready issue in its own worktree, has its pull request reviewed in a second session and merges it once the review approved and every required check passed. Options, exit codes, refusals and the session token: [guide](guides/deliver.md#the-loop).
+`deliver-loop --milestone <M>`, `--feature <nr>` or `--issues <nr,…>` (exactly one) starts one fresh session per ready issue in its own worktree, has its pull request reviewed in a second session and merges it once the review approved and the gates passed. `--milestone` takes the open PBIs and Bugs below the Features of the milestone and those still in it; PBIs and Bugs get their milestone at merge ([milestones](delivery/model.md#issue-levels-and-milestones)). Options, exit codes, refusals and the session token: [guide](guides/deliver.md#the-loop).
 
-| Refuses                                   | Override                     |
-| :---------------------------------------- | :--------------------------- |
-| a base without required checks            | `--allow-no-required-checks` |
-| issues of authors without write access    | `--trust-authors`            |
-| merging a pull request on protected paths | merge it yourself            |
+## Gates
+
+| Gate                                                       | Effect or override                                  |
+| :--------------------------------------------------------- | :-------------------------------------------------- |
+| a base without required checks                             | refused; `--allow-no-required-checks`               |
+| issues of authors without write access                     | refused; `--trust-authors`                          |
+| a red base after one re-run                                | a Bug is filed and delivered first                  |
+| a review verdict `changes`                                 | at most 2 fix rounds, then set aside                |
+| a pull request on protected paths                          | handed over: merge it yourself                      |
+| an approved pull request above the merge risk (`high`)     | handed over; `--merge-risk high` merges every level |
+| the release pull request                                   | opened, never merged                                |
+| a failed publish run, or no tag or release after the merge | `github-release finish` leaves the milestone open   |
+
+Details: [what the loop refuses](guides/deliver.md#what-the-loop-refuses), [publish gate](guides/release.md#publish-gate).
+
+## Role sessions
+
+The loop starts `/deliver` (implement), `/deliver-review` (review) and, with `--milestone`, `/retro --post`, each in a session of its own with the model of its role ([`models`](usage/project-config.md#models)). `deliver-triage`, a session for one attention event, is planned ([ADR 0011](https://github.com/GravionLabs/skills/blob/main/docs/adr/0011-objective-runs-in-three-layers-loop-code-deliver-triage-poimen-as-host.md)) and not built yet, and so is `deliver-loop --objective`.
 
 Settings: `deliver.base`, `deliver.tracker`, `deliver.harness`, `deliver.handoverMinutes`, `deliver.mergeRisk`, `deliver.review`, `deliver.protectedPaths` ([project config](usage/project-config.md#deliver)). The tracker contract is `scripts/tracker.mts` in the skill, GitHub is `scripts/tracker/github.mts`; the agent CLIs are in `scripts/harness.mts`.
 
 ## Release pull request
 
-With `--milestone`, once no PBI or Bug of the milestone is open, the loop opens the release pull request from the base into the default branch, prints its URL and never merges it. An open `release-test` issue is listed as needs you. `github-release` cuts `release/next` and finishes the release ([release guide](guides/release.md)); the release job closes the shipped milestone after the tag (`/github-milestone close M<nnn>` repairs one it did not close).
+With `--milestone`, once no PBI or Bug of the milestone is open, the loop opens the release pull request from the base into the default branch, prints its URL and never merges it. An open `release-test` issue is listed as needs you. Before the pull request the loop runs the [retro](guides/learn-from-runs.md#after-a-milestone) of the milestone and links its comment there; its ticked drafts become issues and [lessons](guides/learn-from-runs.md#lessons). `github-release` cuts `release/next` and finishes the release ([release guide](guides/release.md)); the release job closes the shipped milestone after the tag, and `finish` checks the publish run (`/github-milestone close M<nnn>` repairs a milestone the job left open).
 
 ## Progress events
 
-The loop writes [agent-events](https://github.com/GravionLabs/agent-events) to `<run>.jsonl` in the per-user directory (`~/.local/state/agent-events/`; see the [deliver guide](guides/deliver.md#progress-events)). See [herdr with the skills](guides/herdr.md).
+The loop writes [agent-events](https://github.com/GravionLabs/agent-events) to `<run>.jsonl` in the per-user directory (`$XDG_STATE_HOME/agent-events/`, else `~/.local/state/agent-events/`; Windows `%LOCALAPPDATA%\agent-events\`; `AGENT_EVENTS_DIR` overrides), with the `origin` of the run; the publish check writes its own run there. See the [deliver guide](guides/deliver.md#progress-events), [events in the model](delivery/model.md#events) and [herdr with the skills](guides/herdr.md).
 
 ## Parallel runs
 

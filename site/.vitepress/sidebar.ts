@@ -50,6 +50,7 @@ export const sidebar: SidebarGroup[] = [
     items: [
       { text: 'Skills', link: '/concepts/skills' },
       { text: 'Skill composition', link: '/concepts/composition' },
+      { text: 'Delivery model', link: '/delivery/model' },
       { text: 'Issue model', link: '/concepts/issue-model' },
       { text: 'Skill frontmatter', link: '/concepts/skill-frontmatter' },
     ],
