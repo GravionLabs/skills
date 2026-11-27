@@ -13,8 +13,13 @@ An `[Objective]` (label `objective`) is the level above the Epic, an outcome tha
 
 ## Requires
 
+One of two forms:
+
 `Requires: <owner>/<repo>@<milestone> released|rc`
 
+`Requires: <owner>/<repo>#<feature>`
+
+- `#<feature>`: the Feature is closed and the release that shipped its last PBI is tagged.
 - `released`: the milestone is closed (`github-milestone close`).
 - `rc` (the normal case): the `release-test` issue of the milestone carries the marker `<!-- release-test-rc -->`.
 - Code dependencies between issues stay native `blocked-by` links, never `Requires`.
@@ -26,4 +31,4 @@ When all children are closed, a human checks the Acceptance Criteria and closes 
 
 ## Milestones
 
-An Objective never has a milestone (`milestones.md`); `github-milestone assign` refuses it like an Epic.
+An Objective never has a milestone (`milestones.md`, [ADR 0010](https://github.com/GravionLabs/skills/blob/main/docs/adr/0010-milestones-hold-features-as-a-roadmap-and-record-what-a-release-shipped.md)); `github-milestone assign` refuses it like an Epic.

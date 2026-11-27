@@ -32,7 +32,7 @@ A PBI that another session claimed (assignee) is skipped too, see [delivery](../
 
 ## Milestones
 
-A milestone holds the work items that are delivered: PBIs and Bugs always have one. A Feature has one only when all its PBIs are in that milestone, an Epic and an Objective never. `github-milestone` shows breaks of the rule as `warnings`, `roadmap` refuses them, and `deliver --milestone` skips work items outside the milestone. Closing is independent: after the release PR is merged, Features whose sub-issues are all closed close with them. Details: `references/milestones.md` of `github-issue`.
+A milestone is a roadmap entry of Features and the record of what a release shipped ([ADR 0010](https://github.com/GravionLabs/skills/blob/main/docs/adr/0010-milestones-hold-features-as-a-roadmap-and-record-what-a-release-shipped.md)). A Feature is planned into the release it is meant to ship in, or none; a PBI or Bug gets its milestone when it is merged into `release/next`; an Epic and an Objective never have one. Closing is independent: after the release PR is merged, Features whose sub-issues are all closed close with them. Details: `references/milestones.md` of `github-issue`.
 
 ## Branches and the release branch
 

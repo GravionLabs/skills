@@ -8,8 +8,12 @@ const read = (p: string) => fs.readFileSync(path.join(root, p), 'utf8');
 describe('milestone rule (#327)', () => {
   it('github-issue states the rule in references/milestones.md and links it from SKILL.md', () => {
     const ref = read('skills/github/github-issue/references/milestones.md');
-    expect(ref).toMatch(/\| PBI\s+\| Always/);
-    expect(ref).toMatch(/\| Feature\s+\| Only when all its PBIs are in that same milestone/);
+    expect(ref).toMatch(/\| PBI\s+\| Not planned\. Set at merge into `release\/next`/);
+    expect(ref).toMatch(/\| Bug\s+\| Not planned/);
+    expect(ref).toMatch(/\| Feature\s+\| Planned/);
+    expect(ref).toContain('release-branch.yml');
+    expect(ref).toMatch(/`release-test` .* stays there/);
+    expect(ref).toMatch(/open PBIs and Bugs below those Features, plus .* before the migration/);
     expect(ref).toMatch(/\| Epic\s+\| Never/);
     expect(ref).toContain('close-release-issues');
     expect(ref).toContain('ships with <milestone>');
@@ -17,13 +21,30 @@ describe('milestone rule (#327)', () => {
     expect(read('skills/github/github-issue/SKILL.md')).toContain('references/milestones.md');
   });
 
-  it('planner ready: milestone belongs to PBI and Bug, a Feature is ready without one', () => {
+  it('the five files link ADR 0010', () => {
+    for (const file of [
+      'skills/github/github-issue/SKILL.md',
+      'skills/github/github-issue/references/milestones.md',
+      'skills/github/github-issue/references/objectives.md',
+      'skills/github/github-issue/references/create-from-plan.md',
+      'skills/delivery/planner/references/ready.md',
+    ])
+      expect(read(file), file).toContain('docs/adr/0010-milestones-hold-features');
+  });
+
+  it('create-from-plan: a Feature gets the milestone of the plan, PBIs and Bugs none', () => {
+    const doc = read('skills/github/github-issue/references/create-from-plan.md');
+    expect(doc).toContain('a created Feature gets the milestone of the plan');
+    expect(doc).toContain('created PBIs and Bugs get none');
+  });
+
+  it('planner ready: no milestone for PBI and Bug, a Feature is planned into one or none', () => {
     const ready = read('skills/delivery/planner/references/ready.md');
     const section = (name: string) =>
       ready.split(/^## /m).find((s) => s.startsWith(`${name}\n`)) ?? '';
-    expect(section('PBI')).toContain('Milestone set.');
-    expect(section('Feature')).not.toContain('Milestone set.');
-    expect(section('Feature')).toContain('Milestone: none');
+    expect(section('PBI')).toContain('No milestone (set at merge).');
+    expect(section('Feature')).toContain('Milestone: the release it is planned for, or none.');
+    expect(section('Objective')).toContain('Requires: <owner>/<repo>#<feature>');
     expect(section('Bug')).toContain('milestone');
   });
 
@@ -76,6 +97,8 @@ describe('objective level (#535)', () => {
     expect(skill).toContain('(Objective|Epic|Feature|PBI|Task|Bug)');
     const ref = read('skills/github/github-issue/references/objectives.md');
     expect(ref).toContain('Requires: <owner>/<repo>@<milestone> released|rc');
+    expect(ref).toContain('Requires: <owner>/<repo>#<feature>');
+    expect(ref).toMatch(/Feature is closed and the release that shipped its last PBI is tagged/);
     expect(ref).toContain('<!-- release-test-rc -->');
     expect(read('skills/github/github-issue/references/milestones.md')).toMatch(
       /\| Objective\s+\| Never/,
