@@ -39,8 +39,15 @@
   renumber: migrates the titles of every numbered milestone, open and closed, to the padded form (`M1 (0.2.0)` -> `M001 (0.2.0)`, `M11.1` -> `M011.1`, `M12 Terminal` -> `M012 Terminal`; topic and version kept; legacy x.y.z and other titles untouched).
   A target title that exists already (also two milestones with the same number) exits 1 before the first write; a number above 999 or a sub-number above 9 is reported in skipped[] and left as it is. A second run plans nothing.
   -DryRun prints the plan (renames[]: number, state, old, new; skipped[]; summary) and writes nothing. -AllRepos: one result per repository in repos[].
+  migrate: moves the open milestones of a non-archived repository to the ADR 0010 form, Features in, open PBIs and Bugs out. A PBI or Bug with an open parent Feature of the
+  same repository: the Feature gets the latest milestone among its open PBIs and Bugs (a Feature in a later one keeps it) and the PBI or Bug is cleared (cleared[]); without
+  such a Feature it is cleared and listed in unplanned[]. release-test issues, closed issues and closed milestones are never touched. A milestone with an open issue labeled agent:*
+  or with an open PR into release/next that closes one of its issues is skipped (skipped[]), and so are the PBIs of a Feature that would move out of or into such a milestone;
+  a later run handles them. A Feature that cannot be moved keeps its PBIs; failed reads and writes are in errors[] (exit 1). -DryRun writes nothing.
+  Result per repository: repo, dryRun, features[] (number, from, to), cleared[] (number, from, feature), unplanned[] (number, from), skipped[] (milestone, reason), errors[].
+  -AllRepos: one result per repository with open milestones in repos[].
 .PARAMETER Mode
-  current, list, show, create, issues, close, rename, insert, assign or renumber.
+  current, list, show, create, issues, close, rename, insert, assign, renumber or migrate.
 .PARAMETER Issues
   assign: issue numbers, comma or space separated, `#` allowed (`1,2,#3`).
 .PARAMETER Force
@@ -48,7 +55,7 @@
 .PARAMETER NoReleaseTest
   create, insert: skip the release-test issue (New-ReleaseTestIssue.ps1 makes it only when .agents/config.json has release.test, never twice per milestone; result key releaseTest).
 .PARAMETER DryRun
-  insert: list the renames and the references that need a manual check, write nothing. assign: report the result, write nothing.
+  insert: list the renames and the references that need a manual check, write nothing. assign, renumber, migrate: report the result, write nothing.
 .PARAMETER Name
   show, create, close, issues: M<n>, the full title, the version x.y.z (a leading v is dropped) or the title of a legacy milestone.
   create: M<n> or x.y.z; empty: the next free M number.
@@ -65,12 +72,12 @@
 .PARAMETER ReleaseState
   Path of Get-ReleaseState.ps1; default: the sibling github-release skill. Missing: releasePr is null.
 .PARAMETER AllRepos
-  renumber: run it over every repository of the owner that is not archived and has milestones (`gh repo list <owner> --no-archived`). All repositories are planned first; one clash or failure aborts before the first write.
+  renumber, migrate: run it over every repository of the owner that is not archived (`gh repo list <owner> --no-archived`). renumber: those with milestones; all are planned first, one clash or failure aborts before the first write. migrate: those with open milestones; a failure is reported in the errors[] of its repository and the others go on.
 .PARAMETER Owner
-  renumber -AllRepos: the owner; default the owner of -Repo (of the current directory without -Repo).
+  renumber, migrate -AllRepos: the owner; default the owner of -Repo (of the current directory without -Repo).
 #>
 param(
-  [Parameter(Mandatory)][ValidateSet('current', 'list', 'show', 'create', 'issues', 'close', 'rename', 'insert', 'assign', 'renumber')][string]$Mode,
+  [Parameter(Mandatory)][ValidateSet('current', 'list', 'show', 'create', 'issues', 'close', 'rename', 'insert', 'assign', 'renumber', 'migrate')][string]$Mode,
   [string]$Issues,
   [switch]$Force,
   [switch]$NoReleaseTest,
@@ -89,10 +96,10 @@ $ErrorActionPreference = 'Stop'
 
 function Fail([string]$m) { Write-Error $m -ErrorAction Continue; exit 1 }
 
-# GET with --paginate --slurp: one array of pages, flattened to the items
-function Get-Paged([string]$path) {
+# GET with --paginate --slurp: one array of pages, flattened to the items; -Throw: a failure is catchable (migrate)
+function Get-Paged([string]$path, [switch]$Throw) {
   $raw = & gh api $path --paginate --slurp 2>$null
-  if ($LASTEXITCODE -ne 0) { Fail "gh api $path failed" }
+  if ($LASTEXITCODE -ne 0) { if ($Throw) { throw "gh api $path failed" }; Fail "gh api $path failed" }
   $items = [System.Collections.Generic.List[object]]::new()
   Add-Leaf $items ($raw | Out-String | ConvertFrom-Json -NoEnumerate)
   $items.ToArray()
@@ -176,20 +183,152 @@ function Get-RenumberPlan([string]$repo, $ms) {
   }
 }
 
+# repository selection of renumber and migrate: -Repo (default: the current one) or every non-archived repository of the owner
+function Get-TargetRepos {
+  $self = $Repo
+  if (-not $AllRepos -and $self -eq '{owner}/{repo}') {
+    $self = (& gh repo view --json nameWithOwner --jq '.nameWithOwner' 2>$null | Out-String).Trim()
+    if ($LASTEXITCODE -ne 0 -or -not $self) { Fail 'cannot resolve the repository: pass -Repo owner/name' }
+  }
+  if (-not $AllRepos) { return $self }
+  $own = $Owner
+  if (-not $own -and $self -ne '{owner}/{repo}') { $own = ($self -split '/')[0] }
+  if (-not $own) { $own = (& gh repo view --json owner --jq '.owner.login' 2>$null | Out-String).Trim(); if ($LASTEXITCODE -ne 0 -or -not $own) { Fail 'cannot resolve the owner: pass -Owner' } }
+  $raw = & gh repo list $own --json nameWithOwner --no-archived --limit 1000 2>$null
+  if ($LASTEXITCODE -ne 0) { Fail "gh repo list $own failed" }
+  $raw | Out-String | ConvertFrom-Json | ForEach-Object { $_.nameWithOwner }
+}
+
+# sets (or, with an empty title, clears) the milestone of one issue; $false when gh fails
+function Set-IssueMilestone([string]$repo, [int]$number, [string]$title) {
+  $repoArgs = if ($repo -eq '{owner}/{repo}') { @() } else { @('--repo', $repo) }
+  $null = if ($title) { & gh issue edit $number --milestone $title @repoArgs 2>$null } else { & gh issue edit $number --remove-milestone @repoArgs 2>$null }
+  $LASTEXITCODE -eq 0
+}
+
+# order of milestone titles in time: other titles first, then legacy x.y.z by version, then M<n> by number
+function Get-Order([string]$t) {
+  $p = Get-Title $t
+  if ($p.kind -eq 'numbered') { "2$($p.key)" }
+  elseif ($p.kind -eq 'legacy') { '1' + (($p.version -split '\.' | ForEach-Object { $_.PadLeft(10, '0') }) -join '') }
+  else { '0' }
+}
+
+# numbers of the issues of $repo that an open PR into release/next closes (closing keywords of the body and linked issues) -> PR number
+function Get-InFlightPr([string]$repo) {
+  $closes = @{}
+  $rx = '(?i)\b(?:close[sd]?|fix(?:e[sd])?|resolve[sd]?)\b\s*:?\s+(?:(?<repo>[\w.-]+/[\w.-]+)#|#|https://github\.com/(?<repo>[\w.-]+/[\w.-]+)/issues/)(?<n>[0-9]{1,9})'
+  foreach ($pr in (Get-Paged "repos/$repo/pulls?state=open&base=release/next&per_page=100" -Throw)) {
+    foreach ($hit in [regex]::Matches("$($pr.body)", $rx)) {
+      if (-not $hit.Groups['repo'].Success -or $hit.Groups['repo'].Value -ieq $repo) { $closes[[int]$hit.Groups['n'].Value] = $pr.number }
+    }
+    $raw = & gh pr view $pr.number --repo $repo --json closingIssuesReferences 2>$null
+    if ($LASTEXITCODE -ne 0) { throw "gh pr view $($pr.number) failed" }
+    foreach ($ref in @(($raw | Out-String | ConvertFrom-Json).closingIssuesReferences)) {
+      if ($ref -and "$($ref.repository.owner.login)/$($ref.repository.name)" -ieq $repo) { $closes[[int]$ref.number] = $pr.number }
+    }
+  }
+  $closes
+}
+
+# migrate one repository ($open = its open milestones): everything is read before the first write
+function Invoke-Migration([string]$repo, $open, $res) {
+  $inFlight = Get-InFlightPr $repo
+  $skip = @{}
+  $work = [System.Collections.Generic.List[object]]::new()
+  foreach ($m in ($open | Sort-Object @{ e = { Get-Order $_.title } }, @{ e = { $_.title } })) {
+    $issues = @(Get-Paged "repos/$repo/issues?milestone=$($m.number)&state=open&per_page=100" -Throw | Where-Object { $null -eq $_.pull_request -and $_.state -ne 'closed' } | Sort-Object number)
+    $why = $null
+    foreach ($i in $issues) {
+      $agent = @($i.labels | ForEach-Object { $_.name } | Where-Object { $_ -like 'agent:*' })
+      if ($agent.Count) { $why = "in-flight: #$($i.number) is labeled $($agent[0])"; break }
+      if ($inFlight.ContainsKey([int]$i.number)) { $why = "in-flight: PR #$($inFlight[[int]$i.number]) into release/next closes #$($i.number)"; break }
+    }
+    if ($why) { $skip[$m.title] = $true; $res.skipped.Add([ordered]@{ milestone = $m.title; reason = $why }) }
+    foreach ($i in $issues) {
+      $labels = @($i.labels | ForEach-Object { $_.name })
+      if (($labels -notcontains 'pbi' -and $labels -notcontains 'bug') -or $labels -contains 'release-test') { continue }
+      if (@($labels | Where-Object { $_ -in 'feature', 'epic', 'objective' }).Count) { continue }
+      $work.Add([pscustomobject]@{ number = [int]$i.number; milestone = $m.title; parentUrl = "$($i.parent_issue_url)"; repoUrl = "$($i.repository_url)"; feature = $null })
+    }
+  }
+  # the open parent Feature of the same repository, read once per parent
+  $parents = @{}
+  $features = @{}
+  foreach ($w in $work) {
+    if (-not $w.parentUrl -or $w.parentUrl -notmatch '/issues/([0-9]+)$') { continue }
+    $n = [int]$Matches[1]
+    if ($w.parentUrl -ine "$($w.repoUrl)/issues/$n") { continue }
+    if (-not $parents.ContainsKey($n)) {
+      $raw = & gh api "repos/$repo/issues/$n" 2>$null
+      if ($LASTEXITCODE -ne 0) { throw "gh api repos/$repo/issues/$n failed" }
+      $parents[$n] = $raw | Out-String | ConvertFrom-Json
+    }
+    $p = $parents[$n]
+    if ($p.state -ne 'open' -or @($p.labels | ForEach-Object { $_.name }) -notcontains 'feature') { continue }
+    $w.feature = $n
+    # $work is in milestone order, so the last one is the latest; skipped milestones count too
+    $features[$n] = [pscustomobject]@{ from = $(if ($p.milestone) { [string]$p.milestone.title } else { $null }); to = $w.milestone; move = $false; held = $null }
+  }
+  foreach ($n in ($features.Keys | Sort-Object)) {
+    $ft = $features[$n]
+    $ft.move = -not $ft.from -or (Get-Order $ft.from) -lt (Get-Order $ft.to)
+    if (-not $ft.move) { continue }
+    $ft.held = @($ft.from, $ft.to) | Where-Object { $_ -and $skip.ContainsKey($_) } | Select-Object -First 1
+  }
+  $failed = @{}
+  foreach ($n in ($features.Keys | Sort-Object)) {
+    $ft = $features[$n]
+    # nothing to do when only PBIs of skipped milestones point at it
+    if (-not $ft.move -or $ft.held -or -not @($work | Where-Object { $_.feature -eq $n -and -not $skip.ContainsKey($_.milestone) }).Count) { continue }
+    if (-not $DryRun -and -not (Set-IssueMilestone $repo $n $ft.to)) { $failed[$n] = $true; $res.errors.Add("moving Feature #$n to $($ft.to) failed: its PBIs and Bugs keep their milestone"); continue }
+    $res.features.Add([ordered]@{ number = $n; from = $ft.from; to = $ft.to })
+  }
+  foreach ($w in ($work | Sort-Object number)) {
+    if ($skip.ContainsKey($w.milestone)) { continue }
+    if ($w.feature) {
+      if ($failed.ContainsKey($w.feature)) { continue }
+      $held = $features[$w.feature].held
+      if ($held) { $res.skipped.Add([ordered]@{ milestone = $w.milestone; reason = "#$($w.number) stays: moving Feature #$($w.feature) touches the in-flight milestone $held" }); continue }
+    }
+    if (-not $DryRun -and -not (Set-IssueMilestone $repo $w.number '')) { $res.errors.Add("clearing the milestone of #$($w.number) failed"); continue }
+    if ($w.feature) { $res.cleared.Add([ordered]@{ number = $w.number; from = $w.milestone; feature = $w.feature }) }
+    else { $res.unplanned.Add([ordered]@{ number = $w.number; from = $w.milestone }) }
+  }
+}
+
+if ($Mode -eq 'migrate') {
+  $results = [System.Collections.Generic.List[object]]::new()
+  foreach ($r in @(Get-TargetRepos)) {
+    $res = [ordered]@{ repo = $r; dryRun = [bool]$DryRun }
+    foreach ($k in 'features', 'cleared', 'unplanned', 'skipped', 'errors') { $res[$k] = [System.Collections.Generic.List[object]]::new() }
+    try {
+      $archived = $false
+      # -AllRepos lists no archived repository
+      if (-not $AllRepos) {
+        $raw = & gh api "repos/$r" 2>$null
+        if ($LASTEXITCODE -ne 0) { throw "gh api repos/$r failed" }
+        $archived = [bool]($raw | Out-String | ConvertFrom-Json).archived
+      }
+      if ($archived) { $res.skipped.Add([ordered]@{ milestone = $null; reason = 'archived repository' }) }
+      else {
+        $open = @(Get-Paged "repos/$r/milestones?state=open&per_page=100" -Throw)
+        if ($AllRepos -and -not $open.Count) { continue }
+        if ($open.Count) { Invoke-Migration $r $open $res }
+      }
+    }
+    catch { $res.errors.Add("$($_.Exception.Message)") }
+    $results.Add($res)
+  }
+  foreach ($x in $results) { foreach ($e in $x.errors) { Write-Error "$($x.repo): $e" -ErrorAction Continue } }
+  if ($AllRepos) { [ordered]@{ allRepos = $true; dryRun = [bool]$DryRun; repos = @($results) } | ConvertTo-Json -Depth 7 }
+  else { $results[0] | ConvertTo-Json -Depth 6 }
+  if (@($results | Where-Object { $_.errors.Count }).Count) { exit 1 }
+  exit 0
+}
+
 if ($Mode -eq 'renumber') {
-  if (-not $AllRepos -and $Repo -eq '{owner}/{repo}') {
-    $Repo = (& gh repo view --json nameWithOwner --jq '.nameWithOwner' 2>$null | Out-String).Trim()
-    if ($LASTEXITCODE -ne 0 -or -not $Repo) { Fail 'cannot resolve the repository: pass -Repo owner/name' }
-  }
-  $repos = @($Repo)
-  if ($AllRepos) {
-    $own = $Owner
-    if (-not $own -and $Repo -ne '{owner}/{repo}') { $own = ($Repo -split '/')[0] }
-    if (-not $own) { $own = (& gh repo view --json owner --jq '.owner.login' 2>$null | Out-String).Trim(); if ($LASTEXITCODE -ne 0 -or -not $own) { Fail 'cannot resolve the owner: pass -Owner' } }
-    $raw = & gh repo list $own --json nameWithOwner --no-archived --limit 1000 2>$null
-    if ($LASTEXITCODE -ne 0) { Fail "gh repo list $own failed" }
-    $repos = @($raw | Out-String | ConvertFrom-Json | ForEach-Object { $_.nameWithOwner })
-  }
+  $repos = @(Get-TargetRepos)
   $plans = [System.Collections.Generic.List[object]]::new()
   foreach ($r in $repos) {
     $ms = @(Get-Paged "repos/$r/milestones?state=all&per_page=100")
@@ -424,7 +563,6 @@ if ($Mode -eq 'assign') {
       $i.forced = $true
     }
   }
-  $repoArgs = if ($Repo -eq '{owner}/{repo}') { @() } else { @('--repo', $Repo) }
   $assigned = foreach ($n in $nums) {
     $i = $info[$n]
     $newMs = $null
@@ -433,8 +571,7 @@ if ($Mode -eq 'assign') {
     if ("$($i.current)" -cne "$newMs") {
       $status = if ($i.forced) { 'forced' } else { 'set' }
       if (-not $DryRun) {
-        $null = if ($newMs) { & gh issue edit $n --milestone $newMs @repoArgs 2>$null } else { & gh issue edit $n --remove-milestone @repoArgs 2>$null }
-        if ($LASTEXITCODE -ne 0) { Fail "setting the milestone of #$n failed" }
+        if (-not (Set-IssueMilestone $Repo $n $newMs)) { Fail "setting the milestone of #$n failed" }
       }
     }
     [ordered]@{ number = $n; previous = $(if ($i.current) { $i.current } else { $null }); milestone = $newMs; status = $status }
