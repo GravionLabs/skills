@@ -4,7 +4,7 @@ import { execFileSync } from 'node:child_process';
 
 const LIMIT = '1000';
 const WEEK = 7 * 24 * 60 * 60 * 1000;
-const TRUSTED = ['OWNER', 'MEMBER', 'COLLABORATOR'];
+export const TRUSTED = ['OWNER', 'MEMBER', 'COLLABORATOR'];
 // the comment of the loop that records a verdict on a pull request (`deliver/scripts/review.mts`)
 const MARK = /^<!-- deliver-review: (approve|changes) /;
 
@@ -37,7 +37,7 @@ export type Escaped = {
   title: string;
 };
 
-const gh = <T,>(...args: string[]): T =>
+export const gh = <T,>(...args: string[]): T =>
   JSON.parse(
     execFileSync('gh', args, {
       encoding: 'utf8',
@@ -46,7 +46,8 @@ const gh = <T,>(...args: string[]): T =>
     }),
   ) as T;
 
-const clean = (text: string): string => text.replace(/[\u0000-\u001f\u007f-\u009f]+/g, ' ').trim();
+export const clean = (text: string): string =>
+  text.replace(/[\u0000-\u001f\u007f-\u009f]+/g, ' ').trim();
 
 /** The milestone `<name>`, or `<name> (x.y.z)` after its release, with the numbers of its issues. */
 export function findMilestone(name: string): Milestone | undefined {

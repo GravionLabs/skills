@@ -8,6 +8,10 @@ After a run, `retro` measures what happened and proposes improvements to the age
 
 The `deliver` loop runs `retro --milestone <M> --post` after the last merge of a milestone. The report becomes one comment on the Feature that holds most of the milestone's issues (without a Feature: on the release PR), each draft PBI and lesson a `- [ ]` item with the draft in a `<details>` block. A rerun edits that comment. The release PR body links it. Nothing else is written; tick what you want and create it.
 
+## After an Objective
+
+`retro --objective <owner>/<repo>#<nr> --post` aggregates the milestone retros of every repository of an `[Objective]`: one metrics line per repository (`no retro` where none exists), then the candidates that hold for two or more repositories, then the rest, each with links. The report becomes one comment on the Objective with the same draft checklist; a rerun edits it. Run it yourself once every repository is released.
+
 ## Example
 
 ```text
