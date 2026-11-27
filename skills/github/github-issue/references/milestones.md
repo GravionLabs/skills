@@ -16,7 +16,7 @@ Why: planning the work is the job of Objectives and Features, and what a release
 
 ## Setting a milestone
 
-Only `github-milestone assign M<nnn>|none #<nr> …` sets or clears the milestone of issues (`scripts/Get-Milestones.ps1 -Mode assign`; `-DryRun` writes nothing). Never set one by hand: the milestone flags of the `gh` issue-edit call (`--milestone`, `--remove-milestone`) are not used in any skill, because they skip the checks below and the report. `assign` takes an open milestone only (a missing `M<nnn>` is not created: `create` first), refuses an Epic or an Objective (except `none`) and reports each change as `set` or `unchanged`. A Feature created by `github-issue` `references/create-from-plan.md` gets its milestone this way; a PBI or Bug created there gets none.
+Only `github-milestone assign M<nnn>|none #<nr> …` sets or clears the milestone of issues (`scripts/Get-Milestones.ps1 -Mode assign`; `-DryRun` writes nothing). Never set one by hand: the milestone flags of the `gh` issue-edit call (`--milestone`, `--remove-milestone`) are not used in any skill, because they skip the checks below and the report. `assign` takes an open milestone only (a missing `M<nnn>` is not created: `create` first), refuses an Epic or an Objective, and a PBI or Bug that is no `release-test` (except `none`; `-Force` sets a PBI or Bug for repairs), and reports each change as `set`, `forced` or `unchanged`. A Feature created by `github-issue` `references/create-from-plan.md` gets its milestone this way; a PBI or Bug created there gets none.
 
 ## Release test
 
@@ -33,5 +33,4 @@ An issue closes when its PR is merged into `release/next` (comment "ships with <
 - An Epic or an Objective in a milestone breaks the rule: `github-milestone assign` refuses both (except `none`), `roadmap` (`Set-IssueMilestones.ps1`) refuses an Epic. Fix it by clearing the milestone.
 - A Feature whose PBIs sit in other milestones or in none is the normal case, no warning. A PBI or Bug without a milestone is normal until it is merged.
 - An open PBI or Bug still in a milestone from before the migration is allowed; it stays workable until the migration clears it.
-- The scripts of `github-milestone` and `roadmap` do not apply all of this yet: they may still refuse a Feature whose open PBIs are elsewhere, or warn about it.
 - GravionLabs/ci: `project-needs.yml` (nightly, mode `project`) and `issue-events.yml` (on milestoned and demilestoned events) run `Sync-ProjectNeeds.ps1`, which checks the Current and Milestones fields of the project against the issues' milestones; it does not check the milestone rule itself.

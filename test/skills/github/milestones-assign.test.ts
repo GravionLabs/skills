@@ -77,14 +77,11 @@ describe('Get-Milestones.ps1 -Mode assign', () => {
       out: r.status === 0 ? JSON.parse(r.stdout) : null,
     };
   };
-  const pbi = (milestone: string | null = null, extra: object = {}) => ({
-    labels: ['pbi'],
-    milestone,
-    ...extra,
-  });
+  const pbi = (milestone: string | null = null) => ({ labels: ['pbi'], milestone });
+  const feature = (milestone: string | null = null) => ({ labels: ['feature'], milestone });
 
   it('sets M<n> (numeric lookup finds the padded title with topic) and reports previous', async () => {
-    const { out, writes } = await assign('M3', '1,#2', { 1: pbi(), 2: pbi('M004') });
+    const { out, writes } = await assign('M3', '1,#2', { 1: feature(), 2: feature('M004') });
     expect(out.milestone).toMatchObject({ number: 1, title: 'M003 Market' });
     expect(out.assigned).toEqual([
       { number: 1, previous: null, milestone: 'M003 Market', status: 'set' },
@@ -97,7 +94,7 @@ describe('Get-Milestones.ps1 -Mode assign', () => {
   });
 
   it('a re-run changes nothing (unchanged)', async () => {
-    const { out, writes } = await assign('M003', '1', { 1: pbi('M003 Market') });
+    const { out, writes } = await assign('M003', '1', { 1: feature('M003 Market') });
     expect(out.assigned).toEqual([
       { number: 1, previous: 'M003 Market', milestone: 'M003 Market', status: 'unchanged' },
     ]);
@@ -105,14 +102,14 @@ describe('Get-Milestones.ps1 -Mode assign', () => {
   });
 
   it('-DryRun prints the result and writes nothing', async () => {
-    const { out, writes } = await assign('M3', '1', { 1: pbi() }, {}, ['-DryRun']);
+    const { out, writes } = await assign('M3', '1', { 1: feature() }, {}, ['-DryRun']);
     expect(out.dryRun).toBe(true);
     expect(out.assigned[0].status).toBe('set');
     expect(writes).toEqual([]);
   });
 
   it('-DryRun plans against a missing milestone and still applies the Epic rule', async () => {
-    const ok = await assign('M9', '1', { 1: pbi() }, {}, ['-DryRun']);
+    const ok = await assign('M9', '1', { 1: feature() }, {}, ['-DryRun']);
     expect(ok.r.status).toBe(0);
     expect(ok.out.assigned[0].status).toBe('set');
     expect(ok.writes).toEqual([]);
@@ -123,7 +120,7 @@ describe('Get-Milestones.ps1 -Mode assign', () => {
   });
 
   it('-DryRun against a missing milestone validates against the schema (number null, state missing)', async () => {
-    const { r, out } = await assign('M9', '1', { 1: pbi() }, {}, ['-DryRun']);
+    const { r, out } = await assign('M9', '1', { 1: feature() }, {}, ['-DryRun']);
     expect(r.status).toBe(0);
     expect(out.milestone).toEqual({ number: null, title: 'M9', state: 'missing', url: null });
     const schema = JSON.parse(
@@ -141,7 +138,7 @@ describe('Get-Milestones.ps1 -Mode assign', () => {
     ['a closed milestone', 'M2', /closed/],
     ['an invalid name', 'Next', /invalid milestone name/],
   ])('%s: exit 1, nothing written', async (_c, name, msg) => {
-    const { r, writes, posts } = await assign(name, '1', { 1: pbi() });
+    const { r, writes, posts } = await assign(name, '1', { 1: feature() });
     expect(r.status).toBe(1);
     expect(r.stderr).toMatch(msg);
     expect(writes).toEqual([]);
@@ -149,118 +146,136 @@ describe('Get-Milestones.ps1 -Mode assign', () => {
   });
 
   it('an unknown issue: exit 1, nothing written, also for the issues before it', async () => {
-    const { r, writes } = await assign('M3', '1,7', { 1: pbi() });
+    const { r, writes } = await assign('M3', '1,7', { 1: feature() });
     expect(r.status).toBe(1);
     expect(r.stderr).toContain('#7 not found');
     expect(writes).toEqual([]);
   });
 
   it('refuses an Epic, nothing written', async () => {
-    const { r, writes } = await assign('M3', '1,2', { 1: pbi(), 2: { labels: ['epic'] } });
+    const { r, writes } = await assign('M3', '1,2', { 1: feature(), 2: { labels: ['epic'] } });
     expect(r.status).toBe(1);
     expect(r.stderr).toContain('Epic never has a milestone');
     expect(writes).toEqual([]);
   });
 
   it('refuses an Objective, nothing written', async () => {
-    const { r, writes } = await assign('M3', '1,2', { 1: pbi(), 2: { labels: ['objective'] } });
+    const { r, writes } = await assign('M3', '1,2', { 1: feature(), 2: { labels: ['objective'] } });
     expect(r.status).toBe(1);
     expect(r.stderr).toContain('Objective never has a milestone');
     expect(writes).toEqual([]);
   });
 
-  it('none clears an Epic without a warning', async () => {
+  it('none clears an Epic', async () => {
     const { out } = await assign('none', '2', { 2: { labels: ['epic'], milestone: 'M004' } });
     expect(out.milestone).toBeNull();
     expect(out.assigned).toEqual([{ number: 2, previous: 'M004', milestone: null, status: 'set' }]);
-    expect(out.warnings).toEqual([]);
   });
 
   describe('Feature', () => {
-    const feature = { 5: { labels: ['feature'] } };
-    it.each([
-      ['an open PBI without milestone', [{ number: 6, state: 'open', milestone: null }], '#6'],
-      [
-        'an open PBI in another milestone',
-        [{ number: 6, state: 'open', milestone: { title: 'M004' } }],
-        '#6',
-      ],
-      [
-        'a sub-issue of another repository with the same milestone title',
-        [
-          {
-            number: 6,
-            state: 'open',
-            milestone: { title: 'M003 Market' },
-            repository_url: 'https://api.github.com/repos/o/other',
-          },
-        ],
-        'o/other#6',
-      ],
-    ])('refused with %s: nothing written', async (_c, subs, outside) => {
-      const { r, writes } = await assign('M3', '5', feature, { 5: subs });
-      expect(r.status).toBe(1);
-      expect(r.stderr).toContain(`outside: ${outside}`);
-      expect(writes).toEqual([]);
-    });
-
-    it('allowed when its PBIs are in the call or already there; closed ones do not count', async () => {
-      const { out, writes } = await assign(
+    it('is set without looking at its PBIs (open ones elsewhere or without milestone)', async () => {
+      const before = fake.calls().length;
+      const { r, out, writes } = await assign(
         'M3',
-        '5,6',
-        { ...feature, 6: pbi() },
+        '5',
+        { 5: { labels: ['feature'] } },
         {
           5: [
             { number: 6, state: 'open', milestone: null },
-            { number: 7, state: 'open', milestone: { title: 'M003 Market' } },
-            { number: 8, state: 'closed', milestone: null },
+            { number: 7, state: 'open', milestone: { title: 'M004' } },
           ],
         },
       );
-      expect(out.assigned.map((x: { status: string }) => x.status)).toEqual(['set', 'set']);
-      expect(writes).toHaveLength(2);
+      expect(r.status).toBe(0);
+      expect(out.assigned[0].status).toBe('set');
+      expect(writes).toHaveLength(1);
+      expect(
+        fake
+          .calls()
+          .slice(before)
+          .some((c) => c.args.join(' ').includes('sub_issues')),
+      ).toBe(false);
+    });
+  });
+
+  describe('PBI and Bug (ADR 0010)', () => {
+    it.each([
+      ['pbi', 'PBI'],
+      ['bug', 'Bug'],
+    ])('refuses a %s, also on -DryRun: nothing written', async (label, level) => {
+      for (const extra of [[], ['-DryRun']]) {
+        const { r, writes } = await assign(
+          'M3',
+          '5,1',
+          { 5: { labels: ['feature'] }, 1: { labels: [label] } },
+          {},
+          extra,
+        );
+        expect(r.status).toBe(1);
+        expect(r.stderr).toContain(`#1 is a ${level}: its milestone is set at merge (ADR 0010)`);
+        expect(writes).toEqual([]);
+      }
+    });
+
+    it('sets a release-test', async () => {
+      const { out, writes } = await assign('M3', '1', {
+        1: { labels: ['pbi', 'release-test'] },
+      });
+      expect(out.assigned[0].status).toBe('set');
+      expect(writes).toHaveLength(1);
+    });
+
+    it('-Force sets them and reports forced, unchanged ones stay unchanged; schema valid', async () => {
+      const { out, writes } = await assign(
+        'M3',
+        '1,2,5',
+        { 1: pbi(), 2: pbi('M003 Market'), 5: { labels: ['feature'] } },
+        {},
+        ['-Force'],
+      );
+      expect(out.assigned.map((x: { status: string }) => x.status)).toEqual([
+        'forced',
+        'unchanged',
+        'set',
+      ]);
+      expect(writes.map((w) => w[2])).toEqual(['1', '5']);
+      const schema = JSON.parse(
+        fs.readFileSync(
+          path.join(root, 'skills/github/github-milestone/schema/milestones.schema.json'),
+          'utf8',
+        ),
+      );
+      expect(new Ajv2020({ strict: false }).validate(schema, out)).toBe(true);
+    });
+
+    it('-Force does not override the Epic rule', async () => {
+      const { r, writes } = await assign('M3', '2', { 2: { labels: ['epic'] } }, {}, ['-Force']);
+      expect(r.status).toBe(1);
+      expect(writes).toEqual([]);
     });
   });
 
   describe('none', () => {
-    it('clears with --remove-milestone and warns for a PBI and a Bug', async () => {
+    it('clears every level with --remove-milestone', async () => {
       const before = fake.calls().length;
-      const { out } = await assign('none', '1,2', {
-        1: pbi('M003 Market'),
-        2: { labels: ['bug'], milestone: 'M003 Market' },
-      });
-      expect(out.assigned).toEqual([
-        { number: 1, previous: 'M003 Market', milestone: null, status: 'set' },
-        { number: 2, previous: 'M003 Market', milestone: null, status: 'set' },
-      ]);
-      expect(out.warnings.map((w: { message: string }) => w.message)).toEqual([
-        'warning: #1 has no milestone',
-        'warning: #2 has no milestone',
-      ]);
+      const levels = ['pbi', 'bug', 'feature', 'epic'];
+      const { out } = await assign(
+        'none',
+        '1,2,3,4',
+        Object.fromEntries(
+          levels.map((l, k) => [k + 1, { labels: [l], milestone: 'M003 Market' }]),
+        ),
+      );
+      expect(out.assigned.map((x: { status: string }) => x.status)).toEqual(
+        levels.map(() => 'set'),
+      );
+      expect(out).not.toHaveProperty('warnings');
       const edits = fake
         .calls()
         .slice(before)
         .filter((c) => c.args[1] === 'edit')
-        .map((c) => c.args.slice(0, 4));
-      expect(edits).toEqual([
-        ['issue', 'edit', '1', '--remove-milestone'],
-        ['issue', 'edit', '2', '--remove-milestone'],
-      ]);
-    });
-
-    it('reports feature-incomplete when the Feature of the cleared PBI keeps the milestone', async () => {
-      const { out } = await assign('none', '1', {
-        1: pbi('M003 Market', { parent: 5 }),
-        5: { labels: ['feature'], milestone: 'M003 Market' },
-      });
-      expect(out.warnings.map((w: { type: string }) => w.type)).toEqual([
-        'no-milestone',
-        'feature-incomplete',
-      ]);
-      expect(out.warnings[1]).toMatchObject({
-        number: 5,
-        outside: [{ number: 1, milestone: 'none' }],
-      });
+        .map((c) => c.args.slice(2, 4));
+      expect(edits).toEqual(['1', '2', '3', '4'].map((n) => [n, '--remove-milestone']));
     });
 
     it('an already cleared issue is unchanged', async () => {

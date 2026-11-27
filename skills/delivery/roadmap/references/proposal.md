@@ -35,6 +35,6 @@ pwsh <skill-dir>/scripts/Set-IssueMilestones.ps1 -Assignment '[{ "issue": 12, "m
 - An issue already in the target milestone is skipped, so a re-run is safe.
 - Output follows `schema/set-issue-milestones.schema.json`: `created[]` and `results[]` (`issue`, `milestone`, `status` `set` or `unchanged`).
 
-- An Epic, or a Feature whose open PBIs would not all be in its milestone (assigned in the same call or already there), exits 1 and changes nothing.
+- An Epic, or a PBI or Bug (its milestone is set at merge; a `release-test` is allowed), exits 1 and changes nothing.
 
 `planner` sets the milestone only on the PBIs it creates; this step assigns the rest.
