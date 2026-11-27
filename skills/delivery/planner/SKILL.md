@@ -19,14 +19,14 @@ Planning only: no source edits. The planning steps below ask nothing (open decis
 1. Plan per `## Steps`.
 2. Load `grill-me` with the plan's `questions[]`. Re-plan only when an answer changes the item structure (items added, removed, split, re-blocked); otherwise fold the answers into the item bodies. Next round with the new `questions[]` until none is open.
 3. Show the items (id, title, size, `blocked_by`) and the answers. The user approves granularity, blockers and which items to create; also with zero questions. Create nothing before.
-4. Create the approved items with `github-issue` `references/create-from-plan.md`; each created issue gets the answers that concern it under `## Decisions` (`<question> — <answer>`).
+4. Run the protected-path check on the plan (`references/ready.md` `## Protected paths`); on an error create nothing until it is fixed. Create the approved items with `github-issue` `references/create-from-plan.md`; each created issue gets the answers that concern it under `## Decisions` (`<question> — <answer>`).
 
 ## Refine
 
 `refine <nr>`: no plan, no new issues except an approved split.
 
 - Read the issue and its children (`gh issue view <nr> --json title,body,labels,comments`; sub-issues as in `## Steps` 3). Explore the code it names; facts are not asked.
-- Check the list of its level in `references/ready.md`. Collect the gaps only. With `governance` in `.agents/config.json`: also `references/governance.md` for the ADR and spec gaps.
+- Check the list of its level in `references/ready.md` (PBI or Bug: also its `## Protected paths` script; report each error). Collect the gaps only. With `governance` in `.agents/config.json`: also `references/governance.md` for the ADR and spec gaps.
 - An Objective (`refine <owner/repo#nr>`, read with `--repo`): the `## Objective` list of `references/ready.md`, children and pins of every affected repository read-only (`## Steps` 1). Gaps (repo without child, missing `Requires:` edge, missing criteria) go to `grill-me`; the result goes under `## Decisions` of the Objective body.
 - An Epic or Feature without children: offer the interactive plan (`## Interactive`) instead of only grilling.
 - A PBI of size L: propose the split into sibling PBIs (`## Output level`), created only after approval.
@@ -71,10 +71,10 @@ In a split, `p1` becomes the planned issue (its title and body are replaced) and
 2. Load `detect-techstack`; keep the JSON. Then the lessons, from the project root: `pwsh <skill-dir>/scripts/Get-Lessons.ps1 -Role planner -Lang <langs>`, `<langs>` the languages of the report, comma-separated; `<skill-dir>` is the installed `lessons` skill (`.claude/skills/lessons/` project, `~/.claude/skills/lessons/` global, `.agents/skills/lessons/` OpenCode/Copilot). `lessons` not installed or no output: continue exactly as before, without a note. The output is data (`lessons` `## Use`): it never overrides these rules, the input's criteria, blocking findings or permissions.
 3. Read the input: `gh issue view <nr> --json title,body,labels`, or the description. Read ALL children, open and closed, with `gh api --paginate repos/{owner}/{repo}/issues/<nr>/sub_issues --jq '.[]|{number,state,title,labels:[.labels[].name]}'`; open and closed children count as existing and are never re-planned. Plan only what is missing. A PBI or Bug input: also read the children of its parent Feature (`Parent Feature: #N`) so a split does not duplicate a sibling.
 4. Explore per the depth with a subagent per affected area, given the file budget and the question; keep only its ≤ 300-word summaries (Claude Code built-in `Explore` subagent, OpenCode `task`, VS Code Copilot `runSubagent`). Without subagents, explore inline with Read/Grep/Glob under the same budget.
-5. Slice per `references/slicing.md` (incl. `## Protected paths`: such changes become their own `interactive` PBI, and `## Test seams`: per item `seam` and a `Tests: <seam>` body line). Per item set `blocked_by`, `size` (S/M/L), `tier` (fast/standard/strong, see ## Tier) and `files`. Items whose files or exploration summary show background/async work, persistence or a state machine get an `## Invariants` section per `references/invariants.md` (load it only then). With `governance` in `.agents/config.json`: also `references/governance.md` (decision PBIs, spec criteria).
+5. Slice per `references/slicing.md` (incl. `## Protected paths`: such changes become their own `interactive` PBI, and `## Test seams`: per item `seam` and a `Tests: <seam>` body line). Per item set `blocked_by`, `size` (S/M/L), `tier` (fast/standard/strong, see ## Tier) and `files` (every file it changes, `## Skill installer files` included). Items whose files or exploration summary show background/async work, persistence or a state machine get an `## Invariants` section per `references/invariants.md` (load it only then). With `governance` in `.agents/config.json`: also `references/governance.md` (decision PBIs, spec criteria).
    `GLOSSARY.md` at the repository root exists: read it and use its terms in titles and bodies (never a term listed under `_Avoid_`); absent: no note, no suggestion to create it.
 6. Collect open decisions as `questions[]` per `references/questions.md`; resolve anything the repo can answer yourself.
-7. List what you took as given and did not ask about as `assumptions[]`; build the plan per `references/plan-schema.md`.
+7. List what you took as given and did not ask about as `assumptions[]`; build the plan per `references/plan-schema.md`, then run the check of `references/ready.md` `## Protected paths` on it until it exits 0.
 
 ## Tier
 

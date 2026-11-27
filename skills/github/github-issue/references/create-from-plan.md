@@ -11,6 +11,7 @@ blocked-by links. Link calls and their gotchas: `sub-issues.md`.
   user and wait for the answers. Fold the answers into the affected item bodies; create nothing
   before that.
 - Show the items (id, title, size, `blocked_by`, `repo`) for approval.
+- Protected paths: run the check of the `planner` skill (its `references/ready.md`, "Protected paths") on the plan; exit 1 → create nothing until the errors are fixed.
 - Repositories: an item without `repo` goes to the current repository. Every `repo`, `parent_repo` and repository of `blocked_by` and `requires[]` has the owner of the plan; another owner → stop, create nothing.
 
 ## 2. Create each item, in plan order

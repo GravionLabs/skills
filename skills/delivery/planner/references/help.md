@@ -27,6 +27,7 @@ Plans an issue one level down with blockers and sizes, grills the open decisions
 - Interactive session: plan, grill the open decisions round by round (`grill-me`), then you approve granularity, blockers and which items to create (also with zero questions); nothing is created before; the answers go under `## Decisions` of the created issues
 - A split of an L-sized PBI is created only after your approval
 - Non-interactive (a workflow subagent): no questions, no issues; the plan with `questions[]` is returned as data
+- Protected paths: the files of every PBI are checked against `deliver.protectedPaths`; a hit needs the label `interactive`, else it is not ready and not created
 - `help` (also `--help`, `-h`): print this file
 
 ## Examples

@@ -36,12 +36,21 @@ A change touching many call sites is never one item. Plan it as:
 | M    | one module or component with its tests, one session            |
 | L    | at the edge of one session; split it unless it cannot be split |
 
+## Skill installer files
+
+A PBI that installs, updates or syncs skills (`skills-manage`, `npx skills add` or `update`) also changes what the installer writes. List these in its `files`, or they stay stale:
+
+- `skills-lock.json`
+- `.claude/skills/<name>` (the link, a copy on Windows) and `.agents/skills/<name>/` per installed or removed skill; `.claude/skills/*` when the names are not known yet
+
+Leave out a path the repository ignores (`git check-ignore <path>`): it is local install state and in no pull request.
+
 ## Protected paths
 
 `deliver-loop.mts` never merges a pull request that changes a protected path; a person merges it, and every PBI blocked by it waits too. Do not let ordinary work wait on that.
 
 1. Read the list: `deliver.protectedPaths` of `.agents/config.json` (it replaces the default), else the default list in `protected-paths.json` of the `deliver` skill (`.claude/skills/deliver/`, `~/.claude/skills/deliver/`, `.agents/skills/deliver/`; in this repository `skills/delivery/deliver/`). `dir/` is a directory at the root, anything else a file name anywhere, compared without regard to case. A package.json that only gains or changes entries of its dependency maps (`dependencies`, `devDependencies`, `peerDependencies`, `optionalDependencies`) is not a hit, so adding a dependency is ordinary work; a change to `scripts`, `packageManager`, `engines` or any other key is.
-2. Per planned item check from its `files` and the exploration whether it will probably change a protected path (a CI workflow, an agent setting, a script or a non-dependency key in a package.json, or a change to another manifest).
+2. List in `files` every file the item will probably change (a CI workflow, an agent setting, a manifest, …) and run `scripts/check-protected.mts` (`ready.md`, "Protected paths"): it finds the hits and, with `--fix`, labels them. A manifest change of dependencies only is declared with `Dependency-only: <path>` in the Technical Notes.
 3. Such a change is cut into its own PBI, as small as possible: only the files that trigger the guard, nothing else. The label `interactive` goes in `labels`; the rest of the work is not in it.
 4. A following item gets the `interactive` PBI in `blocked_by` only when it needs the change; otherwise it stays independent and the loop delivers it.
 5. The plan names the `interactive` PBIs (ids and titles) in the summary and the reply and advises delivering them first, in a session: `/deliver <nr>`.
