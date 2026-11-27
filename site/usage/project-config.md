@@ -24,6 +24,30 @@ The `deliver` loop reads these keys of `deliver`, all optional; the command-line
 
 Other keys of `deliver` (`roles`, `loopThreshold`, `parallel`, `sessionTimeoutMinutes`) are ignored with one warning line; the session length is the flag `--session-minutes`. Coming from the PowerShell loop: [migrating](../guides/migrate-powershell-loop.md).
 
+## Models
+
+`models` says which model each role of a delivery run uses: a role maps to a tier, a tier to a model per harness. The key may stand in `~/.agents/config.json` (the user) and in the repository's `.agents/config.json`; per value the repository wins over the user, and a flag of the caller over both.
+
+- `tiers.<harness>.{fast,standard,strong}`: the model, harness `claude` or `copilot`. Defaults: claude `haiku`, `sonnet`, `opus`; copilot `claude-haiku-5.5`, `claude-sonnet-5.5`, `claude-opus-5.5`. A model name is one token of letters, digits and `. _ : / -`, optionally with a suffix like `[1m]`: it ends up in a command line.
+- `roles.<role>`: `fast`, `standard`, `strong` or `tier` (the tier of the issue). Defaults: `orchestrator`, `triage`, `planner` and `review` `strong`; `implement` `tier`; `retro` and `release` `standard`.
+
+```json
+{
+  "models": {
+    "tiers": { "claude": { "strong": "claude-opus-5-5" } },
+    "roles": { "retro": "fast" }
+  }
+}
+```
+
+The script `resolve-model.mts` of the `deliver` skill answers for one role:
+
+```powershell
+node <deliver-skill-dir>/scripts/resolve-model.mts review --harness copilot --json
+```
+
+`resolve-model <role> [--tier fast|standard|strong] [--harness claude|copilot] [--json]` prints the model, or with `--json` the role, harness, tier, model and the source of harness, tier and model (`flag`, `repository`, `user`, `default`). The harness is `claude` without `--harness`. `--tier` wins over the role's tier; a role mapped to `tier` without `--tier` uses `standard`. An unknown key under `models` is ignored with a warning; an unknown role, tier or harness, an invalid model name or tier in a file and invalid JSON exit 64. `deliver-loop` does not read `models` yet: its sessions follow `--model` and `deliver.review`.
+
 ## Release test
 
 `release.prerelease` is the command that cuts a release candidate, for example `gh workflow run release.yml --ref release/next -f prerelease=true`; without it step 9 of `deliver` cuts no RC and the `release-test` comment names `release/next` at its SHA. `release.test.gate` (default `false`): with `true`, `deliver` stops after posting the RC and `github-release finish` refuses while the `release-test` issue is open; with `false` the release PR opens beside the running RC test. See `references/release-review.md` of `deliver`.
