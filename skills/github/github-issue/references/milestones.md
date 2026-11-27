@@ -1,6 +1,6 @@
 # Milestones and the issue levels
 
-A milestone is a roadmap entry of Features and the record of what a release shipped ([ADR 0010](https://github.com/GravionLabs/skills/blob/main/docs/adr/0010-milestones-hold-features-as-a-roadmap-and-record-what-a-release-shipped.md)). The rule is written here once; `planner`, `roadmap`, `deliver` and `github-milestone` follow and check it. Its title is `M<nnn>` (three digits, `M001` to `M999`; the lookup accepts `M11` for `M011`), see `github-milestone`.
+A milestone is a roadmap entry of Features and the record of what a release shipped ([ADR 0010](https://github.com/GravionLabs/skills/blob/main/docs/adr/0010-milestones-hold-features-as-a-roadmap-and-record-what-a-release-shipped.md)). The rule is written here once; `planner`, `roadmap`, `deliver` and `github-milestone` follow and check it. Its title is `M<nnn>` (three digits, `M001` to `M999`; the lookup accepts `M11` for `M011`), see `github-milestone`. How milestones fit the path from Objective to release: [delivery model](https://gravionlabs.github.io/skills/delivery/model).
 
 | Level     | Milestone                                                                                                        |
 | :-------- | :--------------------------------------------------------------------------------------------------------------- |

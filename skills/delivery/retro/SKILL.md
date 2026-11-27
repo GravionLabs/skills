@@ -6,7 +6,7 @@ metadata:
   opencode/autoinvoke: 'false'
 ---
 
-Retrospective on a finished run. You improve the agent **environment** (steering, checks, review rules, agents, models), not the code that was built. Attribution and categories: `references/categories.md` (adapted from mattpocock/skills `retro`, MIT).
+Retrospective on a finished run. You improve the agent **environment** (steering, checks, review rules, agents, models), not the code that was built. Attribution and categories: `references/categories.md` (adapted from mattpocock/skills `retro`, MIT). Where a retro sits in a run: [delivery model](https://gravionlabs.github.io/skills/delivery/model#learning).
 
 ## Input
 

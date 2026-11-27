@@ -1,6 +1,6 @@
 # Deliver issues with /deliver
 
-`/deliver <nr>` takes one open PBI or Bug and delivers it as a pull request into the base branch (`release/next` for a milestone, else the default branch). The `deliver-loop` runs it for a whole milestone or a list of issues: a fresh agent session per issue, each in its own worktree, and it merges the pull request once every required check passed. The reference is in [delivery](../delivery.md); coming from the PowerShell loop: [migrating](migrate-powershell-loop.md).
+`/deliver <nr>` takes one open PBI or Bug and delivers it as a pull request into the base branch (`release/next` for a milestone, else the default branch). The `deliver-loop` runs it for a whole milestone or a list of issues: a fresh agent session per issue, each in its own worktree, and it merges the pull request once every required check passed. The reference is in [delivery](../delivery.md), the whole path from an Objective to a release in the [delivery model](../delivery/model.md); coming from the PowerShell loop: [migrating](migrate-powershell-loop.md).
 
 ::: tip Prerequisites
 - `gh auth status` works and you can push to the repository.
@@ -35,7 +35,9 @@ flowchart TD
   C -->|green| M[squash merge, merge commit into main]
   C -->|red| A
   M -->|more issues| S
-  M -->|milestone done| R[release pull request into main, a person merges]
+  C -->|protected paths or risk| H[hand-over, a person merges]
+  M -->|milestone done| T[retro session]
+  T --> R[release pull request into main, a person merges]
 ```
 
 ```powershell
@@ -73,6 +75,7 @@ After the implementer session the loop starts `/deliver-review` in a fresh workt
 | `--review-model <name>`      | Model of the review session. Default: the role `review` of `models`.                                                 |
 | `--review-harness <name>`    | `claude` or `copilot` for the review. Default: the implementer's harness.                                            |
 | `--no-retro`                 | No retro session after the milestone.                                                                                |
+| `--merge-risk <level>`       | Highest risk the loop merges: `low`, `medium` (default) or `high`.                                                   |
 | `--max <n>`                  | Stops after `n` issues.                                                                                              |
 | `--session-minutes <n>`      | Longest session. Default 90.                                                                                         |
 | `--merge-minutes <n>`        | How long it waits for checks after a pull request. Default 30.                                                       |
@@ -81,26 +84,30 @@ After the implementer session the loop starts `/deliver-review` in a fresh workt
 | `--allow-no-required-checks` | Deliver into a base without required checks.                                                                         |
 | `--trust-authors`            | Also deliver issues of authors without write access.                                                                 |
 
-Exit codes: 0 everything done or `--max` reached, 2 open issues remain and none is ready or the base stayed red (see below), 3 the base is missing or has no required checks, 64 wrong arguments or settings, 130 stopped with Ctrl+C. Colored progress goes to the terminal (`NO_COLOR` turns it off) and to `<git-common-dir>/deliver/loop.log`; to stop from another terminal create the file `stop` in the run folder `<git-common-dir>/deliver/<run>/`.
+Exit codes: 0 everything done or `--max` reached, 2 open issues remain and none is ready, the base stayed red (see below) or `--merge-risk` is invalid, 3 the base is missing or has no required checks, or only handed-over pull requests remain, 5 the harness failed three times in a row, 64 wrong arguments or settings, 130 stopped with Ctrl+C. Colored progress goes to the terminal (`NO_COLOR` turns it off) and to `<git-common-dir>/deliver/loop.log`; to stop from another terminal create the file `stop` in the run folder `<git-common-dir>/deliver/<run>/`.
 
 ## Settings
 
 Optional, under `deliver` in `.agents/config.json` ([project config](../usage/project-config.md#deliver)); the flag of the same name wins.
 
-| Key              | Default                                                         |
-| :--------------- | :-------------------------------------------------------------- |
-| `base`           | `release/next` with `--milestone`, else the default branch      |
-| `tracker`        | `github` (`scripts/tracker/<name>.mts`)                         |
-| `harness`        | `claude`; a name only, a repository cannot set a command        |
-| `review`         | `{ "model", "harness", "effort" }` of the review session        |
-| `retro`          | `{ "enabled", "model" }` of the retro session after a milestone |
-| `protectedPaths` | `.github/`, `.agents/`, `.claude/` and the package manifests    |
+| Key               | Default                                                         |
+| :---------------- | :-------------------------------------------------------------- |
+| `base`            | `release/next` with `--milestone`, else the default branch      |
+| `tracker`         | `github` (`scripts/tracker/<name>.mts`)                         |
+| `harness`         | `claude`; a name only, a repository cannot set a command        |
+| `review`          | `{ "model", "harness", "effort" }` of the review session        |
+| `retro`           | `{ "enabled", "model" }` of the retro session after a milestone |
+| `handoverMinutes` | `120`: how long the loop waits for handed-over pull requests    |
+| `mergeRisk`       | `medium`: an approved pull request above it is handed over      |
+| `protectedPaths`  | `.github/`, `.agents/`, `.claude/` and the package manifests    |
 
 The top-level key [`models`](../usage/project-config.md#models) maps roles to models for `scripts/resolve-model.mts`; the loop picks the model of every session with it (the implementer by the `Tier:` line of the issue).
 
 Other keys (`roles`, `loopThreshold`, `parallel`, `sessionTimeoutMinutes`) are ignored with one warning line. `DELIVER_MIN_<X>` variables are read as `DELIVER_<X>` for one more release, with a warning.
 
 ## What the loop refuses
+
+These are the gates of the loop; with the publish gate of the release they are listed in the [delivery model](../delivery/model.md#gates).
 
 - **A red base.** Before every issue the loop reads the checks of the head of the base branch. Red: it reruns the failed jobs once and waits (`release/next: green after rerun (flake)`). Still red: it files `[Bug] fix: release/next is red (<checks>)` without a milestone, with the failed checks and their run URLs, reuses an open Bug with the marker `<!-- deliver-base-red -->`, and delivers it first. Green after its merge, the run goes on. A Bug that is set aside, or a base that is red again after the repair, ends the run `blocked` with exit 2; the last lines name the failed checks and the Bug URL, and no further issue starts. At most 2 repairs per run. A failing tracker call is no verdict: the issue starts.
 - **A base without required checks.** Nothing would guard the merge. Add a ruleset with required checks, or pass `--allow-no-required-checks`. Exit 3.
@@ -135,6 +142,10 @@ pwsh <skill-dir>/scripts/Install-LoopShim.ps1
 
 The launcher finds the installed `deliver` skill (project first, then your home) and runs `node <skill-dir>/scripts/deliver-loop.mts` with the arguments it gets, from the repository root. The installer removes the old `# >>> deliver-loop >>>` block from `~/.zshrc`, `~/.bashrc` and the PowerShell profiles, because a function of the same name hides the file. It reports when `.local/bin` is not in `PATH` and says how to add it; it never changes `PATH`. A second run changes nothing.
 
+## Triage and learning
+
+An issue that waits for you (hand-over, set-aside with a question, a blocked run) comes to you: `deliver-triage`, a role session that would take one such case, is planned and not built yet ([three layers](../delivery/model.md#three-orchestration-layers)). After a milestone the [retro](learn-from-runs.md#after-a-milestone) turns the run into draft PBIs and [lessons](learn-from-runs.md#lessons); later runs read the approved lessons.
+
 ## Resume and feedback
 
 State lives in GitHub (issue, branch, pull request, checks). After a crash, a closed terminal or a stop, run the same command again: closed issues are not selected, an existing pull request goes straight to its checks. A session that ends `needs-decision` or `blocked` is set aside for the rest of the run and listed at the end with its reason. Answer in the issue, remove the label (`gh issue edit 43 --remove-label needs-decision`) and run again. A pull request that changes protected paths is no failure: it is listed under `needs you` (yellow) with its URL; merge it yourself. When nothing else can start, the loop waits for you: it polls the pull requests every 60 s for up to `--handover-minutes` (default 120, `deliver.handoverMinutes`; `0` skips the wait), reports `blocked` (a question) with an `attention` naming them, and goes on with the unblocked PBIs after your merge. A pull request you close is set aside (`closed by a person`); one that gets a conflict meanwhile gets one repair session. `stop` and Ctrl-C end the wait. When the time is over, run `/deliver` again (or the same command). PBIs that are `blocked_by` a handed-over PBI cannot run until then: the report lists them per pull request (`waiting for the handed-over pull request of #N`), the last line reads `waiting for a handed-over PR`, `results.jsonl` ends with `{"run":"finished","status":"waiting-for-handed-over",…}` and the exit code is 3 (`done` is 0, `blocked` is 2, `failed` after three harness failures is 5).
@@ -149,7 +160,7 @@ Feature pull requests are transport; read the issue. After every review round wi
 
 ## Progress events
 
-The loop writes [agent-events](https://github.com/GravionLabs/agent-events) to `<run>.jsonl` in one directory per user (`$XDG_STATE_HOME/agent-events/`, else `~/.local/state/agent-events/`; Windows `%LOCALAPPDATA%\agent-events\`; `AGENT_EVENTS_DIR` overrides): the run, one task per issue with its pull request, progress, and an attention for an issue set aside. The session reports nothing itself. Displays such as [herdr](herdr.md) read the file.
+The loop writes [agent-events](https://github.com/GravionLabs/agent-events) to `<run>.jsonl` in one directory per user (`$XDG_STATE_HOME/agent-events/`, else `~/.local/state/agent-events/`; Windows `%LOCALAPPDATA%\agent-events\`; `AGENT_EVENTS_DIR` overrides): the run, one task per issue with its pull request, progress, and an attention for an issue set aside. The session reports nothing itself. Displays such as [herdr](herdr.md) and [poimen](https://gravionlabs.github.io/poimen/guide/runs) read the file. Format and location: [jsonl-file binding](https://gravionlabs.github.io/agent-events/bindings/jsonl-file). `github-release finish` writes the publish check there as a run of its own (`publish-ok` or `publish-failed`).
 
 An orchestrator reacts to the events `merged` (with `risk`), `handover` and `aside` (with `reason`, `aside` with the hold label) and `milestone-done`; their fields are a contract in the `SKILL.md` of `deliver`. The loops of all repositories write there (also an Objective run); `run.started` names the repository, branch, worktree and machine in `origin`. A writer deletes only old runs of its own repository and old runs without `origin`. Older versions wrote to `<git-common-dir>/.agents/events/`; nothing is deleted there, and a display that reads only that directory sees no new runs. In a terminal the OSC 7501 state `blocked` names why it waits (`reason=handover`, `decision` or `risk-high`).
 

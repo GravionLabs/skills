@@ -1,6 +1,6 @@
 # Objectives
 
-An `[Objective]` (label `objective`) is the level above the Epic, an outcome that spans several Epics or Features, also in other repositories of the same owner. It names the outcome, never the implementation.
+An `[Objective]` (label `objective`) is the level above the Epic, an outcome that spans several Epics or Features, also in other repositories of the same owner. It names the outcome, never the implementation. How an Objective becomes releases: [delivery model](https://gravionlabs.github.io/skills/delivery/model).
 
 ## Body
 
