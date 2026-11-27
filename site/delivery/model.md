@@ -71,7 +71,7 @@ flowchart TB
 **Built today.** The loop works one repository (`--milestone`, `--feature` or `--issues`). Two parts of ADR 0011 are planned in [skills#1041](https://github.com/GravionLabs/skills/issues/1041) and do not exist yet:
 
 - `deliver-loop --objective`, one command that keeps the order across repositories and waits for releases. Until then you, or a lead agent, start the loop of a repository once what it requires is released ([Objective runs in poimen](https://gravionlabs.github.io/poimen/guide/objective-runs)).
-- The skill `deliver-triage`, a session the loop starts for one attention event (`blocked`, `handover`, `aside` with `needs-decision`, `milestone-done`). It may only answer a `needs-decision` that is a fact check, defer an issue to the next milestone, draft a follow-up issue or re-run a failed CI job once; else it prepares the decision for you. Until then those events come to you.
+- The skill `deliver-triage`, a session the loop starts for one attention event (`blocked`, `deliver.handover`, `deliver.aside` with `needs-decision`, `deliver.milestone.done`). It may only answer a `needs-decision` that is a fact check, defer an issue to the next milestone, draft a follow-up issue or re-run a failed CI job once; else it prepares the decision for you. Until then those events come to you.
 
 What stays with the owner in every layer: the merge of a release pull request, a change on a protected path, a change of risk `high`, and a decision between options.
 
@@ -117,15 +117,15 @@ The loop keeps the stage of each issue in one `agent:*` label (`implementing`, `
 
 ## Gates
 
-| Gate            | Holds when                                                                       | Then                                                 |
-| :-------------- | :------------------------------------------------------------------------------- | :--------------------------------------------------- |
-| Green base      | The checks of the base branch head are red after one re-run                      | A Bug is filed and delivered first                   |
-| Review          | The verdict is `changes`                                                         | Fix rounds, then set aside                           |
-| Required checks | A required check is red or missing; a base without required checks is refused    | One repair session, or the run stops                 |
-| Protected paths | The pull request changes CI, agent settings or manifests beyond dependencies     | Hand-over                                            |
-| Risk            | The risk is above `deliver.mergeRisk` (default `medium`, so `high` is held)      | Hand-over                                            |
-| Release         | Always: the release pull request                                                 | A person merges it                                   |
-| Publish run     | After the release merge a workflow run fails, or the tag or GitHub Release lacks | `publish-failed`; `finish` leaves the milestone open |
+| Gate            | Holds when                                                                       | Then                                                    |
+| :-------------- | :------------------------------------------------------------------------------- | :------------------------------------------------------ |
+| Green base      | The checks of the base branch head are red after one re-run                      | A Bug is filed and delivered first                      |
+| Review          | The verdict is `changes`                                                         | Fix rounds, then set aside                              |
+| Required checks | A required check is red or missing; a base without required checks is refused    | One repair session, or the run stops                    |
+| Protected paths | The pull request changes CI, agent settings or manifests beyond dependencies     | Hand-over                                               |
+| Risk            | The risk is above `deliver.mergeRisk` (default `medium`, so `high` is held)      | Hand-over                                               |
+| Release         | Always: the release pull request                                                 | A person merges it                                      |
+| Publish run     | After the release merge a workflow run fails, or the tag or GitHub Release lacks | `ci.publish.failed`; `finish` leaves the milestone open |
 
 The publish run is checked by `github-release finish`, not by the loop. The release job of GravionLabs/ci closes the shipped milestone after the tag; `finish` is the check and the repair ([release](../guides/release.md#publish-gate)).
 
@@ -134,8 +134,8 @@ The publish run is checked by `github-release finish`, not by the loop. The rele
 Every run writes events in the [agent-events](https://gravionlabs.github.io/agent-events/SPEC) format: a core every reader understands, plus profiles a reader may ignore.
 
 - **Envelope:** `v`, `seq`, `ts`, `run`, `type`, `tone`; `needsYou` marks what waits for a person. The core types are `run.started`, `run.finished`, `task.started`, `task.finished`, `step.started`, `step.finished`, `progress`, `attention` and `attention.resolved`.
-- **Loop events:** `merged`, `handover`, `aside` and `milestone-done`; their fields are the contract in the [`deliver` skill](https://github.com/GravionLabs/skills/blob/main/skills/delivery/deliver/SKILL.md).
-- **CI events:** the publish check writes a run of its own (profile `ci@1`) with `ci.run.completed` per workflow run and `publish-ok` or `publish-failed`.
+- **Loop events:** profile `deliver@2` with `deliver.merged`, `deliver.handover`, `deliver.aside` and `deliver.milestone.done`; their fields are the contract in the [`deliver` skill](https://github.com/GravionLabs/skills/blob/main/skills/delivery/deliver/SKILL.md).
+- **CI events:** the publish check writes a run of its own (profile `ci@1`) with `ci.run.completed` per workflow run and `ci.publish.ok` or `ci.publish.failed`.
 - **Directory:** one per user, `$XDG_STATE_HOME/agent-events/`, else `~/.local/state/agent-events/` (Windows `%LOCALAPPDATA%\agent-events\`); `AGENT_EVENTS_DIR` replaces it. One `<run>.jsonl` per run, for all repositories.
 - **Origin:** `run.started` names `origin.repo`, `.branch`, `.worktree` and `.host`, so one reader follows all runs without knowing the repositories.
 - **Retention:** per origin repository. A writer removes only old runs of its own repository (older than 30 days, or above 100) and old runs without `origin`; readers delete nothing ([jsonl-file binding](https://gravionlabs.github.io/agent-events/bindings/jsonl-file)).

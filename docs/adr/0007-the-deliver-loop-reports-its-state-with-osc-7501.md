@@ -26,7 +26,7 @@ Unchanged from ADR 0002: tokens, sources, TTLs and backend calls stay forbidden;
 
 ## Amendment (#1066): the reason of `blocked`
 
-The decision stays valid and gets one optional key: `blocked` carries `reason=handover`, `reason=decision` or `reason=risk-high`, so a pane host can show why the loop waits. `kind` stays `question`. A key instead of a new `kind`: a terminal that does not know `reason` ignores it and shows `blocked`. An attention with none of these causes (a release test, a red base, another set-aside) has no `reason`. After the merge of an issue of risk `high` the loop also writes `blocked` (`reason=risk-high`) until the next issue starts or the run ends. The events carry the same facts for readers of the files.
+The decision stays valid and gets one optional key: `blocked` carries `reason=handover`, `reason=decision` or `reason=risk-high`, so a pane host can show why the loop waits. `kind` stays `question`. A key instead of a new `kind`: a terminal that does not know `reason` ignores it and shows `blocked`. An attention with none of these causes (a release test, a red base, another set-aside) has no `reason`. After the merge of an issue of risk `high` the loop also writes `blocked` (`reason=risk-high`) until the next issue starts or the run ends. The events carry the same facts for readers of the files (`deliver.handover`, `deliver.aside` and the `attention` reasons prefixed `deliver.`, #1112); the OSC 7501 values have no prefix.
 
 ## Consequences
 

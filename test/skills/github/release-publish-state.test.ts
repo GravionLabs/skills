@@ -2,6 +2,7 @@ import * as fs from 'fs';
 import * as os from 'os';
 import * as path from 'path';
 import { spawnSync } from 'child_process';
+import { profileValidator } from '../../helpers/agent-events-profile';
 import { createFakeGh } from '../../helpers/fake-gh';
 import { PwshWorker } from '../../helpers/pwsh-worker';
 
@@ -42,6 +43,8 @@ const green = {
   parents: 1,
   release: { isDraft: false, url: 'https://x/releases/v1.2.0' },
 };
+
+const profile = profileValidator('ci@1', path.join(skillDir, 'schema/ci-profile.schema.json'));
 
 let tmp: string;
 let repo: string;
@@ -90,11 +93,12 @@ const readRun = (dir: string) => {
   expect(events.map((e) => e.seq)).toEqual(events.map((_, i) => i + 1));
   for (const e of events) expect(e).toMatchObject({ v: 1, run: path.basename(files[0], '.jsonl') });
   expect(events[0].run).toMatch(/^[0-9a-f]{8}-[0-9a-f]{4}-7[0-9a-f]{3}-[89ab][0-9a-f]{3}-/);
+  profile.expectRun(events);
   return events;
 };
 
 describe('Get-PublishState.ps1', () => {
-  it('success: waits for the runs, finds the tag on the changelog commit and writes publish-ok', async () => {
+  it('success: waits for the runs, finds the tag on the changelog commit and writes ci.publish.ok', async () => {
     const dir = path.join(tmp, 'ev-ok');
     const r = await invoke({ ...green, polls: [[], run(null), run('success')] }, [
       '-Wait',
@@ -114,7 +118,7 @@ describe('Get-PublishState.ps1', () => {
     expect(events.map((e) => e.type)).toEqual([
       'run.started',
       'ci.run.completed',
-      'publish-ok',
+      'ci.publish.ok',
       'run.finished',
     ]);
     expect(events[0]).toMatchObject({
@@ -135,7 +139,7 @@ describe('Get-PublishState.ps1', () => {
     expect(r.reruns.map((c) => c.args)).toEqual([['run', 'rerun', '7', '--failed']]);
   });
 
-  it('failed twice: exit 1 with the run URL and the failed job, publish-failed', async () => {
+  it('failed twice: exit 1 with the run URL and the failed job, ci.publish.failed', async () => {
     const dir = path.join(tmp, 'ev-failed');
     const r = await invoke(
       { ...green, tags: [], polls: [run('failure'), run('failure'), run('failure', 2)] },
@@ -148,7 +152,7 @@ describe('Get-PublishState.ps1', () => {
     expect(r.reruns).toHaveLength(1);
     const events = readRun(dir);
     expect(events.at(-2)).toMatchObject({
-      type: 'publish-failed',
+      type: 'ci.publish.failed',
       ci: { job: 'Release', url: 'https://x/runs/7' },
     });
     expect(events.at(-1)).toMatchObject({ type: 'run.finished', outcome: 'failed' });

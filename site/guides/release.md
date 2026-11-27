@@ -87,7 +87,7 @@ A merged release PR is not yet a release. Run `finish` again after the merge:
 Finish the release.
 ```
 
-It runs `Get-PublishState.ps1` on the merge commit: the workflow runs, the tag and the published GitHub Release. It re-runs failed jobs once. Only when all is well does it go on to the [milestone](#_7-close-the-milestone); a failed publish stops it and the milestone stays open. The result is written as [events](../delivery/model.md#events) (`publish-ok` or `publish-failed`), so a host shows it with the runs.
+It runs `Get-PublishState.ps1` on the merge commit: the workflow runs, the tag and the published GitHub Release. It re-runs failed jobs once. Only when all is well does it go on to the [milestone](#_7-close-the-milestone); a failed publish stops it and the milestone stays open. The result is written as [events](../delivery/model.md#events) (`ci.publish.ok` or `ci.publish.failed`), so a host shows it with the runs.
 
 ## When the release job fails
 

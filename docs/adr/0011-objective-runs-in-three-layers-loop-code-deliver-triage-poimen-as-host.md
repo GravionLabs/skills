@@ -25,7 +25,7 @@ An Objective run has three layers. No orchestrator agent stays open for the run.
 
 **Flow.** Everything that can be checked mechanically is code of the loop: what starts, what waits, what merges, and which event needs judgment. The judgment layer never decides the order or passes a gate.
 
-**Judgment.** The loop starts `deliver-triage` on an attention event: `blocked`, `handover`, `aside` with `needs-decision`, or `milestone-done`. One session handles one case. The allowed actions are this list and nothing else:
+**Judgment.** The loop starts `deliver-triage` on an attention event: `blocked`, `deliver.handover`, `deliver.aside` with `needs-decision`, or `deliver.milestone.done`. One session handles one case. The allowed actions are this list and nothing else:
 
 1. Answer a `needs-decision` that is a fact check, with the evidence.
 2. Defer an issue to the next milestone.
