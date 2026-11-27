@@ -31,6 +31,7 @@ import { HARNESSES, type Harness } from './harness.mts';
 import { adoptLegacyEnv, unknownConfigKeys } from './legacy.mts';
 import { killTree, launch, promptPath } from './process.mts';
 import { progressLine } from './progress-bar.mts';
+import { MANIFESTS, exceptedManifest, protectedHits, protectedList } from './protected-paths.mts';
 import {
   RISK_LEVELS,
   type ReviewMark,
@@ -270,29 +271,9 @@ if (HARNESS_OVERRIDE?.some((part) => path.isAbsolute(part) && inside(part))) {
 if (process.env.DELIVER_TRACKER_DIR && inside(process.env.DELIVER_TRACKER_DIR)) {
   fail('DELIVER_TRACKER_DIR must not be inside the repository', 64);
 }
-// A pull request that changes one of these is never merged by the loop: a person looks at it first.
-// `dir/` is a directory at the root, anything else a file name anywhere. deliver.protectedPaths replaces the list.
-// The default list is `protected-paths.json` next to the skill (`planner` reads the same file).
-const PROTECTED: string[] =
-  config.deliver?.protectedPaths ??
-  JSON.parse(
-    readFileSync(
-      path.join(path.dirname(fileURLToPath(import.meta.url)), '../protected-paths.json'),
-      'utf8',
-    ),
-  );
-// Without regard to case (a checkout on macOS or Windows writes `.Claude/` into `.claude/`), and a file named
-// like a protected directory counts too (a symlink `.claude`).
-const protectedHits = (files: string[]): string[] =>
-  files.filter((file) => {
-    const name = file.toLowerCase();
-    return PROTECTED.some((entry) => {
-      const guarded = entry.toLowerCase();
-      return guarded.endsWith('/')
-        ? name.startsWith(guarded) || name === guarded.slice(0, -1)
-        : name === guarded || path.posix.basename(name) === guarded;
-    });
-  });
+// A pull request that changes one of these is never merged by the loop: a person looks at it first
+// (the matching rules: protected-paths.mts, which `planner` uses too).
+const PROTECTED: string[] = protectedList(config.deliver?.protectedPaths);
 // A `package.json` whose difference is only in these keys is no hit. A fixed list: a repository cannot widen it.
 const DEPENDENCY_KEYS = [
   'dependencies',
@@ -417,7 +398,7 @@ function directoryPackagesPropsParts(
   }
 }
 /** The files with a comparator, by lower-case name: what differs outside the allowed parts, `undefined` when unknown. */
-const COMPARATORS: Record<string, typeof packageJsonKeys> = {
+const COMPARATORS: Record<(typeof MANIFESTS)[number], typeof packageJsonKeys> = {
   'package.json': packageJsonKeys,
   'cargo.toml': cargoTomlParts,
   'pnpm-workspace.yaml': pnpmWorkspaceParts,
@@ -427,8 +408,12 @@ const COMPARATORS: Record<string, typeof packageJsonKeys> = {
 };
 /** The protected hits, a `package.json`, `Cargo.toml`, `pnpm-workspace.yaml`, `pyproject.toml`, `go.mod` or `Directory.Packages.props` that differs only in its dependencies dropped, the others named with their parts. */
 function judgeHits(pull: Pull, files: string[], head?: string): string[] {
-  const hits = protectedHits(files);
-  if (!hits.some((file) => Object.hasOwn(COMPARATORS, path.posix.basename(file.toLowerCase()))))
+  const hits = protectedHits(files, PROTECTED);
+  if (
+    !hits.some((file) =>
+      (MANIFESTS as readonly string[]).includes(path.posix.basename(file.toLowerCase())),
+    )
+  )
     return hits;
   let refs: { base: string; head: string } | undefined;
   try {
@@ -439,16 +424,12 @@ function judgeHits(pull: Pull, files: string[], head?: string): string[] {
   const out: string[] = [];
   for (const file of hits) {
     // the case-folded name matches the manifest; the file itself is read under its own name
-    const lower = file.toLowerCase();
-    const inDirectory = PROTECTED.some(
-      (entry) => entry.endsWith('/') && lower.startsWith(entry.toLowerCase()),
-    );
-    const name = path.posix.basename(lower);
-    const compare = Object.hasOwn(COMPARATORS, name) ? COMPARATORS[name] : undefined;
-    if (inDirectory || !compare) {
+    const manifest = exceptedManifest(file, PROTECTED);
+    if (!manifest) {
       out.push(file);
       continue;
     }
+    const compare = COMPARATORS[manifest];
     let keys: string[] | undefined;
     try {
       keys = compare(file, refs);
