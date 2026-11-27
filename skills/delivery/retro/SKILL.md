@@ -16,6 +16,8 @@ Retrospective on a finished run. You improve the agent **environment** (steering
 
 `--post` (with `--milestone <M>`, optional `--release-pr <url>`; the `deliver` loop runs it): load `references/post.md`; the report and the drafts become one marker comment, drafts as a `- [ ]` checklist with `<details>`, and nobody is asked.
 
+`retro --objective <owner>/<repo>#<nr> [--post]`: load `references/objective.md` and follow it instead of the steps; it aggregates the milestone retros of every repository of an `[Objective]`. The rules below still hold.
+
 ## Steps
 
 1. **Metrics.** The run folder of `deliver` comes first: `node scripts/run-metrics.mts` with `--run <path>`, with `--issues <nr,…>`, or with no argument (newest run folder). `--milestone <M>`: `node scripts/run-metrics.mts --milestone <M>`, which also returns `loopReview`, the escaped findings (`references/metrics-sources.md`, section "Escaped findings"). Several runs merge by issue; the last result per issue wins. `agentlens` (`agentlens cost --by issue --format json`) and `gh` (`gh pr view <pr> --json commits,reviews,statusCheckRollup,createdAt,mergedAt`) fill only what the run folder lacks. Source per column: `references/metrics-sources.md`; the report names it. No target found for a milestone or a session id: ask for the issue number. The metrics table has exactly these seven columns; a column without a source or value is `n/a`, never estimated. A value that agentlens marks `~` stays marked as an estimate.

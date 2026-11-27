@@ -1,6 +1,8 @@
 // `retro --post`: writes the report as one comment with the marker `<!-- retro: <milestone> -->` on the Feature that
 // holds most of the milestone's issues, else on the release pull request; a rerun edits that comment.
+// With `--objective` the marker is `<!-- retro: objective -->` and the comment goes on the Objective.
 // Usage: node scripts/post-comment.mts --milestone <M> --file <report.md> [--release-pr <nr|url>]
+//        node scripts/post-comment.mts --objective <owner>/<repo>#<nr> --file <report.md>
 // With DELIVER_RETRO_FILE set (the `deliver` loop) the URL of the comment is written there too.
 import { execFileSync } from 'node:child_process';
 import { mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
@@ -8,6 +10,7 @@ import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { parseArgs } from 'node:util';
 import { findMilestone } from './escaped.mts';
+import { parseObjective } from './objective.mts';
 
 /** GitHub refuses a longer comment. */
 const MAX_BODY = 65_536;
@@ -60,10 +63,10 @@ function featureOf(repo: string, issues: number[]): number | undefined {
   return [...count].sort(([a, x], [b, y]) => y - x || a - b)[0]?.[0];
 }
 
-function post(milestone: string, report: string, releasePr: string | undefined): string {
+function postMilestone(milestone: string, report: string, releasePr: string | undefined): string {
   // the title of a released milestone is `<M> (x.y.z)`: the marker keeps the name
   const name = milestone.replace(/ \(\d+\.\d+\.\d+\)$/, '');
-  if (/[\r\n]|-->/.test(name)) throw new Error('invalid milestone name');
+  if (/[\r\n]|-->/.test(name) || name === 'objective') throw new Error('invalid milestone name');
   const found = findMilestone(name);
   if (!found) throw new Error(`milestone ${name} not found`);
   const repo = gh('repo', 'view', '--json', 'nameWithOwner', '-q', '.nameWithOwner');
@@ -71,7 +74,11 @@ function post(milestone: string, report: string, releasePr: string | undefined):
   const target = featureOf(repo, found.issues) ?? (release ? Number(release) : undefined);
   if (!target)
     throw new Error(`${name} has no Feature: pass the release pull request with --release-pr`);
-  const marker = `<!-- retro: ${name} -->`;
+  return upsert(repo, target, `<!-- retro: ${name} -->`, report);
+}
+
+/** Writes the comment that starts with `marker` on the issue or pull request, or edits the own one. */
+function upsert(repo: string, target: number, marker: string, report: string): string {
   const body = `${marker}\n${report.trim()}\n`;
   if (body.length > MAX_BODY)
     throw new Error(`the report has ${body.length} characters, at most ${MAX_BODY}: shorten it`);
@@ -114,12 +121,19 @@ try {
   const { values } = parseArgs({
     options: {
       milestone: { type: 'string' },
+      objective: { type: 'string' },
       file: { type: 'string' },
       'release-pr': { type: 'string' },
     },
   });
-  if (!values.milestone || !values.file) throw new Error('give --milestone <M> and --file <path>');
-  const url = post(values.milestone, readFileSync(values.file, 'utf8'), values['release-pr']);
+  if (!values.milestone === !values.objective || !values.file)
+    throw new Error('give --milestone <M> or --objective <owner>/<repo>#<nr>, and --file <path>');
+  const report = readFileSync(values.file, 'utf8');
+  let url: string;
+  if (values.objective) {
+    const { repo, number } = parseObjective(values.objective);
+    url = upsert(repo, number, '<!-- retro: objective -->', report);
+  } else url = postMilestone(values.milestone as string, report, values['release-pr']);
   if (process.env.DELIVER_RETRO_FILE)
     writeFileSync(process.env.DELIVER_RETRO_FILE, JSON.stringify({ url }));
   console.log(url);
