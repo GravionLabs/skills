@@ -257,6 +257,10 @@
           "type": "integer",
           "minimum": 0
         },
+        "mergeRisk": {
+          "description": "The highest risk level of the implementer result the loop merges (default medium); a pull request above it is handed over. --merge-risk wins.",
+          "enum": ["low", "medium", "high"]
+        },
         "protectedPaths": {
           "description": "A pull request that changes one of these paths is not merged by the loop; replaces the default list.",
           "type": "array",

@@ -8,6 +8,7 @@ export const CONFIG_KEYS = [
   'harness',
   'protectedPaths',
   'handoverMinutes',
+  'mergeRisk',
   'review',
   'retro',
 ];

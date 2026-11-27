@@ -10,6 +10,7 @@ import {
   createWriteStream,
   existsSync,
   mkdirSync,
+  readdirSync,
   readFileSync,
   realpathSync,
   rmSync,
@@ -69,6 +70,7 @@ const parsed = (() => {
         'session-minutes': { type: 'string', default: '90' },
         'merge-minutes': { type: 'string', default: '30' },
         'handover-minutes': { type: 'string' },
+        'merge-risk': { type: 'string' },
         'dry-run': { type: 'boolean', default: false },
         'allow-no-required-checks': { type: 'boolean', default: false },
         'trust-authors': { type: 'boolean', default: false },
@@ -79,7 +81,7 @@ const parsed = (() => {
     // an unknown option or a missing value: one line, no stack trace
     const message = (error as Error).message.split('\n')[0];
     console.error(
-      `deliver-loop: ${message}. Options: --milestone, --feature, --issues, --base, --tracker, --harness, --max, --model, --review-model, --review-harness, --session-minutes, --merge-minutes, --handover-minutes, --dry-run, --allow-no-required-checks, --trust-authors, --no-retro.`,
+      `deliver-loop: ${message}. Options: --milestone, --feature, --issues, --base, --tracker, --harness, --max, --model, --review-model, --review-harness, --session-minutes, --merge-minutes, --handover-minutes, --merge-risk, --dry-run, --allow-no-required-checks, --trust-authors, --no-retro.`,
     );
     process.exit(1);
   }
@@ -186,6 +188,7 @@ let config: {
     tracker?: string;
     protectedPaths?: string[];
     handoverMinutes?: number;
+    mergeRisk?: unknown;
     review?: unknown;
     retro?: unknown;
   };
@@ -199,6 +202,13 @@ try {
 const HANDOVER_MINUTES = Number(opt['handover-minutes'] ?? config.deliver?.handoverMinutes ?? 120);
 if (!Number.isInteger(HANDOVER_MINUTES) || HANDOVER_MINUTES < 0)
   fail('--handover-minutes (deliver.handoverMinutes) needs a whole number from 0', 64);
+// The highest risk level the loop merges: the flag, then the config, else medium. A level above it is handed over.
+const MERGE_RISK = String(opt['merge-risk'] ?? config.deliver?.mergeRisk ?? 'medium');
+if (!RISK_LEVELS.includes(MERGE_RISK))
+  fail(
+    `--merge-risk (deliver.mergeRisk) is one of ${RISK_LEVELS.join(', ')}, not "${MERGE_RISK}"`,
+    2,
+  );
 for (const warning of legacyWarnings) log(warning, 'warn');
 const configWarning = unknownConfigKeys(config.deliver);
 if (configWarning) log(configWarning, 'warn');
@@ -671,23 +681,27 @@ function resumeAt(item: Item, pull: Pull): Step {
   } catch (error) {
     log(`#${item.id} review marks unreadable: ${firstLine(error)}`, 'warn');
   }
-  const risk = [...(marks ?? [])].reverse().find((m) => m.risk)?.risk;
-  if (risk && !risks.has(item.id)) risks.set(item.id, risk);
-  if (stage === 'approved') {
+  for (const { risk } of marks ?? []) noteRisk(item.id, risk);
+  // a run that ended before the verdict left the level only in its result file
+  for (const level of earlierRisks(item)) noteRisk(item.id, level);
+  // handed over for its risk: still approved, so it goes to the merge gate again and no session is paid for
+  const heldForRisk = stage === 'handover' && riskHold(item.id) !== undefined;
+  if (stage === 'approved' || heldForRisk) {
     if (marks) {
       try {
         const { head } = tracker.compareRefs(pull);
         const latest = [...marks].reverse().find((m) => m.head === head);
         if (latest?.verdict === 'approve') return { step: 'merge', head };
-        log(
-          `#${item.id} agent:approved without an approving review of ${head}: reviews it`,
-          'warn',
-        );
+        if (!heldForRisk)
+          log(
+            `#${item.id} agent:approved without an approving review of ${head}: reviews it`,
+            'warn',
+          );
       } catch (error) {
         log(`#${item.id} review verdict unreadable: ${firstLine(error)}, reviews it`, 'warn');
       }
     }
-    return { step: 'review' };
+    if (!heldForRisk) return { step: 'review' };
   }
   if (stage === 'review') return { step: 'review' };
   const last = marks?.at(-1);
@@ -704,13 +718,30 @@ function resumeAt(item: Item, pull: Pull): Step {
 const risks = new Map<number, string>();
 /** The implementer result the session writes (`risk.level`); the session never reports anything else to the loop. */
 const resultFile = (item: Item) => path.join(runDir, `${item.id}.result.json`);
-function riskOf(item: Item): string | undefined {
+function riskOf(file: string): string | undefined {
   try {
-    const level = JSON.parse(readFileSync(resultFile(item), 'utf8'))?.risk?.level;
+    const level = JSON.parse(readFileSync(file, 'utf8'))?.risk?.level;
     return RISK_LEVELS.includes(level) ? level : undefined;
   } catch {
     return undefined;
   }
+}
+/** The levels the result files of earlier runs hold for the issue. */
+function earlierRisks(item: Item): (string | undefined)[] {
+  const runs = path.dirname(runDir);
+  return readdirSync(runs).map((name) => riskOf(path.join(runs, name, `${item.id}.result.json`)));
+}
+/** The highest level seen wins: a later fix or repair session never lowers the risk of the pull request. */
+function noteRisk(id: number, level: string | undefined): void {
+  if (level && RISK_LEVELS.indexOf(level) > RISK_LEVELS.indexOf(risks.get(id) ?? ''))
+    risks.set(id, level);
+}
+/** Why the loop does not merge the pull request of the issue for its risk; a missing level counts as medium. */
+function riskHold(id: number): string | undefined {
+  const level = risks.get(id) ?? 'medium';
+  return RISK_LEVELS.indexOf(level) > RISK_LEVELS.indexOf(MERGE_RISK)
+    ? `risk ${level}${HANDS_OFF}`
+    : undefined;
 }
 
 /** What one session is for: the implementer of the issue, the review of its pull request, or the retro of the run. */
@@ -1064,8 +1095,11 @@ async function retro(milestone: string, release: Pull | undefined): Promise<Retr
   }
 }
 
-/** Waits for the gate and merges the reviewed commit. Returns nothing when merged, else the reason. */
-async function merge(pull: Pull, reviewed: string): Promise<string | undefined> {
+/**
+ * Waits for the gate and merges the reviewed commit. Returns nothing when merged, else the reason. `held`: why a
+ * pull request that passes the gate is handed over instead.
+ */
+async function merge(pull: Pull, reviewed: string, held?: string): Promise<string | undefined> {
   const start = Date.now();
   let problem = '';
   while (!stopped) {
@@ -1091,6 +1125,7 @@ async function merge(pull: Pull, reviewed: string): Promise<string | undefined> 
       // The merge names gate.head, so a push after this read is refused by the tracker.
       const handsOff = await guard(pull, gate.head);
       if (handsOff) return handsOff;
+      if (held) return held;
       // the read of the files blocks too: a stop request that came in during it must be seen before the merge
       await seeStop();
       if (stopped) break;
@@ -1199,8 +1234,7 @@ async function deliver(item: Item): Promise<{ reason?: string; pull?: Pull }> {
       const ran = await runSession(item, worktree, sessions, implementer(item, reviewFile));
       reviewFile = undefined;
       // read after every implementer session: the next one (a fix round) starts without this file
-      const level = riskOf(item);
-      if (level) risks.set(item.id, level);
+      noteRisk(item.id, riskOf(resultFile(item)));
       session = ran.session;
       pull = tracker.pullOf(item);
       // a stopped or failed session never leads to a merge, also when a pull request is open
@@ -1289,7 +1323,7 @@ async function deliver(item: Item): Promise<{ reason?: string; pull?: Pull }> {
       head = reviewed.head;
     }
     log(`#${item.id} approved, waits for checks`, 'info');
-    reason = await merge(pull, head);
+    reason = await merge(pull, head, riskHold(item.id));
     // a person closed it or has to look at it: no repair session
     if (!reason || reason === 'stopped' || reason === CLOSED || reason.endsWith(HANDS_OFF)) break;
     log(`#${item.id} ${reason}${repaired ? '' : ', one repair session'}`, 'warn');
@@ -1415,6 +1449,7 @@ async function awaitHandovers(): Promise<boolean> {
       if (gate?.state === 'merged') {
         handedOver.delete(nr);
         handedPulls.delete(nr);
+        mergedByPerson.add(nr);
         merged.push(`#${nr} ${pull.url}`);
         log(`#${nr} merged by a person: ${pull.url}`, 'ok');
         mark(item, 'merged');
@@ -1574,6 +1609,8 @@ const aside = new Map<number, string>();
 // handed over by rule (the guard): a person merges the pull request, it is no failure
 const handedOver = new Map<number, string>();
 const handedPulls = new Map<number, { item: Item; pull: Pull }>();
+// handed-over pull requests a person merged during the wait: nothing is left to look at
+const mergedByPerson = new Set<number>();
 const merged: string[] = [];
 let waiting: string[] = [];
 let total = 0;
@@ -1875,11 +1912,16 @@ if (complete) {
   }
 }
 
-// an issue of level high is listed first: a person looks at it before the rest
-const highRisk = [...risks]
-  .filter(([, level]) => level === 'high')
-  .map(([nr]) => `#${nr} risk high`);
-needsYou = [...highRisk, ...[...handedOver].map(([nr, why]) => `#${nr} ${why}`), ...needsYou];
+// an issue of level high is listed first: a person looks at it before the rest. A handed-over one has its own
+// line, and one a person merged was looked at.
+const isHigh = (nr: number) => risks.get(nr) === 'high';
+const highRisk = [...risks.keys()]
+  .filter((nr) => isHigh(nr) && !handedOver.has(nr) && !mergedByPerson.has(nr))
+  .map((nr) => `#${nr} risk high`);
+const handedLines = [...handedOver]
+  .sort(([a], [b]) => Number(isHigh(b)) - Number(isHigh(a)))
+  .map(([nr, why]) => `#${nr} ${why}`);
+needsYou = [...highRisk, ...handedLines, ...needsYou];
 // the open PBIs that wait for a handed-over pull request: their blockers name its issue
 const waitingFor = new Map<number, string[]>();
 for (const nr of handedOver.keys()) {

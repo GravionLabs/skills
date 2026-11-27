@@ -10,6 +10,7 @@ const KINDS: [RegExp, string][] = [
   [/changes protected paths/, 'protected-paths'],
   [/could not read the changed files/, 'files-unreadable'],
   [/pushed after the review/, 'pushed-after-review'],
+  [/(^|, )risk (medium|high)$/, 'merge-risk'],
   [/^high risk/, 'high-risk'],
   [/^review failed/, 'review-failed'],
   [/^red: /, 'red-checks'],
