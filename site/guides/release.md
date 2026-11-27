@@ -162,6 +162,8 @@ The `main` branch has its own ruleset that allows merge commits only, for the re
 
 The release job closes the milestone itself: once it has tagged `v1.3.0` (`close-milestones` of the `gh-release` action of GravionLabs/ci), every open milestone whose issues all shipped with the release is closed and renamed `M003 (1.3.0)`. A milestone with open issues stays open, and the job names it and the issues in a notice. Nothing is left to do after the merge except `/github-milestone create M004` when the next work starts.
 
+`github-release finish` first checks the publish (`Get-PublishState.ps1`: the workflow runs on the merge commit, the tag and the GitHub Release; failed jobs are re-run once) and leaves the milestone open when it did not succeed.
+
 If the job did not close it (a failed step, a pre-release, a milestone with leftovers), repair it by hand. `github-release finish` (the run that deletes the merged `release/next`) prints this hint for the lowest open `M<nnn>`, with the version taken from the tag:
 
 ```text
