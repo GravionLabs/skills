@@ -151,6 +151,17 @@ export function mergeMethodFor(base: string, defaultBranch: string): 'merge' | '
   return base === defaultBranch ? 'merge' : 'squash';
 }
 
+const isFeature = (issue: Issue): boolean =>
+  issue.labels.some((l) => l.name === 'feature') || issue.title.startsWith('[Feature]');
+
+/** The body with exactly one line `Retro: <url>`: an earlier one is replaced, else it is appended. */
+export function withRetroLine(body: string | null | undefined, url: string): string {
+  const line = `Retro: ${url}`;
+  const text = (body ?? '').trimEnd();
+  if (/^Retro: .*$/m.test(text)) return text.replace(/^Retro: [^\r\n]*/m, () => line);
+  return text ? `${text}\n\n${line}` : line;
+}
+
 /** At most this many rate-limit waits in a row (primary and secondary together); the next error is thrown. */
 export const RATE_LIMIT_WAITS = 3;
 /** Seconds of the consecutive waits of a secondary limit: `gh` does not print `Retry-After` on an error. */
@@ -698,6 +709,43 @@ export function create({
         };
       }
       return { id: found.number, title: found.title, url: found.html_url, branch: found.head.ref };
+    },
+
+    hasRetroFeature(): boolean {
+      if (!selection.milestone) return false;
+      const issues = list<Issue>(
+        `repos/${repo}/issues?milestone=${milestone().number}&state=all&per_page=100`,
+      );
+      return issues.some((issue) => {
+        if (issue.pull_request) return false;
+        try {
+          const parent = api<Issue & { repository_url: string }>(
+            `repos/${repo}/issues/${issue.number}/parent`,
+          );
+          return parent.repository_url.endsWith(`/repos/${repo}`) && isFeature(parent);
+        } catch (error) {
+          // no parent
+          if (/HTTP 404/.test((error as { stderr?: string }).stderr ?? '')) return false;
+          throw error;
+        }
+      });
+    },
+
+    isRetroComment(url: string, marker: string): boolean {
+      const id = /^https:\/\/[^/]+\/([^/]+\/[^/]+)\/(?:issues|pull)\/\d+#issuecomment-(\d+)$/.exec(
+        url,
+      );
+      if (!id || id[1] !== repo) return false;
+      const comment = api<{ body: string | null; html_url: string }>(
+        `repos/${repo}/issues/comments/${id[2]}`,
+      );
+      return comment.html_url === url && (comment.body ?? '').startsWith(marker);
+    },
+
+    linkRetro(pull: Pull, url: string): void {
+      const route = `repos/${repo}/pulls/${pull.id}`;
+      const body = withRetroLine(api<PullRecord>(route).body, url);
+      gh('api', '-X', 'PATCH', route, '-f', `body=${body}`);
     },
 
     sessionEnv(token: string): Record<string, string> {

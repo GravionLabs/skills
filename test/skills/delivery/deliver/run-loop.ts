@@ -55,6 +55,8 @@ export type Scenario = {
   verdicts?: ('approve' | 'changes' | 'invalid' | 'none' | 'fail')[];
   /** The summary of the finding of a `changes` verdict, which then has no unmet criterion. */
   summary?: string;
+  retroFeature?: boolean;
+  retro?: 'post' | 'fail' | 'none' | 'hang';
   /** Only the first implementer session writes the risk level. */
   riskOnce?: boolean;
 };
@@ -76,6 +78,7 @@ export type Outcome = {
     ghToken: string | null;
     hasSessionTokenVariable: boolean;
   }[];
+  retros: { prompt: string; releasePulls: number }[];
   reviews: { id: number; prompt: string; cwd: string; hasResultFileVariable: boolean }[];
   results: Result[];
   final?: Record<string, unknown>;
@@ -183,6 +186,7 @@ export function loop(
         comments: lines(path.join(dir, 'comments.jsonl')),
         sessions: lines(path.join(dir, 'sessions.jsonl')),
         reviews: lines(path.join(dir, 'reviews.jsonl')),
+        retros: lines(path.join(dir, 'retros.jsonl')),
         results: results
           ? lines<Result | { issue?: undefined }>(results).filter(
               (r): r is Result => r.issue !== undefined,

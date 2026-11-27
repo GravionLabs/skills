@@ -52,6 +52,8 @@ Name the milestone `M<nnn>` (`M004`): the lookup finds the open `M004` and, afte
 
 With `--milestone`, once no PBI or Bug of the milestone is open (none set aside or waiting), the loop opens the release pull request from the base into the default branch and prints its URL. It never merges it. An open `release-test` issue is never started: it is listed as needs you. A missing `release/next` (the release merge deletes it) is cut from the default branch.
 
+Before that pull request the loop runs the [retro](learn-from-runs.md#after-a-milestone) of the milestone in a session of its own and links its comment in the pull request body (`Retro: <url>`). A failed or timed-out retro is reported as `retro failed` and never blocks the release. `--no-retro` or `deliver.retro.enabled: false` turns it off.
+
 ## The review
 
 After the implementer session the loop starts `/deliver-review` in a fresh worktree at the head of the pull request, by default on the same harness with another model than the implementer. The verdict `approve` lets the checks and the guard of the merged commit follow, and the loop merges only the reviewed commit; a later push hands the pull request over (`pushed after the review`). On `changes` the implementer runs again with the verdict file, at most 2 fix rounds; a further `changes` sets the issue aside as `needs-decision: …` with the findings. A missing or invalid verdict, or a failed review session that left a verdict file, is retried once, then the issue is set aside (`review failed: …`); a session that fails without one is a harness failure. A red check gets one repair session, which is reviewed again. A pull request on protected paths is handed over to you without a review session. `results.jsonl` lists the rounds (`reviews`), the agent-events one step per round.
@@ -66,6 +68,7 @@ After the implementer session the loop starts `/deliver-review` in a fresh workt
 | `--harness <name>`           | `claude` (default) or `copilot`. `--model <name>` passes a model of that harness.                     |
 | `--review-model <name>`      | Model of the review session. Default: another model than the implementer's.                           |
 | `--review-harness <name>`    | `claude` or `copilot` for the review. Default: the implementer's harness.                             |
+| `--no-retro`                 | No retro session after the milestone.                                                                 |
 | `--max <n>`                  | Stops after `n` issues.                                                                               |
 | `--session-minutes <n>`      | Longest session. Default 90.                                                                          |
 | `--merge-minutes <n>`        | How long it waits for checks after a pull request. Default 30.                                        |
@@ -80,13 +83,14 @@ Exit codes: 0 everything done or `--max` reached, 2 open issues remain and none 
 
 Optional, under `deliver` in `.agents/config.json` ([project config](../usage/project-config.md#deliver)); the flag of the same name wins.
 
-| Key              | Default                                                      |
-| :--------------- | :----------------------------------------------------------- |
-| `base`           | `release/next` with `--milestone`, else the default branch   |
-| `tracker`        | `github` (`scripts/tracker/<name>.mts`)                      |
-| `harness`        | `claude`; a name only, a repository cannot set a command     |
-| `review`         | `{ "model", "harness", "effort" }` of the review session     |
-| `protectedPaths` | `.github/`, `.agents/`, `.claude/` and the package manifests |
+| Key              | Default                                                         |
+| :--------------- | :-------------------------------------------------------------- |
+| `base`           | `release/next` with `--milestone`, else the default branch      |
+| `tracker`        | `github` (`scripts/tracker/<name>.mts`)                         |
+| `harness`        | `claude`; a name only, a repository cannot set a command        |
+| `review`         | `{ "model", "harness", "effort" }` of the review session        |
+| `retro`          | `{ "enabled", "model" }` of the retro session after a milestone |
+| `protectedPaths` | `.github/`, `.agents/`, `.claude/` and the package manifests    |
 
 Other keys (`roles`, `loopThreshold`, `parallel`, `sessionTimeoutMinutes`) are ignored with one warning line. `DELIVER_MIN_<X>` variables are read as `DELIVER_<X>` for one more release, with a warning.
 

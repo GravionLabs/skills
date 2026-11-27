@@ -38,6 +38,7 @@ import {
   type Verdict,
   findingsLine,
   parseVerdict,
+  retroSettings,
   reviewSettings,
 } from './review.mts';
 import { type StageEvent, stageAfter, stageOf } from './stage.mts';
@@ -65,13 +66,14 @@ const parsed = (() => {
         'dry-run': { type: 'boolean', default: false },
         'allow-no-required-checks': { type: 'boolean', default: false },
         'trust-authors': { type: 'boolean', default: false },
+        'no-retro': { type: 'boolean', default: false },
       },
     });
   } catch (error) {
     // an unknown option or a missing value: one line, no stack trace
     const message = (error as Error).message.split('\n')[0];
     console.error(
-      `deliver-loop: ${message}. Options: --milestone, --issues, --base, --tracker, --harness, --max, --model, --review-model, --review-harness, --session-minutes, --merge-minutes, --handover-minutes, --dry-run, --allow-no-required-checks, --trust-authors.`,
+      `deliver-loop: ${message}. Options: --milestone, --issues, --base, --tracker, --harness, --max, --model, --review-model, --review-harness, --session-minutes, --merge-minutes, --handover-minutes, --dry-run, --allow-no-required-checks, --trust-authors, --no-retro.`,
     );
     process.exit(1);
   }
@@ -90,6 +92,7 @@ type Session = {
   /** Set for a review session. */
   role?: 'review';
 };
+type Retro = { url?: string; failed?: string };
 type Tone = 'ok' | 'bad' | 'warn' | 'info' | 'dim' | 'bold';
 
 const run = (cmd: string, args: string[], cwd?: string): string =>
@@ -173,6 +176,7 @@ let config: {
     protectedPaths?: string[];
     handoverMinutes?: number;
     review?: unknown;
+    retro?: unknown;
   };
 } = {};
 try {
@@ -214,6 +218,28 @@ const REVIEW: ReviewSettings = (() => {
     return fail((error as Error).message, 64);
   }
 })();
+const RETRO = (() => {
+  try {
+    return retroSettings({
+      disabled: opt['no-retro'],
+      config: config.deliver?.retro,
+      reviewModel: REVIEW.model,
+    });
+  } catch (error) {
+    return fail((error as Error).message, 64);
+  }
+})();
+// the retro session reads and writes one comment (through its script): it never pushes or changes issues and pull requests
+const RETRO_DENY = [
+  'git push',
+  'gh issue create',
+  'gh issue edit',
+  'gh issue close',
+  'gh pr create',
+  'gh pr edit',
+  'gh pr merge',
+  'gh pr close',
+];
 // A fix round per `changes` verdict, at most this many per issue and run; the next `changes` sets the issue aside.
 const FIX_ROUNDS = 2;
 // Tests only: a command from the environment of the user (JSON array, the prompt is appended).
@@ -527,7 +553,7 @@ function finishedResult(line: string): boolean {
     if (event?.type !== 'result' || event.is_error || typeof event.result !== 'string')
       return false;
     const last = event.result.trimEnd().split('\n').pop() ?? '';
-    return /^result: (pr \S+|needs-decision|reviewed (approve|changes)|blocked\b.*)$/.test(
+    return /^result: (pr \S+|needs-decision|reviewed (approve|changes)|retro \S+|blocked\b.*)$/.test(
       last.trim(),
     );
   } catch {
@@ -675,15 +701,20 @@ function riskOf(item: Item): string | undefined {
   }
 }
 
-/** What one session is for: the implementer of the issue, or the review of its pull request. */
+/** What one session is for: the implementer of the issue, the review of its pull request, or the retro of the run. */
 type Task = {
   /** The slash command; the loop appends the issue file. */
   prompt: string;
   harness: Harness;
   model?: string;
   effort?: string;
+  /** Commands the session may not run (`HarnessInput.deny`). */
+  deny?: string[];
   /** The file the session writes its answer to, and the variable that names it. */
-  output: { name: 'DELIVER_RESULT_FILE' | 'DELIVER_REVIEW_FILE'; file: string };
+  output: {
+    name: 'DELIVER_RESULT_FILE' | 'DELIVER_REVIEW_FILE' | 'DELIVER_RETRO_FILE';
+    file: string;
+  };
   /** A failed session that left its work behind is no harness failure. */
   delivered(): boolean;
   role?: 'review';
@@ -699,14 +730,25 @@ const implementer = (item: Item, reviewFile?: string): Task => ({
   delivered: () => Boolean(tracker.pullOf(item)),
 });
 
-async function startSession(item: Item, cwd: string, file: string, task: Task): Promise<Session> {
-  // the session works from this text, not from what the tracker shows when it runs
-  const issueFile = path.join(runDir, `${item.id}.issue.md`);
-  writeFileSync(issueFile, `# ${item.title}\n\n${item.url}\n\n${item.body}\n`);
-  const prompt = `${task.prompt} --issue-file ${promptPath(issueFile)}`;
+/** `item`: the issue of the session; undefined for a session of the whole run (the retro). */
+async function startSession(
+  item: Item | undefined,
+  cwd: string,
+  file: string,
+  task: Task,
+): Promise<Session> {
+  const label = item ? `#${item.id}` : 'retro';
+  let prompt = task.prompt;
+  if (item) {
+    // the session works from this text, not from what the tracker shows when it runs
+    const issueFile = path.join(runDir, `${item.id}.issue.md`);
+    writeFileSync(issueFile, `# ${item.title}\n\n${item.url}\n\n${item.body}\n`);
+    prompt += ` --issue-file ${promptPath(issueFile)}`;
+  }
+  const { model, effort, deny } = task;
   const argv = HARNESS_OVERRIDE
     ? [...HARNESS_OVERRIDE, prompt]
-    : task.harness.command({ prompt, model: task.model, effort: task.effort });
+    : task.harness.command({ prompt, model, effort, deny });
   // an app token is renewed when less than the session timeout is left; the merge keeps the login of the user
   const sessionToken = tokenSource ? await tokenSource.current() : undefined;
   if (sessionToken?.renewed) log('app token minted for this session', 'dim');
@@ -728,6 +770,7 @@ async function startSession(item: Item, cwd: string, file: string, task: Task): 
     // a session gets only the file it writes
     'DELIVER_RESULT_FILE',
     'DELIVER_REVIEW_FILE',
+    'DELIVER_RETRO_FILE',
   ])
     delete env[name];
   env[task.output.name] = task.output.file;
@@ -766,7 +809,7 @@ async function startSession(item: Item, cwd: string, file: string, task: Task): 
       if (finishedResult(line)) {
         grace = setTimeout(() => {
           finished = true;
-          log(`#${item.id} session printed its result and stays alive: ended by the loop`, 'dim');
+          log(`${label} session printed its result and stays alive: ended by the loop`, 'dim');
           killTree(child);
         }, RESULT_GRACE_MS);
       }
@@ -780,7 +823,7 @@ async function startSession(item: Item, cwd: string, file: string, task: Task): 
         }
       }
     });
-    child.on('error', (error) => log(`#${item.id} session: ${error.message}`, 'bad'));
+    child.on('error', (error) => log(`${label} session: ${error.message}`, 'bad'));
     child.on('close', (code) => {
       clearTimeout(timer);
       clearTimeout(grace);
@@ -943,6 +986,46 @@ async function repairConflict(
   const after = read();
   if (after?.state === 'conflict') return `conflict not repaired: ${after.detail}`;
   return 'conflict repaired';
+}
+
+/**
+ * The retro of the delivered milestone, one session in a worktree of its own: it posts its report as one comment
+ * (on the Feature, else on `release`) and writes the URL to its output file. Never throws: a retro that fails is
+ * reported and changes nothing else.
+ */
+async function retro(milestone: string, release: Pull | undefined): Promise<Retro> {
+  const worktree = path.join(path.dirname(root), `${path.basename(root)}-wt-retro`);
+  const drop = () => attempt('git', ['worktree', 'remove', '--force', worktree], root);
+  const file = path.join(runDir, 'retro.result.json');
+  const name = /\s/.test(milestone) ? JSON.stringify(milestone) : milestone;
+  try {
+    run('git', ['fetch', '--quiet', 'origin', BASE], root);
+    drop();
+    run('git', ['worktree', 'add', '--quiet', '--detach', worktree, `origin/${BASE}`], root);
+    log(`retro of ${milestone} (${REVIEW.harnessName}, ${RETRO.model})`, 'info');
+    const session = await startSession(undefined, worktree, path.join(runDir, 'retro.jsonl'), {
+      prompt: `/retro --milestone ${name} --post${release ? ` --release-pr ${release.url}` : ''}`,
+      harness: REVIEW.harness,
+      model: RETRO.model,
+      effort: REVIEW.effort,
+      deny: RETRO_DENY,
+      output: { name: 'DELIVER_RETRO_FILE', file },
+      delivered: () => existsSync(file),
+    });
+    if (stopped) return {};
+    if (session.timedOut) return { failed: 'session timeout' };
+    if (session.exit !== 0) return { failed: `session failed (exit ${session.exit})` };
+    const url = existsSync(file) ? JSON.parse(readFileSync(file, 'utf8'))?.url : undefined;
+    // as the script writes it: the name without the version of a released milestone
+    const marker = `<!-- retro: ${milestone.replace(/ \(\d+\.\d+\.\d+\)$/, '')} -->`;
+    if (typeof url !== 'string' || !tracker.isRetroComment(url, marker))
+      return { failed: 'no retro comment' };
+    return { url };
+  } catch (error) {
+    return { failed: firstLine(error) };
+  } finally {
+    drop();
+  }
 }
 
 /** Waits for the gate and merges the reviewed commit. Returns nothing when merged, else the reason. */
@@ -1367,6 +1450,8 @@ if (opt['dry-run']) {
   console.log(
     `review: ${REVIEW.harnessName} (${REVIEW.harness.command({ prompt: '/deliver-review <nr> …', model: REVIEW.model, effort: REVIEW.effort }).join(' ')})`,
   );
+  if (opt.milestone)
+    console.log(`retro: ${RETRO.enabled ? `after the last merge, model ${RETRO.model}` : 'off'}`);
   console.log(`tracker: ${tracker.name}, base: ${BASE}`);
   console.log(`required checks: ${required.join(', ') || 'none'}`);
   console.log(`session token: ${TOKEN_SOURCE ?? 'none, the session uses your login'}`);
@@ -1615,7 +1700,12 @@ if (!stopped && !harnessDead && !baseBlocked) {
   for (const nr of handedPulls.keys()) await repairHandedOver(nr);
 }
 
-// A fully delivered milestone ends with the release pull request, which a person merges.
+// A fully delivered milestone ends with the retro and the release pull request, which a person merges.
+let retroResult: Retro = {};
+const retroFailed = (why: string) => {
+  retroResult = { failed: why };
+  log(`retro failed: ${why}`, 'warn');
+};
 let needsYou: string[] = [];
 let releaseError = '';
 const complete =
@@ -1633,7 +1723,29 @@ if (complete) {
         'info',
       );
     } else if (tracker.items().length === 0) {
-      const release = tracker.ensureReleasePull();
+      let release: Pull | undefined;
+      if (RETRO.enabled) {
+        try {
+          // without a Feature the retro comments on the release pull request: that one has to exist first
+          if (!tracker.hasRetroFeature()) release = tracker.ensureReleasePull();
+          retroResult = await retro(opt.milestone as string, release);
+          if (retroResult.failed) retroFailed(retroResult.failed);
+          else if (retroResult.url) log(`retro: ${retroResult.url}`, 'info');
+        } catch (error) {
+          retroFailed(firstLine(error));
+        }
+        await seeStop();
+      }
+      // a stop request during the retro ends the run: the next run opens the release pull request
+      if (stopped && !release) throw new Error('stopped');
+      release ??= tracker.ensureReleasePull();
+      if (retroResult.url) {
+        try {
+          tracker.linkRetro(release, retroResult.url);
+        } catch (error) {
+          retroFailed(`release pull request body not updated: ${firstLine(error)}`);
+        }
+      }
       log(`release pull request: ${release.url} (never merged by the loop)`, 'info');
       emit('step.finished', {
         task: 'release',
@@ -1657,8 +1769,10 @@ if (complete) {
     }
   } catch (error) {
     needsYou = [];
-    log(`release pull request: ${firstLine(error)}`, 'bad');
-    releaseError = firstLine(error);
+    if (!stopped) {
+      log(`release pull request: ${firstLine(error)}`, 'bad');
+      releaseError = firstLine(error);
+    }
   }
 }
 
@@ -1690,6 +1804,7 @@ say(
   waiting.length ? 'warn' : undefined,
 );
 if (releaseError) say(`release pull request failed: ${releaseError}`, 'bad');
+if (retroResult.failed) say(`retro failed: ${retroResult.failed}`, 'warn');
 say(
   `needs you (${needsYou.length}):${needsYou.map((line) => `\n  ${line}`).join('')}`,
   needsYou.length ? 'warn' : undefined,
@@ -1753,6 +1868,8 @@ appendFileSync(
     status,
     handedOver: [...handedOver.keys()],
     waitingFor: Object.fromEntries(waitingFor),
+    ...(retroResult.url && { retro: retroResult.url }),
+    ...(retroResult.failed && { retroFailed: retroResult.failed }),
   })}\n`,
 );
 // An incomplete run (issues set aside or waiting) is no success: the agent-events format has no

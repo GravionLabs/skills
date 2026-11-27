@@ -4,6 +4,10 @@ After a run, `retro` measures what happened and proposes improvements to the age
 
 `retro` creates no issue, PR, file or lesson without your approval. It shows drafts as text and asks which to keep.
 
+## After a milestone
+
+The `deliver` loop runs `retro --milestone <M> --post` after the last merge of a milestone. The report becomes one comment on the Feature that holds most of the milestone's issues (without a Feature: on the release PR), each draft PBI and lesson a `- [ ]` item with the draft in a `<details>` block. A rerun edits that comment. The release PR body links it. Nothing else is written; tick what you want and create it.
+
 ## Example
 
 ```text
