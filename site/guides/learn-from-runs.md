@@ -2,11 +2,13 @@
 
 After a run, `retro` measures what happened and proposes improvements to the agent environment (steering, checks, review rules, agents, models), not to the code that was built. Repository-, language- or role-specific findings become **lessons** that the later runs read. `retro` is user-invoked; `/retro help` prints its usage.
 
-`retro` creates no issue, PR, file or lesson without your approval. It shows drafts as text and asks which to keep.
+`retro` creates no issue, PR, file or lesson without your approval. It shows drafts as text and asks which to keep (for `retro file`, below, the tick is the approval).
 
 ## After a milestone
 
-The `deliver` loop runs `retro --milestone <M> --post` after the last merge of a milestone. The report becomes one comment on the Feature that holds most of the milestone's issues (without a Feature: on the release PR), each draft PBI and lesson a `- [ ]` item with the draft in a `<details>` block. A rerun edits that comment. The release PR body links it. Nothing else is written; tick what you want and create it.
+The `deliver` loop runs `retro --milestone <M> --post` after the last merge of a milestone. The report becomes one comment on the Feature that holds most of the milestone's issues (without a Feature: on the release PR), each draft PBI and lesson a `- [ ]` item with the draft in a `<details>` block. A rerun edits that comment. The release PR body links it. Nothing else is written; tick what you want and file it.
+
+`retro file <comment url>` files the ticked items: PBIs through `github-issue` with the label `retro`, lessons as one PR per repository with `status: approved`. Each filed item gets `filed: #<nr>` or `filed: PR #<nr>`, so a rerun files nothing twice. An invalid lesson is reported, not filed; unticked items stay.
 
 ## After an Objective
 
@@ -72,7 +74,7 @@ sequenceDiagram
 A lesson is a short statement about one repository, one language or one role, for example "Dates are stored in UTC; convert at the API edge." A rule that holds for every project is a PBI instead, and a mechanical mistake (format, lint) gets a check, never a lesson.
 
 - **Where:** `.agents/lessons/<nnn>-<id>.md` in the target repository, versioned with the code. Frontmatter: `id`, `scope`, `evidence`, `status`, `version`, `created`. Body: at most 600 characters, no commands. Format: `references/contract.md` of the `lessons` skill.
-- **How approved:** `retro` writes drafts with `status: proposed` only after you approve them, on a branch with a normal PR, one line of evidence per lesson. A reviewer sets `status: approved` in that PR before it merges. A lesson merged as `proposed` is not loaded. `retro` never approves or merges.
+- **How approved:** `retro` writes drafts with `status: proposed` only after you approve them, on a branch with a normal PR, one line of evidence per lesson. A reviewer sets `status: approved` in that PR before it merges. A lesson merged as `proposed` is not loaded. `retro` never merges; it writes `approved` only with `retro file`, for a lesson you ticked, and the PR is still reviewed.
 - **Retire:** `retro` also checks approved lessons against later runs. A finding that repeats on a lesson's topic produces a proposal to set `status: retired`, again through a normal PR.
 
 ## Which roles read them
