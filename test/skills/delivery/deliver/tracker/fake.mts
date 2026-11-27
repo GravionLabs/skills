@@ -14,7 +14,7 @@ import type {
 } from '../../../../../skills/delivery/deliver/scripts/tracker.mts';
 
 type Scenario = {
-  items: { id: number; title: string; blockedBy?: number[]; feature?: number }[];
+  items: { id: number; title: string; body?: string; blockedBy?: number[]; feature?: number }[];
   /** One entry per gate() call, the last one repeats. `throw` is a failing tracker call. */
   gates?: (Gate | 'throw')[];
   files?: string[];
@@ -95,7 +95,7 @@ export function create({ selection }: TrackerContext): Tracker {
           title: item.title,
           url: `https://example.test/issues/${item.id}`,
           labels: ['pbi'],
-          body: 'body of the issue',
+          body: item.body ?? 'body of the issue',
           ...(item.feature && { feature: item.feature }),
         }))
         .concat(baseBug && !closed.has(baseBug.id) ? [baseBug] : []);

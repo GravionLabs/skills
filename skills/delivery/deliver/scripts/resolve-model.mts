@@ -70,6 +70,8 @@ function oneOf<T extends string>(what: string, value: unknown, valid: readonly T
 export function resolveModel(input: {
   role: string;
   tier?: string;
+  /** The tier of the issue: only a role mapped to `tier` takes it, and `tier` (the flag) wins over it. */
+  issueTier?: Tier;
   harness?: string;
   layers?: ConfigLayer[];
 }): Resolved & { warnings: string[] } {
@@ -122,7 +124,9 @@ export function resolveModel(input: {
   const tier: { value: Tier; source: Source } = flagTier
     ? { value: flagTier, source: 'flag' }
     : roleTier.value === 'tier'
-      ? { value: 'standard', source: 'default' }
+      ? input.issueTier
+        ? { value: input.issueTier, source: roleTier.source }
+        : { value: 'standard', source: 'default' }
       : { value: roleTier.value, source: roleTier.source };
   const model = models.get(tier.value)!;
   return {

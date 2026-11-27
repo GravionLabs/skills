@@ -133,12 +133,12 @@ const MODEL_NAME = /^[A-Za-z0-9][\w.:/[\]-]*$/;
 
 /**
  * The settings of the retro session after a milestone: `--no-retro`, then `deliver.retro`; the model defaults to
- * the review model. Throws an Error whose message names the wrong setting.
+ * the one of the role `retro` (`defaultModel`). Throws an Error whose message names the wrong setting.
  */
 export function retroSettings(input: {
   disabled?: boolean;
   config: unknown;
-  reviewModel: string;
+  defaultModel: string;
 }): {
   enabled: boolean;
   model: string;
@@ -146,7 +146,7 @@ export function retroSettings(input: {
   const config = object(input.config) ? input.config : {};
   const enabled = config.enabled ?? true;
   if (typeof enabled !== 'boolean') throw new Error('deliver.retro.enabled is true or false');
-  const model = config.model ?? input.reviewModel;
+  const model = config.model ?? input.defaultModel;
   if (typeof model !== 'string' || !MODEL_NAME.test(model))
     throw new Error('the retro model (deliver.retro.model) is no model name');
   return { enabled: enabled && !input.disabled, model };
@@ -155,18 +155,19 @@ export function retroSettings(input: {
 export type ReviewSettings = {
   harnessName: string;
   harness: Harness;
-  model: string;
+  /** Set by `--review-model` or `deliver.review.model`; else the role `review` decides per issue. */
+  model?: string;
   effort?: string;
 };
 
 /**
- * The settings of the review session: the flag, then `deliver.review`, else the harness of the implementer with
- * a model that is not the implementer's. Throws an Error whose message names the wrong setting.
+ * The settings of the review session: the flag, then `deliver.review`, else the harness of the implementer.
+ * Throws an Error whose message names the wrong setting.
  */
 export function reviewSettings(input: {
   flags: { model?: string; harness?: string };
   config: unknown;
-  implementer: { harnessName: string; model: string };
+  implementer: { harnessName: string };
 }): ReviewSettings {
   const config = object(input.config) ? input.config : {};
   const harnessName = String(
@@ -177,12 +178,8 @@ export function reviewSettings(input: {
       `unknown review harness "${harnessName}": one of ${Object.keys(HARNESSES).join(', ')}`,
     );
   const harness = HARNESSES[harnessName];
-  const [first, second] = harness.reviewModels;
-  // the same family counts as the same model: `claude-opus-…` and `opus`
-  const family = (model: string) => /fable|opus|sonnet|haiku/i.exec(model)?.[0].toLowerCase();
-  const other = family(input.implementer.model) === family(first) ? second : first;
-  const model = input.flags.model ?? config.model ?? other;
-  if (typeof model !== 'string' || !MODEL_NAME.test(model))
+  const model = input.flags.model ?? config.model;
+  if (model !== undefined && (typeof model !== 'string' || !MODEL_NAME.test(model)))
     throw new Error('the review model (--review-model, deliver.review.model) is no model name');
   const { effort } = config;
   if (effort !== undefined && !harness.efforts.includes(effort as string))
