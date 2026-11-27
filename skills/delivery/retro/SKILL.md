@@ -12,15 +12,16 @@ Retrospective on a finished run. You improve the agent **environment** (steering
 
 `help` (or `--help`, `-h`): print `references/help.md` unchanged, nothing else.
 
-Issue number (`retro 197`), session id, or nothing = the newest run.
+`retro --run <path>` (a run folder `<git-common-dir>/deliver/<run>/`, repeatable), `retro --milestone <M>`, an issue number (`retro 197`), a session id, or nothing = the newest run.
 
 ## Steps
 
-1. **Metrics.** Gather the figures per PR of the issue with `agentlens` (cost, requests, role share by subagent: `agentlens cost --by issue --format json`) and `gh` (review rounds, fix rounds, CI result, duration PR opened to merged: `gh pr view <pr> --json commits,reviews,statusCheckRollup,createdAt,mergedAt`). Source per column: `references/metrics-sources.md`. Nothing given: ask for the issue number. The metrics table has exactly these seven columns; a column without a source or value is `n/a`, never estimated. A value that agentlens marks `~` stays marked as an estimate.
+1. **Metrics.** The run folder of `deliver` comes first: `node scripts/run-metrics.mts` with `--run <path>`, with `--issues <nr,…>`, or with no argument (newest run folder). `--milestone <M>`: pass the numbers of the milestone's issues as `--issues` (`references/metrics-sources.md`, section "Run folder"). Several runs merge by issue; the last result per issue wins. `agentlens` (`agentlens cost --by issue --format json`) and `gh` (`gh pr view <pr> --json commits,reviews,statusCheckRollup,createdAt,mergedAt`) fill only what the run folder lacks. Source per column: `references/metrics-sources.md`; the report names it. No target found for a milestone or a session id: ask for the issue number. The metrics table has exactly these seven columns; a column without a source or value is `n/a`, never estimated. A value that agentlens marks `~` stays marked as an estimate.
+   - No run folder (`runs` is empty, or a session id): say "no run folder" in the report and use `agentlens` and `gh` for every column; issues in `uncovered` too.
    - Name the longest phase or most expensive role in one line.
-   - A finding with the same file and title in two or more PRs of the analysed issues is **repeated**: a missing review rule or check.
-   - `agentlens` missing or failing: report that, show cost and context as not measured, continue with the `gh` data and the review findings.
-2. **Read primary sources.** The metrics, the review findings and the relevant transcript turns. **Escalation lines** (blocked PBIs with their reason) come from the final report of `deliver`; without a `deliver` run the section says "no run report". Search only for what a metric flags (a peak, a costly role); do not read whole transcripts.
+   - A finding with the same file and title in two or more PRs of the analysed issues is **repeated** (`repeated` of the script, from the verdict files): a missing review rule or check.
+   - `agentlens` missing or failing: report that, show what only it measures as not measured, continue with the run folder, the `gh` data and the review findings.
+2. **Read primary sources.** The metrics, the review findings and the relevant transcript turns. **Escalation lines** (set-aside and handed-over PBIs with their reason) come from `escalations` of the script; only without a run folder from the final report of `deliver`, and with neither the section says "no run report". Search only for what a metric flags (a peak, a costly role); do not read whole transcripts.
 3. **Find candidates** in the categories of `references/categories.md`. Each needs evidence (turn, review finding, metric). Drop candidates without evidence.
 4. **Report**, at most 40 lines: a metrics table, then candidates ranked by severity (cost or rework caused), one line each: category, evidence, proposed change. Escalation lines are listed after the candidates. The flow diagram of step 8 is a separate block and does not count towards the 40 lines.
 5. **Draft PBIs** for the candidates the user wants, in the `github-issue` format (`github-issue` `references/standalone-issue.md`; sections per its issue templates: Overview, Acceptance Criteria with a verifiable done-when, Definition of Done). Each draft names the skill file (path under `skills/<group>/<name>/`) and the rule to change (heading or quoted line) in its Acceptance Criteria. Show them as text.

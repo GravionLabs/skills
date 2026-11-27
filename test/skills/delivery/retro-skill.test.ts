@@ -22,9 +22,27 @@ describe('retro SKILL.md', () => {
     expect(text).toMatch(/same file and title in two or more PRs/);
   });
 
-  it('takes escalation lines from the deliver report', () => {
-    expect(text).toMatch(/Escalation lines[^\n]*final report of `deliver`/);
+  it('takes escalation lines from the run folder, else the deliver report', () => {
+    expect(text).toMatch(/Escalation lines[^\n]*`escalations`[^\n]*final report of `deliver`/);
     expect(text).toContain('"no run report"');
+  });
+
+  it('takes the run folder first and says when there is none', () => {
+    const ref = fs.readFileSync(
+      path.resolve(__dirname, '../../../skills/delivery/retro/references/metrics-sources.md'),
+      'utf8',
+    );
+    const help = fs.readFileSync(
+      path.resolve(__dirname, '../../../skills/delivery/retro/references/help.md'),
+      'utf8',
+    );
+    for (const doc of [text, help]) {
+      expect(doc).toContain('--run <path>');
+      expect(doc).toContain('--milestone <M>');
+    }
+    expect(text).toContain('node scripts/run-metrics.mts');
+    expect(text).toContain('"no run folder"');
+    expect(ref).toMatch(/\| Column +\| First source: run folder[^\n]*\| Fallback/);
   });
 
   it('names the source of every column in references/metrics-sources.md', () => {

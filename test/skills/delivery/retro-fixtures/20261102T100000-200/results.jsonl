@@ -1,0 +1,3 @@
+{"issue":12,"title":"[PBI] docs: dialogs deep dive","risk":"low","outcome":"merged","pr":"https://github.com/example/app/pull/22","minutes":12,"reviews":[{"round":1,"verdict":"changes"},{"round":2,"verdict":"approve"}],"sessions":[{"exit":0,"turns":20,"costUsd":0.5,"peakContext":80000},{"exit":0,"turns":6,"costUsd":0,"peakContext":0,"role":"review"}]}
+{"issue":15,"title":"[PBI] docs: rubric","outcome":"aside","reason":"review failed: no verdict","minutes":3,"reviews":[{"round":1,"verdict":"failed"}],"sessions":[{"exit":0,"turns":9,"costUsd":0.25,"peakContext":34036}]}
+{"run":"finished","status":"blocked","handedOver":[],"waitingFor":{}}

@@ -10,6 +10,8 @@ After a run, `retro` measures what happened and proposes improvements to the age
 retro #42
 ```
 
+For a `deliver` run the figures come from its run folder (`<git-common-dir>/deliver/<run>/`): cost and peak context per role, review and fix rounds, outcomes, set-aside reasons and the findings of the verdict files. `agentlens` and `gh` fill only what the folder lacks. Pick the run with `retro --run <path>` or `retro --milestone <M>` (several runs are merged by issue, the last result wins). Without a run folder the report says so and uses `agentlens` and `gh`.
+
 Shortened result:
 
 ```text
