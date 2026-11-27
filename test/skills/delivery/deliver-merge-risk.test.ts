@@ -30,7 +30,7 @@ describe('deliver loop: merge risk', () => {
     expect(comment?.body).toContain('merge it yourself');
     expect(out.stdout).toMatch(/needs you \(1\):\n {2}#901 risk high, https:\S+\n/);
     expect(out.events).toContainEqual(
-      expect.objectContaining({ type: 'handover', reason: 'merge-risk' }),
+      expect.objectContaining({ type: 'deliver.handover', reason: 'deliver.merge-risk' }),
     );
   });
 

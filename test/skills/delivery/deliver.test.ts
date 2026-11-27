@@ -23,6 +23,7 @@ import {
   closesIssue,
   openPullsOf,
 } from '../../../skills/delivery/deliver/scripts/tracker/github.mts';
+import { type ProfileEvent, profileValidator } from '../../helpers/agent-events-profile';
 
 import {
   type Outcome,
@@ -39,6 +40,10 @@ import {
 
 fixture();
 let pathCase = 0;
+const profile = profileValidator(
+  'deliver@2',
+  'skills/delivery/deliver/schema/deliver-profile.schema.json',
+);
 
 describe('deliver loop: base check', () => {
   const items = [{ id: 81, title: '[PBI] feat: one' }];
@@ -85,6 +90,10 @@ describe('deliver loop: base check', () => {
     );
     expect(last).toBeTruthy();
     expect(out.events.at(-1)).toMatchObject({ outcome: 'failed' });
+    expect(out.events).toContainEqual(
+      expect.objectContaining({ type: 'attention', reason: 'deliver.base-red' }),
+    );
+    profile.expectRun(out.events as ProfileEvent[]);
   });
 
   it('starts the issue when the base state cannot be read', async () => {
@@ -123,13 +132,13 @@ describe('deliver loop', () => {
       'step.finished',
       'step.finished',
       'task.finished',
-      'merged',
+      'deliver.merged',
       'progress',
       'task.started',
       'step.finished',
       'step.finished',
       'task.finished',
-      'merged',
+      'deliver.merged',
       'progress',
       'run.finished',
     ]);
@@ -164,14 +173,14 @@ describe('deliver loop', () => {
     expect(out.merges).toEqual([]);
     expect(out.results[0]).toMatchObject({ outcome: 'aside', reason: 'session failed (exit 3)' });
     expect(out.events.find((e) => e.type === 'attention')).toMatchObject({
-      reason: 'set-aside',
+      reason: 'deliver.set-aside',
       needsYou: true,
     });
     // an incomplete run does not end as succeeded; the text names the counts
     expect(out.events.at(-1)).toMatchObject({
       type: 'run.finished',
       outcome: 'failed',
-      reason: 'incomplete',
+      reason: 'deliver.incomplete',
       text: 'blocked: merged 0, set aside 1, waiting 0',
     });
     // not merged: the worktree may hold work that is not pushed
@@ -1135,10 +1144,10 @@ describe('deliver loop', () => {
       /merge the pull request .* start the loop again with the same arguments/,
     );
     expect(handed.events.find((e) => e.type === 'attention')).toMatchObject({
-      reason: 'set-aside',
+      reason: 'deliver.set-aside',
       needsYou: true,
     });
-    expect(handed.events.at(-1)).toMatchObject({ outcome: 'failed', reason: 'incomplete' });
+    expect(handed.events.at(-1)).toMatchObject({ outcome: 'failed', reason: 'deliver.incomplete' });
     const failed = await loop({ items: [{ id: 63, title: '[PBI] feat: fails' }], exits: [3] });
     expect(failed.status).toBe(2);
     expect(failed.stdout).toMatch(/set aside \(1\):\n {2}#63 session failed/);
@@ -1250,7 +1259,7 @@ describe('deliver loop', () => {
     expect(out.log.trim().split('\n').at(-1)).toMatch(
       /failed: the harness failed 3 times in a row, last exit code 7/,
     );
-    expect(out.events.at(-1)).toMatchObject({ outcome: 'failed', reason: 'harness' });
+    expect(out.events.at(-1)).toMatchObject({ outcome: 'failed', reason: 'deliver.harness' });
     expect(out.final).toMatchObject({ status: 'failed' });
   });
 
@@ -1566,7 +1575,7 @@ describe('deliver loop', () => {
       expect(out.merges).toHaveLength(1);
       expect(out.releasePulls).toBe(0);
       expect(out.retros).toEqual([]);
-      expect(out.events.some((e) => e.type === 'milestone-done')).toBe(false);
+      expect(out.events.some((e) => e.type === 'deliver.milestone.done')).toBe(false);
     });
 
     it('prints the Feature of each item with --dry-run', async () => {
@@ -1595,9 +1604,10 @@ describe('deliver loop', () => {
       expect(out.sessions[0]?.prompt).toMatch(/^\/deliver 31 --base release\/next /);
       expect(out.sessions.map((s) => s.prompt).join('\n')).not.toContain('/deliver 39');
       expect(out.events.find((e) => e.type === 'attention')).toMatchObject({
-        reason: 'release-test',
+        reason: 'deliver.release-test',
         needsYou: true,
       });
+      profile.expectRun(out.events as ProfileEvent[]);
       // the release pull request is never merged
       expect(out.merges.map((m) => m.pull)).not.toContain(900);
     });
@@ -1620,9 +1630,9 @@ describe('deliver loop', () => {
       );
       expect(aside.releasePulls).toBe(0);
       expect(aside.stdout).not.toContain('needs you (1)');
-      expect(aside.events.some((e) => e.type === 'attention' && e.reason === 'release-test')).toBe(
-        false,
-      );
+      expect(
+        aside.events.some((e) => e.type === 'attention' && e.reason === 'deliver.release-test'),
+      ).toBe(false);
       const waiting = await loop(
         { items: [{ id: 43, title: '[PBI] feat: blocked', blockedBy: [42] }], releaseTests: [49] },
         { milestone: true },

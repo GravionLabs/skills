@@ -161,13 +161,13 @@ function Write-Outcome([System.Collections.IDictionary]$State) {
     Write-PublishEvent 'ci.run.completed' ([ordered]@{ ci = [ordered]@{ name = $r.name; conclusion = $r.conclusion; url = $r.url } }) $tone
   }
   if ($State.state -eq 'ok') {
-    Write-PublishEvent 'publish-ok' ([ordered]@{ ci = [ordered]@{ tag = $State.tag; release = $State.release } }) 'success'
+    Write-PublishEvent 'ci.publish.ok' ([ordered]@{ ci = [ordered]@{ tag = $State.tag; release = $State.release } }) 'success'
     Write-PublishEvent 'run.finished' ([ordered]@{ outcome = 'succeeded' }) 'success'
   } elseif ($State.state -eq 'failed') {
     $bad = @($State.runs | Where-Object { $_.conclusion -notin $green }) | Select-Object -First 1
     $url = if ($bad) { $bad.url } else { @($State.runs)[0].url }
     $job = if ($bad) { @($bad.failedJobs)[0] }
-    Write-PublishEvent 'publish-failed' ([ordered]@{ ci = [ordered]@{ job = $job; url = $url; text = $State.reason } }) 'danger'
+    Write-PublishEvent 'ci.publish.failed' ([ordered]@{ ci = [ordered]@{ job = $job; url = $url; text = $State.reason } }) 'danger'
     Write-PublishEvent 'run.finished' ([ordered]@{ outcome = 'failed'; reason = 'ci.publish-failed'; text = $State.reason }) 'danger'
   } else {
     Write-PublishEvent 'run.finished' ([ordered]@{ outcome = 'cancelled'; reason = 'ci.pending'; text = $State.reason }) 'warning'

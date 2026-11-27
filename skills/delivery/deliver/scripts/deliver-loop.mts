@@ -1424,7 +1424,7 @@ async function awaitHandovers(): Promise<boolean> {
     'attention',
     {
       id: 'handover-wait',
-      reason: 'handed-over',
+      reason: 'deliver.handed-over',
       text: `waiting for you to merge: ${names()}`,
       needsYou: true,
       links: [...handedPulls.values()].map(({ pull }) => ({
@@ -1566,14 +1566,15 @@ emit = (type, body, tone) => {
       title: statusTitle,
       msg: String(body.text ?? ''),
     });
-  } else if (type === 'merged' && body?.risk === 'high') {
+  } else if (type === 'deliver.merged' && mergedFields(body).risk === 'high') {
     blockedShown = true;
+    const { issue, pr } = mergedFields(body);
     report({
       state: 'blocked',
       kind: 'question',
       reason: 'risk-high',
       title: statusTitle,
-      msg: `#${String(body.issue)} merged at risk high: ${String(body.pr)}`,
+      msg: `#${issue} merged at risk high: ${String(pr)}`,
     });
   } else if (type === 'task.started' && blockedShown) {
     blockedShown = false;
@@ -1598,7 +1599,7 @@ if (!TOKEN_SOURCE) {
   );
 }
 emit('run.started', {
-  profiles: [],
+  profiles: ['deliver@2'],
   origin,
   host: {
     'jsonl-file.pid': String(process.pid),
@@ -1627,9 +1628,16 @@ function blockedReason(attention: string): BlockedReason | undefined {
   if (handedOver.has(nr)) return 'handover';
   return aside.get(nr)?.startsWith('needs-decision') ? 'decision' : undefined;
 }
+/** The fields of `deliver.merged`, under `deliver` as the profile rule wants them. */
+type MergedFields = { repo: string; issue: number; pr?: string; risk?: string };
+/** The `deliver` object of the body of a `deliver.merged` event. */
+function mergedFields(body: Record<string, unknown> | undefined): MergedFields {
+  return body?.deliver as MergedFields;
+}
 /** The events an orchestrator reacts to (contract: SKILL.md of `deliver`). */
 function emitMerged(issue: number, pr: string | undefined): void {
-  emit('merged', { repo: tracker.repo, issue, pr, risk: risks.get(issue) }, 'success');
+  const deliver: MergedFields = { repo: tracker.repo, issue, pr, risk: risks.get(issue) };
+  emit('deliver.merged', { deliver }, 'success');
 }
 function emitSetAside(
   type: 'handover' | 'aside',
@@ -1639,15 +1647,17 @@ function emitSetAside(
 ) {
   const reason = reasonCode(why);
   emit(
-    type,
+    `deliver.${type}`,
     {
-      repo: tracker.repo,
-      issue,
-      pr,
       reason,
-      ...(reason === 'needs-decision' && { hold: 'needs-decision' }),
       // a line of an event is limited, and findings can be long
       text: why.slice(0, 1000),
+      deliver: {
+        repo: tracker.repo,
+        issue,
+        pr,
+        ...(reason === 'deliver.needs-decision' && { hold: 'needs-decision' }),
+      },
     },
     'warning',
   );
@@ -1816,7 +1826,7 @@ try {
         'attention',
         {
           id: `aside-${next.id}`,
-          reason: 'set-aside',
+          reason: 'deliver.set-aside',
           text: `#${next.id} set aside: ${reason}`,
           needsYou: true,
           links: [{ rel: pull ? 'pull-request' : 'issue', url: pull?.url ?? next.url }],
@@ -1899,7 +1909,7 @@ if (complete) {
           'attention',
           {
             id: `release-test-${test.id}`,
-            reason: 'release-test',
+            reason: 'deliver.release-test',
             text: `#${test.id} release test is open: a person tests the release candidate`,
             needsYou: true,
             links: [{ rel: 'issue', url: test.url }],
@@ -1961,7 +1971,7 @@ if (baseBlocked) {
     'attention',
     {
       id: 'base-red',
-      reason: 'base-red',
+      reason: 'deliver.base-red',
       text: `blocked: ${baseBlocked}`,
       needsYou: true,
       links: repairBug ? [{ rel: 'issue', url: repairBug.url }] : [],
@@ -2020,25 +2030,29 @@ appendFileSync(
 );
 if (opt.milestone && !stopped) {
   emit(
-    'milestone-done',
+    'deliver.milestone.done',
     {
-      repo: tracker.repo,
-      milestone: opt.milestone,
-      merged: merged.length,
-      aside: aside.size,
-      pr: releaseUrl,
+      deliver: {
+        repo: tracker.repo,
+        milestone: opt.milestone,
+        merged: merged.length,
+        aside: aside.size,
+        pr: releaseUrl,
+      },
     },
     clean && !releaseError ? 'success' : 'warning',
   );
 }
 // An incomplete run (issues set aside or waiting) is no success: the agent-events format has no
 // other outcome for it than `failed`; the counts are in the text. OSC 7501 shows it as `done` with
-// `tone=warning`; only `reason: 'harness'` (the harness failed) is an `error`.
+// `tone=warning`; only `reason: 'deliver.harness'` (the harness failed) is an `error`.
 emit(
   'run.finished',
   {
     outcome: stopped ? 'cancelled' : clean ? 'succeeded' : 'failed',
-    ...(stopped || clean ? {} : { reason: status === 'failed' ? 'harness' : 'incomplete' }),
+    ...(stopped || clean
+      ? {}
+      : { reason: status === 'failed' ? 'deliver.harness' : 'deliver.incomplete' }),
     text: `${status}: merged ${merged.length}, set aside ${aside.size}, waiting ${waiting.length}${needsYou.length ? `, needs you ${needsYou.length}` : ''}`,
   },
   stopped ? 'neutral' : clean ? 'success' : 'warning',

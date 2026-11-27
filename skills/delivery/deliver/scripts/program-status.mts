@@ -62,7 +62,7 @@ export function encodeStatus(report: Report): string {
 }
 
 /**
- * The report of the end of a run (ADR 0007): `error` only when the run failed (`reason: 'harness'`), a
+ * The report of the end of a run (ADR 0007): `error` only when the run failed (`reason: 'deliver.harness'`), a
  * run that is incomplete (blocked, waiting for a handed-over PR) or leaves issues for the owner (`needsYou` > 0) is `done` with `tone=warning`,
  * a stopped run `idle`, a clean run plain `done`.
  */
@@ -78,7 +78,7 @@ export function finishReport(
       ? { state: 'done', tone: 'warning', title, msg }
       : { state: 'done', title, msg };
   }
-  if (body?.reason === 'incomplete') return { state: 'done', tone: 'warning', title, msg };
+  if (body?.reason === 'deliver.incomplete') return { state: 'done', tone: 'warning', title, msg };
   return { state: 'error', title, msg };
 }
 
