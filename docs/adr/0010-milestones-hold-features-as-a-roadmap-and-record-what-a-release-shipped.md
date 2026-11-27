@@ -1,6 +1,6 @@
 # ADR 0010: Milestones hold Features as a roadmap and record what a release shipped
 
-- Status: Proposed
+- Status: Accepted
 - Date: 2026-11-27
 - Issues: #1067
 
@@ -36,11 +36,11 @@ A milestone is a **roadmap entry of Features** and the **record of what a releas
 6. `Requires: <repo>@<milestone>` stays and means: that milestone is closed after its tag. `Requires: <repo>#<feature>` is added and means: the Feature is closed and the release that shipped its last PBI is tagged.
 7. The release test stays one per release (label `release-test`), created by `cut`.
 
-Open for the owner (answer before acceptance):
+Owner decisions (2026-11-27):
 
-- Who sets the milestone at merge: the GravionLabs/ci workflow (proposed; covers merges by hand too) or the loop.
-- Whether a Bug without a parent Feature gets a planned milestone when it must ship in a given release (proposed: no; urgency is a label, the milestone follows at merge).
-- Whether `github-milestone current` still warns about a Feature whose PBIs sit in other milestones (proposed: no, it is the normal case now).
+8. The `release-branch.yml` workflow of GravionLabs/ci sets the milestone at merge, not the loop, so merges by hand are recorded too.
+9. A Bug without a parent Feature gets no planned milestone; urgency is a label, the milestone follows at merge.
+10. `github-milestone current` no longer warns about a Feature whose PBIs sit in other milestones; it is the normal case.
 
 ## Consequences
 
