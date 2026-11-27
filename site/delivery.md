@@ -23,7 +23,7 @@ Feature pull requests are transport: the issue and the release pull request are 
 
 ## The loop
 
-`deliver-loop --milestone <M>` or `--issues <nr,…>` starts one fresh session per ready issue in its own worktree, has its pull request reviewed in a second session and merges it once the review approved and every required check passed. Options, exit codes, refusals and the session token: [guide](guides/deliver.md#the-loop).
+`deliver-loop --milestone <M>`, `--feature <nr>` or `--issues <nr,…>` starts one fresh session per ready issue in its own worktree, has its pull request reviewed in a second session and merges it once the review approved and every required check passed. Options, exit codes, refusals and the session token: [guide](guides/deliver.md#the-loop).
 
 | Refuses                                   | Override                     |
 | :---------------------------------------- | :--------------------------- |

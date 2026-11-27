@@ -54,6 +54,7 @@ const parsed = (() => {
     return parseArgs({
       options: {
         milestone: { type: 'string' },
+        feature: { type: 'string' },
         issues: { type: 'string' },
         base: { type: 'string' },
         tracker: { type: 'string' },
@@ -75,7 +76,7 @@ const parsed = (() => {
     // an unknown option or a missing value: one line, no stack trace
     const message = (error as Error).message.split('\n')[0];
     console.error(
-      `deliver-loop: ${message}. Options: --milestone, --issues, --base, --tracker, --harness, --max, --model, --review-model, --review-harness, --session-minutes, --merge-minutes, --handover-minutes, --dry-run, --allow-no-required-checks, --trust-authors, --no-retro.`,
+      `deliver-loop: ${message}. Options: --milestone, --feature, --issues, --base, --tracker, --harness, --max, --model, --review-model, --review-harness, --session-minutes, --merge-minutes, --handover-minutes, --dry-run, --allow-no-required-checks, --trust-authors, --no-retro.`,
     );
     process.exit(1);
   }
@@ -145,8 +146,11 @@ const fail = (message: string, code: number): never => {
   process.exit(code);
 };
 
-if (!opt.milestone === !opt.issues)
-  fail('give exactly one of --milestone <M…> or --issues <nr,…>', 64);
+if ([opt.milestone, opt.feature, opt.issues].filter((value) => value !== undefined).length !== 1)
+  fail('give exactly one of --milestone <M…>, --feature <nr> or --issues <nr,…>', 64);
+if (opt.milestone === '' || opt.issues === '') fail('--milestone and --issues need a value', 64);
+if (opt.feature !== undefined && !/^[1-9]\d*$/.test(opt.feature))
+  fail('--feature needs the number of an issue', 64);
 const whole = (name: 'max' | 'session-minutes' | 'merge-minutes', least: number): number => {
   const value = Number(opt[name]);
   if (!Number.isInteger(value) || value < least)
@@ -193,11 +197,11 @@ if (!Number.isInteger(HANDOVER_MINUTES) || HANDOVER_MINUTES < 0)
 for (const warning of legacyWarnings) log(warning, 'warn');
 const configWarning = unknownConfigKeys(config.deliver);
 if (configWarning) log(configWarning, 'warn');
-// The base: the flag, then the project config; else release/next for a milestone and the default branch otherwise.
+// The base: the flag, then the project config; else release/next for a milestone or a Feature and the default branch otherwise.
 const BASE: string =
   opt.base ??
   config.deliver?.base ??
-  (opt.milestone
+  (opt.milestone || opt.feature
     ? 'release/next'
     : (attempt('git', ['ls-remote', '--symref', 'origin', 'HEAD'], root)?.match(
         /^ref: refs\/heads\/(\S+)\s+HEAD/m,
@@ -492,7 +496,11 @@ const runDir = path.join(commonDir, 'deliver', runId);
 const tracker = await loadTracker(opt.tracker ?? config.deliver?.tracker ?? 'github', {
   cwd: root,
   base: BASE,
-  selection: { milestone: opt.milestone, issues: opt.issues?.split(',').map((nr) => nr.trim()) },
+  selection: {
+    milestone: opt.milestone,
+    feature: opt.feature,
+    issues: opt.issues?.split(',').map((nr) => nr.trim()),
+  },
   trustAuthors: opt['trust-authors'],
   stopFile: path.join(runDir, 'stop'),
   onStop: requestStop,
@@ -1431,7 +1439,13 @@ if (required.length === 0 && !opt['allow-no-required-checks']) {
 if (opt['dry-run']) {
   try {
     for (const item of tracker.items()) {
-      console.log(`#${item.id} ${tracker.waitReason(item) ?? 'ready'}: ${item.title}`);
+      // where a milestone or a Feature selection took the item from
+      const from = item.feature
+        ? ` (Feature #${item.feature})`
+        : opt.milestone
+          ? ' (milestone)'
+          : '';
+      console.log(`#${item.id} ${tracker.waitReason(item) ?? 'ready'}${from}: ${item.title}`);
     }
   } catch (error) {
     fail(`tracker: ${firstLine(error)}`, 64);
@@ -1461,7 +1475,8 @@ const writeEvent = openEvents(
 );
 // OSC 7501 to the controlling terminal (ADR 0007): the events stay the source for displays
 const report = programStatus();
-const statusTitle = opt.milestone ?? `issues ${opt.issues}`;
+const statusTitle =
+  opt.milestone ?? (opt.feature ? `feature #${opt.feature}` : `issues ${opt.issues}`);
 let blockedShown = false;
 emit = (type, body, tone) => {
   writeEvent(type, body, tone);
