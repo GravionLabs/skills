@@ -102,6 +102,32 @@ export function parseMark(body: string): ReviewMark | undefined {
 
 export const REVIEW_KEYS = ['model', 'harness', 'effort'];
 
+export const RETRO_KEYS = ['enabled', 'model'];
+
+// a model name goes into the command line: never one that reads as an option
+const MODEL_NAME = /^[A-Za-z0-9][\w.:/[\]-]*$/;
+
+/**
+ * The settings of the retro session after a milestone: `--no-retro`, then `deliver.retro`; the model defaults to
+ * the review model. Throws an Error whose message names the wrong setting.
+ */
+export function retroSettings(input: {
+  disabled?: boolean;
+  config: unknown;
+  reviewModel: string;
+}): {
+  enabled: boolean;
+  model: string;
+} {
+  const config = object(input.config) ? input.config : {};
+  const enabled = config.enabled ?? true;
+  if (typeof enabled !== 'boolean') throw new Error('deliver.retro.enabled is true or false');
+  const model = config.model ?? input.reviewModel;
+  if (typeof model !== 'string' || !MODEL_NAME.test(model))
+    throw new Error('the retro model (deliver.retro.model) is no model name');
+  return { enabled: enabled && !input.disabled, model };
+}
+
 export type ReviewSettings = {
   harnessName: string;
   harness: Harness;
@@ -132,8 +158,7 @@ export function reviewSettings(input: {
   const family = (model: string) => /fable|opus|sonnet|haiku/i.exec(model)?.[0].toLowerCase();
   const other = family(input.implementer.model) === family(first) ? second : first;
   const model = input.flags.model ?? config.model ?? other;
-  // a model name goes into the command line: never one that reads as an option
-  if (typeof model !== 'string' || !/^[A-Za-z0-9][\w.:/[\]-]*$/.test(model))
+  if (typeof model !== 'string' || !MODEL_NAME.test(model))
     throw new Error('the review model (--review-model, deliver.review.model) is no model name');
   const { effort } = config;
   if (effort !== undefined && !harness.efforts.includes(effort as string))

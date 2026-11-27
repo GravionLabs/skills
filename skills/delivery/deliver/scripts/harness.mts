@@ -9,6 +9,8 @@ export type HarnessInput = {
   model?: string;
   /** The reasoning effort, one of `efforts`. Undefined: the default of the harness. */
   effort?: string;
+  /** Shell command prefixes (`git push`) the session may not run. */
+  deny?: string[];
 };
 
 export type Harness = {
@@ -28,7 +30,7 @@ export const HARNESSES: Record<string, Harness> = {
     claudeStream: true,
     reviewModels: ['opus', 'sonnet'],
     efforts: ['low', 'medium', 'high', 'xhigh', 'max'],
-    command: ({ prompt, model, effort }) => [
+    command: ({ prompt, model, effort, deny = [] }) => [
       'claude',
       '-p',
       prompt,
@@ -44,6 +46,7 @@ export const HARNESSES: Record<string, Harness> = {
       '--disallowedTools',
       'ScheduleWakeup',
       'CronCreate',
+      ...deny.map((command) => `Bash(${command}:*)`),
     ],
   },
   // Flags checked against `copilot --help` (Copilot CLI 1.0.116). No stream format: the loop logs plain lines.
@@ -52,7 +55,7 @@ export const HARNESSES: Record<string, Harness> = {
     claudeStream: false,
     reviewModels: ['claude-opus-5.5', 'claude-sonnet-5.5'],
     efforts: ['none', 'minimal', 'low', 'medium', 'high', 'xhigh', 'max'],
-    command: ({ prompt, model, effort }) => [
+    command: ({ prompt, model, effort, deny = [] }) => [
       'copilot',
       '-p',
       prompt,
@@ -63,6 +66,7 @@ export const HARNESSES: Record<string, Harness> = {
       '--allow-all-urls',
       '--no-ask-user',
       '--no-color',
+      ...deny.flatMap((command) => ['--deny-tool', `shell(${command})`]),
     ],
   },
 };

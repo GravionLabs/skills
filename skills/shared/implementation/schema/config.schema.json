@@ -186,6 +186,22 @@
           "description": "The agent CLI: claude (default) or copilot.",
           "enum": ["claude", "copilot"]
         },
+        "retro": {
+          "description": "The retro session of deliver-loop after the last merge of a milestone.",
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "enabled": {
+              "description": "Run it (default true); --no-retro turns it off.",
+              "type": "boolean"
+            },
+            "model": {
+              "description": "Model of the retro session (default the review model).",
+              "type": "string",
+              "minLength": 1
+            }
+          }
+        },
         "review": {
           "description": "The review session of deliver-loop (deliver-review). Default: the implementer's harness with another model.",
           "type": "object",

@@ -53,6 +53,8 @@ type Scenario = {
   mergedBefore?: number[];
   /** Items whose pull request is merged by someone else while their session runs. */
   mergedDuring?: number[];
+  /** The milestone has a Feature (default true). */
+  retroFeature?: boolean;
   /** Items that have a second open pull request once their first one exists. */
   twoPulls?: number[];
 };
@@ -239,6 +241,12 @@ export function create(): Tracker {
         branch: 'release/next',
       };
     },
+    hasRetroFeature: () => scenario.retroFeature ?? true,
+    isRetroComment: (url: string, marker: string) =>
+      existsSync(path.join(dir, 'retro.json')) &&
+      JSON.parse(readFileSync(path.join(dir, 'retro.json'), 'utf8'))[url]?.startsWith(marker) ===
+        true,
+    linkRetro: (pull: Pull, url: string) => record({ call: 'linkRetro', pull: pull.id, url }),
     sessionEnv: (token: string) => ({ GH_TOKEN: token }),
   };
 }

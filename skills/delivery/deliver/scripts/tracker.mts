@@ -115,6 +115,12 @@ export interface Tracker {
   releaseCommits(): number;
   /** The open release pull request from the base branch into the default branch; opens it when missing. Never merges it. */
   ensureReleasePull(): Pull;
+  /** An item of the milestone (open or closed) has a Feature of this repository as parent: the retro comments there. */
+  hasRetroFeature(): boolean;
+  /** `url` is a comment of this repository whose body starts with `marker`. The URL comes from a session. */
+  isRetroComment(url: string, marker: string): boolean;
+  /** Puts the line `Retro: <url>` into the body of the release pull request, replacing an earlier one. */
+  linkRetro(pull: Pull, url: string): void;
   /** The environment that makes a session act with `token` instead of the login of the user. */
   sessionEnv(token: string): Record<string, string>;
 }

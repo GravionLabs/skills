@@ -6,6 +6,7 @@ Retrospective on a finished run: measures it, ranks improvements to the agent en
 
 ```
 /retro [#<issue> | <session-id> | --run <path> | --milestone <M>]
+/retro --milestone <M> --post [--release-pr <url>]
 /retro help
 ```
 
@@ -15,6 +16,7 @@ Retrospective on a finished run: measures it, ranks improvements to the agent en
 - `<session-id>`: analyse that session.
 - `--run <path>`: analyse that `deliver` run folder (`<git-common-dir>/deliver/<run>/`); repeatable.
 - `--milestone <M>`: analyse the newest run folders with issues of that milestone; several runs merge by issue, the last result per issue wins. Adds the row `loop review: <x> changes requested, <y> escaped` with links to the escaped findings (other reviews, follow-up PBIs and Bugs, Bugs within 7 days of the release).
+- `--post` (with `--milestone`): post the report as one comment with the marker `<!-- retro: <M> -->` on the Feature that holds most of the milestone's issues, else on the release PR (`--release-pr <url>`); drafts are `- [ ]` checklist items with `<details>`; a rerun edits the comment. Asks nothing and writes nothing else; the `deliver` loop runs it after a milestone.
 - nothing: the newest run folder; without one the skill asks for the issue number.
 - `help` (also `--help`, `-h`): print this text.
 
@@ -26,7 +28,7 @@ Output: a report of at most 40 lines (metrics table, candidates ranked by severi
 - lesson drafts with `status: proposed` for repository-, language- or role-specific candidates;
 - proposals to retire approved lessons that did not help.
 
-Drafts are shown as text. No issue, PR, file or lesson is created, edited or pushed until you approve.
+Drafts are shown as text. No issue, PR, file or lesson is created, edited or pushed until you approve (`--post` writes only its comment).
 
 ## Examples
 
