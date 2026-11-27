@@ -39,7 +39,7 @@ With `--milestone`, once no PBI or Bug of the milestone is open, the loop opens 
 
 ## Progress events
 
-The loop writes [agent-events](https://github.com/GravionLabs/agent-events) to `<git-common-dir>/.agents/events/<run>.jsonl`. See [herdr with the skills](guides/herdr.md).
+The loop writes [agent-events](https://github.com/GravionLabs/agent-events) to `<run>.jsonl` in the per-user directory (`~/.local/state/agent-events/`; see the [deliver guide](guides/deliver.md#progress-events)). See [herdr with the skills](guides/herdr.md).
 
 ## Parallel runs
 

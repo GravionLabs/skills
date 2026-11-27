@@ -50,8 +50,9 @@ export function reasonCode(reason: string): string {
   return found?.[1] ?? 'other';
 }
 
-/** `dir` is `<git-common-dir>/.agents/events`; the file is `<run>.jsonl`. */
-export function openEvents(dir: string, run: string): Emit {
+/** `dir` is the events directory (event-dir.mts), none writes nothing; the file is `<run>.jsonl`. */
+export function openEvents(dir: string | undefined, run: string): Emit {
+  if (!dir) return () => undefined;
   let seq = 0;
   try {
     mkdirSync(dir, { recursive: true });

@@ -16,8 +16,9 @@
 .PARAMETER Version
   Released version x.y.z (with or without the leading v).
 .PARAMETER Events
-  Directory of the agent-events run this script writes (<run>.jsonl). Default: AGENT_EVENTS_DIR, else
-  <git-common-dir>/.agents/events when that directory exists.
+  Directory of the agent-events run this script writes (<run>.jsonl). Default: AGENT_EVENTS_DIR, else the
+  per-user directory ($XDG_STATE_HOME/agent-events, else ~/.local/state/agent-events; Windows
+  %LOCALAPPDATA%\agent-events). Opening a run deletes expired runs of this repository there.
 .PARAMETER PollSeconds
   Pause between two polls.
 .PARAMETER TimeoutMinutes
@@ -35,6 +36,7 @@ param(
 )
 $ErrorActionPreference = 'Stop'
 $green = @('success', 'skipped', 'neutral')
+Import-Module (Join-Path $PSScriptRoot 'EventDirectory.psm1') -Force
 
 # gh with stdout and stderr apart; a failure throws unless the caller reads the exit code itself
 function Invoke-Gh([string[]]$GhArgs, [switch]$AllowFailure) {
@@ -63,16 +65,6 @@ function New-Uuid7 {
   '{0}-{1}-{2}-{3}-{4}' -f $h.Substring(0, 8), $h.Substring(8, 4), $h.Substring(12, 4), $h.Substring(16, 4), $h.Substring(20)
 }
 
-function Get-EventDirectory {
-  if ($Events) { return $Events }
-  if ($env:AGENT_EVENTS_DIR) { return $env:AGENT_EVENTS_DIR }
-  $common = & git rev-parse --path-format=absolute --git-common-dir 2>$null
-  if ($LASTEXITCODE -ne 0 -or -not $common) { return $null }
-  $dir = Join-Path $common '.agents' 'events'
-  if (Test-Path -LiteralPath $dir -PathType Container) { return $dir }
-  return $null
-}
-
 function Write-PublishEvent([string]$Type, [System.Collections.IDictionary]$Body, [string]$Tone = 'neutral') {
   if (-not $script:eventFile) { return }
   $script:seq++
@@ -83,12 +75,14 @@ function Write-PublishEvent([string]$Type, [System.Collections.IDictionary]$Body
 }
 
 function Open-PublishRun {
-  $dir = Get-EventDirectory
-  if (-not $dir) { return }
   try {
+    $dir = if ($Events) { $Events } else { Get-AgentEventsDirectory }
+    if (-not $dir) { return }
     $dir = $ExecutionContext.SessionState.Path.GetUnresolvedProviderPathFromPSPath($dir)
     $null = New-Item -ItemType Directory -Force -Path $dir
+    $origin = Get-RunOrigin
   } catch { Write-Verbose "no events: $_"; return }
+  try { Remove-ExpiredRun -Directory $dir -Repository $origin['repo'] } catch { Write-Verbose "no retention: $_" }
   $script:runId = New-Uuid7
   $script:eventFile = Join-Path $dir "$script:runId.jsonl"
   $subject = [ordered]@{ kind = 'commit'; id = $Sha; title = $Sha.Substring(0, 7) }
@@ -98,7 +92,7 @@ function Open-PublishRun {
     $subject.title = "$($repo.nameWithOwner)@$($Sha.Substring(0, 7))"
     if ($repo.url) { $subject.url = "$($repo.url)/commit/$Sha" }
   }
-  Write-PublishEvent 'run.started' ([ordered]@{ profiles = @('ci@1'); host = @{ 'jsonl-file.pid' = "$PID" }; subject = $subject }) 'info'
+  Write-PublishEvent 'run.started' ([ordered]@{ profiles = @('ci@1'); origin = $origin; host = @{ 'jsonl-file.pid' = "$PID" }; subject = $subject }) 'info'
 }
 
 # --- state

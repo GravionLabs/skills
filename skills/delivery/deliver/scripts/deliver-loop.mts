@@ -21,6 +21,7 @@ import { fileURLToPath } from 'node:url';
 import { createInterface } from 'node:readline';
 import { parseArgs } from 'node:util';
 import { appSettings, tokenSource as makeSource } from './app-token.mts';
+import { eventsDirectory, pruneRuns, runOrigin } from './event-dir.mts';
 import { type Emit, openEvents, reasonCode, uuid7 } from './events.mts';
 import { type Note, handoverNote, reviewNote } from './handover.mts';
 import { type BlockedReason, finishReport, programStatus } from './program-status.mts';
@@ -1543,10 +1544,10 @@ mkdirSync(runDir, { recursive: true });
 logFile = path.join(path.dirname(runDir), 'loop.log');
 // the run id of the events is a UUIDv7 (agent-events contract); the run folder keeps `runId`
 const eventRun = uuid7();
-const writeEvent = openEvents(
-  process.env.AGENT_EVENTS_DIR || path.join(commonDir, '.agents', 'events'),
-  eventRun,
-);
+const eventDir = eventsDirectory();
+const origin = runOrigin();
+if (eventDir) pruneRuns(eventDir, origin.repo);
+const writeEvent = openEvents(eventDir, eventRun);
 // OSC 7501 to the controlling terminal (ADR 0007): the events stay the source for displays
 const report = programStatus();
 const statusTitle =
@@ -1585,7 +1586,10 @@ log(
   `run ${runId} in ${tracker.repo}, models: ${MODEL_LINE}, results: ${path.join(runDir, 'results.jsonl')}`,
   'dim',
 );
-log(`events: run ${eventRun}`, 'dim');
+log(
+  `events: run ${eventRun}${eventDir ? ` in ${eventDir}` : ', not written: no directory'}`,
+  'dim',
+);
 if (cutNote) log(cutNote, 'info');
 if (!TOKEN_SOURCE) {
   log(
@@ -1595,6 +1599,7 @@ if (!TOKEN_SOURCE) {
 }
 emit('run.started', {
   profiles: [],
+  origin,
   host: {
     'jsonl-file.pid': String(process.pid),
     ...(process.env.POIMEN_TERMINAL_ID

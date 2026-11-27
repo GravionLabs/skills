@@ -166,23 +166,44 @@ describe('Get-PublishState.ps1', () => {
     expect(r.json.release).toBeNull();
   });
 
-  it('pending after the wait: exit 2, no publish event; the default directory is used when present', async () => {
-    const dir = path.join(repo, '.git/.agents/events');
-    fs.mkdirSync(dir, { recursive: true });
-    try {
-      const r = await invoke({ ...green, polls: [run(null)] }, ['-Wait', '-TimeoutMinutes', '0']);
-      expect(r.status).toBe(2);
-      expect(r.json.state).toBe('pending');
-      expect(readRun(dir).map((e) => e.type)).toEqual(['run.started', 'run.finished']);
-    } finally {
-      fs.rmSync(path.join(repo, '.git/.agents'), { recursive: true, force: true });
-    }
+  it('pending after the wait: exit 2, no publish event; the default is the per-user directory', async () => {
+    const state = path.join(tmp, 'state');
+    const dir = path.join(state, 'agent-events');
+    const r = await invoke({ ...green, polls: [run(null)] }, ['-Wait', '-TimeoutMinutes', '0'], {
+      XDG_STATE_HOME: state,
+      LOCALAPPDATA: state,
+    });
+    expect(r.status).toBe(2);
+    expect(r.json.state).toBe('pending');
+    const events = readRun(dir);
+    expect(events.map((e) => e.type)).toEqual(['run.started', 'run.finished']);
+    expect(events[0].origin).toEqual({
+      repo,
+      branch: expect.any(String),
+      worktree: repo,
+      host: os.hostname(),
+    });
+    expect(fs.existsSync(path.join(repo, '.git/.agents'))).toBe(false);
   });
 
-  it('writes nothing without -Events and the variable when the default directory is missing', async () => {
-    const r = await invoke({ ...green, polls: [run('success')] });
-    expect(r.status).toBe(0);
-    expect(fs.existsSync(path.join(repo, '.git/.agents'))).toBe(false);
+  it('retention at the start of a run deletes old runs of its repository only', async () => {
+    const dir = path.join(tmp, 'ev-retention');
+    fs.mkdirSync(dir);
+    const old = new Date(Date.now() - 40 * 86_400_000);
+    for (const [name, of] of [
+      ['own', repo],
+      ['other', 'example/other'],
+    ]) {
+      const file = path.join(dir, `${name}.jsonl`);
+      const started = { type: 'run.started', origin: { repo: of } };
+      fs.writeFileSync(file, `${JSON.stringify(started)}\n{"type":"run.finished"}\n`);
+      fs.utimesSync(file, old, old);
+    }
+    await invoke({ ...green, polls: [run('success')] }, ['-Events', dir]);
+    const left = fs.readdirSync(dir);
+    expect(left).toHaveLength(2);
+    expect(left).toContain('other.jsonl');
+    expect(left).not.toContain('own.jsonl');
   });
 
   it('an unreadable gh is exit 3', async () => {
