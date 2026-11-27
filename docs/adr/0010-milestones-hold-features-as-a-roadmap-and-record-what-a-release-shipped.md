@@ -21,11 +21,11 @@ A rough plan of what comes next per repository is still useful to the owner. Wha
 
 A milestone is a **roadmap entry of Features** and the **record of what a release shipped**. The planning unit of work is the Objective and the Feature.
 
-| Level     | Milestone                                                                                         |
-| :-------- | :------------------------------------------------------------------------------------------------ |
-| Objective | Never.                                                                                            |
-| Epic      | Never.                                                                                            |
-| Feature   | Planned: the release it is meant to ship in (rough roadmap). Moves when its last PBI ships later. |
+| Level     | Milestone                                                                                            |
+| :-------- | :--------------------------------------------------------------------------------------------------- |
+| Objective | Never.                                                                                               |
+| Epic      | Never.                                                                                               |
+| Feature   | Planned: the release it is meant to ship in (rough roadmap). Moves when its last PBI ships later.    |
 | PBI, Bug  | Not planned. Set at merge into `release/next`: the open milestone that release branch is heading to. |
 
 1. `planner` and `roadmap` assign Features to milestones, never PBIs or Bugs.
