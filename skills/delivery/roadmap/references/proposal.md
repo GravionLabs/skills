@@ -4,7 +4,7 @@ Used by `/roadmap` steps Propose, Decide and Set. State comes from `scripts/Get-
 
 ## Propose
 
-Only Features are planned (`github-issue` `references/milestones.md`, ADR 0010): an Epic, a PBI or a Bug is never assigned.
+Only Features are planned (`github-issue` `references/milestones.md`, ADR 0010): an Epic never has one, a PBI or Bug is never assigned.
 
 1. Take `issues[]` and `milestones[]`. Candidates are the Features without a milestone; a Feature already in an open milestone keeps it unless the user asks to move it.
 2. Put every open PBI and Bug under its Feature (`parent`, up the chain). Its size and blockers count towards that Feature; a blocker below another Feature blocks as that Feature, one below the same Feature is ignored.
