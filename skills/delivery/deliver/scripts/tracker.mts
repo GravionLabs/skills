@@ -66,6 +66,11 @@ export interface Tracker {
   /** The open work items of the selection in delivery order. */
   items(): Item[];
   itemSubject(item: Item): Subject;
+  /**
+   * The parent Feature of the item in this repository, whose scope and criteria the review reads; `undefined`
+   * without one, or when its author has no write access (`trustAuthors` lifts that). A failed read throws.
+   */
+  parentFeature(item: Item): Item | undefined;
   /** Sets the `agent:*` label of the stage and removes every other `agent:*` label; `undefined` removes all. */
   setStage(item: Item, stage: Stage | undefined): void;
   /** Creates the missing `agent:*` labels and returns their names. */

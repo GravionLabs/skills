@@ -56,6 +56,7 @@ export type Scenario = {
   /** The summary of the finding of a `changes` verdict, which then has no unmet criterion. */
   summary?: string;
   retroFeature?: boolean;
+  features?: Record<number, { title: string; body: string }>;
   retro?: 'post' | 'fail' | 'none' | 'hang';
   /** Only the first implementer session writes the risk level. */
   riskOnce?: boolean;
@@ -79,7 +80,13 @@ export type Outcome = {
     hasSessionTokenVariable: boolean;
   }[];
   retros: { prompt: string; releasePulls: number }[];
-  reviews: { id: number; prompt: string; cwd: string; hasResultFileVariable: boolean }[];
+  reviews: {
+    id: number;
+    prompt: string;
+    cwd: string;
+    hasResultFileVariable: boolean;
+    hasStyleguide: boolean;
+  }[];
   results: Result[];
   final?: Record<string, unknown>;
   events: { type: string; outcome?: string; reason?: string; needsYou?: boolean }[];

@@ -48,3 +48,6 @@ agents-md: docs/agents-md-refs/release.md
 setup-oxc-husky: ng-deep
 # docs/STYLEGUIDE.md is the style guide of the target app that the skill points to, not a file of the skill
 ng-helix: docs/STYLEGUIDE.md
+# the style guide and rubric of the repository under review, not files of the skill
+deliver-review: docs/STYLEGUIDE.md
+deliver-review: docs/styleguide/ux-review-rubric.md

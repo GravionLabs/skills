@@ -19,6 +19,7 @@ if (command === 'deliver-review') {
       prompt,
       cwd: process.cwd(),
       hasResultFileVariable: 'DELIVER_RESULT_FILE' in process.env,
+      hasStyleguide: existsSync('docs/STYLEGUIDE.md'),
     })}\n`,
   );
   const verdict = scenario.verdicts?.[nr] ?? 'approve';

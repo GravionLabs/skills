@@ -92,6 +92,7 @@ const handler = `(call, ctx) => {
   if (route.includes('/rules/branches/')) return { rest: [{ type: 'required_status_checks', parameters: { required_status_checks: [{ context: 'ci' }] } }] };
   if (route.includes('/protection/')) return { rest: {} };
   if (route.includes('/check-runs')) return { rest: [{ check_runs: [{ name: 'ci', status: 'completed', conclusion: 'success' }] }] };
+  if (route.endsWith('/parent')) throw new Error('gh: Not Found (HTTP 404)');
   if (route.includes('/comments')) return { rest: [sc.comments] };
   if (route.includes('/labels')) return { rest: [issue.labels] };
   if (route.includes('/events') || route.includes('/dependencies/')) return { rest: [[]] };

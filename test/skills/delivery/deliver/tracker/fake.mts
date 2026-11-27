@@ -55,6 +55,8 @@ type Scenario = {
   mergedDuring?: number[];
   /** The milestone has a Feature (default true). */
   retroFeature?: boolean;
+  /** The parent Feature by item id. */
+  features?: Record<number, { title: string; body: string }>;
   /** Items that have a second open pull request once their first one exists. */
   twoPulls?: number[];
 };
@@ -105,6 +107,17 @@ export function create(): Tracker {
       return open.length > 0 ? `blocked by ${open.map((id) => `#${id}`).join(', ')}` : undefined;
     },
     needsDecision: () => scenario.needsDecision ?? false,
+    parentFeature(item: Item): Item | undefined {
+      const feature = scenario.features?.[item.id];
+      return (
+        feature && {
+          ...feature,
+          id: 1,
+          url: 'https://example.test/issues/1',
+          labels: ['feature'],
+        }
+      );
+    },
     setStage: (item: Item, stage?: string) =>
       appendFileSync(
         path.join(dir, 'stages.jsonl'),
