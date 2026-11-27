@@ -12,6 +12,8 @@ retro #42
 
 For a `deliver` run the figures come from its run folder (`<git-common-dir>/deliver/<run>/`): cost and peak context per role, review and fix rounds, outcomes, set-aside reasons and the findings of the verdict files. `agentlens` and `gh` fill only what the folder lacks. Pick the run with `retro --run <path>` or `retro --milestone <M>` (several runs are merged by issue, the last result wins). Without a run folder the report says so and uses `agentlens` and `gh`.
 
+With `--milestone` the report also shows `loop review: <x> changes requested, <y> escaped` and links the escaped findings: problems the loop review approved that another review, a later PBI or Bug, or a Bug within 7 days of the release found. More escaped than requested ranks a candidate on the review rules.
+
 Shortened result:
 
 ```text
