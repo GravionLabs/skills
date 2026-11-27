@@ -14,14 +14,46 @@ The `deliver` loop reads these keys of `deliver`, all optional; the command-line
 - `tracker`: the tracker, `scripts/tracker/<name>.mts` in the `deliver` skill, default `github`.
 - `harness`: the agent CLI, `claude` (default) or `copilot`. A name only: a command from the repository would let a change decide what the loop runs.
 - `handoverMinutes`: how long the loop waits for handed-over pull requests to be merged when nothing else can start (default 120; `0` ends the run at once with exit 3). `--handover-minutes` wins.
-- `review`: the review session of the loop. `model` (`--review-model` wins), `harness` `claude` or `copilot` (`--review-harness` wins), `effort` (the reasoning effort of that harness). Default: the implementer's harness with another model (`opus`, or `sonnet` when the implementer runs an Opus model; Copilot `claude-opus-5.5` or `claude-sonnet-5.5`). Unknown keys are ignored with a warning.
-- `protectedPaths`: a pull request that changes one of these paths is not merged by the loop. `dir/` is a directory at the root, anything else a file name anywhere. Default: `.github/`, `.agents/`, `.claude/`, `package.json`, `pnpm-workspace.yaml`, `Cargo.toml`, `pyproject.toml`, `go.mod`, `Directory.Packages.props`. The list replaces the default; the default lives in `protected-paths.json` of the `deliver` skill, which `planner` reads too (it cuts such changes into their own `interactive` PBI).
+- `mergeRisk`: the highest risk level of the implementer result the loop merges, `low`, `medium` (default) or `high`. An approved pull request above it is handed to you; a missing level counts as `medium`. `--merge-risk` wins; another value ends the loop with exit 2.
+- `review`: the review session of the loop. `model` (`--review-model` wins), `harness` `claude` or `copilot` (`--review-harness` wins), `effort` (the reasoning effort of that harness). Default: the implementer's harness and the model of the role `review` ([models](#models)). Unknown keys are ignored with a warning.
+- `retro`: the retro session after a milestone. `enabled` (default `true`; `--no-retro` turns it off), `model` (default the model of the role `retro`, [models](#models)). It runs on the review harness. Unknown keys are ignored with a warning.
+- `protectedPaths`: a pull request that changes one of these paths is not merged by the loop. `dir/` is a directory at the root, anything else a file name anywhere. Default: `.github/`, `.agents/`, `.claude/`, `package.json`, `pnpm-workspace.yaml`, `Cargo.toml`, `pyproject.toml`, `go.mod`, `Directory.Packages.props`. The list replaces the default; the default lives in `protected-paths.json` of the `deliver` skill, which `planner` reads too: it cuts such changes into their own `interactive` PBI and checks the files of every PBI against the list (a hit without the label `interactive` is not ready and not created).
 
 ```json
 { "deliver": { "base": "main", "protectedPaths": [".github/", ".agents/", "package.json"] } }
 ```
 
 Other keys of `deliver` (`roles`, `loopThreshold`, `parallel`, `sessionTimeoutMinutes`) are ignored with one warning line; the session length is the flag `--session-minutes`. Coming from the PowerShell loop: [migrating](../guides/migrate-powershell-loop.md).
+
+## Models
+
+`models` says which model each role of a delivery run uses: a role maps to a tier, a tier to a model per harness. The key may stand in `~/.agents/config.json` (the user) and in the repository's `.agents/config.json`; per value the repository wins over the user, and a flag of the caller over both.
+
+- `tiers.<harness>.{fast,standard,strong}`: the model, harness `claude` or `copilot`. Defaults: claude `haiku`, `sonnet`, `opus`; copilot `claude-haiku-5.5`, `claude-sonnet-5.5`, `claude-opus-5.5`. A model name is one token of letters, digits and `. _ : / -`, optionally with a suffix like `[1m]`: it ends up in a command line.
+- `roles.<role>`: `fast`, `standard`, `strong` or `tier` (the tier of the issue). Defaults: `orchestrator`, `triage`, `planner` and `review` `strong`; `implement` `tier`; `retro` and `release` `standard`.
+
+```json
+{
+  "models": {
+    "tiers": { "claude": { "strong": "claude-opus-5-5" } },
+    "roles": { "retro": "fast" }
+  }
+}
+```
+
+The script `resolve-model.mts` of the `deliver` skill answers for one role:
+
+```powershell
+node <deliver-skill-dir>/scripts/resolve-model.mts review --harness copilot --json
+```
+
+`resolve-model <role> [--tier fast|standard|strong] [--harness claude|copilot] [--json]` prints the model, or with `--json` the role, harness, tier, model and the source of harness, tier and model (`flag`, `repository`, `user`, `default`). The harness is `claude` without `--harness`. `--tier` wins over the role's tier; a role mapped to `tier` without `--tier` uses `standard`. An unknown key under `models` is ignored with a warning; an unknown role, tier or harness, an invalid model name or tier in a file and invalid JSON exit 64. `deliver-loop` picks each session's model this way (harness: the one of the session):
+
+- Implementer: `--model` for every issue, else the role `implement` with the tier of the first `Tier: <tier> — <reason>` line of the issue body. No line or an unknown tier means `standard`, with a log line. A role mapped to a fixed tier ignores the line.
+- Review: `--review-model`, `deliver.review.model`, else the role `review`. When that resolves to the implementer's model (the same name or Claude family), the review takes the next stronger tier; at `strong` it stays there, with a log line.
+- Retro: `deliver.retro.model`, else the role `retro`.
+
+The start line of the run names the models, and every session in `results.jsonl` has `model` and `tier` (the tier of its role, also when a flag or setting names the model). A wrong `models` setting ends the loop with exit 64 before the first session.
 
 ## Release test
 

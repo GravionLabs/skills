@@ -34,7 +34,7 @@ An `[Objective]` sits above the Epic; body, and `Requires:` in `references/objec
 Parent/child links are **native GitHub sub-issues** — see `references/sub-issues.md` for how to
 read, create, move and verify them. Markdown checklists are not used.
 
-Milestones: a PBI and a Bug always have one; a Feature only when all its PBIs are in that milestone; an Epic and an Objective never (`references/milestones.md`). Set them only with `github-milestone assign M<nnn>|none #<nr>`, never `gh issue edit --milestone`.
+Milestones: a Feature is planned into one or none; a PBI and a Bug get theirs at merge into `release/next`; an Epic and an Objective never (`references/milestones.md`, [ADR 0010](https://github.com/GravionLabs/skills/blob/main/docs/adr/0010-milestones-hold-features-as-a-roadmap-and-record-what-a-release-shipped.md)). Set them only with `github-milestone assign M<nnn>|none #<nr>`, never `gh issue edit --milestone`.
 
 ## Routing
 

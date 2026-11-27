@@ -2,7 +2,7 @@
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "https://github.com/GravionLabs/skills/skills/github/github-milestone/schema/milestones.schema.json",
   "title": "Get-Milestones.ps1 output",
-  "description": "Milestone titles: M<n> [<Topic>] (open, topic without parentheses), M<n> [<Topic>] (x.y.z) (closed, released) or legacy x.y.z; others are listed, never current. One of eleven shapes, by -Mode: current, list, show (a milestone detail), create, issues, close, rename, insert, assign or renumber (also with -AllRepos). M<n> may carry sub-numbers (M1.1) that sort between M<n> and M<n+1>.",
+  "description": "Milestone titles: M<n> [<Topic>] (open, topic without parentheses), M<n> [<Topic>] (x.y.z) (closed, released) or legacy x.y.z; others are listed, never current. One of twelve shapes, by -Mode: current, list, show (a milestone detail), create, issues, close, rename, insert, assign, renumber or migrate (the last two also with -AllRepos). M<n> may carry sub-numbers (M1.1) that sort between M<n> and M<n+1>.",
   "oneOf": [
     {
       "title": "current",
@@ -131,7 +131,7 @@
     {
       "title": "assign",
       "type": "object",
-      "required": ["dryRun", "milestone", "assigned", "warnings"],
+      "required": ["dryRun", "milestone", "assigned"],
       "properties": {
         "dryRun": { "type": "boolean", "description": "true: nothing was written." },
         "milestone": {
@@ -157,23 +157,10 @@
                 "type": ["string", "null"],
                 "description": "Milestone title after, null when cleared."
               },
-              "status": { "enum": ["set", "unchanged"] }
-            },
-            "additionalProperties": false
-          }
-        },
-        "warnings": {
-          "type": "array",
-          "description": "no-milestone: a PBI or Bug was cleared; feature-incomplete: the Feature of a cleared PBI keeps its milestone (outside[] as in show).",
-          "items": {
-            "type": "object",
-            "required": ["type", "number"],
-            "properties": {
-              "type": { "enum": ["no-milestone", "feature-incomplete"] },
-              "number": { "type": "integer" },
-              "message": { "type": "string" },
-              "title": { "type": "string" },
-              "outside": { "type": "array", "items": { "type": "object" } }
+              "status": {
+                "enum": ["set", "forced", "unchanged"],
+                "description": "forced: a PBI or Bug set with -Force."
+              }
             },
             "additionalProperties": false
           }
@@ -231,7 +218,11 @@
       "$ref": "#/$defs/renumber"
     },
     {
-      "title": "renumber -AllRepos",
+      "title": "migrate",
+      "$ref": "#/$defs/migrate"
+    },
+    {
+      "title": "renumber or migrate -AllRepos",
       "type": "object",
       "required": ["allRepos", "dryRun", "repos"],
       "properties": {
@@ -239,8 +230,8 @@
         "dryRun": { "type": "boolean" },
         "repos": {
           "type": "array",
-          "description": "One result per repository with milestones.",
-          "items": { "$ref": "#/$defs/renumber" }
+          "description": "One result per repository: renumber those with milestones, migrate those with open milestones.",
+          "items": { "anyOf": [{ "$ref": "#/$defs/renumber" }, { "$ref": "#/$defs/migrate" }] }
         }
       },
       "additionalProperties": false
@@ -336,6 +327,72 @@
       },
       "additionalProperties": false
     },
+    "migrate": {
+      "type": "object",
+      "description": "migrate of one repository: the plan (dry run) or what was written.",
+      "required": ["repo", "dryRun", "features", "cleared", "unplanned", "skipped", "errors"],
+      "properties": {
+        "repo": { "type": "string" },
+        "dryRun": { "type": "boolean", "description": "true: nothing was written." },
+        "features": {
+          "type": "array",
+          "description": "Features moved to the latest milestone of their open PBIs and Bugs.",
+          "items": {
+            "type": "object",
+            "required": ["number", "from", "to"],
+            "properties": {
+              "number": { "type": "integer" },
+              "from": { "type": ["string", "null"], "description": "null: it had none." },
+              "to": { "type": "string" }
+            },
+            "additionalProperties": false
+          }
+        },
+        "cleared": {
+          "type": "array",
+          "description": "PBIs and Bugs below a Feature whose milestone was cleared.",
+          "items": {
+            "type": "object",
+            "required": ["number", "from", "feature"],
+            "properties": {
+              "number": { "type": "integer" },
+              "from": { "type": "string" },
+              "feature": { "type": "integer" }
+            },
+            "additionalProperties": false
+          }
+        },
+        "unplanned": {
+          "type": "array",
+          "description": "PBIs and Bugs without an open parent Feature in the same repository, cleared; from is the old milestone.",
+          "items": {
+            "type": "object",
+            "required": ["number", "from"],
+            "properties": { "number": { "type": "integer" }, "from": { "type": "string" } },
+            "additionalProperties": false
+          }
+        },
+        "skipped": {
+          "type": "array",
+          "description": "Left for a later run: in-flight milestones, PBIs whose Feature would move out of or into one, an archived repository (milestone null).",
+          "items": {
+            "type": "object",
+            "required": ["milestone", "reason"],
+            "properties": {
+              "milestone": { "type": ["string", "null"] },
+              "reason": { "type": "string" }
+            },
+            "additionalProperties": false
+          }
+        },
+        "errors": {
+          "type": "array",
+          "description": "Failed reads and writes; not empty: exit 1.",
+          "items": { "type": "string" }
+        }
+      },
+      "additionalProperties": false
+    },
     "releaseTest": {
       "type": "object",
       "required": ["created", "number", "url"],
@@ -417,6 +474,10 @@
         "number": { "type": "integer" },
         "title": { "type": "string" },
         "assignees": { "type": "array", "items": { "type": "string" } },
+        "via": {
+          "type": "integer",
+          "description": "Only for a PBI or Bug that is not in the milestone itself: the number of its Feature in the milestone."
+        },
         "blockers": {
           "type": "array",
           "description": "Only in blocked: the open blockers.",
@@ -438,41 +499,30 @@
     "detail": {
       "allOf": [{ "$ref": "#/$defs/summary" }],
       "type": "object",
-      "required": ["issues", "warnings", "releasePr"],
+      "required": ["issues", "shipped", "warnings", "releasePr"],
       "properties": {
         "warnings": {
           "type": "array",
-          "description": "Breaks of the milestone rule: an Epic in the milestone (epic-in-milestone); a Feature in it with open sub-issues outside of it (feature-incomplete, outside[] with their milestone title or none).",
+          "description": "Breaks of the milestone rule: an Epic in the milestone (epic-in-milestone).",
           "items": {
             "type": "object",
             "required": ["type", "number", "title"],
             "properties": {
-              "type": { "enum": ["epic-in-milestone", "feature-incomplete"] },
+              "type": { "const": "epic-in-milestone" },
               "number": { "type": "integer" },
-              "title": { "type": "string" },
-              "outside": {
-                "type": "array",
-                "items": {
-                  "type": "object",
-                  "required": ["number", "title", "milestone"],
-                  "properties": {
-                    "number": { "type": "integer" },
-                    "title": { "type": "string" },
-                    "milestone": { "type": "string" },
-                    "repository": {
-                      "type": "string",
-                      "description": "owner/repo of a sub-issue from another repository."
-                    }
-                  }
-                }
-              }
+              "title": { "type": "string" }
             },
             "additionalProperties": false
           }
         },
+        "shipped": {
+          "type": "array",
+          "description": "Closed PBIs and Bugs in the milestone, number ascending.",
+          "items": { "$ref": "#/$defs/issueRef" }
+        },
         "issues": {
           "type": "object",
-          "description": "Open issues, pull requests excluded; each in the first matching group: needsDecision, needsRefinement, blocked, claimed, ready.",
+          "description": "Open issues of the milestone and the open PBIs and Bugs of the same repository below its open Features, pull requests excluded; each in the first matching group: needsDecision, needsRefinement, blocked, claimed, ready.",
           "required": ["ready", "blocked", "needsDecision", "needsRefinement", "claimed"],
           "properties": {
             "ready": { "type": "array", "items": { "$ref": "#/$defs/issue" } },

@@ -19,6 +19,7 @@ if (command === 'deliver-review') {
       prompt,
       cwd: process.cwd(),
       hasResultFileVariable: 'DELIVER_RESULT_FILE' in process.env,
+      hasStyleguide: existsSync('docs/STYLEGUIDE.md'),
     })}\n`,
   );
   const verdict = scenario.verdicts?.[nr] ?? 'approve';
@@ -36,6 +37,33 @@ if (command === 'deliver-review') {
   if (verdict !== 'none')
     writeFileSync(process.env.DELIVER_REVIEW_FILE, JSON.stringify(answers[verdict]));
   console.log(`result: reviewed ${verdict}`);
+  process.exit(0);
+}
+if (prompt.startsWith('/retro ')) {
+  // a retro session is recorded in retros.jsonl; scenario.retro: 'post' (default), 'fail', 'none' or 'hang'.
+  // retro.json holds the comments by URL: like `retro --post`, a rerun edits the comment of the marker.
+  appendFileSync(
+    path.join(dir, 'retros.jsonl'),
+    `${JSON.stringify({
+      prompt,
+      releasePulls: existsSync(path.join(dir, 'calls.jsonl'))
+        ? readFileSync(path.join(dir, 'calls.jsonl'), 'utf8').split('"releasePull"').length - 1
+        : 0,
+    })}\n`,
+  );
+  const mode = scenario.retro ?? 'post';
+  if (mode === 'fail') process.exit(1);
+  if (mode === 'hang') {
+    setInterval(() => {}, 1000);
+    await new Promise(() => {});
+  }
+  if (mode === 'post') {
+    const url = 'https://example.test/issues/7#issuecomment-1';
+    const marker = `<!-- retro: ${/--milestone (\S+)/.exec(prompt)[1]} -->`;
+    writeFileSync(path.join(dir, 'retro.json'), JSON.stringify({ [url]: `${marker}\nreport` }));
+    writeFileSync(process.env.DELIVER_RETRO_FILE, JSON.stringify({ url }));
+  }
+  console.log('result: retro done');
   process.exit(0);
 }
 const log = path.join(dir, 'sessions.jsonl');

@@ -28,6 +28,14 @@ describe('encodeStatus', () => {
     expect(decode(fields.msg)).toBe('#5 set aside: red');
   });
 
+  it.each(['handover', 'decision', 'risk-high'] as const)(
+    'carries the reason %s with blocked only',
+    (reason) => {
+      expect(pairs(encodeStatus({ state: 'blocked', reason })).reason).toBe(reason);
+      expect(pairs(encodeStatus({ state: 'working', reason }))).not.toHaveProperty('reason');
+    },
+  );
+
   it.each(['done', 'error', 'idle'] as const)('encodes %s', (state) => {
     expect(pairs(encodeStatus({ state, title: 'M1' })).state).toBe(state);
   });
@@ -61,16 +69,21 @@ describe('tone', () => {
 
 describe('finishReport', () => {
   const text = 'blocked: merged 5, set aside 0, waiting 2';
-  it.each(['incomplete'])('an incomplete run is done with a warning and the counts', (reason) => {
-    expect(finishReport({ outcome: 'failed', reason, text }, 'M1')).toEqual({
-      state: 'done',
-      tone: 'warning',
-      title: 'M1',
-      msg: text,
-    });
-  });
+  it.each(['deliver.incomplete'])(
+    'an incomplete run is done with a warning and the counts',
+    (reason) => {
+      expect(finishReport({ outcome: 'failed', reason, text }, 'M1')).toEqual({
+        state: 'done',
+        tone: 'warning',
+        title: 'M1',
+        msg: text,
+      });
+    },
+  );
   it('a failed harness is an error', () => {
-    expect(finishReport({ outcome: 'failed', reason: 'harness', text }, 'M1').state).toBe('error');
+    expect(finishReport({ outcome: 'failed', reason: 'deliver.harness', text }, 'M1').state).toBe(
+      'error',
+    );
     expect(finishReport({ outcome: 'failed', text }).state).toBe('error');
   });
   it('a clean run is done without tone', () => {

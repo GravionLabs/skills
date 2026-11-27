@@ -2,7 +2,7 @@
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "https://github.com/GravionLabs/skills/skills/delivery/roadmap/schema/roadmap-state.schema.json",
   "title": "Get-RoadmapState.ps1 output",
-  "description": "Open Epics, Features, PBIs and Bugs with parent, blockers and milestone, plus the milestones with progress (Get-Milestones.ps1 -Mode list).",
+  "description": "Open Epics, Features, PBIs and Bugs with parent, blockers and milestone (only Features are planned into milestones; PBIs and Bugs count towards their Feature, ADR 0010), plus the milestones with progress (Get-Milestones.ps1 -Mode list).",
   "type": "object",
   "required": ["issues", "milestones", "latestTag"],
   "properties": {
@@ -33,7 +33,7 @@
           "labels": { "type": "array", "items": { "type": "string" } },
           "parent": {
             "type": ["integer", "null"],
-            "description": "Native sub-issue parent; null for none."
+            "description": "Native sub-issue parent, which leads a PBI or Bug to its Feature; null for none."
           },
           "blockedBy": {
             "type": "array",
@@ -47,7 +47,7 @@
           },
           "milestone": {
             "type": ["string", "null"],
-            "description": "Milestone title: M<n> [<Topic>], legacy x.y.z, or null."
+            "description": "Milestone title: M<n> [<Topic>], legacy x.y.z, or null. Planned for Features only; a PBI or Bug has one from its merge (or from before the migration)."
           },
           "url": { "type": ["string", "null"] }
         },

@@ -1,6 +1,6 @@
 # Roadmap
 
-Order of work and release assignment for the open issues. A bare `#<n>` is an issue of this repository.
+Order of work and release assignment for the open Features. A bare `#<n>` is an issue of this repository.
 
 <!-- roadmap:begin intro -->
 <!-- roadmap:end -->
@@ -11,8 +11,8 @@ Order of work and release assignment for the open issues. A bare `#<n>` is an is
 <!-- roadmap:end -->
 
 <!-- Generated sections are inserted at the two slots below by `scripts/New-Roadmap.ps1`:
-     "Done in M<n> (x.y.z)" (one per closed milestone, with its issue table) and one plan section per open M<n>
-     (table: order, issue, title, size, depends on / decision). -->
+     "Done in M<n> (x.y.z)" (one per closed milestone, with its issue table) and one plan section per open M<n> with its Features
+     (table: order, feature, title, size, open PBIs and Bugs, depends on / decision). -->
 
 <!-- roadmap:slot done -->
 

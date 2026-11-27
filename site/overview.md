@@ -1,6 +1,6 @@
 # Overview
 
-GravionLabs/skills is a library of reusable **skills** in the [agentskills.io](https://agentskills.io) `SKILL.md` format, installed with [`npx skills`](https://github.com/vercel-labs/skills). One skill source loads unchanged on **Claude Code**, **OpenCode** and **GitHub Copilot**. Workflows are skills. The skill `deliver` chains them from issue to merged PR, see [delivery](delivery.md).
+GravionLabs/skills is a library of reusable **skills** in the [agentskills.io](https://agentskills.io) `SKILL.md` format, installed with [`npx skills`](https://github.com/vercel-labs/skills). One skill source loads unchanged on **Claude Code**, **OpenCode** and **GitHub Copilot**. Workflows are skills. The skill `deliver` chains them from issue to merged PR, see [delivery](delivery.md); the whole path from an Objective to a release is the [delivery model](delivery/model.md).
 
 This documentation is also published as a site at <https://gravionlabs.github.io/skills/>.
 

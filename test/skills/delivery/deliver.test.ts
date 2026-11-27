@@ -23,6 +23,7 @@ import {
   closesIssue,
   openPullsOf,
 } from '../../../skills/delivery/deliver/scripts/tracker/github.mts';
+import { type ProfileEvent, profileValidator } from '../../helpers/agent-events-profile';
 
 import {
   type Outcome,
@@ -39,6 +40,10 @@ import {
 
 fixture();
 let pathCase = 0;
+const profile = profileValidator(
+  'deliver@2',
+  'skills/delivery/deliver/schema/deliver-profile.schema.json',
+);
 
 describe('deliver loop: base check', () => {
   const items = [{ id: 81, title: '[PBI] feat: one' }];
@@ -67,6 +72,13 @@ describe('deliver loop: base check', () => {
     expect(out.sessions.map((s) => s.id)).toEqual([900, 81]);
   });
 
+  it('works the Bug of a red base in a milestone run although the milestone does not hold it', async () => {
+    const out = await loop({ items, base: ['red', 'red', 'green'] }, { milestone: true });
+    expect(out.status).toBe(0);
+    expect(out.sessions.map((s) => s.id)).toEqual([900, 81]);
+    expect(out.releasePulls).toBe(1);
+  });
+
   it('ends blocked (exit 2) when the base is red after its repair', async () => {
     const out = await loop({ items, base: ['red', 'red', 'red'] });
     expect(out.status).toBe(2);
@@ -78,6 +90,10 @@ describe('deliver loop: base check', () => {
     );
     expect(last).toBeTruthy();
     expect(out.events.at(-1)).toMatchObject({ outcome: 'failed' });
+    expect(out.events).toContainEqual(
+      expect.objectContaining({ type: 'attention', reason: 'deliver.base-red' }),
+    );
+    profile.expectRun(out.events as ProfileEvent[]);
   });
 
   it('starts the issue when the base state cannot be read', async () => {
@@ -116,11 +132,13 @@ describe('deliver loop', () => {
       'step.finished',
       'step.finished',
       'task.finished',
+      'deliver.merged',
       'progress',
       'task.started',
       'step.finished',
       'step.finished',
       'task.finished',
+      'deliver.merged',
       'progress',
       'run.finished',
     ]);
@@ -155,14 +173,14 @@ describe('deliver loop', () => {
     expect(out.merges).toEqual([]);
     expect(out.results[0]).toMatchObject({ outcome: 'aside', reason: 'session failed (exit 3)' });
     expect(out.events.find((e) => e.type === 'attention')).toMatchObject({
-      reason: 'set-aside',
+      reason: 'deliver.set-aside',
       needsYou: true,
     });
     // an incomplete run does not end as succeeded; the text names the counts
     expect(out.events.at(-1)).toMatchObject({
       type: 'run.finished',
       outcome: 'failed',
-      reason: 'incomplete',
+      reason: 'deliver.incomplete',
       text: 'blocked: merged 0, set aside 1, waiting 0',
     });
     // not merged: the worktree may hold work that is not pushed
@@ -1126,10 +1144,10 @@ describe('deliver loop', () => {
       /merge the pull request .* start the loop again with the same arguments/,
     );
     expect(handed.events.find((e) => e.type === 'attention')).toMatchObject({
-      reason: 'set-aside',
+      reason: 'deliver.set-aside',
       needsYou: true,
     });
-    expect(handed.events.at(-1)).toMatchObject({ outcome: 'failed', reason: 'incomplete' });
+    expect(handed.events.at(-1)).toMatchObject({ outcome: 'failed', reason: 'deliver.incomplete' });
     const failed = await loop({ items: [{ id: 63, title: '[PBI] feat: fails' }], exits: [3] });
     expect(failed.status).toBe(2);
     expect(failed.stdout).toMatch(/set aside \(1\):\n {2}#63 session failed/);
@@ -1138,14 +1156,17 @@ describe('deliver loop', () => {
   });
 
   it('writes the risk level of the implementer result into results.jsonl and the report', async () => {
-    const out = await loop({
-      items: [
-        { id: 91, title: '[PBI] feat: medium' },
-        { id: 92, title: '[PBI] feat: high' },
-        { id: 93, title: '[PBI] feat: no result' },
-      ],
-      risks: { 91: 'medium', 92: 'high' },
-    });
+    const out = await loop(
+      {
+        items: [
+          { id: 91, title: '[PBI] feat: medium' },
+          { id: 92, title: '[PBI] feat: high' },
+          { id: 93, title: '[PBI] feat: no result' },
+        ],
+        risks: { 91: 'medium', 92: 'high' },
+      },
+      { args: ['--merge-risk', 'high'] },
+    );
     expect(out.status).toBe(0);
     expect(out.results.map((r) => r.risk)).toEqual(['medium', 'high', undefined]);
     expect(out.stdout).toMatch(/#91 \S+ \(risk medium\)/);
@@ -1238,7 +1259,7 @@ describe('deliver loop', () => {
     expect(out.log.trim().split('\n').at(-1)).toMatch(
       /failed: the harness failed 3 times in a row, last exit code 7/,
     );
-    expect(out.events.at(-1)).toMatchObject({ outcome: 'failed', reason: 'harness' });
+    expect(out.events.at(-1)).toMatchObject({ outcome: 'failed', reason: 'deliver.harness' });
     expect(out.final).toMatchObject({ status: 'failed' });
   });
 
@@ -1515,7 +1536,8 @@ describe('deliver loop', () => {
 
   it.each([
     ['no selection', []],
-    ['both selections', ['--milestone', 'M001']],
+    ['--milestone with --issues', ['--milestone', 'M001']],
+    ['--feature with --issues', ['--feature', '7']],
     ['--max that is no number', ['--max', 'abc']],
     ['an unknown harness', ['--harness', 'nope']],
   ])('ends with a usage error for %s', (_name, args) => {
@@ -1528,6 +1550,45 @@ describe('deliver loop', () => {
     }
     expect(status).toBe(64);
   });
+  it.each([
+    ['--milestone with --feature', ['--milestone', 'M001', '--feature', '7']],
+    ['--feature that is no number', ['--feature', 'seven']],
+  ])('ends with a usage error for %s', (_name, args) => {
+    let status = 0;
+    try {
+      execFileSync('node', [loopScript, ...args], { cwd: repo, stdio: 'pipe' });
+    } catch (error) {
+      status = (error as { status: number }).status;
+    }
+    expect(status).toBe(64);
+  });
+
+  describe('--feature', () => {
+    it('delivers its items into release/next and opens no release pull request', async () => {
+      const out = await loop(
+        { items: [{ id: 55, title: '[PBI] feat: below', feature: 7 }] },
+        { feature: 7 },
+      );
+      expect(out.status).toBe(0);
+      expect(out.selection).toEqual({ feature: '7' });
+      expect(out.sessions[0]?.prompt).toMatch(/^\/deliver 55 --base release\/next /);
+      expect(out.merges).toHaveLength(1);
+      expect(out.releasePulls).toBe(0);
+      expect(out.retros).toEqual([]);
+      expect(out.events.some((e) => e.type === 'deliver.milestone.done')).toBe(false);
+    });
+
+    it('prints the Feature of each item with --dry-run', async () => {
+      const items = [
+        { id: 56, title: '[PBI] feat: below', feature: 7 },
+        { id: 57, title: '[PBI] feat: direct' },
+      ];
+      const out = await loop({ items }, { milestone: true, args: ['--dry-run'] });
+      expect(out.stdout).toContain('#56 ready (Feature #7): [PBI] feat: below');
+      expect(out.stdout).toContain('#57 ready (milestone): [PBI] feat: direct');
+    });
+  });
+
   describe('end of a milestone', () => {
     it('opens the release pull request once everything is merged and reports an open release-test as needs you', async () => {
       const out = await loop(
@@ -1543,9 +1604,10 @@ describe('deliver loop', () => {
       expect(out.sessions[0]?.prompt).toMatch(/^\/deliver 31 --base release\/next /);
       expect(out.sessions.map((s) => s.prompt).join('\n')).not.toContain('/deliver 39');
       expect(out.events.find((e) => e.type === 'attention')).toMatchObject({
-        reason: 'release-test',
+        reason: 'deliver.release-test',
         needsYou: true,
       });
+      profile.expectRun(out.events as ProfileEvent[]);
       // the release pull request is never merged
       expect(out.merges.map((m) => m.pull)).not.toContain(900);
     });
@@ -1568,9 +1630,9 @@ describe('deliver loop', () => {
       );
       expect(aside.releasePulls).toBe(0);
       expect(aside.stdout).not.toContain('needs you (1)');
-      expect(aside.events.some((e) => e.type === 'attention' && e.reason === 'release-test')).toBe(
-        false,
-      );
+      expect(
+        aside.events.some((e) => e.type === 'attention' && e.reason === 'deliver.release-test'),
+      ).toBe(false);
       const waiting = await loop(
         { items: [{ id: 43, title: '[PBI] feat: blocked', blockedBy: [42] }], releaseTests: [49] },
         { milestone: true },

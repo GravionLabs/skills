@@ -18,10 +18,22 @@ export const skill = path.resolve(__dirname, '../../../../skills/delivery/delive
 export const loopScript = path.join(skill, 'scripts/deliver-loop.mts');
 const helpers = __dirname;
 
-export type Result = { issue: number; outcome: string; reason?: string; risk?: string };
+export type Result = {
+  issue: number;
+  outcome: string;
+  reason?: string;
+  risk?: string;
+  sessions?: { role?: string; model: string; tier: string }[];
+};
 
 export type Scenario = {
-  items: { id: number; title: string; blockedBy?: number[] }[];
+  items: {
+    id: number;
+    title: string;
+    body?: string;
+    blockedBy?: number[];
+    feature?: number;
+  }[];
   gates?: unknown[];
   files?: string[];
   filesLater?: string[];
@@ -55,6 +67,9 @@ export type Scenario = {
   verdicts?: ('approve' | 'changes' | 'invalid' | 'none' | 'fail')[];
   /** The summary of the finding of a `changes` verdict, which then has no unmet criterion. */
   summary?: string;
+  retroFeature?: boolean;
+  features?: Record<number, { title: string; body: string }>;
+  retro?: 'post' | 'fail' | 'none' | 'hang';
   /** Only the first implementer session writes the risk level. */
   riskOnce?: boolean;
 };
@@ -62,6 +77,8 @@ export type Outcome = {
   status: number | null;
   stdout: string;
   stderr: string;
+  /** The selection the loop handed to the tracker. */
+  selection?: { milestone?: string; feature?: string; issues?: string[] };
   merges: { pull: number; head: string }[];
   /** The stages the loop wrote, in order; `null` removes the label. */
   stages: { id: number; stage: string | null }[];
@@ -76,7 +93,14 @@ export type Outcome = {
     ghToken: string | null;
     hasSessionTokenVariable: boolean;
   }[];
-  reviews: { id: number; prompt: string; cwd: string; hasResultFileVariable: boolean }[];
+  retros: { prompt: string; releasePulls: number }[];
+  reviews: {
+    id: number;
+    prompt: string;
+    cwd: string;
+    hasResultFileVariable: boolean;
+    hasStyleguide: boolean;
+  }[];
   results: Result[];
   final?: Record<string, unknown>;
   events: { type: string; outcome?: string; reason?: string; needsYou?: boolean }[];
@@ -107,6 +131,8 @@ export function loop(
   options: {
     args?: string[];
     milestone?: boolean;
+    /** `--feature <nr>` instead of `--issues`. */
+    feature?: number;
     env?: Record<string, string>;
     whenStdout?: (out: string, stop: () => void) => void;
   } = {},
@@ -121,6 +147,9 @@ export function loop(
     ...process.env,
     NO_COLOR: '1',
     FAKE_DIR: dir,
+    // `models` is also read from the home directory: never the one of the user
+    HOME: dir,
+    USERPROFILE: dir,
     AGENT_EVENTS_DIR: path.join(dir, 'events'),
     DELIVER_TRACKER_DIR: path.join(helpers, 'tracker'),
     DELIVER_HARNESS: JSON.stringify(['node', path.join(helpers, 'fake-harness.mjs'), dir]),
@@ -139,7 +168,11 @@ export function loop(
         loopScript,
         '--tracker',
         'fake',
-        ...(options.milestone ? ['--milestone', 'M001'] : ['--issues', issues]),
+        ...(options.milestone
+          ? ['--milestone', 'M001']
+          : options.feature
+            ? ['--feature', String(options.feature)]
+            : ['--issues', issues]),
         // no wait for handed-over pull requests unless a test asks for one
         ...(options.args?.includes('--handover-minutes') ? [] : ['--handover-minutes', '0']),
         ...(options.args ?? []),
@@ -172,6 +205,9 @@ export function loop(
         status,
         stdout,
         stderr,
+        selection: existsSync(path.join(dir, 'selection.json'))
+          ? JSON.parse(readFileSync(path.join(dir, 'selection.json'), 'utf8'))
+          : undefined,
         merges: lines<{ call: string; pull: number; head: string }>(
           path.join(dir, 'calls.jsonl'),
         ).filter((call) => call.call === 'merge'),
@@ -183,6 +219,7 @@ export function loop(
         comments: lines(path.join(dir, 'comments.jsonl')),
         sessions: lines(path.join(dir, 'sessions.jsonl')),
         reviews: lines(path.join(dir, 'reviews.jsonl')),
+        retros: lines(path.join(dir, 'retros.jsonl')),
         results: results
           ? lines<Result | { issue?: undefined }>(results).filter(
               (r): r is Result => r.issue !== undefined,

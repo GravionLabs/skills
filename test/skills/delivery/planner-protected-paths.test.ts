@@ -16,7 +16,10 @@ describe('planner protected paths (#752)', () => {
   });
 
   it('the loop reads the shared file and keeps no second copy', () => {
-    expect(loop).toContain('protected-paths.json');
+    expect(loop).toContain("from './protected-paths.mts'");
+    expect(read('delivery/deliver/scripts/protected-paths.mts')).toContain(
+      '../protected-paths.json',
+    );
     // the comparators are keyed by file name (#967, #970, #971), the list itself is not copied
     expect(loop).not.toContain("'Directory.Packages.props'");
   });

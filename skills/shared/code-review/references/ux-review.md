@@ -20,4 +20,4 @@ Walk the changed screens with the questions of the rubric. Put the result under 
 
 ## Severity
 
-A deviation from `docs/STYLEGUIDE.md`, or from its base guide unless `## Deviations` lists it, is a note. It is blocking only when an acceptance criterion names it. A UX finding without such a criterion never makes the review blocking.
+A deviation from `docs/STYLEGUIDE.md`, or from its base guide unless `## Deviations` lists it, is a note. It is blocking only when an acceptance criterion names it. A UX finding without such a criterion never makes the review blocking. A caller that names its own severity for rule violations (`deliver-review`) replaces this section.

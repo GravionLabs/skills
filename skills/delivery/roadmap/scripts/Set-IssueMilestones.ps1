@@ -1,12 +1,13 @@
 <#
 .SYNOPSIS
-  Sets the milestones of issues from an approved assignment and prints the result as JSON (schema/set-issue-milestones.schema.json).
+  Sets the milestones of Features from an approved assignment and prints the result as JSON (schema/set-issue-milestones.schema.json).
 .DESCRIPTION
   -Assignment: a JSON array [{ "issue": 12, "milestone": "M3" }] or the path of a file holding it. A milestone name is resolved as in the
-  github-milestone skill: exact title, M<n> (finds `M3 Market data`), or legacy x.y.z. Everything is checked before the first write:
-  invalid input, an unknown issue, a closed milestone or a break of the milestone rule (Epic, incomplete Feature) exits 1 and changes nothing. A missing M<n> is created (after the rule checks of all targets, which run as a dry run against it) with
+  github-milestone skill: exact title, M<n> (finds `M3 Market data`), or legacy x.y.z. Only Features are planned (ADR 0010; a release-test is
+  also accepted); a Feature is set whatever the milestones of its PBIs. Everything is checked before the first write:
+  invalid input, an unknown issue, a closed milestone or a break of the milestone rule (Epic, PBI or Bug) exits 1 and changes nothing. A missing M<n> is created (after the rule checks of all targets, which run as a dry run against it) with
   Get-Milestones.ps1 -Mode create of the sibling github-milestone skill. The assignment is
-  written per target milestone by `Get-Milestones.ps1 -Mode assign` (dry run first), which gets the whole assignment as -Planned so the milestone rule holds over all targets; M1000 and M1.10 are refused up front; an issue already in the target milestone is skipped
+  written per target milestone by `Get-Milestones.ps1 -Mode assign` (dry run first); M1000 and M1.10 are refused up front; an issue already in the target milestone is skipped
   (status unchanged), the others are set (status set). A re-run therefore changes nothing.
 .PARAMETER Assignment
   JSON array or file path.
@@ -84,14 +85,10 @@ foreach ($p in $pairs) {
   if ($LASTEXITCODE -ne 0) { Fail "issue #$($p.issue) not found: nothing was changed" }
 }
 
-# the milestone rule (Epic, Feature) is checked by github-milestone: Get-Milestones.ps1 -Mode assign, per target milestone
+# the milestone rule (Epic, PBI, Bug) is checked by github-milestone: Get-Milestones.ps1 -Mode assign, per target milestone
 function Invoke-Assign([string]$title, [bool]$dry) {
   $nrs = ($pairs | Where-Object { ($targets[$_.name] ?? $_.name) -eq $title } | ForEach-Object { $_.issue }) -join ','
-  # the whole assignment (issue -> target title), so a Feature's sub-issue sent to another target counts as outside
-  $planned = [ordered]@{}
-  foreach ($q in $pairs) { $planned["$($q.issue)"] = [string]($targets[$q.name] ?? $q.name) }
-  $extra = @{ DryRun = $dry; Planned = ($planned | ConvertTo-Json -Compress) }
-  $out = & $MilestoneScript -Mode assign -Name $title -Issues $nrs -Repo $Repo @extra
+  $out = & $MilestoneScript -Mode assign -Name $title -Issues $nrs -Repo $Repo -DryRun:$dry
   if ($LASTEXITCODE -ne 0) { Fail "assigning to milestone $title failed: see above" }
   @(($out | Out-String | ConvertFrom-Json).assigned)
 }

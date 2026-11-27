@@ -9,7 +9,7 @@
     "**/dist",
     "**/node_modules",
     "**/coverage",
-    "test/skills/delivery/agent-events",
+    "test/fixtures/agent-events/directory",
     "site/.vitepress/cache",
     "site/.vitepress/dist",
     ".worktrees",

@@ -45,6 +45,30 @@ export function findingsLine(verdict: Verdict): string {
   return line.length > 500 ? `${line.slice(0, 500)}…` : line;
 }
 
+// the sections of a Feature the review reads; `In scope` and `Out of scope` also come as headings of their own
+const FEATURE_SECTION = /^##\s+(scope|in scope|out of scope|acceptance criteria)\b/i;
+
+/**
+ * The text of `<nr>.feature.md`: title, URL and the Scope (with Out of scope) and Acceptance Criteria sections of
+ * the parent Feature. Everything else of its body is left out; a `## ` line in a code fence is no heading.
+ */
+export function featureText(feature: { title: string; url: string; body: string }): string {
+  const kept: string[] = [];
+  let keep = false;
+  let fence: string | undefined;
+  for (const line of feature.body.split(/\r?\n/)) {
+    const marker = /^\s*(`{3,}|~{3,})/.exec(line)?.[1];
+    if (marker) {
+      if (!fence) fence = marker;
+      else if (marker.startsWith(fence)) fence = undefined;
+    } else if (!fence && /^##?\s/.test(line)) keep = FEATURE_SECTION.test(line);
+    if (keep) kept.push(line);
+  }
+  const sections =
+    kept.join('\n').trim() || 'The Feature has no Scope or Acceptance Criteria section.';
+  return `# ${feature.title}\n\n${feature.url}\n\n${sections}\n`;
+}
+
 /** The risk levels of an implementer result (`risk.level`). */
 export const RISK_LEVELS = ['low', 'medium', 'high'];
 
@@ -102,21 +126,48 @@ export function parseMark(body: string): ReviewMark | undefined {
 
 export const REVIEW_KEYS = ['model', 'harness', 'effort'];
 
+export const RETRO_KEYS = ['enabled', 'model'];
+
+// a model name goes into the command line: never one that reads as an option
+const MODEL_NAME = /^[A-Za-z0-9][\w.:/[\]-]*$/;
+
+/**
+ * The settings of the retro session after a milestone: `--no-retro`, then `deliver.retro`; the model defaults to
+ * the one of the role `retro` (`defaultModel`). Throws an Error whose message names the wrong setting.
+ */
+export function retroSettings(input: {
+  disabled?: boolean;
+  config: unknown;
+  defaultModel: string;
+}): {
+  enabled: boolean;
+  model: string;
+} {
+  const config = object(input.config) ? input.config : {};
+  const enabled = config.enabled ?? true;
+  if (typeof enabled !== 'boolean') throw new Error('deliver.retro.enabled is true or false');
+  const model = config.model ?? input.defaultModel;
+  if (typeof model !== 'string' || !MODEL_NAME.test(model))
+    throw new Error('the retro model (deliver.retro.model) is no model name');
+  return { enabled: enabled && !input.disabled, model };
+}
+
 export type ReviewSettings = {
   harnessName: string;
   harness: Harness;
-  model: string;
+  /** Set by `--review-model` or `deliver.review.model`; else the role `review` decides per issue. */
+  model?: string;
   effort?: string;
 };
 
 /**
- * The settings of the review session: the flag, then `deliver.review`, else the harness of the implementer with
- * a model that is not the implementer's. Throws an Error whose message names the wrong setting.
+ * The settings of the review session: the flag, then `deliver.review`, else the harness of the implementer.
+ * Throws an Error whose message names the wrong setting.
  */
 export function reviewSettings(input: {
   flags: { model?: string; harness?: string };
   config: unknown;
-  implementer: { harnessName: string; model: string };
+  implementer: { harnessName: string };
 }): ReviewSettings {
   const config = object(input.config) ? input.config : {};
   const harnessName = String(
@@ -127,13 +178,8 @@ export function reviewSettings(input: {
       `unknown review harness "${harnessName}": one of ${Object.keys(HARNESSES).join(', ')}`,
     );
   const harness = HARNESSES[harnessName];
-  const [first, second] = harness.reviewModels;
-  // the same family counts as the same model: `claude-opus-…` and `opus`
-  const family = (model: string) => /fable|opus|sonnet|haiku/i.exec(model)?.[0].toLowerCase();
-  const other = family(input.implementer.model) === family(first) ? second : first;
-  const model = input.flags.model ?? config.model ?? other;
-  // a model name goes into the command line: never one that reads as an option
-  if (typeof model !== 'string' || !/^[A-Za-z0-9][\w.:/[\]-]*$/.test(model))
+  const model = input.flags.model ?? config.model;
+  if (model !== undefined && (typeof model !== 'string' || !MODEL_NAME.test(model)))
     throw new Error('the review model (--review-model, deliver.review.model) is no model name');
   const { effort } = config;
   if (effort !== undefined && !harness.efforts.includes(effort as string))

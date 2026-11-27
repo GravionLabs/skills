@@ -190,7 +190,7 @@ describe('Set-IssueMilestones.ps1', () => {
     expect(writes(r.calls)).toEqual([]);
   });
 
-  // #327: an Epic never has a milestone; a Feature only when all its open PBIs are in it
+  // #327, ADR 0010: an Epic never has a milestone, a PBI gets it at merge, a Feature is set without looking at its PBIs
   describe('milestone rule', () => {
     const base = {
       FAKE_MILESTONES: [ms(1, 'M1'), ms(2, 'M2')],
@@ -213,118 +213,44 @@ describe('Set-IssueMilestones.ps1', () => {
       expect(writes(r.calls)).toEqual([]);
     });
 
-    it.each([
-      ['an open PBI without milestone', [{ number: 3, state: 'open', milestone: null }], '#3'],
-      [
-        'an open PBI in another milestone',
-        [{ number: 3, state: 'open', milestone: { title: 'M2' } }],
-        '#3',
-      ],
-    ])('refuses a Feature with %s', async (_n, subs, outside) => {
-      const r = await run([{ issue: 1, milestone: 'M1' }], {
-        ...base,
-        FAKE_LABELS: { 1: ['feature'] },
-        FAKE_SUBS: { 1: subs },
-      });
-      expect(r.status).toBe(1);
-      expect(r.stderr).toContain(`outside: ${outside}`);
-      expect(writes(r.calls)).toEqual([]);
-    });
-
-    // #438: a sub-issue from another repository is outside; its number never matches the assignment
-    it.each([
-      ['a milestone title collision', { title: 'M1' }],
-      ['no milestone', null],
-    ])('refuses a Feature with a sub-issue from another repository (%s)', async (_n, milestone) => {
+    it('refuses a PBI without writes, also next to a Feature', async () => {
       const r = await run(
         [
           { issue: 1, milestone: 'M1' },
-          { issue: 3, milestone: 'M1' },
+          { issue: 3, milestone: 'M2' },
         ],
-        {
-          ...base,
-          FAKE_CURRENT: { 1: null, 3: null },
-          FAKE_LABELS: { 1: ['feature'], 3: ['pbi'] },
-          FAKE_REPOS: { 1: 'https://api.github.com/repos/o/r' },
-          FAKE_SUBS: {
-            1: [
-              {
-                number: 3,
-                state: 'open',
-                milestone,
-                repository_url: 'https://api.github.com/repos/o/other',
-              },
-            ],
-          },
-        },
+        { ...base, FAKE_LABELS: { 1: ['feature'], 3: ['pbi'] } },
       );
       expect(r.status).toBe(1);
-      expect(r.stderr).toContain('outside: o/other#3');
+      expect(r.stderr).toContain('#3 is a PBI: its milestone is set at merge');
       expect(writes(r.calls)).toEqual([]);
     });
 
-    // #464: the rule holds over the whole assignment, in either order of the targets
-    it.each([
-      [
-        'Feature target first',
-        [
-          { issue: 1, milestone: 'M1' },
-          { issue: 3, milestone: 'M2' },
-        ],
-      ],
-      [
-        'PBI target first',
-        [
-          { issue: 3, milestone: 'M2' },
-          { issue: 1, milestone: 'M1' },
-        ],
-      ],
-    ])(
-      'refuses a Feature whose PBI the same assignment sends elsewhere (%s) without writes',
-      async (_n, assignment) => {
-        const r = await run(assignment, {
-          ...base,
-          FAKE_CURRENT: { 1: null, 3: 'M1' },
-          FAKE_LABELS: { 1: ['feature'], 3: ['pbi'] },
-          FAKE_SUBS: { 1: [{ number: 3, state: 'open', milestone: { title: 'M1' } }] },
-        });
-        expect(r.status).toBe(1);
-        expect(r.stderr).toContain('outside: #3');
-        expect(writes(r.calls)).toEqual([]);
-      },
-    );
+    it('refuses a Bug without writes', async () => {
+      const r = await run([{ issue: 3, milestone: 'M2' }], {
+        ...base,
+        FAKE_LABELS: { 3: ['bug'] },
+      });
+      expect(r.status).toBe(1);
+      expect(r.stderr).toContain('#3 is a Bug: its milestone is set at merge');
+      expect(writes(r.calls)).toEqual([]);
+    });
 
     it.each(['M1000', 'M1.10'])('refuses %s up front, before anything is created', async (name) => {
-      const r = await run([{ issue: 3, milestone: name }], {
-        ...base,
-        FAKE_LABELS: { 3: ['pbi'] },
-      });
+      const r = await run([{ issue: 3, milestone: name }], base);
       expect(r.status).toBe(1);
       expect(r.stderr).toContain('not writable');
       expect(writes(r.calls)).toEqual([]);
     });
 
-    it('sets a Feature when its PBIs land in the same milestone (assigned now or already there), closed ones do not count', async () => {
-      const r = await run(
-        [
-          { issue: 1, milestone: 'M1' },
-          { issue: 3, milestone: 'M1' },
-        ],
-        {
-          ...base,
-          FAKE_CURRENT: { 1: null, 3: null },
-          FAKE_LABELS: { 1: ['feature'], 3: ['pbi'] },
-          FAKE_SUBS: {
-            1: [
-              { number: 3, state: 'open', milestone: null },
-              { number: 4, state: 'open', milestone: { title: 'M1' } },
-              { number: 5, state: 'closed', milestone: null },
-            ],
-          },
-        },
-      );
+    it('sets a Feature whatever the milestones of its PBIs', async () => {
+      const r = await run([{ issue: 1, milestone: 'M1' }], {
+        ...base,
+        FAKE_LABELS: { 1: ['feature'] },
+        FAKE_SUBS: { 1: [{ number: 3, state: 'open', milestone: { title: 'M2' } }] },
+      });
       expect(r.status).toBe(0);
-      expect(writes(r.calls).map((a) => a[2])).toEqual(['1', '3']);
+      expect(writes(r.calls).map((a) => a[2])).toEqual(['1']);
     });
   });
 });

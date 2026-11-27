@@ -70,7 +70,10 @@ describe('deliver loop: issue comments', () => {
   });
 
   it('points a person at a merged pull request of high risk', async () => {
-    const out = await run(704, { risks: { 704: 'high' } });
+    const out = await loop(
+      { items: [{ id: 704, title: '[PBI] feat: told' }], risks: { 704: 'high' } },
+      { args: ['--merge-risk', 'high'] },
+    );
     expect(out.comments.at(-1)?.marker).toBe('<!-- deliver-handover: high-risk abc123 -->');
   });
 });

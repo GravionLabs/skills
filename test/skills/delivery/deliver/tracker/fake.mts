@@ -1,7 +1,7 @@
 // A tracker for the tests of the deliver loop: the scenario comes from $FAKE_DIR/scenario.json, the
 // pull request of an item exists once the fake harness wrote $FAKE_DIR/pr-<id>, and every merge is
 // appended to $FAKE_DIR/calls.jsonl. The loop loads it through DELIVER_TRACKER_DIR.
-import { appendFileSync, existsSync, readFileSync } from 'node:fs';
+import { appendFileSync, existsSync, readFileSync, writeFileSync } from 'node:fs';
 import path from 'node:path';
 import type {
   BaseState,
@@ -10,10 +10,11 @@ import type {
   Pull,
   Subject,
   Tracker,
+  TrackerContext,
 } from '../../../../../skills/delivery/deliver/scripts/tracker.mts';
 
 type Scenario = {
-  items: { id: number; title: string; blockedBy?: number[] }[];
+  items: { id: number; title: string; body?: string; blockedBy?: number[]; feature?: number }[];
   /** One entry per gate() call, the last one repeats. `throw` is a failing tracker call. */
   gates?: (Gate | 'throw')[];
   files?: string[];
@@ -53,12 +54,19 @@ type Scenario = {
   mergedBefore?: number[];
   /** Items whose pull request is merged by someone else while their session runs. */
   mergedDuring?: number[];
+  /** The milestone has a Feature (default true). */
+  retroFeature?: boolean;
+  /** The parent Feature by item id. */
+  features?: Record<number, { title: string; body: string }>;
   /** Items that have a second open pull request once their first one exists. */
   twoPulls?: number[];
 };
 
-export function create(): Tracker {
+export function create({ selection }: TrackerContext): Tracker {
   const dir = String(process.env.FAKE_DIR);
+  writeFileSync(path.join(dir, 'selection.json'), JSON.stringify(selection));
+  // like the GitHub tracker: the Bug of a red base is one of the items from its filing until it is merged
+  let baseBug: Item | undefined;
   const scenario: Scenario = JSON.parse(readFileSync(path.join(dir, 'scenario.json'), 'utf8'));
   const record = (call: Record<string, unknown>) =>
     appendFileSync(path.join(dir, 'calls.jsonl'), `${JSON.stringify(call)}\n`);
@@ -87,8 +95,10 @@ export function create(): Tracker {
           title: item.title,
           url: `https://example.test/issues/${item.id}`,
           labels: ['pbi'],
-          body: 'body of the issue',
-        }));
+          body: item.body ?? 'body of the issue',
+          ...(item.feature && { feature: item.feature }),
+        }))
+        .concat(baseBug && !closed.has(baseBug.id) ? [baseBug] : []);
     },
     itemSubject: (item: Item): Subject => ({
       kind: 'fake.issue',
@@ -103,6 +113,17 @@ export function create(): Tracker {
       return open.length > 0 ? `blocked by ${open.map((id) => `#${id}`).join(', ')}` : undefined;
     },
     needsDecision: () => scenario.needsDecision ?? false,
+    parentFeature(item: Item): Item | undefined {
+      const feature = scenario.features?.[item.id];
+      return (
+        feature && {
+          ...feature,
+          id: 1,
+          url: 'https://example.test/issues/1',
+          labels: ['feature'],
+        }
+      );
+    },
     setStage: (item: Item, stage?: string) =>
       appendFileSync(
         path.join(dir, 'stages.jsonl'),
@@ -184,13 +205,14 @@ export function create(): Tracker {
     rerunFailed: () => record({ call: 'rerun' }),
     reportBaseRed(): Item {
       record({ call: 'baseBug' });
-      return {
+      baseBug = {
         id: 900,
         title: '[Bug] fix: release/next is red (ci)',
         url: 'https://example.test/issues/900',
         labels: ['bug'],
         body: 'body of the bug',
       };
+      return baseBug;
     },
     changedFiles(): string[] {
       if (scenario.stopInChangedFiles) {
@@ -239,6 +261,12 @@ export function create(): Tracker {
         branch: 'release/next',
       };
     },
+    hasRetroFeature: () => scenario.retroFeature ?? true,
+    isRetroComment: (url: string, marker: string) =>
+      existsSync(path.join(dir, 'retro.json')) &&
+      JSON.parse(readFileSync(path.join(dir, 'retro.json'), 'utf8'))[url]?.startsWith(marker) ===
+        true,
+    linkRetro: (pull: Pull, url: string) => record({ call: 'linkRetro', pull: pull.id, url }),
     sessionEnv: (token: string) => ({ GH_TOKEN: token }),
   };
 }

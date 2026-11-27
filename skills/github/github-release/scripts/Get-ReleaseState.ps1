@@ -8,6 +8,8 @@
   releasePr (the CI release PR, or null), defaultIsAncestor (origin/<default> is an ancestor of the branch; null when
   the branch is not on origin) and mergeConflicts (`git merge-tree` reports conflicts between them; null when
   defaultIsAncestor is true, the branch is absent or git cannot tell). A squashed back-merge leaves it false. The bump otherwise comes from the Conventional Commits on the branch.
+  cut and finish report openMilestone: the title of the open M<nnn> milestone with the lowest number, or null when
+  there is none (also when gh cannot read the milestones; New-ReleaseNext.ps1 tells the two apart before it creates one).
   finish also warns about an unfinished release: the newest release that is no pre-release is a draft whose tag is not
   on origin. The warning names the newest failed run on the default branch with a failed release or publish job, when
   gh finds one; a `stop: already released` action then names the unfinished release instead.
@@ -38,6 +40,7 @@ param(
   [string]$Milestone
 )
 $ErrorActionPreference = 'Stop'
+Import-Module (Join-Path $PSScriptRoot 'ReleaseMilestone.psm1') -Force
 
 function Fail([string]$m) { Write-Error $m -ErrorAction Continue; exit 1 }
 function Invoke-Git { $o = & git @args 2>$null; $script:gitOk = ($LASTEXITCODE -eq 0); $o }
@@ -284,9 +287,11 @@ if ($Mode -eq 'finish') {
   }
 }
 
+$openMilestone = (Get-OpenMilestone).title
+
 [ordered]@{
   default = $default; branch = $Branch; state = $state; openPrs = @($openPrs); localAhead = $localAhead
   staleLines = @($staleLines); fastForwardAllowed = $fastForwardAllowed; action = $action
   hasMajorCommit = $major; deleteOnMerge = $deleteOnMerge; deletionRule = $deletionRule; retargetedPrs = @($retargetedPrs); defaultIsAncestor = $defaultIsAncestor; mergeConflicts = $mergeConflicts; releaseWorkflow = $workflow; releasePr = $releasePr
-  releaseTest = $releaseTest; olderReleaseTests = @($olderReleaseTests); gate = $gate; warning = $warning
+  releaseTest = $releaseTest; olderReleaseTests = @($olderReleaseTests); gate = $gate; openMilestone = $openMilestone; warning = $warning
 } | ConvertTo-Json -Depth 4

@@ -1,13 +1,14 @@
 // deliver: the review session of the loop (deliver-review) and its verdict.
 import { existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import path from 'node:path';
-import { parseVerdict } from '../../../skills/delivery/deliver/scripts/review.mts';
+import { featureText, parseVerdict } from '../../../skills/delivery/deliver/scripts/review.mts';
 import {
   type Outcome,
   type Scenario,
   READY,
   RED,
   fixture,
+  git,
   loop,
   repo,
   root,
@@ -79,7 +80,9 @@ describe('deliver loop: review session (#1013)', () => {
       risks: { 312: 'high' },
       riskOnce: true,
     });
-    expect(out.results[0]).toMatchObject({ outcome: 'merged', risk: 'high' });
+    // handed over for the level of the first session
+    expect(out.results[0]).toMatchObject({ outcome: 'aside', risk: 'high' });
+    expect(out.merges).toEqual([]);
     expect(out.stdout).toContain('#312 risk high');
   });
 
@@ -150,8 +153,9 @@ describe('deliver loop: review session (#1013)', () => {
       }
     };
     expect((await dry([])).stdout).toMatch(/^review: claude \(claude .*--model opus /m);
+    // an implementer on the strong model: there is no stronger one, the review stays strong
     expect((await dry(['--model', 'claude-opus-5-5'])).stdout).toMatch(
-      /^review: claude .*--model sonnet /m,
+      /^review: claude .*--model opus /m,
     );
     const config = { harness: 'copilot', model: 'gpt-x', effort: 'high', rounds: 3 };
     const fromConfig = await dry([], config);
@@ -167,6 +171,102 @@ describe('deliver loop: review session (#1013)', () => {
     const wrong = await dry(['--review-harness', 'codex']);
     expect(wrong.status).toBe(64);
     expect(wrong.stderr).toContain('unknown review harness "codex"');
+  });
+});
+
+describe('deliver loop: parent Feature and rubric (#1062)', () => {
+  const BODY = [
+    '## Overview',
+    'left out',
+    '## Scope',
+    '**Out of scope**',
+    '- the retro loop',
+    '```md',
+    '## not a heading',
+    '```',
+    '## Acceptance Criteria',
+    '- [ ] no raw controls',
+    '## Definition of Done',
+    'also left out',
+  ].join('\n');
+
+  it('writes the parent Feature next to the issue file and passes it to the review only', async () => {
+    const out = await loop({
+      items: [{ id: 320, title: '[PBI] feat: child' }],
+      features: { 320: { title: '[Feature] parent', body: BODY } },
+    });
+    expect(out.status).toBe(0);
+    expect(out.sessions[0]?.prompt).not.toContain('--feature-file');
+    const prompt = out.reviews[0]?.prompt ?? '';
+    const file = /--feature-file (\S+320\.feature\.md) /.exec(prompt)?.[1] ?? '';
+    const issueFile = /--issue-file (\S+)$/.exec(prompt)?.[1] ?? '';
+    expect(path.dirname(file)).toBe(path.dirname(issueFile));
+    expect(readFileSync(file, 'utf8')).toBe(
+      [
+        '# [Feature] parent',
+        '',
+        'https://example.test/issues/1',
+        '',
+        '## Scope',
+        '**Out of scope**',
+        '- the retro loop',
+        '```md',
+        '## not a heading',
+        '```',
+        '## Acceptance Criteria',
+        '- [ ] no raw controls',
+        '',
+      ].join('\n'),
+    );
+  });
+
+  it('says so when the Feature has neither section', () => {
+    expect(featureText({ title: 't', url: 'u', body: 'text' })).toContain(
+      'no Scope or Acceptance Criteria section',
+    );
+  });
+
+  it.each([
+    ['without', false, 321],
+    ['with', true, 322],
+  ] as const)(
+    'reviews a UI change %s a style guide in a checkout of the pull request head',
+    async (_name, guide, id) => {
+      const head = git(repo, 'rev-parse', 'abc123').trim();
+      if (guide) {
+        mkdirSync(path.join(repo, 'docs'), { recursive: true });
+        writeFileSync(path.join(repo, 'docs/STYLEGUIDE.md'), '# UI style guide\n');
+        git(repo, 'add', 'docs/STYLEGUIDE.md');
+        git(repo, 'commit', '--quiet', '-m', 'docs: style guide');
+        git(repo, 'tag', '--force', 'abc123');
+      }
+      try {
+        const out = await loop({
+          items: [{ id, title: '[PBI] feat: ui' }],
+          files: ['src/dialog.tsx'],
+        });
+        expect(out.status).toBe(0);
+        expect(out.reviews[0]?.hasStyleguide).toBe(guide);
+        expect(out.reviews[0]?.prompt).not.toContain('--feature-file');
+      } finally {
+        if (guide) {
+          git(repo, 'reset', '--quiet', '--hard', 'HEAD~1');
+          git(repo, 'tag', '--force', 'abc123', head);
+        }
+      }
+    },
+  );
+
+  // the rubric is applied by the review session: the skill text is the contract
+  it('applies the rubric only to UI changes of a repository with a style guide', () => {
+    const text = readFileSync(path.join(skill, '../deliver-review/SKILL.md'), 'utf8');
+    expect(text).toMatch(/only when the diff changes UI files.*`docs\/STYLEGUIDE\.md`\)/);
+    expect(text).toContain(
+      'Without a UI file or without `docs/STYLEGUIDE.md` there are no rubric findings',
+    );
+    expect(text).toMatch(/blocking finding that quotes the rule/);
+    expect(text).toMatch(/Every finding names its source: `PBI`.*`Feature` or `rubric`/);
+    expect(text).toMatch(/Feature criteria the issue does not claim are never `unmet`/);
   });
 });
 

@@ -31,10 +31,13 @@ const state = {
   latestTag: 'v1.5.0',
   issues: [
     issue(1, 'epic', '[Epic] short', { milestone: 'M2' }),
-    issue(2, 'pbi', '[PBI] a much longer title with a | pipe', { milestone: 'M2', blockedBy: [3] }),
-    issue(3, 'pbi', '[PBI] 日本語 title', { milestone: 'M2', size: 'S' }),
-    issue(4, 'pbi', '[PBI] emoji 🚀 and — dash'),
-    issue(5, 'pbi', '[PBI] x', { labels: ['pbi', 'needs-decision'] }),
+    issue(2, 'feature', '[PBI] a much longer title with a | pipe', {
+      milestone: 'M2',
+      blockedBy: [3],
+    }),
+    issue(3, 'feature', '[PBI] 日本語 title', { milestone: 'M2', size: 'S' }),
+    issue(4, 'feature', '[PBI] emoji 🚀 and — dash'),
+    issue(5, 'feature', '[PBI] x', { labels: ['feature', 'needs-decision'] }),
   ],
   milestones: [
     {

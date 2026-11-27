@@ -22,11 +22,6 @@ Versioning follows [Semantic Versioning](https://semver.org/).
 
 ## [5.15.0] — 2026-11-26
 
-### Documentation
-- Update CHANGELOG.md for v5.15.0 [skip ci]
-- Update CHANGELOG.md for v5.15.0 [skip ci]
-
-
 ### Features
 - **ui-styleguide**: Form field and dialog rules in the templates and fill.md (#1026) (#1032)
 - **ui-styleguide**: Sync mode proposes a diff between a guide and the code (#1027) (#1034)

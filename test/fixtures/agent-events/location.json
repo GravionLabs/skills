@@ -1,0 +1,60 @@
+{
+  "directory": [
+    {
+      "name": "XDG_STATE_HOME",
+      "windows": false,
+      "env": { "XDG_STATE_HOME": "/xdg/state" },
+      "expected": ["/xdg/state", "agent-events"]
+    },
+    {
+      "name": "no XDG_STATE_HOME",
+      "windows": false,
+      "env": {},
+      "expected": ["/home/dev", ".local", "state", "agent-events"]
+    },
+    {
+      "name": "a relative XDG_STATE_HOME",
+      "windows": false,
+      "env": { "XDG_STATE_HOME": "state" },
+      "expected": ["/home/dev", ".local", "state", "agent-events"]
+    },
+    {
+      "name": "LOCALAPPDATA on Windows",
+      "windows": true,
+      "env": { "LOCALAPPDATA": "/local/appdata", "XDG_STATE_HOME": "/xdg/state" },
+      "expected": ["/local/appdata", "agent-events"]
+    },
+    { "name": "Windows without LOCALAPPDATA", "windows": true, "env": {}, "expected": null },
+    {
+      "name": "the override",
+      "windows": false,
+      "env": { "AGENT_EVENTS_DIR": "/shared/events", "XDG_STATE_HOME": "/xdg/state" },
+      "expected": ["/shared/events"]
+    },
+    {
+      "name": "the override on Windows",
+      "windows": true,
+      "env": { "AGENT_EVENTS_DIR": "/shared/events", "LOCALAPPDATA": "/local/appdata" },
+      "expected": ["/shared/events"]
+    },
+    {
+      "name": "an empty override",
+      "windows": false,
+      "env": { "AGENT_EVENTS_DIR": "", "XDG_STATE_HOME": "/xdg/state" },
+      "expected": ["/xdg/state", "agent-events"]
+    }
+  ],
+  "repository": [
+    { "url": "https://github.com/example/a.git", "repo": "example/a" },
+    { "url": "https://github.com/example/a/", "repo": "example/a" },
+    { "url": "git@github.com:example/a.git", "repo": "example/a" },
+    { "url": "github.com:example/a", "repo": "example/a" },
+    { "url": "ssh://git@host.example:22/group/sub/a.git", "repo": "group/sub/a" },
+    { "url": "file:///srv/git/a.git", "repo": null },
+    { "url": "file://server/share/a.git", "repo": null },
+    { "url": "/srv/git/a.git", "repo": null },
+    { "url": "../a", "repo": null },
+    { "url": "C:\\git\\a", "repo": null },
+    { "url": "C:/git/a", "repo": null }
+  ]
+}

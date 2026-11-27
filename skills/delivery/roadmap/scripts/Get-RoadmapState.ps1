@@ -3,7 +3,8 @@
   State for the roadmap skill as JSON (schema/roadmap-state.schema.json): open Epics, Features, PBIs and Bugs plus the milestones with progress.
 .DESCRIPTION
   Read-only: only `gh api` GET calls (REST). Issues: one paginated read of the open issues (pull requests filtered out); the level
-  comes from the label epic, feature, pbi or bug (issues without one are left out). parent: the native sub-issue parent
+  comes from the label epic, feature, pbi or bug (issues without one are left out). Only Features are planned (ADR 0010); PBIs and Bugs are read because their
+  size and blockers count towards the Feature above them. parent: the native sub-issue parent
   (GET issues/<nr>/parent, none: null). blockedBy: the open native blockers, a number per local blocker and a string `owner/repo#n` per blocker in another repository (GET issues/<nr>/dependencies/blocked_by).
   size: S, M or L from a body line `Size: <S|M|L>` or a label `size:<S|M|L>`, otherwise null. milestone: the title or null.
   milestones: Get-Milestones.ps1 -Mode list of the sibling github-milestone skill (M<n>, M<n> (x.y.z) and legacy x.y.z titles).

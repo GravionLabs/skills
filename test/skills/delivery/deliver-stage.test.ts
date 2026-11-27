@@ -92,6 +92,7 @@ const handler = `(call, ctx) => {
   if (route.includes('/rules/branches/')) return { rest: [{ type: 'required_status_checks', parameters: { required_status_checks: [{ context: 'ci' }] } }] };
   if (route.includes('/protection/')) return { rest: {} };
   if (route.includes('/check-runs')) return { rest: [{ check_runs: [{ name: 'ci', status: 'completed', conclusion: 'success' }] }] };
+  if (route.endsWith('/parent')) throw new Error('gh: Not Found (HTTP 404)');
   if (route.includes('/comments')) return { rest: [sc.comments] };
   if (route.includes('/labels')) return { rest: [issue.labels] };
   if (route.includes('/events') || route.includes('/dependencies/')) return { rest: [[]] };
@@ -124,7 +125,7 @@ describe('deliver loop: resume by label (fake gh)', () => {
     return () => rmSync(dir, { recursive: true, force: true });
   });
 
-  const resume = async (label: string, comments: unknown[] = []) => {
+  const resume = async (label: string, comments: unknown[] = [], args: string[] = []) => {
     const id = 600;
     const fake = createFakeGh(dir, handler);
     const scenario = path.join(dir, 'gh-scenario.json');
@@ -134,7 +135,7 @@ describe('deliver loop: resume by label (fake gh)', () => {
     const out = await loop(
       { items: [{ id, title: '[PBI] feat: resumed' }] },
       {
-        args: ['--tracker', 'github'],
+        args: ['--tracker', 'github', ...args],
         env: { PATH: env.PATH as string, SCENARIO: scenario, DELIVER_TRACKER_DIR: '' },
       },
     );
@@ -148,9 +149,11 @@ describe('deliver loop: resume by label (fake gh)', () => {
   };
 
   it('agent:approved with the recorded verdict goes straight to the merge gate, with its risk', async () => {
-    const { out, merged, added, calls } = await resume('agent:approved', [
-      comment('<!-- deliver-review: approve abc123 risk=high -->\nrecorded'),
-    ]);
+    const { out, merged, added, calls } = await resume(
+      'agent:approved',
+      [comment('<!-- deliver-review: approve abc123 risk=high -->\nrecorded')],
+      ['--merge-risk', 'high'],
+    );
     expect(out.status).toBe(0);
     expect(out.results[0]?.risk).toBe('high');
     expect(out.stdout).toContain('(risk high)');
@@ -163,6 +166,20 @@ describe('deliver loop: resume by label (fake gh)', () => {
     );
     expect(calls.filter((c) => c.startsWith('label create'))).toHaveLength(STAGES.length);
   });
+
+  it.each(['agent:approved', 'agent:handover'])(
+    '%s with a high risk is handed over again without a session',
+    async (label) => {
+      const { out, merged } = await resume(label, [
+        comment('<!-- deliver-review: approve abc123 risk=high -->\nrecorded'),
+      ]);
+      expect(out.status).toBe(3);
+      expect(out.sessions).toEqual([]);
+      expect(out.reviews).toEqual([]);
+      expect(merged).toBe(false);
+      expect(out.results[0]?.reason).toBe('risk high, merge it yourself');
+    },
+  );
 
   it.each([
     ['no mark', []],

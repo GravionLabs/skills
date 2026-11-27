@@ -12,7 +12,7 @@ const state = {
   issues: [
     {
       number: 9,
-      level: 'pbi',
+      level: 'feature',
       title: '[PBI] open work',
       size: 'S',
       labels: ['pbi'],
