@@ -5,7 +5,7 @@ Retrospective on a finished run: measures it, ranks improvements to the agent en
 ## Usage
 
 ```
-/retro [#<issue> | <session-id>]
+/retro [#<issue> | <session-id> | --run <path> | --milestone <M>]
 /retro help
 ```
 
@@ -13,10 +13,12 @@ Retrospective on a finished run: measures it, ranks improvements to the agent en
 
 - `#<issue>` (or the bare number): analyse the PRs of that issue.
 - `<session-id>`: analyse that session.
-- nothing: the newest run; without a source the skill asks for the issue number.
+- `--run <path>`: analyse that `deliver` run folder (`<git-common-dir>/deliver/<run>/`); repeatable.
+- `--milestone <M>`: analyse the newest run folders with issues of that milestone; several runs merge by issue, the last result per issue wins.
+- nothing: the newest run folder; without one the skill asks for the issue number.
 - `help` (also `--help`, `-h`): print this text.
 
-What it measures (seven columns, `n/a` when there is no source, never estimated; `~` stays an estimate): cost, main peak (context), requests, roles by cost, review rounds, fix rounds, CI / duration. Sources: `agentlens` and `gh`.
+What it measures (seven columns, `n/a` when there is no source, never estimated; `~` stays an estimate): cost, main peak (context), requests, roles by cost, review rounds, fix rounds, CI / duration. Sources: the run folder first, `agentlens` and `gh` for what it lacks (each column names its source). Without a run folder the report says so and uses `agentlens` and `gh`.
 
 Output: a report of at most 40 lines (metrics table, candidates ranked by severity with evidence, escalation lines) plus a separate Mermaid flow diagram of the agent calls per PBI (order, round numbers, results; "flow not measured" without a source; it does not count towards the 40 lines), then on request:
 
@@ -31,6 +33,8 @@ Drafts are shown as text. No issue, PR, file or lesson is created, edited or pus
 ```
 /retro #197
 /retro 197
+/retro --milestone M016
+/retro --run .git/deliver/20261126T193530-28755
 /retro
 /retro help
 ```
@@ -41,6 +45,6 @@ none
 
 ## See also
 
-- `deliver`, whose run report supplies the escalation lines
+- `deliver`, whose run folder supplies the metrics and escalation lines
 - `github-issue`, which creates approved PBIs
 - `lessons`, the contract of lesson drafts

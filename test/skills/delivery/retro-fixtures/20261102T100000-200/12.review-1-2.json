@@ -1,0 +1,5 @@
+{
+  "verdict": "changes",
+  "findings": [{ "severity": "blocking", "file": "src/dialog.ts", "summary": "input has no test" }],
+  "unmet": []
+}
