@@ -48,6 +48,12 @@ describe('planner refine definition of ready (#891)', () => {
     expect(refine).toMatch(/gh label create/);
   });
 
+  it('Refine gives created PBIs no milestone and asks once for new Features (#1071)', () => {
+    expect(refine).toMatch(/PBIs created in `## Interactive` step 4 get none/);
+    expect(refine).toMatch(/Features created from an Epic or Objective[\s\S]*ask once, optional/);
+    expect(refine).not.toMatch(/else the one of the Feature/);
+  });
+
   it('description triggers on "refine #N"', () => {
     expect(skill.split('---')[1]).toContain('refine #N');
   });

@@ -2,7 +2,7 @@
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "https://github.com/GravionLabs/skills/skills/delivery/roadmap/schema/set-issue-milestones.schema.json",
   "title": "Set-IssueMilestones.ps1 output",
-  "description": "Milestones created and the status per assigned issue.",
+  "description": "Milestones created and the status per assigned Feature (PBIs and Bugs are refused, ADR 0010; a release-test is accepted).",
   "type": "object",
   "required": ["created", "results"],
   "properties": {

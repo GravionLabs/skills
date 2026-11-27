@@ -1,12 +1,12 @@
 ---
 name: roadmap
-description: 'Plan the releases: assign open Epics, Features and PBIs to M<nnn> milestones and keep ROADMAP.md. Use for "/roadmap" or "plan the milestones".'
+description: 'Plan the releases: assign open Features to M<nnn> milestones and keep ROADMAP.md. Use for "/roadmap" or "plan the milestones".'
 disable-model-invocation: true
 metadata:
   opencode/autoinvoke: 'false'
 ---
 
-Plans the releases of a repository. Reads the open Epics, Features, PBIs and Bugs, proposes which `M<nnn>` milestone each belongs to, asks the open decisions, sets the milestones after approval and keeps `ROADMAP.md` current. `planner` stays free of milestones; milestones are the releases (`github-milestone`).
+Plans the releases of a repository. Reads the open Epics, Features, PBIs and Bugs, proposes which `M<nnn>` milestone each Feature belongs to (PBIs and Bugs count towards their Feature and are never assigned: their milestone is set at merge, ADR 0010), asks the open decisions, sets the milestones after approval and keeps `ROADMAP.md` current. `planner` stays free of milestones; milestones are the releases (`github-milestone`).
 
 ## Input
 
@@ -28,7 +28,7 @@ pwsh <skill-dir>/scripts/Get-RoadmapState.ps1
 ## Steps
 
 1. **Read.** Run the state script (Start 2). An empty `issues[]` ends the run: `roadmap: no open work`.
-2. **Propose.** Order the issues by the blocked-by DAG and size, group them into `M<nnn>` (open ones first), print the table. Procedure: `references/proposal.md`.
+2. **Propose.** Order the Features by the blocked-by DAG and size, group them into `M<nnn>` (open ones first), print the table. Procedure: `references/proposal.md`.
 3. **Decide.** Open decisions (scope per release, no size, `needs-decision`) go to `grill-me`; the final table needs the user's approval.
 4. **Set.** Only after approval: `pwsh <skill-dir>/scripts/Set-IssueMilestones.ps1 -Assignment <json>` sets the milestones and creates a missing `M<nnn>` (`references/proposal.md`).
 5. **Write.** `pwsh <skill-dir>/scripts/New-Roadmap.ps1 -State <state.json> -Path ROADMAP.md` prints the diff and writes nothing; show it, and only after approval run it again with `-Write`. Markers and rules: `references/roadmap-md.md`.

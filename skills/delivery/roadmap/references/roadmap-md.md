@@ -18,19 +18,21 @@ Show the diff first (the default run writes nothing). Write only after the user 
 
 Generated text sits between `<!-- roadmap:begin <key> -->` and `<!-- roadmap:end -->`. Everything outside is hand-written and never changed. Do not edit inside a block; the next run overwrites it.
 
-| Key           | Content                                                                                       |
-| :------------ | :-------------------------------------------------------------------------------------------- |
-| `intro`       | date and last release tag                                                                     |
-| `where`       | open Epics and Features: open children, milestone                                             |
-| `plan M<nnn>` | heading, progress, table of the open issues: order, issue, title, size, depends on / decision |
-| `done M<nnn>` | heading `Done in M<nnn> (x.y.z)` and the table of the closed issues of the milestone          |
-| `later`       | open issues without milestone and why (`needs-decision`, blockers)                            |
+| Key           | Content                                                                                                                           |
+| :------------ | :-------------------------------------------------------------------------------------------------------------------------------- |
+| `intro`       | date and last release tag                                                                                                         |
+| `where`       | open Epics and Features: open children, milestone                                                                                 |
+| `plan M<nnn>` | heading, progress, table of the Features of the milestone: order, feature, title, size, open PBIs and Bugs, depends on / decision |
+| `done M<nnn>` | heading `Done in M<nnn> (x.y.z)` and the table of the closed issues of the milestone                                              |
+| `later`       | Features without milestone and why (`needs-decision`, blockers); PBIs and Bugs without a Feature as `unplanned, ships at merge`   |
 
 Legacy `x.y.z` milestones use their title as key (`plan 1.3.0`).
 
 ## Rules
 
-- Plan order follows the blocked-by DAG inside the milestone, then the issue number. An issue with an open child is listed through the child.
+- Plan sections list Features only (ADR 0010). Their open PBIs and Bugs are shown in the row of the Feature, also when they are still in another milestone from before the migration. Size counts them (`1 S, 2 M, 1 ?`; a Feature without open ones shows its own size or `?`); their `needs-decision` and blockers count towards the Feature. A blocker below another Feature is shown as that Feature, one below the same Feature is left out.
+- A PBI or Bug without an open Feature above it is listed under `later` as `unplanned, ships at merge`; a `release-test` in its milestone is not listed.
+- Plan order follows the blocked-by DAG between the Features of the milestone, then the issue number.
 - A closed milestone `M<nnn> (x.y.z)` leaves the plan sections: its `plan` block is removed and a `done` block with its closed issues (`milestones[].issues[]` of the state) is added.
 - New `plan` and `done` blocks go to the comments `<!-- roadmap:slot plan -->` and `<!-- roadmap:slot done -->`. A file without slots gets them before `## Later`, else at the end. Existing blocks keep their place, so hand-written notes next to them stay.
 - A fixed block (`intro`, `where`, `later`) missing from an existing file is not added: the script warns on stderr.

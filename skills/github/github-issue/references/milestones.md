@@ -30,7 +30,7 @@ An issue closes when its PR is merged into `release/next` (comment "ships with <
 
 ## Checks
 
-- An Epic or an Objective in a milestone breaks the rule: `github-milestone assign` refuses both (except `none`), `roadmap` (`Set-IssueMilestones.ps1`) refuses an Epic. Fix it by clearing the milestone.
+- An Epic or an Objective in a milestone breaks the rule: `github-milestone assign` refuses both (except `none`), `roadmap` (`Set-IssueMilestones.ps1`) assigns through it. Fix it by clearing the milestone.
 - A Feature whose PBIs sit in other milestones or in none is the normal case, no warning. A PBI or Bug without a milestone is normal until it is merged.
 - An open PBI or Bug still in a milestone from before the migration is allowed; it stays workable until the migration clears it.
 - GravionLabs/ci: `project-needs.yml` (nightly, mode `project`) and `issue-events.yml` (on milestoned and demilestoned events) run `Sync-ProjectNeeds.ps1`, which checks the Current and Milestones fields of the project against the issues' milestones; it does not check the milestone rule itself.

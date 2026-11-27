@@ -19,7 +19,7 @@ Planning only: no source edits. The planning steps below ask nothing (open decis
 1. Plan per `## Steps`.
 2. Load `grill-me` with the plan's `questions[]`. Re-plan only when an answer changes the item structure (items added, removed, split, re-blocked); otherwise fold the answers into the item bodies. Next round with the new `questions[]` until none is open.
 3. Show the items (id, title, size, `blocked_by`) and the answers. The user approves granularity, blockers and which items to create; also with zero questions. Create nothing before.
-4. Run the protected-path check on the plan (`references/ready.md` `## Protected paths`); on an error create nothing until it is fixed. Create the approved items with `github-issue` `references/create-from-plan.md`; each created issue gets the answers that concern it under `## Decisions` (`<question> — <answer>`).
+4. Run the protected-path check on the plan (`references/ready.md` `## Protected paths`); on an error create nothing until it is fixed. Create the approved items with `github-issue` `references/create-from-plan.md` (milestone: `## Refine`); each created issue gets the answers that concern it under `## Decisions` (`<question> — <answer>`).
 
 ## Refine
 
@@ -32,7 +32,7 @@ Planning only: no source edits. The planning steps below ask nothing (open decis
 - A PBI of size L: propose the split into sibling PBIs (`## Output level`), created only after approval.
 - Load `grill-me` with the gaps only. Update the body with the decisions (`## Decisions`) and the sharpened criteria and notes via `gh api -X PATCH repos/{owner}/{repo}/issues/<nr> -F body=@file`.
 - Missing `Tier:` line (PBI or Bug, `references/ready.md`): add `Tier: <tier> — <reason>` to the body, the tier from the table of `references/plan-schema.md` (size S fast, M standard, L strong, else standard). Each change is listed in the report with its item and tier; an existing line is never changed. `refine M<nnn>` does this for every open PBI and Bug of the milestone and reports the items it changed (`references/ready.md`).
-- Milestone: the PBIs created in step 4 get the milestone the user names, else the one of the Feature; none known → ask once. Set it with `github-milestone assign M<nnn> #<nr> …`, not by hand; never set a milestone on an Epic, and a Feature only when all its PBIs are in it (`github-issue` `references/milestones.md`).
+- Milestone (ADR 0010): the PBIs created in `## Interactive` step 4 get none (set at merge). Features created from an Epic or Objective plan get the milestone the user names: ask once, optional, none named means none. Set it with `github-milestone assign M<nnn> #<nr> …` (a Feature of another repository: in that repository, `github-issue` `references/create-from-plan.md`), never by hand and never on an Epic or Objective (`github-issue` `references/milestones.md`).
 - Labels: ready → remove `needs-refinement`; open decision left → add `needs-decision` and post the question as a comment. Create the label (`gh label create`) when the repository lacks it.
 
 ## Check

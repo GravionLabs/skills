@@ -226,6 +226,16 @@ describe('Set-IssueMilestones.ps1', () => {
       expect(writes(r.calls)).toEqual([]);
     });
 
+    it('refuses a Bug without writes', async () => {
+      const r = await run([{ issue: 3, milestone: 'M2' }], {
+        ...base,
+        FAKE_LABELS: { 3: ['bug'] },
+      });
+      expect(r.status).toBe(1);
+      expect(r.stderr).toContain('#3 is a Bug: its milestone is set at merge');
+      expect(writes(r.calls)).toEqual([]);
+    });
+
     it.each(['M1000', 'M1.10'])('refuses %s up front, before anything is created', async (name) => {
       const r = await run([{ issue: 3, milestone: name }], base);
       expect(r.status).toBe(1);
