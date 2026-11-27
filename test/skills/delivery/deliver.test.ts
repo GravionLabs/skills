@@ -1147,14 +1147,17 @@ describe('deliver loop', () => {
   });
 
   it('writes the risk level of the implementer result into results.jsonl and the report', async () => {
-    const out = await loop({
-      items: [
-        { id: 91, title: '[PBI] feat: medium' },
-        { id: 92, title: '[PBI] feat: high' },
-        { id: 93, title: '[PBI] feat: no result' },
-      ],
-      risks: { 91: 'medium', 92: 'high' },
-    });
+    const out = await loop(
+      {
+        items: [
+          { id: 91, title: '[PBI] feat: medium' },
+          { id: 92, title: '[PBI] feat: high' },
+          { id: 93, title: '[PBI] feat: no result' },
+        ],
+        risks: { 91: 'medium', 92: 'high' },
+      },
+      { args: ['--merge-risk', 'high'] },
+    );
     expect(out.status).toBe(0);
     expect(out.results.map((r) => r.risk)).toEqual(['medium', 'high', undefined]);
     expect(out.stdout).toMatch(/#91 \S+ \(risk medium\)/);

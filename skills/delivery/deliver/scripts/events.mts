@@ -23,6 +23,7 @@ const STARTS: [string, string][] = [
   ['needs-decision', 'needs-decision'],
   ['session failed', 'session-failed'],
   ['session timeout', 'session-timeout'],
+  ['risk ', 'merge-risk'],
   ['session ended without a pull request', 'no-pull-request'],
   ['review failed', 'review-failed'],
   ['red: ', 'checks-red'],

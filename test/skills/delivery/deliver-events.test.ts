@@ -16,13 +16,16 @@ describe('deliver loop events', () => {
   fixture();
 
   it('writes merged once per issue with its risk, in one gapless run with a UUIDv7', async () => {
-    const out = await loop({
-      items: [
-        { id: 11, title: '[PBI] feat: first' },
-        { id: 12, title: '[PBI] feat: second' },
-      ],
-      risks: { 11: 'high' },
-    });
+    const out = await loop(
+      {
+        items: [
+          { id: 11, title: '[PBI] feat: first' },
+          { id: 12, title: '[PBI] feat: second' },
+        ],
+        risks: { 11: 'high' },
+      },
+      { args: ['--merge-risk', 'high'] },
+    );
     expect(out.status).toBe(0);
     const merged = of(out, 'merged');
     expect(merged).toHaveLength(2);

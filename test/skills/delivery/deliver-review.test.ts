@@ -80,7 +80,9 @@ describe('deliver loop: review session (#1013)', () => {
       risks: { 312: 'high' },
       riskOnce: true,
     });
-    expect(out.results[0]).toMatchObject({ outcome: 'merged', risk: 'high' });
+    // handed over for the level of the first session
+    expect(out.results[0]).toMatchObject({ outcome: 'aside', risk: 'high' });
+    expect(out.merges).toEqual([]);
     expect(out.stdout).toContain('#312 risk high');
   });
 
