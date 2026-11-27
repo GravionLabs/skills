@@ -24,7 +24,7 @@ flowchart LR
 Cut a release.
 ```
 
-`github-release cut` creates the rolling `release/next` from `main`. A branch that holds unreleased work is never reset; a released one is moved to `main` by a fast-forward; a fresh one is left as it is. PBI pull requests target this branch. Rules for the branch types and merge methods: `references/release-branches.md` of `github-issue`.
+`github-release cut` creates the rolling `release/next` from `main`. A branch that holds unreleased work is never reset; a released one is moved to `main` by a fast-forward; a fresh one is left as it is. When no `M<nnn>` milestone is open, `cut` creates the next one, so every merge has a milestone to land in. PBI pull requests target this branch. Rules for the branch types and merge methods: `references/release-branches.md` of `github-issue`.
 
 ## 2. Create and inspect the milestone
 
