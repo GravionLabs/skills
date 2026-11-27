@@ -19,9 +19,9 @@ import { fileURLToPath } from 'node:url';
 import { createInterface } from 'node:readline';
 import { parseArgs } from 'node:util';
 import { appSettings, tokenSource as makeSource } from './app-token.mts';
-import { type Emit, openEvents } from './events.mts';
+import { type Emit, openEvents, reasonCode, uuid7 } from './events.mts';
 import { type Note, handoverNote, reviewNote } from './handover.mts';
-import { finishReport, programStatus } from './program-status.mts';
+import { type BlockedReason, finishReport, programStatus } from './program-status.mts';
 import { cargoTomlKeys } from './cargo-toml.mts';
 import { directoryPackagesPropsKeys } from './directory-packages-props.mts';
 import { goModKeys } from './go-mod.mts';
@@ -1374,6 +1374,7 @@ async function awaitHandovers(): Promise<boolean> {
         mark(item, 'merged');
         appendFileSync(file, `${JSON.stringify({ ...row, outcome: 'merged' })}\n`);
         cleanup(item, pull);
+        emitMerged(nr, pull.url);
         emit('progress', { done: merged.length, total, label: 'PBIs' });
         await untilClosed(nr);
         changed = true;
@@ -1383,6 +1384,7 @@ async function awaitHandovers(): Promise<boolean> {
         aside.set(nr, `closed by a person, ${pull.url}`);
         log(`#${nr} set aside: closed by a person, ${pull.url}`, 'bad');
         tell(item, pull, CLOSED, false);
+        emitSetAside('aside', nr, pull.url, CLOSED);
         appendFileSync(
           file,
           `${JSON.stringify({ ...row, outcome: 'aside', reason: 'closed by a person' })}\n`,
@@ -1451,9 +1453,11 @@ if (opt['dry-run']) {
 
 mkdirSync(runDir, { recursive: true });
 logFile = path.join(path.dirname(runDir), 'loop.log');
+// the run id of the events is a UUIDv7 (agent-events contract); the run folder keeps `runId`
+const eventRun = uuid7();
 const writeEvent = openEvents(
-  process.env.AGENT_EVENTS_DIR ?? path.join(commonDir, '.agents', 'events'),
-  runId,
+  process.env.AGENT_EVENTS_DIR || path.join(commonDir, '.agents', 'events'),
+  eventRun,
 );
 // OSC 7501 to the controlling terminal (ADR 0007): the events stay the source for displays
 const report = programStatus();
@@ -1468,8 +1472,18 @@ emit = (type, body, tone) => {
     report({
       state: 'blocked',
       kind: 'question',
+      reason: blockedReason(String(body.id)),
       title: statusTitle,
       msg: String(body.text ?? ''),
+    });
+  } else if (type === 'merged' && body?.risk === 'high') {
+    blockedShown = true;
+    report({
+      state: 'blocked',
+      kind: 'question',
+      reason: 'risk-high',
+      title: statusTitle,
+      msg: `#${String(body.issue)} merged at risk high: ${String(body.pr)}`,
     });
   } else if (type === 'task.started' && blockedShown) {
     blockedShown = false;
@@ -1479,6 +1493,7 @@ emit = (type, body, tone) => {
   }
 };
 log(`run ${runId} in ${tracker.repo}, results: ${path.join(runDir, 'results.jsonl')}`, 'dim');
+log(`events: run ${eventRun}`, 'dim');
 if (cutNote) log(cutNote, 'info');
 if (!TOKEN_SOURCE) {
   log(
@@ -1505,6 +1520,39 @@ const handedPulls = new Map<number, { item: Item; pull: Pull }>();
 const merged: string[] = [];
 let waiting: string[] = [];
 let total = 0;
+
+/** Why an attention blocks the run, as far as OSC 7501 names it. */
+function blockedReason(attention: string): BlockedReason | undefined {
+  if (attention === 'handover-wait') return 'handover';
+  const nr = Number(/^aside-(\d+)$/.exec(attention)?.[1]);
+  if (handedOver.has(nr)) return 'handover';
+  return aside.get(nr)?.startsWith('needs-decision') ? 'decision' : undefined;
+}
+/** The events an orchestrator reacts to (contract: SKILL.md of `deliver`). */
+function emitMerged(issue: number, pr: string | undefined): void {
+  emit('merged', { repo: tracker.repo, issue, pr, risk: risks.get(issue) }, 'success');
+}
+function emitSetAside(
+  type: 'handover' | 'aside',
+  issue: number,
+  pr: string | undefined,
+  why: string,
+) {
+  const reason = reasonCode(why);
+  emit(
+    type,
+    {
+      repo: tracker.repo,
+      issue,
+      pr,
+      reason,
+      ...(reason === 'needs-decision' && { hold: 'needs-decision' }),
+      // a line of an event is limited, and findings can be long
+      text: why.slice(0, 1000),
+    },
+    'warning',
+  );
+}
 try {
   const created = tracker.syncStageLabels();
   if (created.length) log(`labels created: ${created.join(', ')}`, 'info');
@@ -1640,6 +1688,7 @@ try {
         { task: `issue-${next.id}`, outcome: 'succeeded', text: 'merged' },
         'success',
       );
+      emitMerged(next.id, pull?.url);
       await untilClosed(next.id);
     } else if (reason === 'stopped') {
       log(`#${next.id} stopped: not merged${pull ? `, ${pull.url}` : ''}`, 'warn');
@@ -1662,6 +1711,7 @@ try {
         { task: `issue-${next.id}`, outcome: 'skipped', text: reason },
         'warning',
       );
+      emitSetAside(planned ? 'handover' : 'aside', next.id, pull?.url, why);
       // after the task: an attention of a finished task would close with it
       emit(
         'attention',
@@ -1698,6 +1748,7 @@ const retroFailed = (why: string) => {
 };
 let needsYou: string[] = [];
 let releaseError = '';
+let releaseUrl: string | undefined;
 const complete =
   Boolean(opt.milestone) &&
   !stopped &&
@@ -1736,6 +1787,7 @@ if (complete) {
           retroFailed(`release pull request body not updated: ${firstLine(error)}`);
         }
       }
+      releaseUrl = release.url;
       log(`release pull request: ${release.url} (never merged by the loop)`, 'info');
       emit('step.finished', {
         task: 'release',
@@ -1862,6 +1914,19 @@ appendFileSync(
     ...(retroResult.failed && { retroFailed: retroResult.failed }),
   })}\n`,
 );
+if (opt.milestone && !stopped) {
+  emit(
+    'milestone-done',
+    {
+      repo: tracker.repo,
+      milestone: opt.milestone,
+      merged: merged.length,
+      aside: aside.size,
+      pr: releaseUrl,
+    },
+    clean && !releaseError ? 'success' : 'warning',
+  );
+}
 // An incomplete run (issues set aside or waiting) is no success: the agent-events format has no
 // other outcome for it than `failed`; the counts are in the text. OSC 7501 shows it as `done` with
 // `tone=warning`; only `reason: 'harness'` (the harness failed) is an `error`.

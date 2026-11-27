@@ -24,6 +24,10 @@ The loop writes OSC 7501 records for the **root record** of its terminal, and on
 
 Unchanged from ADR 0002: tokens, sources, TTLs and backend calls stay forbidden; the events remain the source for displays that need more (steps, tasks, links); `poimen-server report` stays as it is.
 
+## Amendment (#1066): the reason of `blocked`
+
+The decision stays valid and gets one optional key: `blocked` carries `reason=handover`, `reason=decision` or `reason=risk-high`, so a pane host can show why the loop waits. `kind` stays `question`. A key instead of a new `kind`: a terminal that does not know `reason` ignores it and shows `blocked`. An attention with none of these causes (a release test, a red base, another set-aside) has no `reason`. After the merge of an issue of risk `high` the loop also writes `blocked` (`reason=risk-high`) until the next issue starts or the run ends. The events carry the same facts for readers of the files.
+
 ## Consequences
 
 - Any terminal with the protocol shows the loop state without a plugin.
