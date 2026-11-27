@@ -1,4 +1,5 @@
 // The events an orchestrator reacts to (merged, handover, aside, milestone-done), run against the fake harness.
+import os from 'node:os';
 import path from 'node:path';
 import { describe, expect, it } from 'vitest';
 import { fixture, loop, type Outcome, READY } from './deliver/run-loop.ts';
@@ -42,6 +43,14 @@ describe('deliver loop events', () => {
     const run = all[0]!.run;
     expect(run).toMatch(UUID7);
     expect(out.stdout).toContain(`events: run ${run}`);
+    expect(all[0]).toMatchObject({
+      type: 'run.started',
+      origin: {
+        repo: expect.any(String),
+        worktree: expect.any(String),
+        host: os.hostname(),
+      },
+    });
     expect(all.map((e) => [e.v, e.run, e.seq])).toEqual(all.map((_, i) => [1, run, i + 1]));
     // no milestone: no end of a milestone
     expect(of(out, 'milestone-done')).toEqual([]);

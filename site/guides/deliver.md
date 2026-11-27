@@ -149,9 +149,9 @@ Feature pull requests are transport; read the issue. After every review round wi
 
 ## Progress events
 
-The loop writes [agent-events](https://github.com/GravionLabs/agent-events) to `<git-common-dir>/.agents/events/<run>.jsonl`: the run, one task per issue with its pull request, progress, and an attention for an issue set aside. The session reports nothing itself. Displays such as [herdr](herdr.md) read the file.
+The loop writes [agent-events](https://github.com/GravionLabs/agent-events) to `<run>.jsonl` in one directory per user (`$XDG_STATE_HOME/agent-events/`, else `~/.local/state/agent-events/`; Windows `%LOCALAPPDATA%\agent-events\`; `AGENT_EVENTS_DIR` overrides): the run, one task per issue with its pull request, progress, and an attention for an issue set aside. The session reports nothing itself. Displays such as [herdr](herdr.md) read the file.
 
-An orchestrator reacts to the events `merged` (with `risk`), `handover` and `aside` (with `reason`, `aside` with the hold label) and `milestone-done`; their fields are a contract in the `SKILL.md` of `deliver`. To follow the loops of several repositories in one place (an Objective run), set the same absolute `AGENT_EVENTS_DIR` for each. In a terminal the OSC 7501 state `blocked` names why it waits (`reason=handover`, `decision` or `risk-high`).
+An orchestrator reacts to the events `merged` (with `risk`), `handover` and `aside` (with `reason`, `aside` with the hold label) and `milestone-done`; their fields are a contract in the `SKILL.md` of `deliver`. The loops of all repositories write there (also an Objective run); `run.started` names the repository, branch, worktree and machine in `origin`. A writer deletes only old runs of its own repository and old runs without `origin`. Older versions wrote to `<git-common-dir>/.agents/events/`; nothing is deleted there, and a display that reads only that directory sees no new runs. In a terminal the OSC 7501 state `blocked` names why it waits (`reason=handover`, `decision` or `risk-high`).
 
 ## Troubleshooting
 

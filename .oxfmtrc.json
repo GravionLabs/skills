@@ -13,7 +13,7 @@
   "bracketSpacing": true,
   "ignorePatterns": [
     "**/dist",
-    "test/skills/delivery/agent-events",
+    "test/fixtures/agent-events/directory",
     "**/node_modules",
     "**/coverage",
     "**/test-results",
