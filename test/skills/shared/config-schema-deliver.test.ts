@@ -42,3 +42,27 @@ describe('config schema: deliver', () => {
     expect(validate({ deliver })).toBe(false);
   });
 });
+
+describe('config schema: models', () => {
+  it('accepts tiers per harness and roles', () => {
+    expect(
+      validate({
+        models: {
+          tiers: { claude: { strong: 'claude-opus-5-5[1m]' }, copilot: { fast: 'x' } },
+          roles: { implement: 'tier', review: 'strong' },
+        },
+      }),
+    ).toBe(true);
+  });
+
+  it.each([
+    { tiers: { codex: {} } },
+    { tiers: { claude: { huge: 'x' } } },
+    { tiers: { claude: { fast: 'two words' } } },
+    { roles: { boss: 'fast' } },
+    { roles: { review: 'huge' } },
+    { effort: 'high' },
+  ])('rejects %j', (models) => {
+    expect(validate({ models })).toBe(false);
+  });
+});

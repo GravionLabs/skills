@@ -96,6 +96,8 @@ Optional, under `deliver` in `.agents/config.json` ([project config](../usage/pr
 | `retro`          | `{ "enabled", "model" }` of the retro session after a milestone |
 | `protectedPaths` | `.github/`, `.agents/`, `.claude/` and the package manifests    |
 
+The top-level key [`models`](../usage/project-config.md#models) maps roles to models for `scripts/resolve-model.mts`; the loop does not read it yet.
+
 Other keys (`roles`, `loopThreshold`, `parallel`, `sessionTimeoutMinutes`) are ignored with one warning line. `DELIVER_MIN_<X>` variables are read as `DELIVER_<X>` for one more release, with a warning.
 
 ## What the loop refuses
