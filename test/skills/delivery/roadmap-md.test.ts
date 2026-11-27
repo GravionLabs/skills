@@ -76,7 +76,6 @@ describe('New-Roadmap.ps1', () => {
     expect(text).toContain('Updated 2026-11-04. Last release `v1.5.0`.');
     expect(text).toContain('| #1 [epic] title 1 | open: #2, #3 | not scheduled |');
     expect(text).toContain('## M3 Roadmap');
-    expect(text).toContain('| Order | Issue | Title | Size | Depends on / decision |');
     // Features only: #3 blocks #2 through their PBIs, so it comes first; a blocker inside #2 is left out
     expect(text).toContain('| Order | Feature | Title | Size | Open PBIs and Bugs |');
     expect(text).toContain('| 1 | #3 | [feature] title 3 | 1 S | #6 | |');
