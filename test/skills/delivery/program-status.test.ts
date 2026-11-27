@@ -28,6 +28,14 @@ describe('encodeStatus', () => {
     expect(decode(fields.msg)).toBe('#5 set aside: red');
   });
 
+  it.each(['handover', 'decision', 'risk-high'] as const)(
+    'carries the reason %s with blocked only',
+    (reason) => {
+      expect(pairs(encodeStatus({ state: 'blocked', reason })).reason).toBe(reason);
+      expect(pairs(encodeStatus({ state: 'working', reason }))).not.toHaveProperty('reason');
+    },
+  );
+
   it.each(['done', 'error', 'idle'] as const)('encodes %s', (state) => {
     expect(pairs(encodeStatus({ state, title: 'M1' })).state).toBe(state);
   });

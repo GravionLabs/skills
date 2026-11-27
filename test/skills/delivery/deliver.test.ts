@@ -116,11 +116,13 @@ describe('deliver loop', () => {
       'step.finished',
       'step.finished',
       'task.finished',
+      'merged',
       'progress',
       'task.started',
       'step.finished',
       'step.finished',
       'task.finished',
+      'merged',
       'progress',
       'run.finished',
     ]);
