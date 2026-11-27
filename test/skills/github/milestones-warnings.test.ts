@@ -8,7 +8,7 @@ import { PwshWorker } from '../../helpers/pwsh-worker';
 const root = path.resolve(__dirname, '../../..');
 const skill = path.join(root, 'skills/github/github-milestone');
 
-// #327: the `warnings` group of current/show (milestone rule: Epic never, Feature only when all its PBIs are in it).
+// #327: the `warnings` group of current/show (milestone rule: Epic never).
 const handler = `(call) => {
   const env = (k, d) => JSON.parse(process.env[k] || d);
   const p = call.args[1];
@@ -38,12 +38,11 @@ const issue = (number: number, label: string) => ({
   assignees: [],
   repository_url: 'https://api.github.com/repos/o/r',
 });
-const sub = (
-  number: number,
-  milestone: { number: number; title: string } | null,
-  state = 'open',
-  repository_url?: string,
-) => ({ number, title: `sub ${number}`, state, milestone, repository_url });
+const sub = (number: number, milestone: { number: number; title: string } | null) => ({
+  ...issue(number, 'pbi'),
+  state: 'open',
+  milestone,
+});
 
 describe('Get-Milestones.ps1 warnings (#327)', () => {
   let worker: PwshWorker;
@@ -70,9 +69,9 @@ describe('Get-Milestones.ps1 warnings (#327)', () => {
     return JSON.parse(r.stdout);
   };
 
-  it('has no warnings for PBIs, and for a Feature whose open PBIs are all in the milestone', async () => {
+  it('has no warnings for PBIs, and for a Feature whose open PBIs are elsewhere (ADR 0010)', async () => {
     const out = await show([issue(1, 'pbi'), issue(2, 'feature')], {
-      2: [sub(3, { number: 4, title: 'M4' }), sub(5, { number: 9, title: 'M9' }, 'closed')],
+      2: [sub(5, { number: 9, title: 'M5' }), sub(6, null)],
     });
     expect(out.warnings).toEqual([]);
   });
@@ -82,55 +81,57 @@ describe('Get-Milestones.ps1 warnings (#327)', () => {
     expect(out.warnings).toEqual([{ type: 'epic-in-milestone', number: 7, title: 'issue 7' }]);
   });
 
-  it('warns about a Feature with open sub-issues outside, with their milestone or none', async () => {
-    const out = await show([issue(2, 'feature')], {
-      2: [sub(3, { number: 4, title: 'M4' }), sub(5, { number: 9, title: 'M5' }), sub(6, null)],
+  it('counts the open PBIs and Bugs below a Feature in the groups, marked via', async () => {
+    const same = 'https://api.github.com/repos/o/r';
+    const below = (number: number, label: string, extra: object = {}) => ({
+      ...issue(number, label),
+      state: 'open',
+      ...extra,
     });
-    expect(out.warnings).toEqual([
-      {
-        type: 'feature-incomplete',
-        number: 2,
-        title: 'issue 2',
-        outside: [
-          { number: 5, title: 'sub 5', milestone: 'M5' },
-          { number: 6, title: 'sub 6', milestone: 'none' },
-        ],
-      },
-    ]);
-  });
-
-  // #438: a milestone belongs to one repository
-  it.each([
-    ['milestone number', { number: 4, title: 'M9' }],
-    ['milestone title', { number: 7, title: 'M4' }],
-  ])('a sub-issue from another repository is outside whatever its %s', async (_n, ms) => {
-    const other = 'https://api.github.com/repos/o/other';
-    const out = await show([issue(2, 'feature')], {
+    const out = await show([issue(2, 'feature'), issue(4, 'pbi')], {
       2: [
-        sub(3, { number: 4, title: 'M4' }),
-        sub(8, ms, 'open', other),
-        sub(9, null, 'open', other),
+        below(3, 'pbi'),
+        below(4, 'pbi'),
+        below(5, 'bug', { assignees: [{ login: 'jk' }], repository_url: same }),
+        below(6, 'pbi', { state: 'closed' }),
+        below(8, 'pbi', { repository_url: 'https://api.github.com/repos/o/other' }),
+        below(9, 'task'),
       ],
     });
-    expect(out.warnings[0].type).toBe('feature-incomplete');
-    expect(out.warnings[0].outside).toEqual([
-      { number: 8, title: 'sub 8', milestone: ms.title, repository: 'o/other' },
-      { number: 9, title: 'sub 9', milestone: 'none', repository: 'o/other' },
+    expect(out.issues.ready).toEqual([
+      { number: 2, title: 'issue 2', assignees: [] },
+      { number: 3, title: 'issue 3', assignees: [], via: 2 },
+      { number: 4, title: 'issue 4', assignees: [] },
     ]);
+    expect(out.issues.claimed).toEqual([
+      { number: 5, title: 'issue 5', assignees: ['jk'], via: 2 },
+    ]);
+    expect(out.shipped).toEqual([]);
   });
 
-  it('same-repository sub-issues carry no repository and raise no new warning', async () => {
-    const same = 'https://api.github.com/repos/o/r';
-    const out = await show([issue(2, 'feature')], {
-      2: [sub(3, { number: 4, title: 'M4' }, 'open', same)],
+  it('shipped lists the closed PBIs and Bugs of the milestone, not other closed issues', async () => {
+    const closed = (number: number, label: string) => ({
+      ...issue(number, label),
+      state: 'closed',
     });
+    const out = await show([
+      closed(1, 'pbi'),
+      closed(2, 'feature'),
+      closed(3, 'bug'),
+      issue(4, 'pbi'),
+    ]);
+    expect(out.shipped.map((i: { number: number }) => i.number)).toEqual([1, 3]);
+    expect(out.issues.ready.map((i: { number: number }) => i.number)).toEqual([4]);
     expect(out.warnings).toEqual([]);
   });
 
   it('the output matches the schema', async () => {
-    const out = await show([issue(7, 'epic'), issue(2, 'feature')], {
-      2: [sub(6, null, 'open', 'https://api.github.com/repos/o/other')],
-    });
+    const out = await show(
+      [issue(7, 'epic'), issue(2, 'feature'), { ...issue(1, 'pbi'), state: 'closed' }],
+      {
+        2: [{ ...issue(6, 'pbi'), state: 'open' }],
+      },
+    );
     const schema = JSON.parse(
       fs.readFileSync(path.join(skill, 'schema/milestones.schema.json'), 'utf8'),
     );
