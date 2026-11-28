@@ -2,6 +2,8 @@
 
 An orchestrator is a session that starts other sessions: subagents, poimen panes, loops. A subagent or pane started without a model inherits the orchestrator's model. So before every start it resolves the model of the role and passes it.
 
+In a workflow skill, starts go through the verbs of [host-verbs.md](host-verbs.md).
+
 ## Resolve, then pass
 
 ```powershell
