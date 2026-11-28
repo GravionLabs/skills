@@ -151,6 +151,8 @@ export interface Tracker extends ObjectiveReader {
    * keyword or a closing reference; a merged pull request that does not, such as an ADR step, is no delivery). The item is delivered.
    */
   mergedPullOf(item: Item): Pull | undefined;
+  /** The pull request of number `id` with the name of the branch it goes into. Throws when it cannot be read. */
+  pullRequest(id: number): { pull: Pull; base: string };
   gate(pull: Pull): Gate;
   /** Merges exactly the commit `head`: a merge commit into the default branch, a squash into every other base. Throws an Error whose message is the reason when the tracker refuses. */
   merge(pull: Pull, head: string): void;

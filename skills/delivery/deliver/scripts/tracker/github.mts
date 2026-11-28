@@ -660,6 +660,21 @@ export function create({
       );
     },
 
+    pullRequest(id: number): { pull: Pull; base: string } {
+      const record = JSON.parse(gh('api', `repos/${repo}/pulls/${id}`)) as PullRecord & {
+        base: { ref: string };
+      };
+      return {
+        pull: {
+          id: record.number,
+          title: record.title,
+          url: record.html_url,
+          branch: record.head.ref,
+        },
+        base: record.base.ref,
+      };
+    },
+
     gate(pull: Pull): Gate {
       const view = JSON.parse(
         gh('pr', 'view', String(pull.id), '--repo', repo, '--json', 'state,mergeable,headRefOid'),
