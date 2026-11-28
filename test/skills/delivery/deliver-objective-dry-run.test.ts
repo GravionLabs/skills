@@ -70,13 +70,6 @@ describe('deliver-loop --objective', () => {
     expect(out.merges).toEqual([]);
   });
 
-  it('exits 64 without --dry-run: the run of an Objective is not built yet', async () => {
-    const out = await loop(scenario, { args: ['--objective', 'x/app#1'] });
-    expect(out.status).toBe(64);
-    expect(out.stderr).toContain('not built yet');
-    expect(out.sessions).toEqual([]);
-  });
-
   it('exits 64 for a malformed reference', async () => {
     const out = await loop(scenario, { args: ['--objective', 'x/app', '--dry-run'] });
     expect(out.status).toBe(64);

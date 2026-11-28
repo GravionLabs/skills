@@ -26,7 +26,7 @@ node <deliver-skill-dir>/scripts/resolve-model.mts <role> [--tier <fast|standard
 
 A PBI without a `Tier:` line: no `--tier` (`standard`). "Of the role": no `--tier`, the config decides.
 
-`deliver-loop --objective` (Feature [GravionLabs/skills#1041](https://github.com/GravionLabs/skills/issues/1041), not built yet) uses the same resolver for the sessions it starts.
+`deliver-loop --objective` (Feature [GravionLabs/skills#1041](https://github.com/GravionLabs/skills/issues/1041)) uses the same resolver for the sessions it starts.
 
 ## Start prompt template of an Objective run
 

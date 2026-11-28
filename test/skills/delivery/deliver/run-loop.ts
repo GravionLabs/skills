@@ -76,6 +76,8 @@ export type Scenario = {
   riskOnce?: boolean;
   /** Every implementer and review session of the fake harness works this long. */
   sessionMs?: number;
+  /** Repositories of an Objective run whose release pull request releases its milestone at once. */
+  releaseOnPull?: string[];
 };
 /** A session of the fake harness: its process and when it started and ended (ms since the epoch). */
 export type Span = { id: number; pid: number; at: number; end: number; review: boolean };

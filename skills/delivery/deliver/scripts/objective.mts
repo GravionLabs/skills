@@ -82,7 +82,7 @@ export function parseRequires(body: string): Requirement[] {
 }
 
 /** `M013`, `M13 Topic (1.2.0)` and `M013 (1.2.0)` are the same milestone. */
-function milestoneKey(title: string): string | undefined {
+export function milestoneKey(title: string): string | undefined {
   return /^M(\d+(?:\.\d+)*)(?!\S)/i.exec(title)?.[1]?.split('.').map(Number).join('.');
 }
 
