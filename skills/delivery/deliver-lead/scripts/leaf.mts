@@ -24,6 +24,7 @@
 // run of the loop), restarts (`deliver.restart`): the events before it are history, the `agent:*` label and the pull
 // request decide the next step (`deliver.resumed` on the replayed steps). Times run from the resume, never from before.
 import { execFileSync } from 'node:child_process';
+import { createHash } from 'node:crypto';
 import {
   appendFileSync,
   mkdirSync,
@@ -232,6 +233,9 @@ const stepName = (event: RunEvent): string => String(fieldsOf(event, 'step').nam
 const seqOf = (event: RunEvent | undefined): number => Number(event?.seq) || 0;
 const str = (value: unknown): string | undefined =>
   typeof value === 'string' && value !== '' ? value : undefined;
+
+/** The fingerprint of a verdict file the events keep: a file changed after its round is never trusted on resume. */
+const sha256 = (content: string): string => createHash('sha256').update(content).digest('hex');
 
 const readIfThere = (file: string): string | undefined => {
   try {
@@ -454,6 +458,11 @@ export async function leafStep(input: LeafInput): Promise<Action> {
   if (input.resume) {
     const done = ofType('task.finished').at(-1);
     if (done?.outcome === 'succeeded') return { do: 'end', report: reportOf(issue, done) };
+    // handed over by this run: it stays with the person whatever the label says (a label write may have failed)
+    if (done && (about('deliver.handover').length || about('deliver.aside').length)) {
+      gates.stage(tracker, item(), 'handover');
+      return { do: 'end', report: reportOf(issue, done) };
+    }
     // the steps of a lead carry their role; the loop's steps do not
     const leadSteps = own().some(
       (event) =>
@@ -693,7 +702,7 @@ export async function leafStep(input: LeafInput): Promise<Action> {
     // the issue was read once: the gates apply their rule to it
     const reader = { repo, issue: () => found } as unknown as Tracker;
     const stage = getStageGate(reader, issue).evidence.stage;
-    if (epoch() > 0 && typeof stage === 'string') return fromStage(found, reader, stage as Stage);
+    if (epoch() > 0) return fromStage(found, reader, (stage ?? undefined) as Stage | undefined);
     if (own().length === 0 && typeof stage === 'string')
       // an issue an earlier run left in a stage: a start would repeat its work; this call writes nothing
       return {
@@ -741,22 +750,23 @@ export async function leafStep(input: LeafInput): Promise<Action> {
     marks: ReviewMark[],
     head: string,
   ): { file: string; verdict: Verdict['verdict']; source: string } | undefined {
-    const rounds = history().filter(
-      (event) =>
-        event.type === 'step.started' &&
-        fieldsOf(event, 'deliver').role === 'reviewer' &&
-        fieldsOf(event, 'deliver').head === head,
-    );
-    for (const round of rounds.reverse()) {
-      const file = String(fieldsOf(round, 'deliver').verdictFile);
-      const checked = gates.verifyVerdict({
-        content: readIfThere(file),
-        reviewedHead: head,
-        prHead: head,
-      });
-      if (checked.result === 'pass') return { file, verdict: 'approve', source: 'run' };
-      if (Array.isArray(checked.evidence.findings))
-        return { file, verdict: 'changes', source: 'run' };
+    // the newest round of the run decides, never an older one; its file counts only as its step.finished recorded it
+    const last = history()
+      .filter((event) => event.type === 'step.finished' && /^review-\d+$/.test(stepName(event)))
+      .at(-1);
+    const d = fieldsOf(last, 'deliver');
+    if (last && d.head === head) {
+      const file = str(d.verdictFile);
+      const content = file && readIfThere(file);
+      if (!file || !content || d.sha256 !== sha256(content)) return undefined;
+      const checked = gates.verifyVerdict({ content, reviewedHead: head, prHead: head });
+      const verdict =
+        checked.result === 'pass'
+          ? 'approve'
+          : Array.isArray(checked.evidence.findings)
+            ? 'changes'
+            : undefined;
+      return verdict && verdict === d.verdict ? { file, verdict, source: 'run' } : undefined;
     }
     const mark = [...marks].reverse().find((m) => m.head === head);
     if (!mark || (mark.verdict === 'changes' && !mark.review)) return undefined;
@@ -767,9 +777,14 @@ export async function leafStep(input: LeafInput): Promise<Action> {
     return { file, verdict: mark.verdict, source: 'mark' };
   }
 
+  /** What the `step.finished` of a review round keeps: the verdict, the commit and the fingerprint of its file. */
+  function roundRecord(verdict: string, head: string, file: string, content: string): Body {
+    return { deliver: { verdict, head, verdictFile: file, sha256: sha256(content) } };
+  }
+
   /**
    * The risk level of the pull request for guard and merge: the highest of the marks, this result file and those of
-   * earlier runs, as in the loop. None known: the result file stays as it is, and the guard hands over.
+   * earlier runs, as in the loop. None known: no result file, and the merge gate hands over.
    */
   function keepRisk(marks: ReviewMark[]): void {
     const levels = [...marks.map((m) => m.risk), riskOf(resultFile), ...earlierRisks()];
@@ -778,7 +793,9 @@ export async function leafStep(input: LeafInput): Promise<Action> {
         next && RISK_LEVELS.indexOf(next) > RISK_LEVELS.indexOf(max ?? '') ? next : max,
       undefined,
     );
-    if (!level || level === riskOf(resultFile)) return;
+    // the result file of a session before is not this pull request's: only the level is kept, the highest one
+    rmSync(resultFile, { force: true });
+    if (!level) return;
     mkdirSync(runDir, { recursive: true });
     writeFileSync(resultFile, `${JSON.stringify({ risk: { level } })}\n`);
   }
@@ -803,7 +820,7 @@ export async function leafStep(input: LeafInput): Promise<Action> {
   async function fromStage(
     found: { number: number; title: string; url: string; body: string; labels: string[] },
     reader: Tracker,
-    stage: Stage,
+    stage: Stage | undefined,
   ): Promise<Action> {
     if (stage === 'handover')
       return finish(
@@ -829,6 +846,8 @@ export async function leafStep(input: LeafInput): Promise<Action> {
         { merged: true },
       );
     }
+    // no stage (a person removed it): a new start
+    if (!stage) return startFresh(found, reader);
     if (!pull) {
       const limit = gates.limits({ events: all, issue, kind: 'timeout', repo });
       if (limit.result === 'owner')
@@ -895,7 +914,11 @@ export async function leafStep(input: LeafInput): Promise<Action> {
       });
       emit(
         'step.finished',
-        { task, step: { ...step, text: `review round ${round}: ${known.verdict}` } },
+        {
+          task,
+          step: { ...step, text: `review round ${round}: ${known.verdict}` },
+          ...roundRecord(known.verdict, head, known.file, readFileSync(known.file, 'utf8')),
+        },
         known.verdict === 'changes' ? 'warning' : 'success',
       );
     }
@@ -1027,6 +1050,10 @@ export async function leafStep(input: LeafInput): Promise<Action> {
         return finishMerged();
       }
       if (role === 'implementer' && !open) return restartStale();
+      // a fix round that pushed nothing: the pull request is still at the commit the review asked changes for
+      const asked = str(fieldsOf(reviews.at(-1), 'deliver').head);
+      if (open && name.startsWith('fix-') && asked === at.compareRefs(open).head)
+        return restartStale();
     }
     if (!stale) {
       const handle = String(fieldsOf(worker, 'deliver').handle);
@@ -1066,14 +1093,12 @@ export async function leafStep(input: LeafInput): Promise<Action> {
     }
     // the report is a claim: what counts is the pull request and the verdict file the gates read
     let text = `${name === 'implement' ? 'implementer' : name} finished${stale ? ' (its lead is gone, the pull request is open)' : ''}`;
+    let recorded: Body = {};
     if (role === 'reviewer') {
       // the file of this round for the commit it reviewed; the head of the pull request is checked before the merge
       const head = String(cd.head);
-      const checked = gates.verifyVerdict({
-        content: readIfThere(String(cd.verdictFile)),
-        reviewedHead: head,
-        prHead: head,
-      });
+      const content = readIfThere(String(cd.verdictFile));
+      const checked = gates.verifyVerdict({ content, reviewedHead: head, prHead: head });
       const verdict =
         checked.result === 'pass'
           ? 'approve'
@@ -1099,11 +1124,12 @@ export async function leafStep(input: LeafInput): Promise<Action> {
         return handOver(`review failed: ${checked.reason}`, 'limits', { before: failed });
       }
       text = `review round ${round}: ${verdict}`;
+      recorded = roundRecord(verdict, head, String(cd.verdictFile), content!);
       recordMark(head, String(cd.verdictFile));
     }
     emit(
       'step.finished',
-      { task, step: { ...fieldsOf(current, 'step'), name, text } },
+      { task, step: { ...fieldsOf(current, 'step'), name, text }, ...recorded },
       text.endsWith('changes') ? 'warning' : 'success',
     );
   }
