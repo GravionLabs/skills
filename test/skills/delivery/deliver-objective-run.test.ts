@@ -2,7 +2,7 @@
 // Objective (objective-run.mts). Each repository is cloned from DELIVER_REPOS_DIR; the fake tracker works the
 // milestone of a unit from `repositories`.
 import { execFileSync } from 'node:child_process';
-import { mkdirSync } from 'node:fs';
+import { mkdirSync, readdirSync } from 'node:fs';
 import path from 'node:path';
 import { beforeAll, describe, expect, it } from 'vitest';
 import {
@@ -15,6 +15,19 @@ import {
   repo,
   root,
 } from './deliver/run-loop';
+import { type ProfileEvent, profileValidator } from '../../helpers/agent-events-profile.ts';
+
+type Event = ProfileEvent & {
+  run: string;
+  seq: number;
+  reason?: string;
+  needsYou?: boolean;
+  deliver: Record<string, unknown>;
+};
+const profile = profileValidator(
+  'deliver@2',
+  'skills/delivery/deliver/schema/deliver-profile.schema.json',
+);
 
 const overlap = (a: Span, b: Span) => a.at < b.end && b.at < a.end;
 const implementer = (spans: Span[], id: number) => spans.find((s) => s.id === id && !s.review);
@@ -104,7 +117,11 @@ describe('deliver-loop --objective', () => {
     expect(a && b && overlap(a, b)).toBe(true);
     expect(out.merges.map((m) => m.pull).sort((a, b) => a - b)).toEqual([111, 121]);
     expect(out.calls.filter((c) => c === 'releasePull')).toHaveLength(2);
-    expect(out.stdout).toContain('done (2):');
+    // a section per repository, then the verdict
+    expect(out.stdout).toMatch(
+      /x\/app\n  merged \(1\):\n    #11 [\s\S]*x\/cli\n  merged \(0\):[\s\S]*x\/lib\n  merged \(1\):\n    #21 /,
+    );
+    expect(out.stdout.trim().split('\n').pop()).toBe('done');
     // a repository without a Feature has nothing to do
     expect(out.stdout).toMatch(/x\/cli \(no unit\)/);
   });
@@ -159,9 +176,9 @@ describe('deliver-loop --objective', () => {
     expect(out.merges.map((m) => m.pull).sort((a, b) => a - b)).toEqual([123, 133]);
     expect(implementer(out.spans, 13)).toBeUndefined();
     expect(out.stdout).toMatch(
-      /needs you \(\d+\):[\s\S]*x\/app M001: upstream x\/lib@M001 not released/,
+      /x\/app\n[\s\S]*?waiting \(1\):\n    M001: upstream x\/lib@M001 not released\n[\s\S]*?needs you \(1\):\n    M001: upstream/,
     );
-    expect(out.stdout).toContain('x/lib M001: #90');
+    expect(out.stdout).toMatch(/x\/lib\n[\s\S]*needs you \(1\):\n    M001: #90/);
     expect(out.stdout.trim().split('\n').pop()).toBe('needs you: nothing else can start');
   });
 
@@ -178,5 +195,66 @@ describe('deliver-loop --objective', () => {
     expect(out.status, out.stdout + out.stderr).toBe(0);
     expect(out.merges.map((m) => m.pull)).toEqual([124, 126]);
     expect(implementer(out.spans, 25)).toBeUndefined();
+  });
+
+  it('writes one run folder and one events run for two repositories', async () => {
+    const out = await run(
+      objective({
+        'x/app': [{ work: [16], body: 'Requires: x/lib@M001 released' }],
+        'x/lib': [{ work: [16] }],
+      }),
+    );
+    // nothing releases x/lib: x/app waits for it
+    expect(out.status, out.stdout + out.stderr).toBe(3);
+    const events = out.events as unknown as Event[];
+    profile.expectRun(events);
+    const dir = path.join(path.dirname(out.eventsFile), 'deliver');
+    const folder = path.join(dir, readdirSync(dir)[0]!);
+    expect(lines<{ issue?: number }>(path.join(folder, 'x/lib/results.jsonl'))[0]).toMatchObject({
+      issue: 16,
+      outcome: 'merged',
+    });
+    // one run: gapless, one start that names the Objective, one end
+    expect(events.map((e) => [e.run, e.seq])).toEqual(
+      events.map((_, i) => [events[0]!.run, i + 1]),
+    );
+    expect(events[0]).toMatchObject({
+      type: 'run.started',
+      deliver: { objective: 'x/app#1' },
+      subject: { id: 'x/app#1', title: '[Objective] o' },
+    });
+    expect(events.filter((e) => e.type.startsWith('run.')).map((e) => e.type)).toEqual([
+      'run.started',
+      'run.finished',
+    ]);
+    for (const event of events) expect(event.deliver).toMatchObject({ objective: 'x/app#1' });
+    for (const event of events.filter((e) => !e.type.startsWith('run.')))
+      expect(event.deliver).toHaveProperty('repo', expect.stringMatching(/^x\//));
+    expect(events.find((e) => e.type === 'task.started')).toMatchObject({
+      task: 'x/lib:issue-16',
+      deliver: { repo: 'x/lib' },
+    });
+    expect(events.find((e) => e.type === 'deliver.merged')).toMatchObject({
+      deliver: { repo: 'x/lib', issue: 16 },
+    });
+    const waits = events.filter((e) => e.reason === 'deliver.waiting-upstream');
+    expect(waits.map((e) => e.needsYou)).toEqual([false, true]);
+    expect(waits[1]).toMatchObject({
+      type: 'attention',
+      text: 'x/app M001: upstream x/lib@M001 not released',
+      deliver: { objective: 'x/app#1', repo: 'x/app' },
+    });
+  });
+
+  it('reports an Objective with only deferred Features open as partly released', async () => {
+    const out = await run(objective({ 'x/lib': [{ work: [29], labels: ['deferred'] }] }));
+    expect(out.status, out.stdout + out.stderr).toBe(0);
+    expect(out.stdout).toMatch(/x\/lib\n[\s\S]*?deferred \(1\):\n    #101 \[Feature\] f\n/);
+    expect(out.stdout.trim().split('\n').pop()).toBe('partly released');
+    expect(out.events.at(-1)).toMatchObject({
+      type: 'run.finished',
+      outcome: 'succeeded',
+      text: expect.stringMatching(/^partly released:/),
+    });
   });
 });

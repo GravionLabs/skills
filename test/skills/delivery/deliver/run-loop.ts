@@ -114,6 +114,8 @@ export type Outcome = {
   spans: Span[];
   final?: Record<string, unknown>;
   events: { type: string; outcome?: string; reason?: string; needsYou?: boolean }[];
+  /** The events file of the run. */
+  eventsFile: string;
   log: string;
 };
 
@@ -218,6 +220,12 @@ export function loop(
     child.on('close', (status) => {
       const results = /results: (\S+)/.exec(stdout)?.[1];
       const events = path.join(dir, 'events');
+      // an Objective run also has its run folder (a directory) there
+      const eventsFile = path.join(
+        events,
+        (existsSync(events) ? readdirSync(events) : []).find((name) => name.endsWith('.jsonl')) ??
+          'none.jsonl',
+      );
       done({
         status,
         stdout,
@@ -244,10 +252,10 @@ export function loop(
             )
           : [],
         final: results ? lines<Record<string, unknown>>(results).find((r) => r.run) : undefined,
-        events: existsSync(events) ? lines(path.join(events, readdirSync(events)[0] ?? '')) : [],
-        log: results
-          ? readFileSync(path.join(path.dirname(path.dirname(results)), 'loop.log'), 'utf8')
-          : '',
+        eventsFile,
+        events: existsSync(eventsFile) ? lines(eventsFile) : [],
+        // below the git directory, also for an Objective run, whose run folder is in the events directory
+        log: results ? readFileSync(path.join(repo, '.git', 'deliver', 'loop.log'), 'utf8') : '',
       });
     });
   });

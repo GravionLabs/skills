@@ -318,6 +318,8 @@ export type RepositoryContext = {
   mergeLocks?: MergeLocks;
   /** The role sessions of a run over several repositories (an Objective, `maxSessions`): this one also stays within `parallel`. */
   slots?: Slots;
+  /** The run folders whose result files hold earlier risk levels. Default: those beside `runDir`. */
+  earlierRunDirs?: () => string[];
 };
 export type RepositoryResult = {
   /** 0 done, 2 blocked, 3 waiting for a handed-over pull request (or refused), 5 harness failed, 130 stopped; 1 error, 64 usage. */
@@ -699,8 +701,10 @@ export async function runRepository(context: RepositoryContext): Promise<Reposit
   }
   /** The levels the result files of earlier runs hold for the issue. */
   function earlierRisks(item: Item): (string | undefined)[] {
-    const runs = path.dirname(runDir);
-    return readdirSync(runs).map((name) => riskOf(path.join(runs, name, `${item.id}.result.json`)));
+    const beside = path.dirname(runDir);
+    const runs =
+      context.earlierRunDirs?.() ?? readdirSync(beside).map((name) => path.join(beside, name));
+    return runs.map((folder) => riskOf(path.join(folder, `${item.id}.result.json`)));
   }
   /** The highest level seen wins: a later fix or repair session never lowers the risk of the pull request. */
   function noteRisk(id: number, level: string | undefined): void {
