@@ -3,15 +3,17 @@ import { execFileSync } from 'node:child_process';
 import { existsSync } from 'node:fs';
 import { LABEL_PREFIX, labelOf } from '../stage.mts';
 import { type ReviewMark, type Verdict, markBody, parseMark } from '../review.mts';
-import { DEFERRED, HOLD_LABELS, blockReason } from '../objective.mts';
+import { DEFERRED, HOLD_LABELS, blockReason, isKind, objectiveLeaves } from '../objective.mts';
 import { syncLabels } from '../sync-labels.mts';
 import type {
   BaseState,
   Gate,
   Item,
+  Leaf,
   ObjectiveReader,
   PublishState,
   Pull,
+  Selection,
   Subject,
   TrackedIssue,
   Tracker,
@@ -43,6 +45,7 @@ type RestIssue = {
   html_url: string;
   repository_url: string;
   body: string | null;
+  author_association?: string;
   labels: { name: string }[];
   milestone?: { title: string } | null;
 };
@@ -319,20 +322,23 @@ export function create({
     (JSON.parse(gh('api', route, '--paginate', '--slurp')) as T[][]).flat();
   const repo = named ?? gh('repo', 'view', '--json', 'nameWithOwner', '-q', '.nameWithOwner');
 
+  const findMilestone = (title: string): Milestone | undefined =>
+    list<Milestone>(`repos/${repo}/milestones?state=all&per_page=100`).find(
+      (m) => m.title === title || m.title.startsWith(`${title} `),
+    );
   let milestoneCache: Milestone | undefined;
   const milestone = (): Milestone => {
     if (milestoneCache) return milestoneCache;
-    const found = list<Milestone>(`repos/${repo}/milestones?state=all&per_page=100`).find(
-      (m) => m.title === selection.milestone || m.title.startsWith(`${selection.milestone} `),
-    );
+    const found = findMilestone(String(selection.milestone));
     if (!found) throw new Error(`milestone ${selection.milestone} not found in ${repo}`);
     milestoneCache = found;
     return found;
   };
 
-  const authors = new Map<number, string>();
+  // the author association of every issue read as work, by `owner/repo#n`
+  const authors = new Map<string, string>();
   const toItem = (issue: Issue): Item => {
-    authors.set(issue.number, issue.author_association);
+    authors.set(`${repo}#${issue.number}`, issue.author_association);
     return {
       id: issue.number,
       title: issue.title,
@@ -349,22 +355,22 @@ export function create({
     ).filter((i) => i.state === 'open' && i.repository_url.endsWith(`/repos/${repo}`) && isWork(i));
 
   /** The items of a milestone or a Feature selection, by number; an issue below a Feature names it. */
-  const selected = (): Item[] => {
+  const selected = ({ feature: only, skipDeferred }: Selection, of = milestone): Item[] => {
     const found = new Map<number, Item>();
     const add = (issue: Issue, feature?: number) => {
       if (!found.get(issue.number)?.feature)
         found.set(issue.number, { ...toItem(issue), ...(feature && { feature }) });
     };
-    if (selection.feature) {
-      const feature = Number(selection.feature);
+    if (only) {
+      const feature = Number(only);
       for (const issue of workBelow(feature)) add(issue, feature);
     } else {
       const open = list<Issue>(
-        `repos/${repo}/issues?milestone=${milestone().number}&state=open&per_page=100`,
+        `repos/${repo}/issues?milestone=${of().number}&state=open&per_page=100`,
       );
       for (const issue of open.filter(isWork)) add(issue);
       const deferred = (i: Issue) =>
-        !!selection.skipDeferred && i.labels.some((l) => l.name.toLowerCase() === DEFERRED);
+        !!skipDeferred && i.labels.some((l) => l.name.toLowerCase() === DEFERRED);
       for (const feature of open.filter((i) => !i.pull_request && isFeature(i) && !deferred(i)))
         for (const issue of workBelow(feature.number)) add(issue, feature.number);
     }
@@ -416,7 +422,12 @@ export function create({
     },
     subIssues: (ref) =>
       list<RestIssue>(`repos/${ref.repo}/issues/${ref.number}/sub_issues?per_page=100`).map(
-        tracked,
+        (issue) => {
+          const read = tracked(issue);
+          if (issue.author_association)
+            authors.set(`${read.repo}#${read.number}`, issue.author_association);
+          return read;
+        },
       ),
     milestones: (name) =>
       list<{ title: string; state: string }>(`repos/${name}/milestones?state=all&per_page=100`).map(
@@ -512,7 +523,28 @@ export function create({
             .map(toItem),
         );
       }
-      return withBaseBugs(selected());
+      return withBaseBugs(selected(selection));
+    },
+
+    leaves(ref: string): Leaf[] | undefined {
+      const number = /^#?([1-9]\d*)$/.exec(ref)?.[1];
+      if (!number) {
+        const named = findMilestone(ref);
+        return named && selected({ milestone: ref }, () => named);
+      }
+      const issue = found<Issue>(`repos/${repo}/issues/${number}`);
+      if (!issue || issue.pull_request) return undefined;
+      if (isFeature(issue)) return selected({ feature: number });
+      if (!isKind(issue, 'epic') && !isKind(issue, 'objective')) return undefined;
+      return objectiveLeaves(`${repo}#${number}`, reader).map(({ issue: leaf, held }) => ({
+        id: leaf.number,
+        title: leaf.title,
+        url: leaf.url,
+        labels: leaf.labels,
+        body: leaf.body,
+        repo: leaf.repo,
+        ...(held && { held }),
+      }));
     },
 
     itemSubject(item: Item): Subject {
@@ -604,13 +636,14 @@ export function create({
     waitReason(item: Item): string | undefined {
       const held = item.labels.find((name) => HOLD_LABELS.includes(name));
       if (held) return held;
-      const author = authors.get(item.id) ?? 'NONE';
+      const own = item.repo ?? repo;
+      const author = authors.get(`${own}#${item.id}`) ?? 'NONE';
       if (!trustAuthors && !TRUSTED.includes(author)) {
         return `author has no write access (${author.toLowerCase()}), --trust-authors delivers it`;
       }
       return blockReason(
-        { repo, number: item.id },
-        reader.blockers({ repo, number: item.id }),
+        { repo: own, number: item.id },
+        reader.blockers({ repo: own, number: item.id }),
         reader,
       );
     },

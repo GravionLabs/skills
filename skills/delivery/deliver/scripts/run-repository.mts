@@ -20,9 +20,11 @@ import { createInterface } from 'node:readline';
 import type { tokenSource as makeSource } from './app-token.mts';
 import type { Origin } from './event-dir.mts';
 import { type Emit, reasonCode } from './events.mts';
+import { mergedMeanwhile } from './gates/merged-meanwhile.mts';
 import { verifyVerdict } from './gates/verify-verdict.mts';
 import { type Note, handoverNote, reviewNote } from './handover.mts';
 import { type BlockedReason, type Report, finishReport } from './program-status.mts';
+import { HANDS_OFF, guardCheck, readChangedFiles, riskOf } from './gates/guard.mts';
 import { cargoTomlKeys } from './cargo-toml.mts';
 import { directoryPackagesPropsKeys } from './directory-packages-props.mts';
 import { releaseGate, retroMarker } from './gates/release-gate.mts';
@@ -30,11 +32,11 @@ import { setStageGate } from './gates/stage.mts';
 import { goModKeys } from './go-mod.mts';
 import { pyprojectTomlKeys } from './pyproject-toml.mts';
 import { pnpmWorkspaceKeys } from './pnpm-workspace.mts';
+import { inPickOrder } from './gates/next-issue.mts';
 import type { Harness } from './harness.mts';
 import { MergeLocks, Slots } from './parallel.mts';
 import { killTree, launch, promptPath } from './process.mts';
 import { progressLine } from './progress-bar.mts';
-import { MANIFESTS, exceptedManifest, protectedHits } from './protected-paths.mts';
 import {
   RISK_LEVELS,
   type ReviewMark,
@@ -152,29 +154,6 @@ const RETRO_DENY = [
 // A fix round per `changes` verdict, at most this many per issue and run; the next `changes` sets the issue aside.
 const FIX_ROUNDS = 2;
 
-// A `package.json` whose difference is only in these keys is no hit. A fixed list: a repository cannot widen it.
-const DEPENDENCY_KEYS = [
-  'dependencies',
-  'devDependencies',
-  'peerDependencies',
-  'optionalDependencies',
-];
-const sameJson = (a: unknown, b: unknown) =>
-  JSON.stringify(sortKeys(a)) === JSON.stringify(sortKeys(b));
-function sortKeys(value: unknown): unknown {
-  if (Array.isArray(value)) return value.map(sortKeys);
-  if (value && typeof value === 'object') {
-    return Object.fromEntries(
-      Object.entries(value as Record<string, unknown>)
-        .sort(([x], [y]) => (x < y ? -1 : x > y ? 1 : 0))
-        .map(([k, v]) => [k, sortKeys(v)]),
-    );
-  }
-  return value;
-}
-
-const HANDS_OFF = ', merge it yourself';
-const GUARD_READS = 3;
 const MORE_PULLS = 'more than one open pull request';
 /** Two open pull requests of one item: a person closes the stale one, the loop merges neither. */
 function morePulls(pull: Pull | undefined): string | undefined {
@@ -417,178 +396,25 @@ export async function runRepository(context: RepositoryContext): Promise<Reposit
     };
   };
 
-  /**
-   * The keys outside the dependency maps in which `package.json` differs between the merge base and `head`;
-   * `undefined` when unknown (added, deleted, renamed, not JSON), then the file is a plain hit.
-   * Throws when a read fails: the caller treats that as unknown too.
-   */
-  function packageJsonKeys(
-    file: string,
-    refs: { base: string; head: string },
-  ): string[] | undefined {
-    const before = tracker.fileAt(refs.base, file);
-    const after = tracker.fileAt(refs.head, file);
-    if (before === undefined || after === undefined) return undefined;
-    let a: unknown;
-    let b: unknown;
-    try {
-      a = JSON.parse(before);
-      b = JSON.parse(after);
-    } catch {
-      return undefined;
-    }
-    const isObject = (v: unknown): v is Record<string, unknown> =>
-      !!v && typeof v === 'object' && !Array.isArray(v);
-    if (!isObject(a) || !isObject(b)) return undefined;
-    return [...new Set([...Object.keys(a), ...Object.keys(b)])]
-      .filter((key) => !DEPENDENCY_KEYS.includes(key) && !sameJson(a[key], b[key]))
-      .sort();
-  }
-  /**
-   * The parts outside the dependency entries in which `Cargo.toml` differs between the merge base and `head`;
-   * `undefined` when unknown (added, deleted, a file the parser does not understand), then the file is a plain hit.
-   */
-  function cargoTomlParts(
-    file: string,
-    refs: { base: string; head: string },
-  ): string[] | undefined {
-    const before = tracker.fileAt(refs.base, file);
-    const after = tracker.fileAt(refs.head, file);
-    if (before === undefined || after === undefined) return undefined;
-    try {
-      return cargoTomlKeys(before, after);
-    } catch {
-      return undefined;
-    }
-  }
-  /**
-   * The top-level parts outside the catalog entries in which `pnpm-workspace.yaml` differs between the merge base and
-   * `head`; `undefined` when unknown (added, deleted, a file the strict parser does not understand).
-   */
-  function pnpmWorkspaceParts(
-    file: string,
-    refs: { base: string; head: string },
-  ): string[] | undefined {
-    const before = tracker.fileAt(refs.base, file);
-    const after = tracker.fileAt(refs.head, file);
-    if (before === undefined || after === undefined) return undefined;
-    try {
-      return pnpmWorkspaceKeys(before, after);
-    } catch {
-      return undefined;
-    }
-  }
-  /**
-   * The parts outside the requirement lists in which `pyproject.toml` differs between the merge base and `head`;
-   * `undefined` when unknown (added, deleted, a file the strict parser does not understand).
-   */
-  function pyprojectTomlParts(
-    file: string,
-    refs: { base: string; head: string },
-  ): string[] | undefined {
-    const before = tracker.fileAt(refs.base, file);
-    const after = tracker.fileAt(refs.head, file);
-    if (before === undefined || after === undefined) return undefined;
-    try {
-      return pyprojectTomlKeys(before, after);
-    } catch {
-      return undefined;
-    }
-  }
-  /**
-   * The directives other than `require` in which `go.mod` differs between the merge base and `head`;
-   * `undefined` when unknown (added, deleted, a line the strict parser does not understand).
-   */
-  function goModParts(file: string, refs: { base: string; head: string }): string[] | undefined {
-    const before = tracker.fileAt(refs.base, file);
-    const after = tracker.fileAt(refs.head, file);
-    if (before === undefined || after === undefined) return undefined;
-    try {
-      return goModKeys(before, after);
-    } catch {
-      return undefined;
-    }
-  }
-  /**
-   * The parts outside the `PackageVersion` items in which `Directory.Packages.props` differs between the merge base and
-   * `head`; `undefined` when unknown (added, deleted, markup the strict parser does not understand).
-   */
-  function directoryPackagesPropsParts(
-    file: string,
-    refs: { base: string; head: string },
-  ): string[] | undefined {
-    const before = tracker.fileAt(refs.base, file);
-    const after = tracker.fileAt(refs.head, file);
-    if (before === undefined || after === undefined) return undefined;
-    try {
-      return directoryPackagesPropsKeys(before, after);
-    } catch {
-      return undefined;
-    }
-  }
-  /** The files with a comparator, by lower-case name: what differs outside the allowed parts, `undefined` when unknown. */
-  const COMPARATORS: Record<(typeof MANIFESTS)[number], typeof packageJsonKeys> = {
-    'package.json': packageJsonKeys,
-    'cargo.toml': cargoTomlParts,
-    'pnpm-workspace.yaml': pnpmWorkspaceParts,
-    'pyproject.toml': pyprojectTomlParts,
-    'go.mod': goModParts,
-    'directory.packages.props': directoryPackagesPropsParts,
-  };
-  /** The protected hits, a `package.json`, `Cargo.toml`, `pnpm-workspace.yaml`, `pyproject.toml`, `go.mod` or `Directory.Packages.props` that differs only in its dependencies dropped, the others named with their parts. */
-  function judgeHits(pull: Pull, files: string[], head?: string): string[] {
-    const hits = protectedHits(files, PROTECTED);
-    if (
-      !hits.some((file) =>
-        (MANIFESTS as readonly string[]).includes(path.posix.basename(file.toLowerCase())),
-      )
-    )
-      return hits;
-    let refs: { base: string; head: string } | undefined;
-    try {
-      refs = tracker.compareRefs(pull, head);
-    } catch {
-      return hits;
-    }
-    const out: string[] = [];
-    for (const file of hits) {
-      // the case-folded name matches the manifest; the file itself is read under its own name
-      const manifest = exceptedManifest(file, PROTECTED);
-      if (!manifest) {
-        out.push(file);
-        continue;
-      }
-      const compare = COMPARATORS[manifest];
-      let keys: string[] | undefined;
-      try {
-        keys = compare(file, refs);
-      } catch {
-        keys = undefined;
-      }
-      if (keys === undefined) out.push(file);
-      else if (keys.length > 0) out.push(`${file}: ${keys.join(', ')}`);
-    }
-    return out;
-  }
   /** Why the loop does not merge the pull request as it is now, else nothing. A person decides then, no repair session. */
   async function guard(pull: Pull, head?: string): Promise<string | undefined> {
-    let hits: string[] = [];
-    for (let read = 1; ; read++) {
-      try {
-        hits = judgeHits(pull, tracker.changedFiles(pull), head);
-        break;
-      } catch (error) {
-        // a read that fails once (server load, rate limit) is asked again, as the gate is
-        if (read < GUARD_READS && !signal.stopped) {
-          for (let second = 0; second < 5 && !signal.stopped; second++) await sleep(1);
-          continue;
-        }
-        // unknown is not safe: a person looks
-        return `could not read the changed files (${firstLine(error)})${HANDS_OFF}`;
-      }
-    }
-    if (hits.length === 0) return undefined;
-    return `changes protected paths (${hits.slice(0, 3).join(', ')}${hits.length > 3 ? ', …' : ''})${HANDS_OFF}`;
+    // a read that fails once (server load, rate limit) is asked again, as the gate is
+    const files = await readChangedFiles(() => tracker.changedFiles(pull), {
+      pause: async () => {
+        for (let second = 0; second < 5 && !signal.stopped; second++) await sleep(1);
+      },
+      stopped: () => signal.stopped,
+    });
+    // unknown is not safe: a person looks
+    const check = guardCheck({
+      files,
+      compare: {
+        refs: () => tracker.compareRefs(pull, head),
+        fileAt: (sha, file) => tracker.fileAt(sha, file),
+      },
+      protectedList: PROTECTED,
+    });
+    return check.result === 'pass' ? undefined : check.reason;
   }
 
   let emit: Emit = () => {};
@@ -728,14 +554,6 @@ export async function runRepository(context: RepositoryContext): Promise<Reposit
   const risks = new Map<number, string>();
   /** The implementer result the session writes (`risk.level`); the session never reports anything else to the loop. */
   const resultFile = (item: Item) => path.join(runDir, `${item.id}.result.json`);
-  function riskOf(file: string): string | undefined {
-    try {
-      const level = JSON.parse(readFileSync(file, 'utf8'))?.risk?.level;
-      return RISK_LEVELS.includes(level) ? level : undefined;
-    } catch {
-      return undefined;
-    }
-  }
   /** The levels the result files of earlier runs hold for the issue. */
   function earlierRisks(item: Item): (string | undefined)[] {
     const beside = path.dirname(runDir);
@@ -750,10 +568,8 @@ export async function runRepository(context: RepositoryContext): Promise<Reposit
   }
   /** Why the loop does not merge the pull request of the issue for its risk; a missing level counts as medium. */
   function riskHold(id: number): string | undefined {
-    const level = risks.get(id) ?? 'medium';
-    return RISK_LEVELS.indexOf(level) > RISK_LEVELS.indexOf(MERGE_RISK)
-      ? `risk ${level}${HANDS_OFF}`
-      : undefined;
+    const check = guardCheck({ risk: risks.get(id), mergeRisk: MERGE_RISK });
+    return check.result === 'pass' ? undefined : check.reason;
   }
 
   // a note about the model of an issue is logged once per run
@@ -776,6 +592,22 @@ export async function runRepository(context: RepositoryContext): Promise<Reposit
     // a pull request means the session did its work: the normal rules for a failed session apply
     delivered: () => Boolean(tracker.pullOf(item)),
   });
+
+  /**
+   * The argument that names what was merged into the base since the fork point of the worktree, empty when nothing
+   * was (ADR 0012, Parallelism). A list that cannot be made is logged: the session starts without it.
+   */
+  function mergedSince(item: Item, workspace: string): string {
+    try {
+      const gate = mergedMeanwhile({ workspace, base: BASE, issue: item.id, runDir });
+      const { file } = gate.evidence;
+      if (gate.result !== 'pass') log(`#${item.id} merged-meanwhile: ${gate.reason}`, 'warn');
+      else if (typeof file === 'string') return ` --merged-meanwhile-file ${promptPath(file)}`;
+    } catch (error) {
+      log(`#${item.id} merged-meanwhile: ${firstLine(error)}`, 'warn');
+    }
+    return '';
+  }
 
   /** `item`: the issue of the session; undefined for a session of the whole run (the retro). */
   async function startSession(
@@ -805,6 +637,8 @@ export async function runRepository(context: RepositoryContext): Promise<Reposit
           model: task.model,
           tier: task.tier,
         };
+      // an implementer session; read now, as the base may have moved while it waited for its slot
+      if (item && task.output.name === 'DELIVER_RESULT_FILE') prompt += mergedSince(item, cwd);
       return await launchSession(label, prompt, cwd, file, task);
     } finally {
       free();
@@ -2037,8 +1871,7 @@ export async function runRepository(context: RepositoryContext): Promise<Reposit
           }
         }
         waiting = [];
-        for (const item of candidates) {
-          const reason = tracker.waitReason(item);
+        for (const { item, reason } of inPickOrder(candidates, (i) => tracker.waitReason(i))) {
           if (reason) waiting.push(`#${item.id} ${reason}`);
           else if (starts.length < room) starts.push(item);
         }

@@ -7,6 +7,7 @@ import type {
   BaseState,
   Gate,
   Item,
+  Leaf,
   ObjectiveReader,
   PublishState,
   Pull,
@@ -16,7 +17,11 @@ import type {
   TrackerContext,
 } from '../../../../../skills/delivery/deliver/scripts/tracker.mts';
 import {
+  HOLD_LABELS,
+  blockReason,
   blockerState,
+  isKind,
+  objectiveLeaves,
   parseObjective,
 } from '../../../../../skills/delivery/deliver/scripts/objective.mts';
 
@@ -52,6 +57,10 @@ export type Scenario = {
   filesLater?: string[];
   /** The first this many reads of the changed files fail. */
   filesFailures?: number;
+  /** `.agents/config.json` by commit, as the guard gate reads it (missing: no such file; `throw`: a failing read). */
+  projectConfig?: { base?: string; head?: string } | 'throw';
+  /** The head of the pull request from this compareRefs() call on (1-based): a push while the guard reads. */
+  pushedAtCompare?: number;
   /** `package.json` contents by commit: `base` is the merge base, `head` the commit that is judged (missing: no such file). */
   packageJson?: { base?: string; head?: string };
   /** The same for `Cargo.toml`. */
@@ -138,6 +147,7 @@ export function create({ selection, repo: named }: TrackerContext): Tracker {
   const listedCalls = new Map<number, number>();
   let gateCalls = 0;
   let fileReads = 0;
+  let compareCalls = 0;
   let baseCalls = 0;
   const itemOf = (pull: Pull) => pull.id - 100;
 
@@ -208,24 +218,22 @@ export function create({ selection, repo: named }: TrackerContext): Tracker {
     (issue.state ?? 'open') === 'open' &&
     (issue.labels ?? []).some((label) => label === 'pbi' || label === 'bug');
   /** The open PBIs and Bugs of the unit: in its milestone or below its Feature (or the open Features of its milestone). */
-  const unitIssues = (): FakeIssue[] => {
+  const unitIssues = (of = selection): FakeIssue[] => {
     const issues = repository(repo)?.issues ?? [];
     const below = (feature: FakeIssue) =>
       (feature.subIssues ?? []).flatMap((value) =>
         typeof value === 'number' ? issues.filter((i) => i.number === value) : [],
       );
-    const features = selection.feature
-      ? issues.filter((i) => i.number === Number(selection.feature))
+    const features = of.feature
+      ? issues.filter((i) => i.number === Number(of.feature))
       : issues.filter(
           (i) =>
-            i.milestone === selection.milestone &&
+            i.milestone === of.milestone &&
             i.title.startsWith('[Feature]') &&
             (i.state ?? 'open') === 'open' &&
-            !(selection.skipDeferred && i.labels?.includes('deferred')),
+            !(of.skipDeferred && i.labels?.includes('deferred')),
         );
-    const direct = selection.feature
-      ? []
-      : issues.filter((i) => i.milestone === selection.milestone);
+    const direct = of.feature ? [] : issues.filter((i) => i.milestone === of.milestone);
     const found = new Map<number, FakeIssue>();
     for (const issue of [...direct, ...features.flatMap(below)])
       if (isWork(issue) && (issue.addedAfter === undefined || closed.has(issue.addedAfter)))
@@ -236,6 +244,31 @@ export function create({ selection, repo: named }: TrackerContext): Tracker {
     named
       ? unitIssues().map((i) => ({ id: i.number, title: i.title, body: i.body }))
       : scenario.items;
+
+  const leafOf = (issue: Omit<FakeIssue, 'subIssues'>, held?: string): Leaf => ({
+    id: issue.number,
+    title: issue.title,
+    url: `https://example.test/issues/${issue.number}`,
+    labels: issue.labels ?? [],
+    body: issue.body ?? '',
+    ...(held && { held }),
+  });
+  /** `ref`: a milestone of the repository, or the number of a Feature, Epic or Objective of it. */
+  const leaves = (ref: string): Leaf[] | undefined => {
+    const number = /^#?([1-9]\d*)$/.exec(ref)?.[1];
+    if (!number)
+      return repository(repo)?.milestones?.some((m) => m.title === ref)
+        ? unitIssues({ milestone: ref }).map((i) => leafOf(i))
+        : undefined;
+    const issue = reader.issue({ repo, number: Number(number) });
+    if (!issue) return undefined;
+    if (isKind(issue, 'feature')) return unitIssues({ feature: number }).map((i) => leafOf(i));
+    if (!isKind(issue, 'epic') && !isKind(issue, 'objective')) return undefined;
+    return objectiveLeaves(`${repo}#${number}`, reader).map(({ issue: leaf, held }) => ({
+      ...leafOf(leaf, held),
+      repo: leaf.repo,
+    }));
+  };
 
   return {
     name: 'fake',
@@ -260,6 +293,7 @@ export function create({ selection, repo: named }: TrackerContext): Tracker {
         }))
         .concat(baseBug && !closed.has(baseBug.id) ? [baseBug] : []);
     },
+    leaves,
     itemSubject: (item: Item): Subject => ({
       kind: 'fake.issue',
       id: `fake/repo#${item.id}`,
@@ -267,6 +301,13 @@ export function create({ selection, repo: named }: TrackerContext): Tracker {
       url: item.url,
     }),
     waitReason(item: Item): string | undefined {
+      // a leaf of a tree is judged by its labels and the blockers of its issue
+      const own = repository(item.repo ?? repo)?.issues?.find((i) => i.number === item.id);
+      if (!named && own && !scenario.items.some((i) => i.id === item.id)) {
+        const held = item.labels.find((label) => HOLD_LABELS.includes(label));
+        const blocked = { repo: item.repo ?? repo, number: item.id };
+        return held ?? blockReason(blocked, reader.blockers(blocked), reader);
+      }
       const blockers = scenario.items.find((i) => i.id === item.id)?.blockedBy ?? [];
       const open = blockers.filter((id) => typeof id === 'number' && !closed.has(id));
       if (open.length > 0) return `blocked by ${open.map((id) => `#${id}`).join(', ')}`;
@@ -399,8 +440,17 @@ export function create({ selection, repo: named }: TrackerContext): Tracker {
       return files ?? ['src/a.ts'];
     },
     // `abc123` is a tag of the fixture repository: the loop checks the head out for the review
-    compareRefs: (_pull: Pull, head?: string) => ({ base: 'base-sha', head: head ?? 'abc123' }),
+    compareRefs: (_pull: Pull, head?: string) => {
+      compareCalls++;
+      const current =
+        scenario.pushedAtCompare && compareCalls >= scenario.pushedAtCompare ? 'def456' : 'abc123';
+      return { base: 'base-sha', head: head ?? current };
+    },
     fileAt(sha: string, file: string): string | undefined {
+      if (file === '.agents/config.json') {
+        if (scenario.projectConfig === 'throw') throw new Error('HTTP 500');
+        return sha === 'base-sha' ? scenario.projectConfig?.base : scenario.projectConfig?.head;
+      }
       const contents = /cargo\.toml$/i.test(file)
         ? scenario.cargoToml
         : /pnpm-workspace\.yaml$/i.test(file)
