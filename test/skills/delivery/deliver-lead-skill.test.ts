@@ -9,6 +9,7 @@ const read = (file: string) =>
   readFileSync(path.join(delivery, file), 'utf8').replaceAll('\r\n', '\n');
 const skill = read('deliver-lead/SKILL.md');
 const leaf = read('deliver-lead/references/leaf.md');
+const tree = read('deliver-lead/references/tree.md');
 const help = read('deliver-lead/references/help.md');
 
 const section = (text: string, heading: string) =>
@@ -48,8 +49,9 @@ describe('deliver-lead skill', () => {
     expectSkillHelp(dir);
   });
 
-  it('routes PBI and Bug to the leaf flow and names the three adapters', () => {
+  it('routes every type to its flow and names the three adapters', () => {
     expect(skill).toMatch(/\| PBI, Bug +\|.*references\/leaf\.md/);
+    expect(skill).toMatch(/\| Feature, Epic, milestone +\|.*references\/tree\.md/);
     expect(skill).toContain('GravionLabs/skills#1143');
     for (const host of ['host-poimen', 'host-orca', 'host-claude-code']) {
       expect(skill).toContain(`\`${host}\``);
@@ -57,25 +59,32 @@ describe('deliver-lead skill', () => {
     }
   });
 
-  it('has a row for every host verb and for end in leaf.md', () => {
+  const flows = [
+    ['leaf.md', leaf, []],
+    // the gates the tree flow names
+    ['tree.md', tree, ['next-issue', 'release-gate']],
+  ] as const;
+
+  it.each(flows)('has a row for every host verb and for end in %s', (_, text) => {
     // the first row is the header
-    expect(rowIds(section(leaf, 'Actions')).slice(1)).toEqual([...verbs, 'end']);
+    expect(rowIds(section(text, 'Actions')).slice(1)).toEqual([...verbs, 'end']);
   });
 
-  it('names in leaf.md only verbs of host-verbs.md', () => {
-    // every hyphenated word in backticks is a verb id
-    const named = [...leaf.matchAll(/`([a-z]+(?:-[a-z]+)+)`/g)].map((m) => m[1]!);
+  it.each(flows)('names in %s only verbs of host-verbs.md', (_, text, gates) => {
+    // every other hyphenated word in backticks is a verb id
+    const named = [...text.matchAll(/`([a-z]+(?:-[a-z]+)+)`/g)].map((m) => m[1]!);
     expect(named.length).toBeGreaterThan(0);
-    expect(named.filter((name) => !verbs.includes(name))).toEqual([]);
+    const allowed: readonly string[] = [...verbs, ...gates];
+    expect(named.filter((name) => !allowed.includes(name))).toEqual([]);
   });
 
   it.each(HOST_TOOLS)('does not name the host tool %s', (tool) => {
-    for (const text of [skill, leaf, help])
+    for (const text of [skill, leaf, tree, help])
       expect(text).not.toMatch(new RegExp(`(?<![\\w-])${tool}(?![\\w-])`));
   });
 
   it('names only scripts that exist', () => {
-    const named = [skill, leaf, help].flatMap((text) => [
+    const named = [skill, leaf, tree, help].flatMap((text) => [
       ...text.matchAll(/(<deliver-skill-dir>\/|<skill-dir>\/)?\b(scripts\/[\w./-]+\.(?:mts|ps1))/g),
     ]);
     expect(named.length).toBeGreaterThan(0);
