@@ -1,6 +1,6 @@
 # ADR 0011: Objective runs in three layers: loop code, deliver-triage, poimen as host
 
-- Status: Proposed
+- Status: Proposed; the rejection of an orchestrator agent and the rule that the flow lives only in loop code superseded in part by [ADR 0012](0012-delivery-runs-as-host-neutral-workflow-skills-next-to-the-loop-with-gates-in-scripts.md)
 - Date: 2026-11-27
 - Issues: #1081, #1041, #1114
 - Builds on: [ADR 0009](0009-deliver-loop-runs-role-sessions-and-keeps-the-stage-in-labels.md)
