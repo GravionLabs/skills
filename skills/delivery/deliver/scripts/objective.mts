@@ -16,6 +16,8 @@ const REQUIREMENT = new RegExp(
 // the version `github-milestone close` puts into the title: `M013 (1.2.0)`
 const VERSION = /\((v?\d+\.\d+\.\d+[^()\s]*)\)\s*$/;
 export const DEFERRED = 'deferred';
+/** Labels that hold an item back: the loop never starts it (`Tracker.waitReason`, `planObjective`). */
+export const HOLD_LABELS = ['needs-decision', 'needs-refinement', 'interactive', 'release-test'];
 
 export type IssueRef = { repo: string; number: number };
 export type Requirement = { repo: string } & (
@@ -201,4 +203,98 @@ export function readObjective(ref: string, reader: ObjectiveReader): Objective {
     epics,
     features,
   };
+}
+
+/** The wait reason of an issue from its native `blocked-by` links (the loop's `waitReason` and the plan share it). */
+export function blockReason(
+  blocked: IssueRef,
+  blockers: (IssueRef & { state: string })[],
+  reader: ObjectiveReader,
+): string | undefined {
+  const open = blockers.filter((b) => b.state === 'open');
+  if (open.length > 0) return `blocked by ${open.map((b) => `${b.repo}#${b.number}`).join(', ')}`;
+  // a closed blocker of another repository is not enough: its Feature must be released
+  const upstream = blockers
+    .filter((b) => b.repo.toLowerCase() !== blocked.repo.toLowerCase())
+    .flatMap((b) => {
+      const state = blockerState(b, blocked, reader);
+      return state.state === 'waiting' ? [state.reason] : [];
+    });
+  return upstream.length > 0 ? [...new Set(upstream)].join(', ') : undefined;
+}
+
+/**
+ * The order the repositories start in: after every repository that a Feature of them requires. Ties go by name; a
+ * cycle starts its first repository by name.
+ */
+export function startOrder(objective: Objective): string[] {
+  const repos = new Map(objective.repositories.map((repo) => [repo.toLowerCase(), repo]));
+  const after = new Map<string, Set<string>>();
+  for (const feature of objective.features) {
+    const own = feature.repo.toLowerCase();
+    for (const req of feature.requires) {
+      const upstream = req.repo.toLowerCase();
+      if (upstream !== own && repos.has(upstream))
+        after.set(own, new Set([...(after.get(own) ?? []), upstream]));
+    }
+  }
+  const order: string[] = [];
+  const pending = [...repos.keys()];
+  while (pending.length > 0) {
+    const ready = pending.findIndex((key) =>
+      [...(after.get(key) ?? [])].every((upstream) => order.includes(upstream)),
+    );
+    const [key] = pending.splice(Math.max(ready, 0), 1) as [string];
+    order.push(key);
+  }
+  return order.map((key) => repos.get(key) as string);
+}
+
+/**
+ * The plan of an Objective for `--objective --dry-run`: its repositories in start order and, per Feature, `deferred`
+ * or the Feature's milestone with its open PBIs and Bugs. Each of those shows `ready` or every reason that holds it: a
+ * hold label, an Objective or Feature `Requires:` not met, a `blocked-by` link. A Feature with no open PBI or Bug is a
+ * gap. Reads only; nothing starts.
+ */
+export function planObjective(ref: string, reader: ObjectiveReader): string[] {
+  const read = readObjective(ref, reader);
+  const waiting = (reqs: Requirement[]): string[] =>
+    reqs.flatMap((req) => {
+      const state = requirementState(req, reader);
+      return state.state === 'waiting' ? [state.reason] : [];
+    });
+  const shared = waiting(read.requires);
+  const order = startOrder(read);
+  const lines = [
+    `Objective ${ref} starts in: ${order.join(', ') || 'no repository'}`,
+    `  requires: ${read.requires.length === 0 ? 'none' : shared.join(', ') || 'met'}`,
+  ];
+  for (const repo of order) {
+    lines.push(repo);
+    const features = read.features.filter((f) => f.repo.toLowerCase() === repo.toLowerCase());
+    if (features.length === 0) lines.push('  no Feature');
+    for (const feature of features) {
+      const name = `${feature.repo}#${feature.number}`;
+      if (feature.deferred) {
+        lines.push(`  feature ${name} deferred`);
+        continue;
+      }
+      const closed = feature.state === 'closed';
+      lines.push(
+        `  feature ${name}${feature.milestone ? ` ${feature.milestone}` : ''}${closed ? ' closed' : ''}`,
+      );
+      if (!closed && feature.work.length === 0) lines.push('    gap: no open PBI or Bug');
+      const featureWaits = waiting(feature.requires);
+      for (const item of feature.work) {
+        const itemRef = { repo: item.repo, number: item.number };
+        const hold = item.labels.find((label) => HOLD_LABELS.includes(label));
+        const blocked = blockReason(itemRef, reader.blockers(itemRef), reader);
+        const reasons = [hold, ...shared, ...featureWaits, blocked].filter(
+          (reason): reason is string => reason !== undefined,
+        );
+        lines.push(`    ${item.repo}#${item.number} ${reasons.join(', ') || 'ready'}`);
+      }
+    }
+  }
+  return lines;
 }

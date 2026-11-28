@@ -3,7 +3,7 @@ import { execFileSync } from 'node:child_process';
 import { existsSync } from 'node:fs';
 import { LABEL_PREFIX, labelOf } from '../stage.mts';
 import { type ReviewMark, type Verdict, markBody, parseMark } from '../review.mts';
-import { blockerState } from '../objective.mts';
+import { HOLD_LABELS, blockReason } from '../objective.mts';
 import { syncLabels } from '../sync-labels.mts';
 import type {
   BaseState,
@@ -17,7 +17,6 @@ import type {
   TrackerContext,
 } from '../tracker.mts';
 
-const HOLD = ['needs-decision', 'needs-refinement', 'interactive', 'release-test'];
 // only these can change the text of an issue they wrote; anyone can write a comment
 const TRUSTED = ['OWNER', 'MEMBER', 'COLLABORATOR'];
 
@@ -407,6 +406,14 @@ export function create({
         (m) => ({ title: m.title, closed: m.state === 'closed' }),
       ),
     hasTag: (name, tag) => !!found(`repos/${name}/git/ref/tags/${encodeURIComponent(tag)}`),
+    blockers: (ref) =>
+      list<{ number: number; state: string; repository_url: string }>(
+        `repos/${ref.repo}/issues/${ref.number}/dependencies/blocked_by`,
+      ).map((b) => ({
+        repo: b.repository_url.split('/repos/')[1] as string,
+        number: b.number,
+        state: b.state,
+      })),
   };
 
   const checksOf = (id: number): Check[] => {
@@ -557,30 +564,17 @@ export function create({
     },
 
     waitReason(item: Item): string | undefined {
-      const held = item.labels.find((name) => HOLD.includes(name));
+      const held = item.labels.find((name) => HOLD_LABELS.includes(name));
       if (held) return held;
       const author = authors.get(item.id) ?? 'NONE';
       if (!trustAuthors && !TRUSTED.includes(author)) {
         return `author has no write access (${author.toLowerCase()}), --trust-authors delivers it`;
       }
-      const blockers = list<{ number: number; state: string; repository_url: string }>(
-        `repos/${repo}/issues/${item.id}/dependencies/blocked_by`,
-      ).map((b) => ({
-        repo: b.repository_url.split('/repos/')[1] as string,
-        number: b.number,
-        state: b.state,
-      }));
-      const open = blockers.filter((b) => b.state === 'open');
-      if (open.length > 0)
-        return `blocked by ${open.map((b) => `${b.repo}#${b.number}`).join(', ')}`;
-      // a closed blocker of another repository is not enough: its Feature must be released
-      const upstream = blockers
-        .filter((b) => b.repo.toLowerCase() !== repo.toLowerCase())
-        .flatMap((b) => {
-          const state = blockerState(b, { repo, number: item.id }, reader);
-          return state.state === 'waiting' ? [state.reason] : [];
-        });
-      return upstream.length > 0 ? [...new Set(upstream)].join(', ') : undefined;
+      return blockReason(
+        { repo, number: item.id },
+        reader.blockers({ repo, number: item.id }),
+        reader,
+      );
     },
 
     needsDecision(item: Item): boolean {

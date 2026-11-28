@@ -24,6 +24,8 @@ export type FakeIssue = Partial<Omit<TrackedIssue, 'repo' | 'url'>> & {
   number: number;
   title: string;
   subIssues?: (number | string)[];
+  /** Native `blocked-by` links: numbers of the same repository or `owner/repo#n`. */
+  blockedBy?: (number | string)[];
 };
 
 export type Scenario = {
@@ -142,6 +144,13 @@ export function create({ selection }: TrackerContext): Tracker {
     },
     milestones: (repo) => repository(repo)?.milestones ?? [],
     hasTag: (repo, tag) => repository(repo)?.tags?.includes(tag) ?? false,
+    blockers(ref) {
+      const issue = repository(ref.repo)?.issues?.find((i) => i.number === ref.number);
+      return (issue?.blockedBy ?? []).map((value) => {
+        const blocker = refOf(ref.repo, value);
+        return { ...blocker, state: reader.issue(blocker)?.state ?? 'open' };
+      });
+    },
   };
 
   return {
