@@ -10,6 +10,7 @@ import type {
   Gate,
   Item,
   ObjectiveReader,
+  PublishState,
   Pull,
   Subject,
   TrackedIssue,
@@ -32,7 +33,7 @@ type Issue = {
   user?: { type?: string };
   milestone?: { number: number } | null;
 };
-type Milestone = { number: number; title: string; html_url: string };
+type Milestone = { number: number; title: string; html_url: string; created_at?: string };
 type RestIssue = {
   number: number;
   title: string;
@@ -54,6 +55,14 @@ type PullRecord = {
   body?: string | null;
 };
 type Check = { name: string; bucket: string };
+type WorkflowRun = {
+  id: number;
+  workflow_id: number;
+  event: string;
+  status: string;
+  html_url: string;
+};
+type Job = { name: string; status: string; conclusion: string | null; html_url: string };
 
 /**
  * The verdict of the checks of a pull request. The loop decides this itself and does not rely on the
@@ -192,6 +201,11 @@ const tracked = (issue: RestIssue): TrackedIssue => ({
   ...(issue.closed_at && { closedAt: issue.closed_at }),
   ...(issue.milestone && { milestone: issue.milestone.title }),
 });
+
+/** A job that releases or publishes, by its name (as `github-release` finds the failed release run). */
+const PUBLISH_JOB = /release|publish/i;
+/** How many runs of the default branch are searched for one with a publish job. */
+const PUBLISH_RUNS = 10;
 
 /** The body with exactly one line `Retro: <url>`: an earlier one is replaced, else it is appended. */
 export function withRetroLine(body: string | null | undefined, url: string): string {
@@ -830,7 +844,7 @@ export function create({
     },
 
     defaultBranch(): string {
-      return gh('repo', 'view', '--json', 'defaultBranchRef', '-q', '.defaultBranchRef.name');
+      return gh('repo', 'view', repo, '--json', 'defaultBranchRef', '-q', '.defaultBranchRef.name');
     },
 
     releaseTests(): Item[] {
@@ -866,14 +880,52 @@ export function create({
         .map((p) => ({ id: p.number, title: p.title, url: p.html_url, branch: p.head.ref }));
     },
 
+    publishState(): PublishState {
+      const branch = encodeURIComponent(this.defaultBranch());
+      const runs = api<{ workflow_runs: WorkflowRun[] }>(
+        `repos/${repo}/actions/runs?branch=${branch}&per_page=50`,
+      )
+        .workflow_runs.filter((r) => r.event === 'push' || r.event === 'workflow_dispatch')
+        .slice(0, PUBLISH_RUNS);
+      // newer runs that are not completed and have no publish job yet: it starts after the jobs it needs
+      const early = new Map<number, string>();
+      for (const run of runs) {
+        const jobs = api<{ jobs: Job[] }>(
+          `repos/${repo}/actions/runs/${run.id}/jobs?per_page=100`,
+        ).jobs.filter((j) => PUBLISH_JOB.test(j.name) && j.conclusion !== 'skipped');
+        if (jobs.length === 0) {
+          if (run.status !== 'completed') early.set(run.workflow_id, run.html_url);
+          continue;
+        }
+        const next = early.get(run.workflow_id);
+        if (next) return { state: 'running', url: next };
+        const failed = jobs.find(
+          (j) => j.status === 'completed' && !['success', 'neutral'].includes(String(j.conclusion)),
+        );
+        if (failed) return { state: 'failed', url: failed.html_url };
+        const running = jobs.find((j) => j.status !== 'completed');
+        return running ? { state: 'running', url: running.html_url } : { state: 'ok' };
+      }
+      return { state: 'none' };
+    },
+
+    releasePull(): Pull | undefined {
+      const owner = repo.split('/')[0];
+      const route = `repos/${repo}/pulls?state=open&base=${this.defaultBranch()}&head=${owner}:${base}&per_page=100`;
+      const found = list<PullRecord>(route)[0];
+      return (
+        found && {
+          id: found.number,
+          title: found.title,
+          url: found.html_url,
+          branch: found.head.ref,
+        }
+      );
+    },
+
     ensureReleasePull(): Pull {
       const target = this.defaultBranch();
-      const owner = repo.split('/')[0];
-      const find = () =>
-        list<PullRecord>(
-          `repos/${repo}/pulls?state=open&base=${target}&head=${owner}:${base}&per_page=100`,
-        )[0];
-      let found = find();
+      let found = this.releasePull();
       if (!found) {
         const url = gh(
           'pr',
@@ -889,14 +941,14 @@ export function create({
           '--body',
           `Release pull request of ${selection.milestone ?? base}. Merged by a person, never by the loop.`,
         );
-        found = find() ?? {
-          number: Number(url.split('/').pop()),
+        found = this.releasePull() ?? {
+          id: Number(url.split('/').pop()),
           title: `release: ${base}`,
-          html_url: url,
-          head: { ref: base, repo: { full_name: repo } },
+          url,
+          branch: base,
         };
       }
-      return { id: found.number, title: found.title, url: found.html_url, branch: found.head.ref };
+      return found;
     },
 
     hasRetroFeature(): boolean {
@@ -916,6 +968,24 @@ export function create({
         `repos/${repo}/issues/comments/${id[2]}`,
       );
       return comment.html_url === url && (comment.body ?? '').startsWith(marker);
+    },
+
+    retroComment(marker: string): string | undefined {
+      // one list for the Feature and the release pull request; the retro is younger than the milestone
+      const since = selection.milestone ? milestone().created_at : undefined;
+      return list<{
+        body: string | null;
+        html_url: string;
+        author_association: string;
+        user: { type?: string } | null;
+      }>(`repos/${repo}/issues/comments?per_page=100${since ? `&since=${since}` : ''}`)
+        .filter(
+          // anyone can write the marker
+          (c) =>
+            (c.body ?? '').startsWith(marker) &&
+            (TRUSTED.includes(c.author_association) || c.user?.type === 'Bot'),
+        )
+        .at(-1)?.html_url;
     },
 
     linkRetro(pull: Pull, url: string): void {

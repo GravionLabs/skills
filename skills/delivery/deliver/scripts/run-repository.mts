@@ -25,6 +25,7 @@ import { type Note, handoverNote, reviewNote } from './handover.mts';
 import { type BlockedReason, type Report, finishReport } from './program-status.mts';
 import { cargoTomlKeys } from './cargo-toml.mts';
 import { directoryPackagesPropsKeys } from './directory-packages-props.mts';
+import { releaseGate, retroMarker } from './gates/release-gate.mts';
 import { setStageGate } from './gates/stage.mts';
 import { goModKeys } from './go-mod.mts';
 import { pyprojectTomlKeys } from './pyproject-toml.mts';
@@ -1085,9 +1086,7 @@ export async function runRepository(context: RepositoryContext): Promise<Reposit
       if (session.timedOut) return { failed: 'session timeout' };
       if (session.exit !== 0) return { failed: `session failed (exit ${session.exit})` };
       const url = existsSync(file) ? JSON.parse(readFileSync(file, 'utf8'))?.url : undefined;
-      // as the script writes it: the name without the version of a released milestone
-      const marker = `<!-- retro: ${milestone.replace(/ \(\d+\.\d+\.\d+\)$/, '')} -->`;
-      if (typeof url !== 'string' || !tracker.isRetroComment(url, marker))
+      if (typeof url !== 'string' || !tracker.isRetroComment(url, retroMarker(milestone)))
         return { failed: 'no retro comment' };
       return { url };
     } catch (error) {
@@ -2135,60 +2134,72 @@ export async function runRepository(context: RepositoryContext): Promise<Reposit
           `milestone ${milestone} is not released: the triage took ${[...dropped].map((nr) => `#${nr}`).join(', ')} out of the run`,
           'warn',
         );
-      } else if (tracker.items().length === 0) {
-        // a pull request into the base that is not of this milestone would be lost with the release branch: a person decides
-        try {
-          for (const pull of tracker.foreignPulls()) {
+      } else {
+        const { evidence } = releaseGate({ tracker, milestone: milestone as string });
+        const { unread } = evidence;
+        if (unread.open) throw new Error(unread.open);
+        // an item that is open by now: no release; the publish state and a ready pull request hold nothing back here
+        if (evidence.open?.length === 0) {
+          // a pull request into the base that is not of this milestone would be lost with the release branch: a person decides
+          if (unread.pulls)
+            log(`open pull requests into ${BASE} not read: ${unread.pulls}`, 'warn');
+          for (const pull of evidence.pulls ?? []) {
             needsYou.push(
               `${pull.url} is open into ${BASE} and not in ${milestone}: merge, close or retarget it first`,
             );
           }
-        } catch (error) {
-          log(`open pull requests into ${BASE} not read: ${firstLine(error)}`, 'warn');
-        }
-        let release: Pull | undefined;
-        if (RETRO.enabled) {
-          try {
-            // without a Feature the retro comments on the release pull request: that one has to exist first
-            if (!tracker.hasRetroFeature()) release = tracker.ensureReleasePull();
-            retroResult = await retro(milestone as string, release);
-            if (retroResult.failed) retroFailed(retroResult.failed);
-            else if (retroResult.url) log(`retro: ${retroResult.url}`, 'info');
-          } catch (error) {
-            retroFailed(firstLine(error));
+          let release: Pull | undefined;
+          if (RETRO.enabled) {
+            try {
+              // once per release: the tracker says whether the retro comment exists
+              if (unread.retroDone) retroFailed(`retro comment not read: ${unread.retroDone}`);
+              else if (evidence.retroDone) {
+                retroResult = { url: evidence.retro };
+                log(`retro: already posted, ${evidence.retro}`, 'info');
+              } else {
+                // without a Feature the retro comments on the release pull request: that one has to exist first
+                if (!tracker.hasRetroFeature()) release = tracker.ensureReleasePull();
+                retroResult = await retro(milestone as string, release);
+                if (retroResult.failed) retroFailed(retroResult.failed);
+                else if (retroResult.url) log(`retro: ${retroResult.url}`, 'info');
+              }
+            } catch (error) {
+              retroFailed(firstLine(error));
+            }
+            await seeStop();
           }
-          await seeStop();
-        }
-        // a stop request during the retro ends the run: the next run opens the release pull request
-        if (signal.stopped && !release) throw new Error('stopped');
-        release ??= tracker.ensureReleasePull();
-        if (retroResult.url) {
-          try {
-            tracker.linkRetro(release, retroResult.url);
-          } catch (error) {
-            retroFailed(`release pull request body not updated: ${firstLine(error)}`);
+          // a stop request during the retro ends the run: the next run opens the release pull request
+          if (signal.stopped && !release) throw new Error('stopped');
+          release ??= tracker.ensureReleasePull();
+          if (retroResult.url) {
+            try {
+              tracker.linkRetro(release, retroResult.url);
+            } catch (error) {
+              retroFailed(`release pull request body not updated: ${firstLine(error)}`);
+            }
           }
-        }
-        releaseUrl = release.url;
-        log(`release pull request: ${release.url} (never merged by the loop)`, 'info');
-        emit('step.finished', {
-          task: 'release',
-          step: { name: 'release-pr', text: 'release pull request' },
-          links: [{ rel: 'pull-request', url: release.url, title: release.title }],
-        });
-        for (const test of tracker.releaseTests()) {
-          needsYou.push(`#${test.id} ${test.title}`);
-          emit(
-            'attention',
-            {
-              id: `release-test-${test.id}`,
-              reason: 'deliver.release-test',
-              text: `#${test.id} release test is open: a person tests the release candidate`,
-              needsYou: true,
-              links: [{ rel: 'issue', url: test.url }],
-            },
-            'warning',
-          );
+          releaseUrl = release.url;
+          log(`release pull request: ${release.url} (never merged by the loop)`, 'info');
+          emit('step.finished', {
+            task: 'release',
+            step: { name: 'release-pr', text: 'release pull request' },
+            links: [{ rel: 'pull-request', url: release.url, title: release.title }],
+          });
+          if (unread.releaseTests) throw new Error(unread.releaseTests);
+          for (const test of evidence.releaseTests ?? []) {
+            needsYou.push(`#${test.id} ${test.title}`);
+            emit(
+              'attention',
+              {
+                id: `release-test-${test.id}`,
+                reason: 'deliver.release-test',
+                text: `#${test.id} release test is open: a person tests the release candidate`,
+                needsYou: true,
+                links: [{ rel: 'issue', url: test.url }],
+              },
+              'warning',
+            );
+          }
         }
       }
     } catch (error) {

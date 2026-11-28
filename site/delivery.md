@@ -50,7 +50,7 @@ Settings: `deliver.base`, `deliver.tracker`, `deliver.harness`, `deliver.handove
 
 ## Release pull request
 
-With `--milestone`, once no PBI or Bug of the milestone is open, the loop opens the release pull request from the base into the default branch, prints its URL and never merges it. An open `release-test` issue is listed as needs you. Before the pull request the loop runs the [retro](guides/learn-from-runs.md#after-a-milestone) of the milestone and links its comment there; its ticked drafts become issues and [lessons](guides/learn-from-runs.md#lessons). `github-release` cuts `release/next` and finishes the release ([release guide](guides/release.md)); the release job closes the shipped milestone after the tag, and `finish` checks the publish run (`/github-milestone close M<nnn>` repairs a milestone the job left open).
+With `--milestone`, once no PBI or Bug of the milestone is open, the loop opens the release pull request from the base into the default branch, prints its URL and never merges it. An open `release-test` issue is listed as needs you. Before the pull request the loop runs the [retro](guides/learn-from-runs.md#after-a-milestone) of the milestone (once per release: not while its comment exists) and links its comment there; its ticked drafts become issues and [lessons](guides/learn-from-runs.md#lessons). `github-release` cuts `release/next` and finishes the release ([release guide](guides/release.md)); the release job closes the shipped milestone after the tag, and `finish` checks the publish run (`/github-milestone close M<nnn>` repairs a milestone the job left open).
 
 ## Progress events
 
