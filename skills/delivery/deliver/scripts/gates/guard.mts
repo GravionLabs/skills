@@ -270,12 +270,40 @@ type ProjectConfig = {
 };
 const CONFIG_FILE = '.agents/config.json';
 
+/** The top of the git checkout of the working directory, else the working directory. */
+export function checkoutRoot(): string {
+  try {
+    return execFileSync('git', ['rev-parse', '--show-toplevel'], {
+      encoding: 'utf8',
+      stdio: ['ignore', 'pipe', 'ignore'],
+    }).trim();
+  } catch {
+    // not a git checkout
+    return process.cwd();
+  }
+}
+
 /**
- * The CLI: loads the tracker (`--tracker`, default github), reads `deliver.protectedPaths` and `deliver.mergeRisk` of
- * the project config at the merge base of the pull request and runs `guardCheck` on its current head. The reviewed
- * pull request never chooses its own guard: a config it changes counts from the next pull request on.
+ * Throws a `UsageError` when `DELIVER_TRACKER_DIR` (tests only) points into the repository at `root`: as in the loop,
+ * a tracker from inside the repository would let a merged pull request decide what the gate runs.
  */
-export async function guardCli(args: string[]): Promise<GateResult> {
+export function trackerDirOutside(root: string): void {
+  const trackerDir = process.env.DELIVER_TRACKER_DIR;
+  if (!trackerDir) return;
+  const real = (file: string) => {
+    try {
+      return realpathSync.native(path.resolve(file));
+    } catch {
+      return path.resolve(file);
+    }
+  };
+  const rel = path.relative(real(root), real(trackerDir));
+  if (!path.isAbsolute(rel) && rel !== '..' && !rel.startsWith(`..${path.sep}`))
+    throw new UsageError('DELIVER_TRACKER_DIR must not be inside the repository');
+}
+
+/** The arguments of the guard CLI; a wrong one throws a `UsageError`. */
+export function guardArgs(args: string[]) {
   const { values, positionals } = parseArgs({
     args,
     allowPositionals: true,
@@ -298,31 +326,19 @@ export async function guardCli(args: string[]): Promise<GateResult> {
     level(values.risk, '--risk') ??
     (values['result-file'] === undefined ? undefined : riskOf(values['result-file']));
   level(values['merge-risk'], '--merge-risk');
-  const trackerName = values.tracker ?? 'github';
+  return { pr, values, risk, trackerName: values.tracker ?? 'github' };
+}
 
-  let root = process.cwd();
-  try {
-    root = execFileSync('git', ['rev-parse', '--show-toplevel'], {
-      encoding: 'utf8',
-      stdio: ['ignore', 'pipe', 'ignore'],
-    }).trim();
-  } catch {
-    // not a git checkout
-  }
-  // as in the loop: a tracker from inside the repository would let a merged pull request decide what the guard runs
-  const trackerDir = process.env.DELIVER_TRACKER_DIR;
-  if (trackerDir) {
-    const real = (file: string) => {
-      try {
-        return realpathSync.native(path.resolve(file));
-      } catch {
-        return path.resolve(file);
-      }
-    };
-    const rel = path.relative(real(root), real(trackerDir));
-    if (!path.isAbsolute(rel) && rel !== '..' && !rel.startsWith(`..${path.sep}`))
-      throw new UsageError('DELIVER_TRACKER_DIR must not be inside the repository');
-  }
+/**
+ * The CLI: loads the tracker (`--tracker`, default github), reads `deliver.protectedPaths` and `deliver.mergeRisk` of
+ * the project config at the merge base of the pull request and runs `guardCheck` on its current head. The reviewed
+ * pull request never chooses its own guard: a config it changes counts from the next pull request on.
+ */
+export async function guardCli(args: string[]): Promise<GateResult> {
+  const { pr, values, risk, trackerName } = guardArgs(args);
+
+  const root = checkoutRoot();
+  trackerDirOutside(root);
 
   let tracker;
   try {

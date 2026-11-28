@@ -3,14 +3,17 @@ import { execFileSync } from 'node:child_process';
 import { existsSync } from 'node:fs';
 import { LABEL_PREFIX, labelOf } from '../stage.mts';
 import { type ReviewMark, type Verdict, markBody, parseMark } from '../review.mts';
-import { DEFERRED, HOLD_LABELS, blockReason } from '../objective.mts';
+import { DEFERRED, HOLD_LABELS, blockReason, isKind, objectiveLeaves } from '../objective.mts';
 import { syncLabels } from '../sync-labels.mts';
 import type {
   BaseState,
   Gate,
   Item,
+  Leaf,
   ObjectiveReader,
+  PublishState,
   Pull,
+  Selection,
   Subject,
   TrackedIssue,
   Tracker,
@@ -32,7 +35,7 @@ type Issue = {
   user?: { type?: string };
   milestone?: { number: number } | null;
 };
-type Milestone = { number: number; title: string; html_url: string };
+type Milestone = { number: number; title: string; html_url: string; created_at?: string };
 type RestIssue = {
   number: number;
   title: string;
@@ -42,6 +45,7 @@ type RestIssue = {
   html_url: string;
   repository_url: string;
   body: string | null;
+  author_association?: string;
   labels: { name: string }[];
   milestone?: { title: string } | null;
 };
@@ -54,6 +58,14 @@ type PullRecord = {
   body?: string | null;
 };
 type Check = { name: string; bucket: string };
+type WorkflowRun = {
+  id: number;
+  workflow_id: number;
+  event: string;
+  status: string;
+  html_url: string;
+};
+type Job = { name: string; status: string; conclusion: string | null; html_url: string };
 
 /**
  * The verdict of the checks of a pull request. The loop decides this itself and does not rely on the
@@ -193,6 +205,11 @@ const tracked = (issue: RestIssue): TrackedIssue => ({
   ...(issue.milestone && { milestone: issue.milestone.title }),
 });
 
+/** A job that releases or publishes, by its name (as `github-release` finds the failed release run). */
+const PUBLISH_JOB = /release|publish/i;
+/** How many runs of the default branch are searched for one with a publish job. */
+const PUBLISH_RUNS = 10;
+
 /** The body with exactly one line `Retro: <url>`: an earlier one is replaced, else it is appended. */
 export function withRetroLine(body: string | null | undefined, url: string): string {
   const line = `Retro: ${url}`;
@@ -305,20 +322,23 @@ export function create({
     (JSON.parse(gh('api', route, '--paginate', '--slurp')) as T[][]).flat();
   const repo = named ?? gh('repo', 'view', '--json', 'nameWithOwner', '-q', '.nameWithOwner');
 
+  const findMilestone = (title: string): Milestone | undefined =>
+    list<Milestone>(`repos/${repo}/milestones?state=all&per_page=100`).find(
+      (m) => m.title === title || m.title.startsWith(`${title} `),
+    );
   let milestoneCache: Milestone | undefined;
   const milestone = (): Milestone => {
     if (milestoneCache) return milestoneCache;
-    const found = list<Milestone>(`repos/${repo}/milestones?state=all&per_page=100`).find(
-      (m) => m.title === selection.milestone || m.title.startsWith(`${selection.milestone} `),
-    );
+    const found = findMilestone(String(selection.milestone));
     if (!found) throw new Error(`milestone ${selection.milestone} not found in ${repo}`);
     milestoneCache = found;
     return found;
   };
 
-  const authors = new Map<number, string>();
+  // the author association of every issue read as work, by `owner/repo#n`
+  const authors = new Map<string, string>();
   const toItem = (issue: Issue): Item => {
-    authors.set(issue.number, issue.author_association);
+    authors.set(`${repo}#${issue.number}`, issue.author_association);
     return {
       id: issue.number,
       title: issue.title,
@@ -335,22 +355,22 @@ export function create({
     ).filter((i) => i.state === 'open' && i.repository_url.endsWith(`/repos/${repo}`) && isWork(i));
 
   /** The items of a milestone or a Feature selection, by number; an issue below a Feature names it. */
-  const selected = (): Item[] => {
+  const selected = ({ feature: only, skipDeferred }: Selection, of = milestone): Item[] => {
     const found = new Map<number, Item>();
     const add = (issue: Issue, feature?: number) => {
       if (!found.get(issue.number)?.feature)
         found.set(issue.number, { ...toItem(issue), ...(feature && { feature }) });
     };
-    if (selection.feature) {
-      const feature = Number(selection.feature);
+    if (only) {
+      const feature = Number(only);
       for (const issue of workBelow(feature)) add(issue, feature);
     } else {
       const open = list<Issue>(
-        `repos/${repo}/issues?milestone=${milestone().number}&state=open&per_page=100`,
+        `repos/${repo}/issues?milestone=${of().number}&state=open&per_page=100`,
       );
       for (const issue of open.filter(isWork)) add(issue);
       const deferred = (i: Issue) =>
-        !!selection.skipDeferred && i.labels.some((l) => l.name.toLowerCase() === DEFERRED);
+        !!skipDeferred && i.labels.some((l) => l.name.toLowerCase() === DEFERRED);
       for (const feature of open.filter((i) => !i.pull_request && isFeature(i) && !deferred(i)))
         for (const issue of workBelow(feature.number)) add(issue, feature.number);
     }
@@ -402,7 +422,12 @@ export function create({
     },
     subIssues: (ref) =>
       list<RestIssue>(`repos/${ref.repo}/issues/${ref.number}/sub_issues?per_page=100`).map(
-        tracked,
+        (issue) => {
+          const read = tracked(issue);
+          if (issue.author_association)
+            authors.set(`${read.repo}#${read.number}`, issue.author_association);
+          return read;
+        },
       ),
     milestones: (name) =>
       list<{ title: string; state: string }>(`repos/${name}/milestones?state=all&per_page=100`).map(
@@ -498,7 +523,28 @@ export function create({
             .map(toItem),
         );
       }
-      return withBaseBugs(selected());
+      return withBaseBugs(selected(selection));
+    },
+
+    leaves(ref: string): Leaf[] | undefined {
+      const number = /^#?([1-9]\d*)$/.exec(ref)?.[1];
+      if (!number) {
+        const named = findMilestone(ref);
+        return named && selected({ milestone: ref }, () => named);
+      }
+      const issue = found<Issue>(`repos/${repo}/issues/${number}`);
+      if (!issue || issue.pull_request) return undefined;
+      if (isFeature(issue)) return selected({ feature: number });
+      if (!isKind(issue, 'epic') && !isKind(issue, 'objective')) return undefined;
+      return objectiveLeaves(`${repo}#${number}`, reader).map(({ issue: leaf, held }) => ({
+        id: leaf.number,
+        title: leaf.title,
+        url: leaf.url,
+        labels: leaf.labels,
+        body: leaf.body,
+        repo: leaf.repo,
+        ...(held && { held }),
+      }));
     },
 
     itemSubject(item: Item): Subject {
@@ -590,13 +636,14 @@ export function create({
     waitReason(item: Item): string | undefined {
       const held = item.labels.find((name) => HOLD_LABELS.includes(name));
       if (held) return held;
-      const author = authors.get(item.id) ?? 'NONE';
+      const own = item.repo ?? repo;
+      const author = authors.get(`${own}#${item.id}`) ?? 'NONE';
       if (!trustAuthors && !TRUSTED.includes(author)) {
         return `author has no write access (${author.toLowerCase()}), --trust-authors delivers it`;
       }
       return blockReason(
-        { repo, number: item.id },
-        reader.blockers({ repo, number: item.id }),
+        { repo: own, number: item.id },
+        reader.blockers({ repo: own, number: item.id }),
         reader,
       );
     },
@@ -658,6 +705,21 @@ export function create({
           branch: found.head.ref,
         }
       );
+    },
+
+    pullRequest(id: number): { pull: Pull; base: string } {
+      const record = JSON.parse(gh('api', `repos/${repo}/pulls/${id}`)) as PullRecord & {
+        base: { ref: string };
+      };
+      return {
+        pull: {
+          id: record.number,
+          title: record.title,
+          url: record.html_url,
+          branch: record.head.ref,
+        },
+        base: record.base.ref,
+      };
     },
 
     gate(pull: Pull): Gate {
@@ -830,7 +892,7 @@ export function create({
     },
 
     defaultBranch(): string {
-      return gh('repo', 'view', '--json', 'defaultBranchRef', '-q', '.defaultBranchRef.name');
+      return gh('repo', 'view', repo, '--json', 'defaultBranchRef', '-q', '.defaultBranchRef.name');
     },
 
     releaseTests(): Item[] {
@@ -866,14 +928,52 @@ export function create({
         .map((p) => ({ id: p.number, title: p.title, url: p.html_url, branch: p.head.ref }));
     },
 
+    publishState(): PublishState {
+      const branch = encodeURIComponent(this.defaultBranch());
+      const runs = api<{ workflow_runs: WorkflowRun[] }>(
+        `repos/${repo}/actions/runs?branch=${branch}&per_page=50`,
+      )
+        .workflow_runs.filter((r) => r.event === 'push' || r.event === 'workflow_dispatch')
+        .slice(0, PUBLISH_RUNS);
+      // newer runs that are not completed and have no publish job yet: it starts after the jobs it needs
+      const early = new Map<number, string>();
+      for (const run of runs) {
+        const jobs = api<{ jobs: Job[] }>(
+          `repos/${repo}/actions/runs/${run.id}/jobs?per_page=100`,
+        ).jobs.filter((j) => PUBLISH_JOB.test(j.name) && j.conclusion !== 'skipped');
+        if (jobs.length === 0) {
+          if (run.status !== 'completed') early.set(run.workflow_id, run.html_url);
+          continue;
+        }
+        const next = early.get(run.workflow_id);
+        if (next) return { state: 'running', url: next };
+        const failed = jobs.find(
+          (j) => j.status === 'completed' && !['success', 'neutral'].includes(String(j.conclusion)),
+        );
+        if (failed) return { state: 'failed', url: failed.html_url };
+        const running = jobs.find((j) => j.status !== 'completed');
+        return running ? { state: 'running', url: running.html_url } : { state: 'ok' };
+      }
+      return { state: 'none' };
+    },
+
+    releasePull(): Pull | undefined {
+      const owner = repo.split('/')[0];
+      const route = `repos/${repo}/pulls?state=open&base=${this.defaultBranch()}&head=${owner}:${base}&per_page=100`;
+      const found = list<PullRecord>(route)[0];
+      return (
+        found && {
+          id: found.number,
+          title: found.title,
+          url: found.html_url,
+          branch: found.head.ref,
+        }
+      );
+    },
+
     ensureReleasePull(): Pull {
       const target = this.defaultBranch();
-      const owner = repo.split('/')[0];
-      const find = () =>
-        list<PullRecord>(
-          `repos/${repo}/pulls?state=open&base=${target}&head=${owner}:${base}&per_page=100`,
-        )[0];
-      let found = find();
+      let found = this.releasePull();
       if (!found) {
         const url = gh(
           'pr',
@@ -889,14 +989,14 @@ export function create({
           '--body',
           `Release pull request of ${selection.milestone ?? base}. Merged by a person, never by the loop.`,
         );
-        found = find() ?? {
-          number: Number(url.split('/').pop()),
+        found = this.releasePull() ?? {
+          id: Number(url.split('/').pop()),
           title: `release: ${base}`,
-          html_url: url,
-          head: { ref: base, repo: { full_name: repo } },
+          url,
+          branch: base,
         };
       }
-      return { id: found.number, title: found.title, url: found.html_url, branch: found.head.ref };
+      return found;
     },
 
     hasRetroFeature(): boolean {
@@ -916,6 +1016,24 @@ export function create({
         `repos/${repo}/issues/comments/${id[2]}`,
       );
       return comment.html_url === url && (comment.body ?? '').startsWith(marker);
+    },
+
+    retroComment(marker: string): string | undefined {
+      // one list for the Feature and the release pull request; the retro is younger than the milestone
+      const since = selection.milestone ? milestone().created_at : undefined;
+      return list<{
+        body: string | null;
+        html_url: string;
+        author_association: string;
+        user: { type?: string } | null;
+      }>(`repos/${repo}/issues/comments?per_page=100${since ? `&since=${since}` : ''}`)
+        .filter(
+          // anyone can write the marker
+          (c) =>
+            (c.body ?? '').startsWith(marker) &&
+            (TRUSTED.includes(c.author_association) || c.user?.type === 'Bot'),
+        )
+        .at(-1)?.html_url;
     },
 
     linkRetro(pull: Pull, url: string): void {
