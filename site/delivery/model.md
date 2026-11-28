@@ -162,7 +162,7 @@ How events travel is a [binding](https://gravionlabs.github.io/agent-events/docs
 - **Reading events:** poimen sets `AGENT_EVENTS_DIR` in its terminals and places each run by its `origin`. The app reads local runs, `poimen-server` reads the runs of a remote machine and relays them, and `poimen mcp` reads them for its tools; all follow the same rules ([runs](https://gravionlabs.github.io/poimen/guide/runs)).
 - **Remote machines:** their runs show in the app; the MCP run tools read only the computer the agent runs on ([remote machines](https://gravionlabs.github.io/poimen/guide/remote-machines)).
 - **MCP run tools:** `list_runs`, `get_events` and `wait_any` follow runs without polling; `start_shell` and `create_space` start loops, `request_grant` lets you confirm a plan once ([MCP server](https://gravionlabs.github.io/poimen/guide/mcp)).
-- **Lead runs:** an agent that leads a run records plan, members and decisions with `record_run`; a new session resumes it with `read_run`. The skill `poimen-lead` teaches an agent to lead workers; the loop does not use it.
+- **Lead runs:** an agent that leads a run records plan, members and decisions with `record_run`; a new session resumes it with `read_run`. The skill `host-poimen` holds the rules for leading workers; the loop does not use it.
 
 ## Next
 

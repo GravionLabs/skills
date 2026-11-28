@@ -65,7 +65,6 @@
         "./skills/delivery/host-orca",
         "./skills/delivery/host-poimen",
         "./skills/delivery/planner",
-        "./skills/delivery/poimen-lead",
         "./skills/delivery/retro",
         "./skills/delivery/roadmap",
         "./skills/delivery/skills-manage"
