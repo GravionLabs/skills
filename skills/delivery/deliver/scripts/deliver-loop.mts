@@ -401,6 +401,8 @@ async function objectiveRun(ref: string): Promise<number> {
     `run ${runId}: ${title}, base ${base}, up to ${PARALLEL} sessions per repository, ${MAX_SESSIONS} across them`,
     'dim',
   );
+  // one file for every repository of the run
+  log(`stop file: ${path.join(runDir, 'stop')}`, 'dim');
   const status = objectiveStatus(title, report);
   const stream = objectiveStream(events, ref);
   const runUnit = async (unit: Unit, unitRoot: string) => {
