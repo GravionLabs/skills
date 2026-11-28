@@ -20,6 +20,7 @@ import { createInterface } from 'node:readline';
 import type { tokenSource as makeSource } from './app-token.mts';
 import type { Origin } from './event-dir.mts';
 import { type Emit, reasonCode } from './events.mts';
+import { verifyVerdict } from './gates/verify-verdict.mts';
 import { type Note, handoverNote, reviewNote } from './handover.mts';
 import { type BlockedReason, type Report, finishReport } from './program-status.mts';
 import { cargoTomlKeys } from './cargo-toml.mts';
@@ -39,7 +40,6 @@ import {
   type Verdict,
   findingsLine,
   featureText,
-  parseVerdict,
   type retroSettings,
 } from './review.mts';
 import type { Tier } from './resolve-model.mts';
@@ -1006,9 +1006,11 @@ export async function runRepository(context: RepositoryContext): Promise<Reposit
         if (ran.reason) return { reason: ran.reason };
         if (ran.session.exit !== 0) problem = `session failed (exit ${ran.session.exit})`;
         else {
-          const verdict = existsSync(file) ? parseVerdict(readFileSync(file, 'utf8')) : undefined;
+          const content = existsSync(file) ? readFileSync(file, 'utf8') : undefined;
+          // the session reviewed `head`; the merge gate refuses a later push
+          const { verdict, reason } = verifyVerdict({ content, reviewedHead: head, prHead: head });
           if (verdict) return { verdict, file, head };
-          problem = existsSync(file) ? 'invalid verdict' : 'no verdict';
+          problem = reason;
         }
       } catch (error) {
         problem = firstLine(error);
