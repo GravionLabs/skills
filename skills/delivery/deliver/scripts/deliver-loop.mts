@@ -11,6 +11,7 @@ import { type Report, finishReport, programStatus } from './program-status.mts';
 import { HARNESSES } from './harness.mts';
 import { adoptLegacyEnv, unknownConfigKeys } from './legacy.mts';
 import { protectedList } from './protected-paths.mts';
+import { parseObjective, planObjective } from './objective.mts';
 import { RISK_LEVELS, type ReviewSettings, retroSettings, reviewSettings } from './review.mts';
 import { type HarnessName, readLayers } from './resolve-model.mts';
 import {
@@ -36,6 +37,7 @@ const parsed = (() => {
         milestone: { type: 'string' },
         feature: { type: 'string' },
         issues: { type: 'string' },
+        objective: { type: 'string' },
         base: { type: 'string' },
         tracker: { type: 'string' },
         harness: { type: 'string' },
@@ -57,7 +59,7 @@ const parsed = (() => {
     // an unknown option or a missing value: one line, no stack trace
     const message = (error as Error).message.split('\n')[0];
     console.error(
-      `deliver-loop: ${message}. Options: --milestone, --feature, --issues, --base, --tracker, --harness, --max, --model, --review-model, --review-harness, --session-minutes, --merge-minutes, --handover-minutes, --merge-risk, --dry-run, --allow-no-required-checks, --trust-authors, --no-retro.`,
+      `deliver-loop: ${message}. Options: --milestone, --feature, --issues, --objective, --base, --tracker, --harness, --max, --model, --review-model, --review-harness, --session-minutes, --merge-minutes, --handover-minutes, --merge-risk, --dry-run, --allow-no-required-checks, --trust-authors, --no-retro.`,
     );
     process.exit(1);
   }
@@ -70,9 +72,25 @@ const fail = (message: string, code: number): never => {
   process.exit(code);
 };
 
-if ([opt.milestone, opt.feature, opt.issues].filter((value) => value !== undefined).length !== 1)
-  fail('give exactly one of --milestone <M…>, --feature <nr> or --issues <nr,…>', 64);
+if (
+  [opt.milestone, opt.feature, opt.issues, opt.objective].filter((value) => value !== undefined)
+    .length !== 1
+)
+  fail(
+    'give exactly one of --milestone <M…>, --feature <nr>, --issues <nr,…> or --objective <owner>/<repo>#<nr>',
+    64,
+  );
 if (opt.milestone === '' || opt.issues === '') fail('--milestone and --issues need a value', 64);
+if (opt.objective !== undefined) {
+  try {
+    parseObjective(opt.objective);
+  } catch (error) {
+    fail((error as Error).message, 64);
+  }
+  // the run of an Objective is not built yet (ADR 0011, #1041): only its plan
+  if (!opt['dry-run'])
+    fail('--objective runs are not built yet: use --objective <owner>/<repo>#<nr> --dry-run', 64);
+}
 if (opt.feature !== undefined && !/^[1-9]\d*$/.test(opt.feature))
   fail('--feature needs the number of an issue', 64);
 const whole = (name: 'max' | 'session-minutes' | 'merge-minutes', least: number): number => {
@@ -263,6 +281,15 @@ const tracker = await loadTracker(opt.tracker ?? config.deliver?.tracker ?? 'git
   },
   log: (text) => log(text, 'warn'),
 }).catch((error) => fail(`tracker: ${firstLine(error)}`, 64));
+if (opt.objective !== undefined) {
+  // the plan reads only: the Objective's repositories in start order, with the wait reason of every item
+  try {
+    for (const line of planObjective(opt.objective, tracker)) console.log(line);
+  } catch (error) {
+    fail(`objective: ${firstLine(error)}`, 1);
+  }
+  process.exit(0);
+}
 const tokenSource = app ? makeSource(app, tracker.repo, SESSION_MINUTES * 60_000) : undefined;
 const result = await runRepository({
   root,

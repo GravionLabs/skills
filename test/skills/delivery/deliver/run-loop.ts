@@ -27,6 +27,8 @@ export type Result = {
 };
 
 export type Scenario = {
+  /** The repositories of an Objective, as `tracker/fake.mts` reads them (`--objective` runs). */
+  repositories?: Record<string, unknown>;
   items: {
     id: number;
     title: string;
@@ -168,11 +170,14 @@ export function loop(
         loopScript,
         '--tracker',
         'fake',
-        ...(options.milestone
-          ? ['--milestone', 'M001']
-          : options.feature
-            ? ['--feature', String(options.feature)]
-            : ['--issues', issues]),
+        // a test with `--objective` in its args names the selection itself
+        ...(options.args?.includes('--objective')
+          ? []
+          : options.milestone
+            ? ['--milestone', 'M001']
+            : options.feature
+              ? ['--feature', String(options.feature)]
+              : ['--issues', issues]),
         // no wait for handed-over pull requests unless a test asks for one
         ...(options.args?.includes('--handover-minutes') ? [] : ['--handover-minutes', '0']),
         ...(options.args ?? []),

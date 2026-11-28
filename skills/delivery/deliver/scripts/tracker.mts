@@ -89,6 +89,11 @@ export interface ObjectiveReader {
   /** Open and closed milestones. */
   milestones(repo: string): { title: string; closed: boolean }[];
   hasTag(repo: string, tag: string): boolean;
+  /** The native `blocked-by` links of the issue, of any repository, with their state. */
+  blockers(ref: {
+    repo: string;
+    number: number;
+  }): { repo: string; number: number; state: string }[];
 }
 
 export interface Tracker extends ObjectiveReader {
