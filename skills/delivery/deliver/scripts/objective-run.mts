@@ -6,17 +6,21 @@
 // repository that waits for a person (a hand-over, a release test, its release pull request) holds back only the
 // units that require it: the others go on. Before a repository ends, the Objective is read again and a new milestone
 // of its Features joins the frontier. The run ends when nothing runs and nothing else can start: what is left needs
-// you. It never merges a release pull request. Reads the Objective through the tracker (objective.mts).
+// you. It never merges a release pull request. Reads the Objective through the tracker (objective.mts). One events run
+// and a summary per repository report it (objective-report.mts); an Objective whose open Features are all deferred ends
+// `partly released`.
 
 import type { Checkouts } from './checkout.mts';
 import {
   type Objective,
   type Requirement,
   milestoneKey,
+  parseObjective,
   readObjective,
   requirementState,
   startOrder,
 } from './objective.mts';
+import { type Counts, type ObjectiveStream, sayRepositories } from './objective-report.mts';
 import type { RepositoryResult, Tone } from './run-repository.mts';
 import type { StopSignal } from './stop-signal.mts';
 import type { ObjectiveReader } from './tracker.mts';
@@ -45,14 +49,21 @@ export type ObjectiveRunContext = {
   signal: StopSignal;
   say: (line: string, tone?: Tone) => void;
   log: (line: string, tone?: Tone) => void;
+  /** The events of the run; the units write through views of it. */
+  events: ObjectiveStream;
+  /** Fields of `run.started`: `host` and `agent`. */
+  started: Record<string, unknown>;
+  /** The number of running and waiting repositories, after every step of the frontier. */
+  onCounts: (counts: Counts) => void;
 };
 
 export type ObjectiveResult = {
-  /** 0 done, 2 blocked (a unit ended blocked or with an error), 3 needs you, 5 harness failed, 130 stopped. */
+  /** 0 done (also partly released), 2 blocked (a unit ended blocked or with an error), 3 needs you, 5 harness failed, 130 stopped. */
   exitCode: number;
-  done: string[];
   waiting: string[];
   needsYou: string[];
+  /** Nothing is left to do, but deferred Features are open. */
+  partlyReleased: boolean;
 };
 
 export const unitName = (unit: Unit): string =>
@@ -109,6 +120,13 @@ type Repository = {
   active?: Promise<void>;
   /** Why no further unit of the repository starts in this run. */
   halted?: string;
+  /** The first pending unit waits for a requirement. */
+  blockedUpstream?: boolean;
+  merged: string[];
+  aside: string[];
+  /** The waiting issues of its worked units. */
+  waiting: string[];
+  needsYou: string[];
 };
 
 export async function runObjective(context: ObjectiveRunContext): Promise<ObjectiveResult> {
@@ -116,14 +134,77 @@ export async function runObjective(context: ObjectiveRunContext): Promise<Object
   let objective = readObjective(context.ref, reader);
   const repositories: Repository[] = startOrder(objective).map((name) => {
     const pending = unitsOf(objective, name);
-    return { name, pending, seen: new Set(pending.map(unitKey)) };
+    return {
+      name,
+      pending,
+      seen: new Set(pending.map(unitKey)),
+      merged: [],
+      aside: [],
+      waiting: [],
+      needsYou: [],
+    };
+  });
+  const { events } = context;
+  events.open();
+  const { title, url } = objective.objective;
+  events.emit('run.started', {
+    profiles: ['deliver@2'],
+    origin: events.open().origin,
+    ...context.started,
+    subject: {
+      kind: 'github.issue',
+      id: `${parseObjective(context.ref).repo}#${parseObjective(context.ref).number}`,
+      title: title || context.ref,
+      url,
+    },
   });
   log(
     `objective ${context.ref}: ${repositories.map((r) => `${r.name} (${r.pending.map((u) => u.milestone ?? `#${u.feature}`).join(', ') || 'no unit'})`).join(', ')}`,
     'info',
   );
-  const done: string[] = [];
   const needsYou: string[] = [];
+  /** The open `deliver.waiting-upstream` attentions, by unit key. */
+  const attentions = new Map<string, { text: string; needsYou: boolean }>();
+  const needs = (repo: Repository, unit: string, line: string): void => {
+    needsYou.push(`${unit}: ${line}`);
+    repo.needsYou.push(`${unit.slice(repo.name.length + 1)}: ${line}`);
+  };
+  const resolve = (unit: Unit): void => {
+    if (!attentions.delete(unitKey(unit))) return;
+    events.emit('attention.resolved', { id: `waiting-${unitKey(unit)}` }, 'neutral', unit.repo);
+  };
+  /** Raises the attention of a waiting unit; a changed one replaces the open one (readers ignore a repeated id). */
+  const raise = (unit: Unit, text: string, forYou: boolean): void => {
+    const open = attentions.get(unitKey(unit));
+    if (open?.text === text && open.needsYou === forYou) return;
+    resolve(unit);
+    attentions.set(unitKey(unit), { text, needsYou: forYou });
+    events.emit(
+      'attention',
+      {
+        id: `waiting-${unitKey(unit)}`,
+        reason: 'deliver.waiting-upstream',
+        text: text.slice(0, 1000),
+        needsYou: forYou,
+      },
+      forYou ? 'warning' : 'info',
+      unit.repo,
+    );
+  };
+  /** A repository that cannot be worked. */
+  const failed = (repo: Repository, unit: Unit, text: string): void => {
+    events.emit(
+      'attention',
+      {
+        id: `failed-${unitKey(unit)}`,
+        reason: 'deliver.error',
+        text: text.slice(0, 1000),
+        needsYou: true,
+      },
+      'warning',
+      repo.name,
+    );
+  };
   let blocked = false;
   let harnessFailed = false;
   let waiting: string[] = [];
@@ -162,6 +243,8 @@ export async function runObjective(context: ObjectiveRunContext): Promise<Object
       const checkout = await context.checkouts.checkout(repo.name);
       if ('needsYou' in checkout) {
         needsYou.push(checkout.needsYou);
+        repo.needsYou.push(checkout.needsYou);
+        failed(repo, unit, checkout.needsYou);
         repo.halted = 'checkout failed';
         blocked = true;
         return;
@@ -172,15 +255,18 @@ export async function runObjective(context: ObjectiveRunContext): Promise<Object
     try {
       result = await context.runUnit(unit, repo.root);
     } catch (error) {
-      needsYou.push(`${name}: ${firstLine(error)}`);
+      needs(repo, name, firstLine(error));
+      failed(repo, unit, `${name}: ${firstLine(error)}`);
       repo.halted = 'error';
       blocked = true;
       return;
     }
-    needsYou.push(...result.needsYou.map((line) => `${name}: ${line}`));
+    for (const line of result.needsYou) needs(repo, name, line);
+    repo.merged.push(...result.merged);
+    repo.aside.push(...[...result.aside].map(([nr, why]) => `#${nr} ${why}`));
+    repo.waiting.push(...result.waiting);
     const merged = `merged ${result.merged.length}`;
     if (result.exitCode === 0) {
-      done.push(`${name}: done, ${merged}`);
       log(`${name} done, ${merged}`, 'ok');
       return;
     }
@@ -193,7 +279,9 @@ export async function runObjective(context: ObjectiveRunContext): Promise<Object
     const status = result.status ?? `exit ${result.exitCode}`;
     repo.halted = `${name} ${status}`;
     if (result.exitCode !== 3) blocked = true;
-    if (!result.needsYou.length) needsYou.push(`${name}: ${status}, ${merged}`);
+    if (!result.needsYou.length) needs(repo, name, `${status}, ${merged}`);
+    // a run that ended before it started wrote no event of its own
+    if (!result.status) failed(repo, unit, `${name} ${status}`);
     log(`${name} ${status}, ${merged}: its dependents wait`, 'warn');
   }
 
@@ -209,13 +297,16 @@ export async function runObjective(context: ObjectiveRunContext): Promise<Object
         continue;
       }
       const reasons = waitsOf(unit);
+      repo.blockedUpstream = reasons.length > 0;
       if (reasons.length > 0) {
         const line = `${unitName(unit)}: ${reasons.join(', ')}`;
         waiting.push(line);
         if (shown.get(unitKey(unit)) !== line) log(`${line}, waits`, 'dim');
         shown.set(unitKey(unit), line);
+        raise(unit, line, attentions.get(unitKey(unit))?.needsYou ?? false);
         continue;
       }
+      resolve(unit);
       repo.pending.shift();
       log(`${unitName(unit)} starts`, 'info');
       repo.active = work(repo, unit).finally(() => {
@@ -223,7 +314,14 @@ export async function runObjective(context: ObjectiveRunContext): Promise<Object
       });
     }
     const active = repositories.flatMap((repo) => (repo.active ? [repo.active] : []));
+    context.onCounts(countsOf(repositories));
     if (active.length === 0) {
+      // only a person can move what still waits
+      for (const repo of repositories) {
+        const unit = repo.halted ? undefined : repo.pending[0];
+        const text = unit && attentions.get(unitKey(unit))?.text;
+        if (unit && text) raise(unit, text, true);
+      }
       // nothing runs: only a person can meet what is left (a release); the run waits for one at most `idlePolls`
       if (waiting.length === 0 || idle >= context.idlePolls) break;
       idle += 1;
@@ -232,28 +330,30 @@ export async function runObjective(context: ObjectiveRunContext): Promise<Object
   }
   await Promise.all(repositories.flatMap((repo) => (repo.active ? [repo.active] : [])));
 
-  // the units a halted repository did not start wait for it
+  context.onCounts(countsOf(repositories));
+
+  // the units a halted repository did not start wait for it; a repository's waits are listed in its section
   for (const repo of repositories) {
     if (!repo.halted || repo.halted === 'done') continue;
     for (const unit of repo.pending) waiting.push(`${unitName(unit)}: after ${repo.halted}`);
   }
   waiting = [...new Set(waiting)];
-  for (const line of waiting) if (!needsYou.includes(line)) needsYou.push(line);
+  for (const line of waiting) {
+    if (needsYou.includes(line)) continue;
+    needsYou.push(line);
+    const repo = repositories.find((r) => line.startsWith(`${r.name} `));
+    repo?.needsYou.push(line.slice(repo.name.length + 1));
+  }
 
-  say('');
-  say(`objective ${context.ref}`, 'bold');
-  say(
-    `done (${done.length}):${done.map((l) => `\n  ${l}`).join('')}`,
-    done.length ? 'ok' : undefined,
-  );
-  say(
-    `waiting (${waiting.length}):${waiting.map((l) => `\n  ${l}`).join('')}`,
-    waiting.length ? 'warn' : undefined,
-  );
-  say(
-    `needs you (${needsYou.length}):${needsYou.map((l) => `\n  ${l}`).join('')}`,
-    needsYou.length ? 'warn' : undefined,
-  );
+  // read once more: a Feature may have been closed or deferred during the run
+  let read = true;
+  try {
+    objective = readObjective(context.ref, reader);
+  } catch (error) {
+    read = false;
+    log(`objective ${context.ref} not read again: ${firstLine(error)}`, 'warn');
+  }
+  const open = objective.features.filter((feature) => feature.state === 'open');
   const exitCode = signal.stopped
     ? 130
     : harnessFailed
@@ -263,16 +363,70 @@ export async function runObjective(context: ObjectiveRunContext): Promise<Object
         : needsYou.length > 0
           ? 3
           : 0;
+  const partlyReleased =
+    read && exitCode === 0 && open.length > 0 && open.every((feature) => feature.deferred);
+
+  say('');
+  say(`objective ${context.ref}`, 'bold');
+  sayRepositories(
+    repositories.map((repo) => ({
+      repo: repo.name,
+      merged: repo.merged,
+      aside: repo.aside,
+      waiting: [
+        ...repo.waiting,
+        ...waiting
+          .filter((line) => line.startsWith(`${repo.name} `))
+          .map((line) => line.slice(repo.name.length + 1)),
+      ],
+      deferred: open
+        .filter((f) => f.deferred && f.repo.toLowerCase() === repo.name.toLowerCase())
+        .map((f) => `#${f.number} ${f.title}`),
+      needsYou: repo.needsYou,
+    })),
+    say,
+  );
+  const verdict =
+    exitCode === 0
+      ? partlyReleased
+        ? 'partly released'
+        : 'done'
+      : exitCode === 5
+        ? 'failed: the harness failed'
+        : exitCode === 2
+          ? 'blocked'
+          : exitCode === 3
+            ? 'needs you: nothing else can start'
+            : 'stopped';
   if (!signal.stopped)
     say(
-      exitCode === 0
-        ? 'done'
-        : exitCode === 5
-          ? 'failed: the harness failed'
-          : exitCode === 2
-            ? 'blocked'
-            : 'needs you: nothing else can start',
-      exitCode === 0 ? 'ok' : exitCode === 3 ? 'warn' : 'bad',
+      verdict,
+      exitCode === 0 && !partlyReleased ? 'ok' : exitCode === 2 || exitCode === 5 ? 'bad' : 'warn',
     );
-  return { exitCode, done, waiting, needsYou };
+  const count = (key: 'merged' | 'aside') =>
+    repositories.reduce((sum, repo) => sum + repo[key].length, 0);
+  events.emit(
+    'run.finished',
+    {
+      outcome: signal.stopped ? 'cancelled' : exitCode === 0 ? 'succeeded' : 'failed',
+      ...(signal.stopped || exitCode === 0
+        ? {}
+        : { reason: exitCode === 5 ? 'deliver.harness' : 'deliver.incomplete' }),
+      text: `${verdict}: merged ${count('merged')}, set aside ${count('aside')}, waiting ${waiting.length}${needsYou.length ? `, needs you ${needsYou.length}` : ''}`,
+    },
+    signal.stopped ? 'neutral' : exitCode === 0 ? 'success' : 'warning',
+  );
+  return { exitCode, waiting, needsYou, partlyReleased };
+}
+
+/** A repository runs a unit, waits (for a requirement or a person), or has nothing left. */
+function countsOf(repositories: Repository[]): Counts {
+  return {
+    running: repositories.filter((repo) => repo.active).length,
+    waiting: repositories.filter(
+      (repo) =>
+        !repo.active &&
+        (repo.halted ? repo.halted !== 'done' && repo.halted !== 'stopped' : repo.blockedUpstream),
+    ).length,
+  };
 }
