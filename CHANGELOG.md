@@ -5,6 +5,33 @@ Versioning follows [Semantic Versioning](https://semver.org/).
 
 ---
 
+## [6.1.0] — 2026-11-28
+
+### Documentation
+- The Objective mode of deliver-loop in the skill, references and site (#1130) (#1178)
+- **adr**: Delivery runs as host-neutral workflow skills next to the loop (#1139) (#1149)
+
+
+### Features
+- **deliver**: Read an Objective and evaluate its Requires across repositories (#1118) (#1133)
+- **deliver**: --objective with --dry-run prints the plan of an Objective (#1119) (#1134)
+- **deliver**: An Objective run clones the repositories it works on (#1120) (#1135)
+- **deliver**: Parallel sessions in one repository with deliver.parallel (#1121) (#1136)
+- **deliver-triage**: Role session that judges one attention case within fixed actions (#1126) (#1148)
+- **deliver**: Deliver.parallel counts per repository with default 1 (#1137) (#1150)
+- **deliver**: An Objective run works one frontier across its repositories (#1122) (#1138)
+- **deliver**: Run folder, report and events of an Objective run (#1124) (#1173)
+- **deliver**: Stop and resume an Objective run (#1125) (#1175)
+- **deliver**: The loop starts deliver-triage on an attention event and applies its result (#1127) (#1176)
+- **deliver**: Report open pull requests of other milestones before the release gate (#1128) (#1177)
+- **deliver**: One GitHub App token per repository of an Objective run (#1123) (#1172)
+- Reference host-verbs.md names the host verbs a workflow skill uses (#1167) (#1174)
+
+
+### Refactoring
+- **deliver**: The milestone loop runs as a module per repository (#1117) (#1131)
+
+
 ## [6.0.1] — 2026-11-28
 
 ### Documentation
