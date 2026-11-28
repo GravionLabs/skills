@@ -18,7 +18,7 @@ Input: `/deliver-review <nr> --base <base> --pr <url> [--issue-file <path>] [--f
 3. Review the diff with `code-review` (its steps, `## Blocking` and `## Spec`): blocking findings, unmet acceptance criteria, and unrequested behavior (behavior of the diff that no criterion asks for; a note, not blocking). Then the two further sources:
    - **Feature** (with `--feature-file`): a diff that contradicts a Feature criterion or does what its Out of scope excludes is a blocking finding that quotes the line. Feature criteria the issue does not claim are never `unmet`; a part of the Feature the diff does not touch is no finding.
    - **Rubric** (only when the diff changes UI files, `*.html`, component styles such as `*.css` or `*.scss`, `*.tsx`, `*.vue`, and the repository has `docs/STYLEGUIDE.md`): apply its review rubric, the first of `docs/styleguide/ux-review-rubric.md`, the base guide's rubric of an `Extends:` line (`code-review` `references/ux-review.md`), a review rubric section of `docs/STYLEGUIDE.md`. A rule of the rubric or the guide that the diff violates is a blocking finding that quotes the rule and names its file; here this replaces the severity of `ux-review.md`. A rule listed under `## Deviations`, or a finding without a rule to quote, is no violation (a note). No rubric found: a note. Without a UI file or without `docs/STYLEGUIDE.md` there are no rubric findings.
-4. Write the verdict as JSON to the file in `DELIVER_REVIEW_FILE`; without that variable print it.
+4. Write the verdict as JSON to the file in `DELIVER_REVIEW_FILE`, with `head` set to the output of `git rev-parse HEAD` (the commit you reviewed); without that variable print it.
 5. Post exactly one comment on the pull request (`gh pr comment <url> --body-file <file>`, the file outside the worktree): the verdict, the blocking findings, the unmet criteria and the notes. Every finding names its source: `PBI` (the issue's criteria, and correctness, security and test findings), `Feature` or `rubric`.
 
 ## Verdict
@@ -27,13 +27,15 @@ Input: `/deliver-review <nr> --base <base> --pr <url> [--issue-file <path>] [--f
 {
   "verdict": "changes",
   "findings": [{ "severity": "blocking", "file": "src/a.ts", "summary": "…" }],
-  "unmet": ["<acceptance criterion>"]
+  "unmet": ["<acceptance criterion>"],
+  "head": "<full sha of the reviewed commit>"
 }
 ```
 
 - `verdict`: `approve` or `changes`.
 - `findings`: only blocking findings; `severity` is always `blocking`, `file` and `summary` are not empty.
 - `unmet`: the text of each acceptance criterion that is not met.
+- `head`: the full sha of the commit you reviewed (`git rev-parse HEAD`). The merge gate (`merge-approved`) merges an `approve` only for this commit.
 - `approve` has both lists empty, `changes` at least one entry. Notes go into the comment only.
 
 The loop validates the file; an invalid or missing one gets one retry, then the issue is set aside.

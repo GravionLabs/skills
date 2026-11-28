@@ -59,6 +59,10 @@ export type Scenario = {
   filesFailures?: number;
   /** `.agents/config.json` by commit, as the guard gate reads it (missing: no such file; `throw`: a failing read). */
   projectConfig?: { base?: string; head?: string } | 'throw';
+  /** The base branch of `pullRequest()`, one entry per call, the last one repeats: a retarget while a gate runs. */
+  pullBases?: string[];
+  /** Every merge() call throws this message, as a tracker that refuses the merge. */
+  mergeRefused?: string;
   /** The head of the pull request from this compareRefs() call on (1-based): a push while the guard reads. */
   pushedAtCompare?: number;
   /** `package.json` contents by commit: `base` is the merge base, `head` the commit that is judged (missing: no such file). */
@@ -109,7 +113,7 @@ export type Scenario = {
   releaseOnPull?: string[];
 };
 
-export function create({ selection, repo: named }: TrackerContext): Tracker {
+export function create({ selection, repo: named, base }: TrackerContext): Tracker {
   const dir = String(process.env.FAKE_DIR);
   // a unit of an Objective run names its repository: its items come from `repositories`
   const repo = named ?? 'fake/repo';
@@ -149,6 +153,7 @@ export function create({ selection, repo: named }: TrackerContext): Tracker {
   let fileReads = 0;
   let compareCalls = 0;
   let baseCalls = 0;
+  let pullReads = 0;
   const itemOf = (pull: Pull) => pull.id - 100;
 
   const repository = (name: string) => scenario.repositories?.[name];
@@ -382,6 +387,19 @@ export function create({ selection, repo: named }: TrackerContext): Tracker {
         branch: `feat/${item.id}-fake`,
       };
     },
+    pullRequest(id: number): { pull: Pull; base: string } {
+      const reads = (pullReads += 1);
+      const bases = scenario.pullBases ?? ['release/next'];
+      return {
+        pull: {
+          id,
+          title: `fake #${id}`,
+          url: `https://example.test/pull/${id}`,
+          branch: `feat/${id}-fake`,
+        },
+        base: bases[Math.min(reads - 1, bases.length - 1)],
+      };
+    },
     gate(pull: Pull): Gate {
       if (merged.has(itemOf(pull))) return { state: 'merged' };
       if (scenario.gateBlockMs) {
@@ -401,7 +419,13 @@ export function create({ selection, repo: named }: TrackerContext): Tracker {
       return gate;
     },
     merge(pull: Pull, head: string): void {
+      if (scenario.mergeRefused) throw new Error(scenario.mergeRefused);
       record({ call: 'merge', pull: pull.id, head, repo: named });
+      // what a merge depends on beside the commit: the base branch of the tracker (method, required checks) and the title
+      appendFileSync(
+        path.join(dir, 'merges.jsonl'),
+        `${JSON.stringify({ pull: pull.id, head, base, title: pull.title })}\n`,
+      );
       merged.add(itemOf(pull));
     },
     dropBranch: (pull: Pull) => record({ call: 'dropBranch', pull: pull.id }),

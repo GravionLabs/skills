@@ -28,6 +28,7 @@ import {
   limits,
   readRunEvents,
 } from './gates/limits.mts';
+import { CLOSED, mergeApproved } from './gates/merge-approved.mts';
 import { mergedMeanwhile } from './gates/merged-meanwhile.mts';
 import { verifyVerdict } from './gates/verify-verdict.mts';
 import { type Note, handoverNote, reviewNote } from './handover.mts';
@@ -246,8 +247,6 @@ type Task = {
   delivered(): boolean;
   role?: 'review';
 };
-
-const CLOSED = 'pull request closed';
 
 // Harness failures (exit ≠ 0, no pull request, no timeout kill): wait 5, 15, 60 minutes, the third in a row ends the run.
 const HARNESS_WAITS_MINUTES = [5, 15, 60];
@@ -976,41 +975,42 @@ export async function runRepository(context: RepositoryContext): Promise<Reposit
     while (!signal.stopped) {
       const done = await mergeLock.run(
         async (): Promise<{ reason?: string; conflict?: true } | undefined> => {
-          let gate: Gate;
-          try {
-            gate = tracker.gate(pull);
-          } catch (error) {
-            // a tracker call that fails once (network, rate limit) is not a verdict on the pull request
-            problem = `tracker error: ${firstLine(error)}`;
-            gate = { state: 'pending', reported: false };
+          const attempt = await mergeApproved({
+            tracker,
+            pull,
+            sha: reviewed,
+            // the loop reaches the merge only with an approving verdict of `reviewed`: the review it ran, or the
+            // verdict it recorded on the pull request for that head
+            verdict: { result: 'pass', reason: 'approved', evidence: { head: reviewed } },
+            guard: async (head) => {
+              const handsOff = await guard(pull, head);
+              const reason = handsOff ?? held;
+              return reason === undefined
+                ? { result: 'pass', reason: 'guarded', evidence: {} }
+                : { result: 'owner', reason, evidence: {} };
+            },
+            // checks register a moment after the pull request opens: nothing reported is not green yet
+            unreportedOk: Date.now() - start > 90_000,
+            checkpoint: async () => {
+              await seeStop();
+              return signal.stopped
+                ? { result: 'retry', reason: 'stopped', evidence: { stopped: true } }
+                : undefined;
+            },
+          });
+          const { result, reason, evidence } = attempt;
+          if (evidence.stopped) return undefined;
+          if (result === 'pass') return {};
+          if (result === 'retry') {
+            if (evidence.error !== undefined) problem = reason;
+            return undefined;
           }
-          if (gate.state === 'merged') return {};
-          if (gate.state === 'closed') return { reason: CLOSED };
-          if (gate.state === 'conflict') return { reason: gate.detail, conflict: true };
-          if (gate.state === 'red') return { reason: `red: ${gate.detail}` };
-          // checks register a moment after the pull request opens: nothing reported is not green yet
-          if (gate.state === 'ready' && (gate.reported || Date.now() - start > 90_000)) {
-            await seeStop();
-            if (signal.stopped) return undefined;
-            // only the approved commit is merged: what was pushed after the review was seen by nobody
-            if (gate.head !== reviewed) return { reason: `pushed after the review${HANDS_OFF}` };
-            // the files of the commit that is merged, not of the one the session left: a later push is checked too.
-            // The merge names gate.head, so a push after this read is refused by the tracker.
-            const handsOff = await guard(pull, gate.head);
-            // the read of the files blocks too: a stop request that came in during it must be seen before the merge,
-            // and before a hand-over changes the label
-            await seeStop();
-            if (signal.stopped) return undefined;
-            if (handsOff) return { reason: handsOff };
-            if (held) return { reason: held };
-            try {
-              tracker.merge(pull, gate.head);
-              return {};
-            } catch (error) {
-              problem = `merge refused: ${(error as Error).message}`;
-            }
+          // a refused merge is tried again until the deadline
+          if (evidence.refused) {
+            problem = reason;
+            return undefined;
           }
-          return undefined;
+          return evidence.conflict ? { reason, conflict: true } : { reason };
         },
       );
       if (done) return done;
