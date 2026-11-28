@@ -42,7 +42,7 @@ Details: [what the loop refuses](guides/deliver.md#what-the-loop-refuses), [publ
 
 ## Role sessions
 
-The loop starts `/deliver` (implement), `/deliver-review` (review) and, with `--milestone`, `/retro --post`, each in a session of its own with the model of its role ([`models`](usage/project-config.md#models)). `deliver-triage`, a session for one attention event, is planned ([ADR 0011](https://github.com/GravionLabs/skills/blob/main/docs/adr/0011-objective-runs-in-three-layers-loop-code-deliver-triage-poimen-as-host.md)) and not built yet, and so is `deliver-loop --objective`.
+The loop starts `/deliver` (implement), `/deliver-review` (review) and, with `--milestone`, `/retro --post`, each in a session of its own with the model of its role ([`models`](usage/project-config.md#models)). `/deliver-triage --case <file> --result <file>` judges one attention event within fixed actions ([ADR 0011](https://github.com/GravionLabs/skills/blob/main/docs/adr/0011-objective-runs-in-three-layers-loop-code-deliver-triage-poimen-as-host.md)); the loop does not start it yet, and `deliver-loop --objective` does not run an Objective yet.
 
 Settings: `deliver.base`, `deliver.tracker`, `deliver.harness`, `deliver.handoverMinutes`, `deliver.mergeRisk`, `deliver.review`, `deliver.protectedPaths` ([project config](usage/project-config.md#deliver)). The tracker contract is `scripts/tracker.mts` in the skill, GitHub is `scripts/tracker/github.mts`; the agent CLIs are in `scripts/harness.mts`.
 
