@@ -251,6 +251,11 @@ export async function runObjective(context: ObjectiveRunContext): Promise<Object
       }
       repo.root = checkout.root;
     }
+    // stopped during the checkout: the unit does not start, so it changes nothing on the tracker or on origin
+    if (signal.stopped) {
+      repo.halted = 'stopped';
+      return;
+    }
     let result: RepositoryResult;
     try {
       result = await context.runUnit(unit, repo.root);

@@ -2,7 +2,7 @@
 // Objective (objective-run.mts). Each repository is cloned from DELIVER_REPOS_DIR; the fake tracker works the
 // milestone of a unit from `repositories`.
 import { execFileSync } from 'node:child_process';
-import { mkdirSync, readdirSync } from 'node:fs';
+import { mkdirSync, readdirSync, writeFileSync } from 'node:fs';
 import path from 'node:path';
 import { beforeAll, describe, expect, it } from 'vitest';
 import {
@@ -195,6 +195,59 @@ describe('deliver-loop --objective', () => {
     expect(out.status, out.stdout + out.stderr).toBe(0);
     expect(out.merges.map((m) => m.pull)).toEqual([124, 126]);
     expect(implementer(out.spans, 25)).toBeUndefined();
+  });
+
+  it('stops every repository with one stop file and resumes each where it stopped', async () => {
+    const scenario = objective({
+      'x/app': [{ work: [41] }],
+      'x/lib': [{ work: [42] }],
+      'x/cli': [{ work: [43] }],
+    });
+    let stopped = false;
+    // x/cli merges its issue, x/app hangs in its review, x/lib hangs in its implementer session
+    const first = await loop(
+      { sessionMs: 0, ...scenario, hangsOn: ['review:41', '42'] },
+      {
+        args: ['--objective', 'x/app#1', '--no-retro', '--max-sessions', '3'],
+        env: { DELIVER_REPOS_DIR: reposDir },
+        whenStdout: (stdout) => {
+          const file = /stop file: (.+)/.exec(stdout)?.[1];
+          const hanging = stdout.match(/\[x\/(app|lib)\] {3}working/g)?.length ?? 0;
+          if (stopped || !file || hanging < 2 || !stdout.includes('#43 merged:')) return;
+          stopped = true;
+          writeFileSync(file, '');
+        },
+      },
+    );
+    expect(first.status, first.stdout + first.stderr).toBe(130);
+    expect(first.merges.map((m) => m.pull)).toEqual([143]);
+    // no session of the run is alive
+    for (const { pid } of first.spans) expect(() => process.kill(pid, 0)).toThrow(/ESRCH/);
+    // each stopped item keeps the label of its stage
+    const stageOf = (id: number) => first.stages.filter((s) => s.id === id).at(-1)?.stage;
+    expect([stageOf(41), stageOf(42), stageOf(43)]).toEqual(['review', 'implementing', null]);
+
+    const second = await loop(
+      { sessionMs: 0, ...scenario },
+      {
+        args: ['--objective', 'x/app#1', '--no-retro', '--max-sessions', '3'],
+        env: { DELIVER_REPOS_DIR: reposDir },
+        resume: first.dir,
+      },
+    );
+    expect(second.status, second.stdout + second.stderr).toBe(0);
+    expect(second.merges.map((m) => m.pull).sort()).toEqual([141, 142, 143]);
+    expect(second.stdout).toContain('#41 resumes at the review');
+    // both runs together: #41 was built once, #43 is not touched again, #42 got one new implementer session
+    const started = (review: boolean) =>
+      second.spans
+        .filter((s) => s.review === review)
+        .map((s) => s.id)
+        .sort();
+    expect(started(false)).toEqual([41, 42, 42, 43]);
+    expect(started(true)).toEqual([41, 41, 42, 43]);
+    // every repository syncs its labels in both runs
+    expect(second.calls.filter((c) => c === 'syncStageLabels')).toHaveLength(6);
   });
 
   it('writes one run folder and one events run for two repositories', async () => {

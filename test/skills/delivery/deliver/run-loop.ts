@@ -59,6 +59,8 @@ export type Scenario = {
   twoPulls?: number[];
   lingers?: boolean;
   hangs?: boolean;
+  /** The sessions that never end: `<id>` (implementer) or `review:<id>`. */
+  hangsOn?: string[];
   plan?: { exit?: number; noPull?: boolean; hangs?: boolean }[];
   closeAfterCalls?: number;
   releaseTests?: number[];
@@ -82,6 +84,8 @@ export type Scenario = {
 /** A session of the fake harness: its process and when it started and ended (ms since the epoch). */
 export type Span = { id: number; pid: number; at: number; end: number; review: boolean };
 export type Outcome = {
+  /** The case directory: `resume` of a further run. */
+  dir: string;
   status: number | null;
   stdout: string;
   stderr: string;
@@ -148,12 +152,14 @@ export function loop(
     /** Sessions at once; default 1 (one issue after the other), `default`: no flag, the config or the loop decides. */
     parallel?: number | 'default';
     env?: Record<string, string>;
+    /** The case directory of an earlier run: this run finds its pull requests, stages and merges. */
+    resume?: string;
     whenStdout?: (out: string, stop: () => void) => void;
   } = {},
 ): Promise<Outcome> {
   count += 1;
-  const dir = path.join(root, `case-${count}`);
-  mkdirSync(dir);
+  const dir = options.resume ?? path.join(root, `case-${count}`);
+  if (!options.resume) mkdirSync(dir);
   writeFileSync(path.join(dir, 'scenario.json'), JSON.stringify(scenario));
   if (scenario.earlierPull)
     for (const item of scenario.items) writeFileSync(path.join(dir, `pr-${item.id}`), '');
@@ -227,6 +233,7 @@ export function loop(
           'none.jsonl',
       );
       done({
+        dir,
         status,
         stdout,
         stderr,

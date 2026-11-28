@@ -15,6 +15,12 @@ process.on('exit', () =>
     `${JSON.stringify({ pid: process.pid, at: Date.now() })}\n`,
   ),
 );
+// scenario.hangsOn: the sessions that never end, `<id>` (implementer) or `review:<id>`
+const hang = async () => {
+  console.log('working');
+  setInterval(() => {}, 1000);
+  await new Promise(() => {});
+};
 // scenario.sessionMs: every implementer and review session works this long before it answers
 const working = () => new Promise((done) => setTimeout(done, scenario.sessionMs ?? 0));
 if (command === 'deliver-review') {
@@ -34,6 +40,7 @@ if (command === 'deliver-review') {
       hasStyleguide: existsSync('docs/STYLEGUIDE.md'),
     })}\n`,
   );
+  if (scenario.hangsOn?.includes(`review:${id}`)) await hang();
   await working();
   const verdict = scenario.verdicts?.[nr] ?? 'approve';
   if (verdict === 'fail') process.exit(1);
@@ -96,6 +103,7 @@ appendFileSync(
 );
 // per session (by index): { exit, noPull, hangs } overrides the scenario-wide fields for that session
 const own = scenario.plan?.[index] ?? {};
+if (scenario.hangsOn?.includes(id)) await hang();
 if (own.hangs ?? scenario.hangs) {
   // a session that never ends: only the loop's stop request ends it
   console.log('working');

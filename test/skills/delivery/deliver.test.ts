@@ -240,6 +240,10 @@ describe('deliver loop', () => {
   it.skipIf(process.platform === 'win32').each([
     ['gate', { stopInGate: true }],
     ['the read of the changed files', { stopInChangedFiles: true }],
+    [
+      'the read of protected files',
+      { stopInChangedFiles: true, files: ['.github/x.yml'] as string[] },
+    ],
   ] as const)('does not merge when the stop request arrives during %s', async (_name, stop) => {
     // the fake tracker sends the stop request inside the call: no timing window in the test
     const out = await loop({
@@ -249,6 +253,8 @@ describe('deliver loop', () => {
     expect(out.status).toBe(130);
     expect(out.merges).toEqual([]);
     expect(out.results[0]).toMatchObject({ outcome: 'stopped' });
+    // the item keeps the label of its stage
+    expect(out.stages.map((s) => s.stage)).not.toContain('handover');
   });
 
   it('does not merge a pull request that got a protected path after the session ended', async () => {

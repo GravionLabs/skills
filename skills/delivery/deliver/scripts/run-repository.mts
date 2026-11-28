@@ -790,6 +790,9 @@ export async function runRepository(context: RepositoryContext): Promise<Reposit
     const sessionToken = tokenSource ? await tokenSource.current() : undefined;
     if (sessionToken?.renewed) log('app token minted for this session', 'dim');
     const token = sessionToken?.token ?? FIXED_TOKEN;
+    // a stop that came in during the mint: no process is started, nothing would end it
+    if (signal.stopped)
+      return { exit: null, turns: 0, costUsd: 0, peakContext: 0, model, tier: task.tier };
     const env: NodeJS.ProcessEnv = {
       // -p stops subagents 10 minutes after the last turn unless the ceiling is off
       CLAUDE_CODE_PRINT_BG_WAIT_CEILING_MS: '0',
@@ -1092,11 +1095,12 @@ export async function runRepository(context: RepositoryContext): Promise<Reposit
             // the files of the commit that is merged, not of the one the session left: a later push is checked too.
             // The merge names gate.head, so a push after this read is refused by the tracker.
             const handsOff = await guard(pull, gate.head);
-            if (handsOff) return { reason: handsOff };
-            if (held) return { reason: held };
-            // the read of the files blocks too: a stop request that came in during it must be seen before the merge
+            // the read of the files blocks too: a stop request that came in during it must be seen before the merge,
+            // and before a hand-over changes the label
             await seeStop();
             if (signal.stopped) return undefined;
+            if (handsOff) return { reason: handsOff };
+            if (held) return { reason: held };
             try {
               tracker.merge(pull, gate.head);
               return {};
@@ -1241,6 +1245,9 @@ export async function runRepository(context: RepositoryContext): Promise<Reposit
       // before the review: a session never runs on a pull request the guard hands over, because a checkout of
       // protected paths (agent settings, hooks) would run with the rights of the loop
       reason = morePulls(pull) ?? (await guard(pull));
+      await seeStop();
+      // a stopped item keeps its label: what the guard said is asked again by the next run
+      if (signal.stopped) reason = 'stopped';
       if (reason) {
         settle();
         break;
@@ -1859,7 +1866,8 @@ export async function runRepository(context: RepositoryContext): Promise<Reposit
           // a failing tracker or git call sets the issue aside, it does not end the run
           const work = deliver(item)
             .catch((error): { reason?: string; pull?: Pull } => ({
-              reason: `error: ${firstLine(error)}`,
+              // a call that the stop broke off (Ctrl-C also reaches `git`) sets nothing aside
+              reason: signal.stopped ? 'stopped' : `error: ${firstLine(error)}`,
             }))
             .then((result) => settle(item, result))
             .finally(() => running.delete(item.id));
