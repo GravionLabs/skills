@@ -693,7 +693,7 @@ describe('leafStep resumes from its events', () => {
         issue: 12,
         outcome: 'ended',
         gate: 'stage',
-        reason: `#12 is in stage review and run ${run} has no events of it: resume it, or remove the agent:review label to start it again`,
+        reason: `#12 is in stage review and run ${run} has no events of it: resume it with --resume, or remove the agent:review label to start it again`,
       },
     });
     expect(existsSync(path.join(eventsDir, `${run}.jsonl`))).toBe(false);

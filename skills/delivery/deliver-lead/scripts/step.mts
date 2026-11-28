@@ -1,7 +1,8 @@
 #!/usr/bin/env node
-// The step script of deliver-lead (ADR 0012): `node step.mts leaf <issue> --run <run> [--result <file>]` in the lead's
-// checkout prints the one action the lead executes next (leaf.mts), as one JSON line, exit 0. `--result` is a JSON
-// file with the outcome of the previous verb. Wrong arguments or config print a gate result (`usage`, exit 64), any
+// The step script of deliver-lead (ADR 0012): `node step.mts leaf <issue> --run <run> [--result <file> | --resume]` in
+// the lead's checkout prints the one action the lead executes next (leaf.mts), as one JSON line, exit 0. `--result` is
+// a JSON file with the outcome of the previous verb; `--resume` is the first call of a new lead for a run or an issue
+// another lead or the loop left. Wrong arguments or config print a gate result (`usage`, exit 64), any
 // other error `fail` (exit 1), as the gate scripts do (`emit` of `deliver/scripts/gates/result.mts`).
 import { readFileSync, realpathSync } from 'node:fs';
 import path from 'node:path';
@@ -14,7 +15,7 @@ import { readLayers } from '../../deliver/scripts/resolve-model.mts';
 import { loadTracker } from '../../deliver/scripts/tracker.mts';
 import { type Action, type ProjectConfig, type StepResult, leafStep } from './leaf.mts';
 
-const USAGE = 'usage: step.mts leaf <issue> --run <run> [--result <file>]';
+const USAGE = 'usage: step.mts leaf <issue> --run <run> [--result <file> | --resume]';
 
 function readResultFile(file: string): StepResult {
   let value: unknown;
@@ -33,10 +34,16 @@ export async function stepCli(args: string[]): Promise<Action> {
   const { values, positionals } = parseArgs({
     args,
     allowPositionals: true,
-    options: { run: { type: 'string' }, result: { type: 'string' } },
+    options: { run: { type: 'string' }, result: { type: 'string' }, resume: { type: 'boolean' } },
   });
   const [flow, number, ...rest] = positionals;
-  if (flow !== 'leaf' || !/^[1-9]\d*$/.test(number ?? '') || rest.length > 0 || !values.run)
+  if (
+    flow !== 'leaf' ||
+    !/^[1-9]\d*$/.test(number ?? '') ||
+    rest.length > 0 ||
+    !values.run ||
+    (values.resume && values.result !== undefined)
+  )
     throw new UsageError(USAGE);
   const root = checkoutRoot();
   trackerDirOutside(root);
@@ -63,6 +70,7 @@ export async function stepCli(args: string[]): Promise<Action> {
     issue: Number(number),
     run: values.run,
     result: values.result === undefined ? undefined : readResultFile(values.result),
+    resume: values.resume === true,
     cwd: root,
     config,
     layers: readLayers(root),

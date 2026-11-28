@@ -48,6 +48,7 @@ export async function runLead(
     scenario = {},
     max = 40,
     onWait,
+    prefix = '',
   }: {
     fakeDir: string;
     issue: number;
@@ -55,6 +56,8 @@ export async function runLead(
     max?: number;
     /** A wait without handles: the host lets `timeout` seconds pass. */
     onWait?: (timeout: number) => void;
+    /** The start of every handle: a second host (a resumed lead) names its workers apart from the first. */
+    prefix?: string;
   },
   /** Called after each action with the call that returns it again (a repeated call); a test checks it. */
   onRepeat?: (action: Action, again: () => Promise<Action>) => Promise<void>,
@@ -70,7 +73,7 @@ export async function runLead(
     await onRepeat?.(action, () => step(answered));
     if (action.do === 'end') return { actions, report: action.report };
     if (action.do === 'start-worker') {
-      const handle = `w${workers.size + 1}-${action.role}`;
+      const handle = `${prefix}w${workers.size + 1}-${action.role}`;
       const scripts = [scenario[action.role] ?? {}].flat();
       const script = scripts[Math.min(starts[action.role], scripts.length - 1)]!;
       starts[action.role] += 1;
@@ -83,7 +86,8 @@ export async function runLead(
         continue;
       }
       const handle = action.handles[0]!;
-      const worker = workers.get(handle)!;
+      const worker = workers.get(handle);
+      if (!worker) throw new Error(`wait-any for ${handle}, a worker this host never started`);
       if (worker.blocked) {
         if (worker.script.asksAgainAfter) onWait?.(worker.script.asksAgainAfter);
         result = { handle, state: 'blocked', question: worker.script.question ?? 'which option?' };

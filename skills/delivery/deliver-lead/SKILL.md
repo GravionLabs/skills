@@ -35,10 +35,10 @@ You are the lead of one run: the step script decides, you execute its actions th
    node -p "require(process.argv[1]).uuid7()" <deliver-skill-dir>/scripts/events.mts
    ```
 
-4. **Step.** Call the script in the checkout; the first call of a session has no `--result`:
+4. **Step.** Call the script in the checkout; the first call of a session has no `--result`, and passes `--resume` when the session resumes a run (`--run`) or the issue has an `agent:*` label:
 
    ```powershell
-   node <skill-dir>/scripts/step.mts leaf <issue> --run <run> [--result <file>]
+   node <skill-dir>/scripts/step.mts leaf <issue> --run <run> [--result <file> | --resume]
    ```
 
    It prints one JSON line, the action: `do` and its fields.
@@ -56,7 +56,7 @@ You are the lead of one run: the step script decides, you execute its actions th
 
 ## Gotchas
 
-- The state of a run is its agent-events (`AGENT_EVENTS_DIR`, else the per-user default), not this session. To resume, start with the same `--run`.
+- The state of a run is its agent-events (`AGENT_EVENTS_DIR`, else the per-user default) and the `agent:*` label, not this session. To resume, start with the same `--run` (`references/leaf.md` `## Resume`).
 - The script reads `.agents/config.json` of this checkout (`deliver.base`, `deliver.tracker`, `deliver.harness`).
 
 ## Report
