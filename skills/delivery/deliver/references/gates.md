@@ -22,5 +22,6 @@ A run counts as `fail` when it prints no JSON object, an unknown word, or a word
 
 ## Scripts
 
-| Script | Arguments | Checks |
-| :----- | :-------- | :----- |
+| Script           | Arguments                                                                                     | Checks                                                                                                                                                                                                            |
+| :--------------- | :-------------------------------------------------------------------------------------------- | :---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `verify-verdict` | `<file> <pr> [--head <sha>]`: `--head` is the reviewed commit, default `HEAD` of the checkout | `pass`: a valid `approve` and the pull request is still at the reviewed commit. `fail`: `changes` (evidence `findings`, `unmet`), no or an invalid verdict file, another head (evidence `reviewedHead`, `prHead`) |
