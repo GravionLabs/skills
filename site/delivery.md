@@ -56,4 +56,4 @@ The loop writes [agent-events](https://github.com/GravionLabs/agent-events) to `
 
 ## Parallel runs
 
-Run one loop per repository. Sessions of the loop each use their own worktree, so a hand-started `/deliver <nr>` on another issue in the same repository does not collide with it.
+Run one loop per repository. Within it, up to `deliver.parallel` sessions (default 2, `--parallel`) work the ready issues at once, each in its own worktree; merges stay one at a time ([project config](usage/project-config.md)). Every session uses its own worktree, so a hand-started `/deliver <nr>` on another issue in the same repository does not collide with the loop.

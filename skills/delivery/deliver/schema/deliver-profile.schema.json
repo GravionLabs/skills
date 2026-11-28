@@ -2,14 +2,20 @@
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "https://raw.githubusercontent.com/GravionLabs/skills/main/skills/delivery/deliver/schema/deliver-profile.schema.json",
   "title": "deliver profile v2 (deliver@2) of agent-events",
-  "description": "Applied in addition to the agent-events core schema (GravionLabs/agent-events, schema/v0/core.schema.json) to every line of a run that declares deliver@2. Owner: the skill deliver; writer: scripts/deliver-loop.mts. Profile types: deliver.merged (an issue is merged), deliver.handover (a pull request is handed to a person), deliver.aside (an issue is set aside), deliver.milestone.done (the end of a milestone run). Their fields sit under `deliver`; deliver.handover and deliver.aside also carry the core fields reason and text. Every reason of the run is prefixed deliver.. Tone: deliver.merged success; deliver.handover and deliver.aside warning; deliver.milestone.done success for a clean run, else warning.",
+  "description": "Applied in addition to the agent-events core schema (GravionLabs/agent-events, schema/v0/core.schema.json) to every line of a run that declares deliver@2. Owner: the skill deliver; writer: scripts/deliver-loop.mts. Profile types: deliver.merged (an issue is merged), deliver.handover (a pull request is handed to a person), deliver.aside (an issue is set aside), deliver.milestone.done (the end of a milestone run), deliver.sessions (the number of running role sessions changed). Their fields sit under `deliver`; deliver.handover and deliver.aside also carry the core fields reason and text. Every reason of the run is prefixed deliver.. Tone: deliver.merged success; deliver.handover and deliver.aside warning; deliver.milestone.done success for a clean run, else warning; deliver.sessions neutral.",
   "type": "object",
   "required": ["type"],
   "properties": {
     "type": {
       "if": { "pattern": "^deliver\\." },
       "then": {
-        "enum": ["deliver.merged", "deliver.handover", "deliver.aside", "deliver.milestone.done"]
+        "enum": [
+          "deliver.merged",
+          "deliver.handover",
+          "deliver.aside",
+          "deliver.milestone.done",
+          "deliver.sessions"
+        ]
       }
     },
     "reason": { "type": "string", "pattern": "^deliver\\.[a-z0-9.-]+$" }
@@ -56,6 +62,16 @@
           "deliver": { "$ref": "#/$defs/milestoneDone" }
         }
       }
+    },
+    {
+      "if": { "properties": { "type": { "const": "deliver.sessions" } } },
+      "then": {
+        "required": ["deliver"],
+        "properties": {
+          "tone": { "const": "neutral" },
+          "deliver": { "$ref": "#/$defs/sessions" }
+        }
+      }
     }
   ],
   "$defs": {
@@ -92,6 +108,15 @@
         "merged": { "$ref": "#/$defs/count" },
         "aside": { "$ref": "#/$defs/count" },
         "pr": { "$ref": "#/$defs/url" }
+      }
+    },
+    "sessions": {
+      "type": "object",
+      "required": ["repo", "running", "limit"],
+      "properties": {
+        "repo": { "$ref": "#/$defs/repo" },
+        "running": { "$ref": "#/$defs/count" },
+        "limit": { "type": "integer", "minimum": 1 }
       }
     }
   }

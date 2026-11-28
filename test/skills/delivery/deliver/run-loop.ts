@@ -74,7 +74,11 @@ export type Scenario = {
   retro?: 'post' | 'fail' | 'none' | 'hang';
   /** Only the first implementer session writes the risk level. */
   riskOnce?: boolean;
+  /** Every implementer and review session of the fake harness works this long. */
+  sessionMs?: number;
 };
+/** A session of the fake harness: its process and when it started and ended (ms since the epoch). */
+export type Span = { id: number; pid: number; at: number; end: number; review: boolean };
 export type Outcome = {
   status: number | null;
   stdout: string;
@@ -104,6 +108,8 @@ export type Outcome = {
     hasStyleguide: boolean;
   }[];
   results: Result[];
+  /** Every implementer and review session, in the order they started. */
+  spans: Span[];
   final?: Record<string, unknown>;
   events: { type: string; outcome?: string; reason?: string; needsYou?: boolean }[];
   log: string;
@@ -135,6 +141,8 @@ export function loop(
     milestone?: boolean;
     /** `--feature <nr>` instead of `--issues`. */
     feature?: number;
+    /** Sessions at once; default 1 (one issue after the other), `default`: no flag, the config or the loop decides. */
+    parallel?: number | 'default';
     env?: Record<string, string>;
     whenStdout?: (out: string, stop: () => void) => void;
   } = {},
@@ -180,6 +188,8 @@ export function loop(
               : ['--issues', issues]),
         // no wait for handed-over pull requests unless a test asks for one
         ...(options.args?.includes('--handover-minutes') ? [] : ['--handover-minutes', '0']),
+        // the cases are written for one issue after the other unless a test asks for parallel sessions
+        ...(options.parallel === 'default' ? [] : ['--parallel', String(options.parallel ?? 1)]),
         ...(options.args ?? []),
       ],
       { cwd: repo, env, stdio: ['ignore', 'pipe', 'pipe'] },
@@ -225,6 +235,7 @@ export function loop(
         sessions: lines(path.join(dir, 'sessions.jsonl')),
         reviews: lines(path.join(dir, 'reviews.jsonl')),
         retros: lines(path.join(dir, 'retros.jsonl')),
+        spans: spansOf(dir),
         results: results
           ? lines<Result | { issue?: undefined }>(results).filter(
               (r): r is Result => r.issue !== undefined,
@@ -238,6 +249,22 @@ export function loop(
       });
     });
   });
+}
+
+/** The sessions of a case with their end, by start time. */
+function spansOf(dir: string): Span[] {
+  const ends = new Map(
+    lines<{ pid: number; at: number }>(path.join(dir, 'ends.jsonl')).map((e) => [e.pid, e.at]),
+  );
+  const of = (file: string, review: boolean) =>
+    lines<{ id: number; pid: number; at: number }>(path.join(dir, file)).map(({ id, pid, at }) => ({
+      id,
+      pid,
+      at,
+      end: ends.get(pid) ?? Number.POSITIVE_INFINITY,
+      review,
+    }));
+  return [...of('sessions.jsonl', false), ...of('reviews.jsonl', true)].sort((a, b) => a.at - b.at);
 }
 
 export const READY = { state: 'ready', reported: true, head: 'abc123' };
