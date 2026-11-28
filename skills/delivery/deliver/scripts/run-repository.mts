@@ -1,7 +1,7 @@
 // The work of one repository in a deliver run: a fresh agent session per issue, a review session for its pull
 // request, merge. Up to `parallel` issues are worked at once, merges one at a time; the state is read from the tracker
 // whenever an issue ends. The run only remembers what it set aside. `deliver-loop.mts` parses the arguments and calls `runRepository` once.
-// Tracker: tracker.mts. Progress events: events.mts. Review settings and verdict: review.mts. Issue stage: stage.mts.
+// Tracker: tracker.mts. Progress events: events.mts. Review settings and verdict: review.mts. Issue stage: stage.mts, gates/stage.mts.
 // Model of each session: session-models.mts. Comments on the issue: handover.mts. Stop request: stop-signal.mts.
 // Parallel sessions and the merge lock: parallel.mts.
 import { execFileSync } from 'node:child_process';
@@ -20,10 +20,17 @@ import { createInterface } from 'node:readline';
 import type { tokenSource as makeSource } from './app-token.mts';
 import type { Origin } from './event-dir.mts';
 import { type Emit, reasonCode } from './events.mts';
+import { mergedMeanwhile } from './gates/merged-meanwhile.mts';
 import { verifyVerdict } from './gates/verify-verdict.mts';
 import { type Note, handoverNote, reviewNote } from './handover.mts';
 import { type BlockedReason, type Report, finishReport } from './program-status.mts';
 import { HANDS_OFF, guardCheck, readChangedFiles, riskOf } from './gates/guard.mts';
+import { cargoTomlKeys } from './cargo-toml.mts';
+import { directoryPackagesPropsKeys } from './directory-packages-props.mts';
+import { setStageGate } from './gates/stage.mts';
+import { goModKeys } from './go-mod.mts';
+import { pyprojectTomlKeys } from './pyproject-toml.mts';
+import { pnpmWorkspaceKeys } from './pnpm-workspace.mts';
 import type { Harness } from './harness.mts';
 import { MergeLocks, Slots } from './parallel.mts';
 import { killTree, launch, promptPath } from './process.mts';
@@ -468,11 +475,8 @@ export async function runRepository(context: RepositoryContext): Promise<Reposit
 
   /** Writes the stage of the issue after the event. A failing call is logged: the label never decides about the run. */
   function mark(item: Item, event: StageEvent): void {
-    try {
-      tracker.setStage(item, stageAfter(event));
-    } catch (error) {
-      log(`#${item.id} stage label not written: ${firstLine(error)}`, 'warn');
-    }
+    const { result, reason } = setStageGate(tracker, item, stageAfter(event));
+    if (result !== 'pass') log(`#${item.id} stage label not written: ${reason}`, 'warn');
   }
 
   /** Comments on the issue, once per marker. A failing call is logged, as for the label. */
@@ -587,6 +591,22 @@ export async function runRepository(context: RepositoryContext): Promise<Reposit
     delivered: () => Boolean(tracker.pullOf(item)),
   });
 
+  /**
+   * The argument that names what was merged into the base since the fork point of the worktree, empty when nothing
+   * was (ADR 0012, Parallelism). A list that cannot be made is logged: the session starts without it.
+   */
+  function mergedSince(item: Item, workspace: string): string {
+    try {
+      const gate = mergedMeanwhile({ workspace, base: BASE, issue: item.id, runDir });
+      const { file } = gate.evidence;
+      if (gate.result !== 'pass') log(`#${item.id} merged-meanwhile: ${gate.reason}`, 'warn');
+      else if (typeof file === 'string') return ` --merged-meanwhile-file ${promptPath(file)}`;
+    } catch (error) {
+      log(`#${item.id} merged-meanwhile: ${firstLine(error)}`, 'warn');
+    }
+    return '';
+  }
+
   /** `item`: the issue of the session; undefined for a session of the whole run (the retro). */
   async function startSession(
     item: Item | undefined,
@@ -615,6 +635,8 @@ export async function runRepository(context: RepositoryContext): Promise<Reposit
           model: task.model,
           tier: task.tier,
         };
+      // an implementer session; read now, as the base may have moved while it waited for its slot
+      if (item && task.output.name === 'DELIVER_RESULT_FILE') prompt += mergedSince(item, cwd);
       return await launchSession(label, prompt, cwd, file, task);
     } finally {
       free();
