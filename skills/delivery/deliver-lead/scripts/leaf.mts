@@ -31,6 +31,7 @@ import {
   readFileSync,
   readdirSync,
   rmSync,
+  statSync,
   writeFileSync,
 } from 'node:fs';
 import path from 'node:path';
@@ -216,7 +217,13 @@ type HandoverOptions = {
   planned?: boolean;
   /** Events that follow the hand-over event. */
   before?: () => void;
+  /** The head of the pull request the hand-over names; default the commit of the last review. */
+  head?: string;
+  /** Every open pull request of the issue the comment names (two open ones); default the one of the task. */
+  pulls?: string[];
 };
+/** Two open pull requests of one issue: a person closes the stale one (the reason of the loop). */
+const MORE_PULLS = 'more than one open pull request';
 
 /** Worker text in a reason: one line, no code span or marker, quoted, at most 300 characters. */
 const quoted = (text: string): string => {
@@ -276,21 +283,38 @@ function runFolder(cwd: string, run: string): string {
 /**
  * The writer of the run file; it continues `seq` after the events already there. A failed write throws: events are
  * the state. A torn last line (a writer that died mid-line) is closed first, so it never swallows the next event.
+ * Another writer of the same file (the loop around a driver, #1194) may append in between: whenever the file grew
+ * since the last write of this one, `seq` continues after the events it holds now.
  */
 export function eventWriter(dir: string, run: string, known: RunEvent[], now: () => number) {
   let seq = known.reduce((max, event) => Math.max(max, seqOf(event)), 0);
   mkdirSync(dir, { recursive: true });
   const file = path.join(dir, `${run}.jsonl`);
-  let checked = false;
+  const sizeOf = () => {
+    try {
+      return statSync(file).size;
+    } catch (error) {
+      if ((error as NodeJS.ErrnoException).code === 'ENOENT') return 0;
+      throw error;
+    }
+  };
+  let seen: number | undefined;
   return (type: string, body: Body = {}, tone = 'neutral') => {
-    if (!checked) {
-      checked = true;
+    if (sizeOf() !== seen) {
       const text = readIfThere(file);
       if (text && !text.endsWith('\n')) appendFileSync(file, '\n');
+      for (const line of (text ?? '').split('\n')) {
+        try {
+          seq = Math.max(seq, seqOf(JSON.parse(line) as RunEvent));
+        } catch {
+          // a torn or foreign line holds no seq
+        }
+      }
     }
     seq += 1;
     const event = { v: 1, seq, ts: new Date(now()).toISOString(), run, type, tone, ...body };
     appendFileSync(file, `${JSON.stringify(event)}\n`);
+    seen = sizeOf();
     known.push(event);
   };
 }
@@ -480,7 +504,7 @@ export async function leafStep(input: LeafInput): Promise<Action> {
   let pr = str(fieldsOf(reviews.at(-1), 'deliver').pr);
 
   /** Ends the task: written before `end` is returned. */
-  const end = (
+  const finish = (
     reason: string,
     { gate, word, merged = false }: { gate?: string; word?: string; merged?: boolean } = {},
   ): Action => {
@@ -503,6 +527,8 @@ export async function leafStep(input: LeafInput): Promise<Action> {
   /** The rest of a hand-over whose event is written: label and comment (both repeat safely), then the end. */
   const completeHandover = (event: RunEvent): Action => {
     const d = fieldsOf(event, 'deliver');
+    // a hand-over before any review names its pull request in the event only
+    pr ??= str(d.pr);
     const why = String(event.text ?? '');
     const notes: string[] = [];
     // a failing label or comment is reported, as in the loop: it never undoes the hand-over
@@ -512,7 +538,7 @@ export async function leafStep(input: LeafInput): Promise<Action> {
       reason: why,
       planned: event.type === 'deliver.handover',
       head: str(d.head) ?? 'none',
-      urls: pr ? [pr] : [],
+      urls: Array.isArray(d.pulls) ? d.pulls.map(String) : pr ? [pr] : [],
       risk: riskOf(resultFile),
     });
     try {
@@ -523,17 +549,30 @@ export async function leafStep(input: LeafInput): Promise<Action> {
       );
     }
     const reason = event.type === 'deliver.handover' ? `${why}${HANDS_OFF}` : why;
-    return end(notes.length ? `${reason}; ${notes.join('; ')}` : reason, {
+    const ended = finish(notes.length ? `${reason}; ${notes.join('; ')}` : reason, {
       gate: str(d.gate),
       word: str(d.result),
     });
+    // after the task, as the loop writes it: an attention of a finished task would close with it
+    emit(
+      'attention',
+      {
+        id: `aside-${issue}`,
+        reason: 'deliver.set-aside',
+        text: `#${issue} set aside: ${reason}`.slice(0, 1000),
+        needsYou: true,
+        links: pr ? [{ rel: 'pull-request', url: pr }] : [],
+      },
+      'warning',
+    );
+    return ended;
   };
 
   /** The hand-over of the loop: `deliver.handover` (a person merges) or `deliver.aside`, label, comment, end. */
   const handOver = (
     reason: string,
     gate?: string,
-    { word = 'owner', planned = false, before }: HandoverOptions = {},
+    { word = 'owner', planned = false, before, head, pulls }: HandoverOptions = {},
   ): Action => {
     const why = planned && reason.endsWith(HANDS_OFF) ? reason.slice(0, -HANDS_OFF.length) : reason;
     const code = reasonCode(why);
@@ -547,9 +586,10 @@ export async function leafStep(input: LeafInput): Promise<Action> {
           issue,
           ...(pr && { pr }),
           ...(code === 'deliver.needs-decision' && { hold: 'needs-decision' }),
-          head: str(fieldsOf(reviews.at(-1), 'deliver').head) ?? 'none',
+          head: head ?? str(fieldsOf(reviews.at(-1), 'deliver').head) ?? 'none',
+          ...(pulls && { pulls }),
           ...(gate && { gate }),
-          result: word,
+          ...(word && { result: word }),
         },
       },
       'warning',
@@ -560,7 +600,18 @@ export async function leafStep(input: LeafInput): Promise<Action> {
     return completeHandover(event);
   };
 
-  /** Seconds since an event was written, by the clock of the run. */
+  /**
+   * A task that ends without a merge is set aside as the loop sets it aside (#1194): `deliver.aside`, the
+   * `agent:handover` label, one hand-over comment and an attention, then the end.
+   */
+  const end = (
+    reason: string,
+    options: { gate?: string; word?: string; merged?: boolean } = {},
+  ): Action =>
+    options.merged
+      ? finish(reason, options)
+      : handOver(reason, options.gate, { word: options.word ?? '' });
+
   /** Seconds since an event was written, by the clock of the run; never from before the last resume. */
   const elapsed = (event: RunEvent): number => {
     const at = (e: RunEvent | undefined) => Date.parse(String(e?.ts ?? '')) || 0;
@@ -599,6 +650,22 @@ export async function leafStep(input: LeafInput): Promise<Action> {
     const cleared = gates.stage(tracker, item(), undefined);
     if (about('deliver.merged').length === 0) {
       const risk = riskOf(resultFile);
+      // a merge at risk high is told on the issue once, as the loop tells it (#1194)
+      if (risk === 'high') {
+        const head = str(fieldsOf(reviews.at(-1), 'deliver').head) ?? 'none';
+        const { marker, body } = handoverNote({
+          reason: 'high risk: merged',
+          planned: false,
+          head,
+          urls: pr ? [pr] : [],
+          risk,
+        });
+        try {
+          tracker.commentOnce(item(), marker, body);
+        } catch {
+          // a failing comment never undoes the merge
+        }
+      }
       emit('deliver.merged', { deliver: { repo, issue, pr, ...(risk && { risk }) } }, 'success');
     }
     return end(
@@ -608,7 +675,19 @@ export async function leafStep(input: LeafInput): Promise<Action> {
   };
 
   /** The same step once more (a timeout, a worker gone, a missing verdict): counted by the limits gate. */
-  const again = (started: RunEvent, kind: 'timeout' | 'review', text: string): Action => {
+  const again = async (
+    started: RunEvent,
+    kind: 'timeout' | 'review',
+    text: string,
+  ): Promise<Action> => {
+    let open: Pull | undefined;
+    try {
+      open = at.pullOf(item());
+    } catch {
+      // no pull request known: nothing is checked out but the base
+    }
+    const held = open && (await beforeSession(at, open));
+    if (held) return held;
     const d = fieldsOf(started, 'deliver');
     const attempt = (Number(d.attempt) || 1) + 1;
     const name = stepName(started);
@@ -659,18 +738,47 @@ export async function leafStep(input: LeafInput): Promise<Action> {
     return startFresh(found, reader);
   }
 
+  /**
+   * Before a worker starts on an open pull request, as the loop checks it (#1194): two open pull requests of the
+   * issue, or one that changes a protected path (agent settings, hooks: a checkout would run them with the rights of
+   * the executor), are handed over. The guard judges the paths only here; the risk is judged at the merge.
+   */
+  async function beforeSession(at: Tracker, pull: Pull): Promise<Action | undefined> {
+    let head = 'none';
+    try {
+      head = at.compareRefs(pull).head;
+    } catch {
+      head = 'unknown';
+    }
+    pr = pull.url;
+    const others = pull.others ?? [];
+    if (others.length)
+      return handOver(`${MORE_PULLS} (${[pull.url, ...others].join(', ')})${HANDS_OFF}`, 'guard', {
+        planned: true,
+        head,
+        pulls: [pull.url, ...others],
+      });
+    const gate = await gates.guard([String(pull.id), '--paths-only', '--tracker', at.name]);
+    if (gate.result === 'pass') return undefined;
+    if (gate.result === 'owner')
+      return handOver(gate.reason, 'guard', { planned: gate.reason.endsWith(HANDS_OFF), head });
+    return decide('guard', gate);
+  }
+
   /** Stage, merge base, what was merged meanwhile, then the implementer; `extra` goes into its `step.started`. */
-  function startFresh(
+  async function startFresh(
     found: { number: number; title: string; url: string; body: string; labels: string[] },
     reader: Tracker,
     extra: Body = {},
-  ): Action {
+  ): Promise<Action> {
     const level = issueType(found.labels, found.title);
     startRun(found);
     const staged = decide('stage', gates.stage(tracker, item(found.title), 'implementing'));
     if (staged) return staged;
     const base = gates.mergeBase(reader, issue, config);
-    return decide('merge-base', base) ?? startImplementer(found, level ?? 'pbi', base, extra);
+    return (
+      decide('merge-base', base) ?? (await startImplementer(found, level ?? 'pbi', base, extra))
+    );
   }
 
   /** The pull request of the issue that is merged, by anyone; unknown is not merged. */
@@ -765,7 +873,7 @@ export async function leafStep(input: LeafInput): Promise<Action> {
     stage: Stage | undefined,
   ): Promise<Action> {
     if (stage === 'handover')
-      return end(
+      return finish(
         `#${issue} is handed over (agent:handover): a person decides; remove the label to start it again`,
         { gate: 'stage' },
       );
@@ -868,14 +976,19 @@ export async function leafStep(input: LeafInput): Promise<Action> {
     return leafStep({ ...input, resume: false, result: undefined });
   }
 
-  function startImplementer(
+  async function startImplementer(
     found: { number: number; title: string; body: string },
     level: string,
     mergeBase: GateResult,
     extra: Body = {},
-  ): Action {
+  ): Promise<Action> {
     const base = String(mergeBase.evidence.base);
     backmerge = str(mergeBase.evidence.backmerge);
+    // a pull request an earlier run left open: checked before a session is paid for
+    const atBase = await (input.trackerAt ?? (() => tracker))(base);
+    const earlier = atBase.pullOf(item());
+    const held = earlier && (await beforeSession(atBase, earlier));
+    if (held) return held;
     const meanwhile = gates.mergedMeanwhile({ workspace: cwd, base, issue, runDir });
     const stop = decide('merged-meanwhile', meanwhile);
     if (stop) return stop;
@@ -902,6 +1015,30 @@ export async function leafStep(input: LeafInput): Promise<Action> {
       },
     });
     return startAction(issue, all.at(-1)!);
+  }
+
+  /**
+   * The mark of the review on the pull request, as the loop records it (`recordVerdict`): a later run of the loop or
+   * a lead resumes `agent:approved` or `agent:changes` from it. A failed write is no verdict: the step goes on.
+   */
+  function recordMark(head: string, verdict: Verdict['verdict'], evidence: Body): void {
+    const pull: Pull = {
+      id: Number(cd.number),
+      title: '',
+      url: String(cd.pr),
+      branch: String(cd.branch),
+    };
+    // the verdict the gate verified, never the file read again
+    const review: Verdict = {
+      verdict,
+      findings: Array.isArray(evidence.findings) ? (evidence.findings as Verdict['findings']) : [],
+      unmet: Array.isArray(evidence.unmet) ? (evidence.unmet as string[]) : [],
+    };
+    try {
+      at.recordVerdict(pull, review, head, riskOf(resultFile));
+    } catch {
+      // unreadable or not written: the next run reviews again
+    }
   }
 
   const started = implement ?? current;
@@ -951,7 +1088,7 @@ export async function leafStep(input: LeafInput): Promise<Action> {
     // a worker of the lead before the resume: it is gone, its handle is never waited for. What it left counts.
     const stale = seqOf(worker) < seqOf(resumed);
     /** The stale worker's step once more, counted as a timeout. */
-    const restartStale = (): Action => {
+    const restartStale = async (): Promise<Action> => {
       const limit = gates.limits({ events: all, issue, kind: 'timeout', repo });
       if (limit.result === 'pass')
         return again(
@@ -1048,6 +1185,7 @@ export async function leafStep(input: LeafInput): Promise<Action> {
       }
       text = `review round ${round}: ${verdict}`;
       recorded = roundRecord(verdict, head, String(cd.verdictFile), content!);
+      recordMark(head, verdict, checked.evidence);
     }
     emit(
       'step.finished',
@@ -1059,10 +1197,20 @@ export async function leafStep(input: LeafInput): Promise<Action> {
   if (role === 'implementer') {
     // the implementer finished: its pull request goes to review, a fix round to the next one
     const pull = at.pullOf(item());
+    // the implementer asked a question (the `needs-decision` label): an open pull request is no answer to it
+    if (tracker.needsDecision(item())) {
+      if (pull) pr = pull.url;
+      return handOver('needs-decision', undefined, {
+        word: '',
+        head: pull ? at.compareRefs(pull).head : 'none',
+      });
+    }
     if (!pull) return end('session ended without a pull request');
     pr = pull.url;
     const target = at.pullRequest(pull.id).base;
     if (target !== base) return end(`the pull request goes into ${target}, not into ${base}`);
+    const held = await beforeSession(at, pull);
+    if (held) return held;
     const stop = decide('stage', gates.stage(at, item(), 'review'));
     if (stop) return stop;
     const head = at.compareRefs(pull).head;
@@ -1120,6 +1268,10 @@ export async function leafStep(input: LeafInput): Promise<Action> {
       }
       const stop = decide('limits', limit) ?? decide('stage', gates.stage(at, item(), 'changes'));
       if (stop) return stop;
+      // the fix round works on the open pull request: checked before its session
+      const open = at.pullOf(item()) ?? { ...pull, branch: String(cd.branch) };
+      const held = await beforeSession(at, open);
+      if (held) return held;
       const n = Number(limit.evidence.count) + 1;
       const d = fieldsOf(started, 'deliver');
       // the risk of an earlier round never reaches guard or merge: without a new result the guard hands over

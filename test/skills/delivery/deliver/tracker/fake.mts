@@ -48,6 +48,8 @@ export type Scenario = {
     body?: string;
     blockedBy?: (number | string)[];
     feature?: number;
+    /** Labels of the item beside `pbi`: an `agent:*` stage an earlier run left. */
+    labels?: string[];
   }[];
   /** By `owner/repo`: what `readObjective` reads. A release is its milestone and its tag. */
   repositories?: Record<
@@ -322,7 +324,7 @@ export function create({ selection, repo: named, base }: TrackerContext): Tracke
           id: item.id,
           title: item.title,
           url: `https://example.test/issues/${item.id}`,
-          labels: ['pbi', ...stageLabels(item.id)],
+          labels: ['pbi', ...(item.labels ?? []), ...stageLabels(item.id)],
           body: item.body ?? 'body of the issue',
           ...(item.feature && { feature: item.feature }),
         }))

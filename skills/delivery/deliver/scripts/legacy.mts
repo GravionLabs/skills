@@ -11,6 +11,7 @@ export const CONFIG_KEYS = [
   'mergeRisk',
   'parallel',
   'maxSessions',
+  'leafFlow',
   'review',
   'retro',
 ];

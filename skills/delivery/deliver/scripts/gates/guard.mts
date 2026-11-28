@@ -312,16 +312,24 @@ export function guardArgs(args: string[]) {
       risk: { type: 'string' },
       'result-file': { type: 'string' },
       'merge-risk': { type: 'string' },
+      'paths-only': { type: 'boolean' },
       tracker: { type: 'string' },
     },
   });
   const [pr, ...rest] = positionals;
   if (!pr || rest.length > 0 || !/^[1-9]\d*$/.test(pr))
     throw new UsageError(
-      'usage: guard <pr> [--head <sha>] [--risk <level> | --result-file <file>] [--merge-risk <level>] [--tracker <name>]',
+      'usage: guard <pr> [--head <sha>] [--risk <level> | --result-file <file>] [--merge-risk <level>] [--paths-only] [--tracker <name>]',
     );
   if (values.risk !== undefined && values['result-file'] !== undefined)
     throw new UsageError('--risk and --result-file exclude each other');
+  if (
+    values['paths-only'] &&
+    (values.risk !== undefined ||
+      values['result-file'] !== undefined ||
+      values['merge-risk'] !== undefined)
+  )
+    throw new UsageError('--paths-only judges no risk: no --risk, --result-file or --merge-risk');
   const risk =
     level(values.risk, '--risk') ??
     (values['result-file'] === undefined ? undefined : riskOf(values['result-file']));
@@ -416,7 +424,8 @@ export async function guardCli(args: string[]): Promise<GateResult> {
     compare: { refs: () => refs, fileAt: (sha, file) => tracker.fileAt(sha, file) },
     protectedList: protectedList(config.deliver?.protectedPaths),
     risk,
-    mergeRisk,
+    // before a session only the paths count (the risk is judged at the merge)
+    ...(!values['paths-only'] && { mergeRisk }),
   });
   result.evidence = { pr: id, head, base: refs.base, ...result.evidence };
   return result;

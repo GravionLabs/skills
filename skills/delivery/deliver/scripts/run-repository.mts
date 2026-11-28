@@ -3,7 +3,8 @@
 // whenever an issue ends. The run only remembers what it set aside. `deliver-loop.mts` parses the arguments and calls `runRepository` once.
 // Tracker: tracker.mts. Progress events: events.mts. Review settings and verdict: review.mts. Issue stage: stage.mts, gates/stage.mts.
 // Model of each session: session-models.mts. Comments on the issue: handover.mts. Stop request: stop-signal.mts.
-// Parallel sessions and the merge lock: parallel.mts.
+// Parallel sessions and the merge lock: parallel.mts. With `leafFlow` `step` (#1194) each item is driven through the
+// step script of deliver-lead (leaf-driver.mts, process-host.mts) instead of `deliver`.
 import { execFileSync } from 'node:child_process';
 import {
   appendFileSync,
@@ -17,6 +18,7 @@ import {
 } from 'node:fs';
 import path from 'node:path';
 import { createInterface } from 'node:readline';
+import { type ProjectConfig, type StepResult, leafStep } from '../../deliver-lead/scripts/leaf.mts';
 import type { tokenSource as makeSource } from './app-token.mts';
 import type { Origin } from './event-dir.mts';
 import { type Emit, reasonCode } from './events.mts';
@@ -43,6 +45,8 @@ import { pyprojectTomlKeys } from './pyproject-toml.mts';
 import { pnpmWorkspaceKeys } from './pnpm-workspace.mts';
 import { inPickOrder } from './gates/next-issue.mts';
 import type { Harness } from './harness.mts';
+import { driveLeaf } from './leaf-driver.mts';
+import { commandOf, processHost } from './process-host.mts';
 import { MergeLocks, Slots } from './parallel.mts';
 import { killTree, launch, promptPath } from './process.mts';
 import { progressLine } from './progress-bar.mts';
@@ -55,11 +59,18 @@ import {
   featureText,
   type retroSettings,
 } from './review.mts';
-import type { Tier } from './resolve-model.mts';
+import { type Tier, readLayers } from './resolve-model.mts';
 import type { Pick, sessionModels } from './session-models.mts';
 import { type StageEvent, stageAfter, stageOf } from './stage.mts';
 import type { StopSignal } from './stop-signal.mts';
-import type { BaseState, Gate, Item, Pull, Tracker } from './tracker.mts';
+import {
+  type BaseState,
+  type Gate,
+  type Item,
+  type Pull,
+  type Tracker,
+  loadTracker,
+} from './tracker.mts';
 import {
   type Triage,
   type TriageCase,
@@ -311,6 +322,8 @@ export type RepositoryOptions = {
   harnessOverride?: string[];
   /** An Objective run: its attention cases go to `deliver-triage`, each once across the units of the run. */
   triage?: TriageRun;
+  /** `deliver.leafFlow`: `step` drives each item through the step script of deliver-lead; default `legacy`. */
+  leafFlow?: 'legacy' | 'step';
 };
 /** The events of the run: nothing is written before `open` (a dry run writes none). */
 export type EventSink = {
@@ -378,6 +391,7 @@ export async function runRepository(context: RepositoryContext): Promise<Reposit
     retro: RETRO,
     protectedPaths: PROTECTED,
     harnessOverride: HARNESS_OVERRIDE,
+    leafFlow: LEAF_FLOW = 'legacy',
   } = context.options;
   const { source: tokenSource, fixed: FIXED_TOKEN, name: TOKEN_SOURCE } = context.token;
   // what a run starts with: an issue of tier standard; the tier of each issue decides its own sessions
@@ -666,25 +680,12 @@ export async function runRepository(context: RepositoryContext): Promise<Reposit
     }
   }
 
-  /** One process of the harness, from its start to its end. */
-  async function launchSession(
-    label: string,
-    prompt: string,
-    cwd: string,
-    file: string,
-    task: Task,
-  ): Promise<Session> {
-    const { model, effort, deny } = task;
-    const argv = HARNESS_OVERRIDE
-      ? [...HARNESS_OVERRIDE, prompt]
-      : task.harness.command({ prompt, model, effort, deny });
-    // an app token is renewed when less than the session timeout is left; the merge keeps the login of the user
+  /** The environment of a session: its token (an app token is renewed when less than the session timeout is left). */
+  async function sessionEnv(): Promise<NodeJS.ProcessEnv> {
+    // the merge keeps the login of the user
     const sessionToken = tokenSource ? await tokenSource.current() : undefined;
     if (sessionToken?.renewed) log('app token minted for this session', 'dim');
     const token = sessionToken?.token ?? FIXED_TOKEN;
-    // a stop that came in during the mint: no process is started, nothing would end it
-    if (signal.stopped)
-      return { exit: null, turns: 0, costUsd: 0, peakContext: 0, model, tier: task.tier };
     const env: NodeJS.ProcessEnv = {
       // -p stops subagents 10 minutes after the last turn unless the ceiling is off
       CLAUDE_CODE_PRINT_BG_WAIT_CEILING_MS: '0',
@@ -706,6 +707,25 @@ export async function runRepository(context: RepositoryContext): Promise<Reposit
       'DELIVER_TRIAGE_FILE',
     ])
       delete env[name];
+    return env;
+  }
+
+  /** One process of the harness, from its start to its end. */
+  async function launchSession(
+    label: string,
+    prompt: string,
+    cwd: string,
+    file: string,
+    task: Task,
+  ): Promise<Session> {
+    const { model, effort, deny } = task;
+    const argv = HARNESS_OVERRIDE
+      ? [...HARNESS_OVERRIDE, prompt]
+      : task.harness.command({ prompt, model, effort, deny });
+    const env = await sessionEnv();
+    // a stop that came in during the mint: no process is started, nothing would end it
+    if (signal.stopped)
+      return { exit: null, turns: 0, costUsd: 0, peakContext: 0, model, tier: task.tier };
     env[task.output.name] = task.output.file;
     // the answer of an earlier session is not the answer of this one
     rmSync(task.output.file, { force: true });
@@ -1448,6 +1468,9 @@ export async function runRepository(context: RepositoryContext): Promise<Reposit
   // the run id of the events is a UUIDv7 (agent-events contract); the run folder keeps `runId`
   const { run: eventRun, dir: eventDir, origin } = events.open();
   limitSource = { dir: eventDir, run: eventRun };
+  // the events are the state of the step script: without them it cannot run
+  if (LEAF_FLOW === 'step' && !eventDir)
+    return ended(64, 'deliver.leafFlow step needs an events directory (AGENT_EVENTS_DIR)');
   // OSC 7501 to the controlling terminal (ADR 0007): the events stay the source for displays
   const report = context.status;
   const statusTitle = titleOf(context.options);
@@ -1850,6 +1873,243 @@ export async function runRepository(context: RepositoryContext): Promise<Reposit
     emit('progress', { done: merged.length, total, label: 'PBIs' });
   }
 
+  // `deliver.leafFlow` `step` (#1194): the step script of deliver-lead orders the flow of each item, the driver runs
+  // its verbs as child processes. Labels, events, gates, limits, hand-over and merge happen in `leafStep`; the loop
+  // around the driver keeps the frontier, the stop request, the slots and the output of the run.
+  const leafConfig: ProjectConfig = {
+    deliver: { base: BASE, tracker: tracker.name, harness: harnessName },
+  };
+  const leafTrackers = new Map<string, Promise<Tracker>>();
+  /** The tracker of pull requests into `at` (a hotfix goes into another base than the run). */
+  const trackerAt = (at: string): Tracker | Promise<Tracker> => {
+    if (at === BASE) return tracker;
+    if (!leafTrackers.has(at))
+      leafTrackers.set(
+        at,
+        loadTracker(tracker.name, {
+          cwd: root,
+          base: at,
+          selection: {},
+          trustAuthors: false,
+          log: (text) => log(text, 'warn'),
+        }),
+      );
+    return leafTrackers.get(at)!;
+  };
+  // one second of waiting lasts TICK_MS: the clock of the step script runs at the same pace
+  const clockStart = Date.now();
+  const leafClock = () => clockStart + ((Date.now() - clockStart) * 1000) / TICK_MS;
+
+  /** The prompt of a worker: the command of its brief, with the issue file (and the Feature file of a review). */
+  function workerPrompt(item: Item, role: 'implementer' | 'reviewer', brief: string) {
+    const command = commandOf(brief);
+    if (!command) return undefined;
+    const issueFile = path.join(runDir, `${item.id}.issue.md`);
+    writeFileSync(issueFile, `# ${item.title}\n\n${item.url}\n\n${item.body}\n`);
+    let prompt = `${command} --issue-file ${promptPath(issueFile)}`;
+    const feature = role === 'reviewer' ? tracker.parentFeature(item) : undefined;
+    if (feature) {
+      const featureFile = path.join(runDir, `${item.id}.feature.md`);
+      writeFileSync(featureFile, featureText(feature));
+      prompt += ` --feature-file ${promptPath(featureFile)}`;
+    }
+    return prompt;
+  }
+
+  /** One item through the leaf driver; what its end means for the run is kept as `settle` keeps it. */
+  async function driveItem(item: Item): Promise<void> {
+    const started = Date.now();
+    const shown: Session = {
+      exit: null,
+      turns: 0,
+      costUsd: 0,
+      peakContext: 0,
+      model: '',
+      tier: STANDARD.implement.tier,
+    };
+    const host = processHost({
+      root,
+      runDir,
+      command: ({ role, prompt, model }) =>
+        HARNESS_OVERRIDE
+          ? [...HARNESS_OVERRIDE, prompt]
+          : role === 'reviewer'
+            ? REVIEW.harness.command({ prompt, model, effort: REVIEW.effort })
+            : harness.command({ prompt, model }),
+      prompt: (start) => workerPrompt(item, start.role, start.brief),
+      env: sessionEnv,
+      acquire: () => slots.acquire(),
+      stopped: () => signal.stopped,
+      enlist: (stop) => signal.enlist(stop),
+      sessionMs: SESSION_MS_OVERRIDE ?? SESSION_MINUTES * 60_000,
+      graceMs: RESULT_GRACE_MS,
+      tickMs: TICK_MS,
+      onLine: (_, line) => {
+        if (harness.claudeStream) render(line, shown);
+        else {
+          const plain = line.replace(/\u001b\[[0-9;]*[A-Za-z]/g, '').trimEnd();
+          if (plain) say(`  ${plain}`);
+        }
+      },
+    });
+    // an item in an `agent:*` stage was left by an earlier run or a lead: the first step resumes it
+    let first = stageOf(item.labels) !== undefined;
+    const step = (result: StepResult | undefined) =>
+      // one step at a time in the repository: the run file has one writer at a time, merges are one at a time
+      mergeLock.run(() => {
+        const resume = first;
+        first = false;
+        return leafStep({
+          tracker,
+          trackerAt,
+          events: eventDir,
+          issue: item.id,
+          run: eventRun,
+          result,
+          resume,
+          cwd: root,
+          runDir,
+          config: leafConfig,
+          layers: readLayers(root),
+          now: leafClock,
+        });
+      });
+    // The harness failures of the loop (exit ≠ 0 without a result line, no timeout): the loop around the driver waits
+    // 5, 15, 60 minutes before the step script sees the failure, and the third in a row ends the run. The driver
+    // gets the outcome unchanged.
+    const verbs = {
+      ...host,
+      waitAny: async (handles: string[], timeout: number) => {
+        const result = await host.waitAny(handles, timeout);
+        const session = host.sessions().find((s) => s.handle === result.handle);
+        if (!session || signal.stopped) return result;
+        if (result.state === 'done') harnessFailures = 0;
+        else if (result.state === 'error' && session.exit !== 0 && !session.timedOut) {
+          harnessFailures += 1;
+          if (harnessFailures >= HARNESS_WAITS_MINUTES.length) {
+            harnessDead = { count: harnessFailures, exit: session.exit };
+            return result;
+          }
+          const minutes = HARNESS_WAITS_MINUTES[harnessFailures - 1]!;
+          log(
+            `#${item.id} harness failed (exit ${session.exit}, ${harnessFailures} in a row): waits ${minutes} min, then the step script goes on`,
+            'warn',
+          );
+          for (let half = 0; half < minutes * 2 && !signal.stopped; half++) await sleep(30);
+        }
+        return result;
+      },
+    };
+    let outcome: Awaited<ReturnType<typeof driveLeaf>> | { error: string };
+    try {
+      outcome = await driveLeaf({
+        step,
+        host: verbs,
+        stopped: () => signal.stopped || harnessDead !== undefined,
+      });
+    } catch (error) {
+      outcome = signal.stopped ? { stopped: true } : { error: firstLine(error) };
+    } finally {
+      await host.stop();
+    }
+    const task = `issue-${item.id}`;
+    noteRisk(item.id, riskOf(resultFile(item)));
+    let pull: Pull | undefined;
+    try {
+      pull = tracker.pullOf(item) ?? tracker.mergedPullOf(item);
+    } catch {
+      // the line of the issue names no pull request
+    }
+    let reason: string | undefined;
+    if ('stopped' in outcome && !signal.stopped && harnessDead) {
+      // the run ends: the item keeps its stage, the next run resumes it
+      reason = HARNESS_FAILED;
+      aside.set(item.id, `${reason}${pull ? `, ${pull.url}` : ''}`);
+      log(`#${item.id} set aside: ${reason}`, 'bad');
+      emit('task.finished', { task, outcome: 'skipped', text: reason }, 'warning');
+    } else if ('stopped' in outcome) {
+      reason = 'stopped';
+      log(`#${item.id} stopped: not merged${pull ? `, ${pull.url}` : ''}`, 'warn');
+      emit('task.finished', { task, outcome: 'cancelled', text: 'stopped' });
+    } else if ('error' in outcome) {
+      reason = `error: ${outcome.error}`;
+      aside.set(item.id, `${reason}${pull ? `, ${pull.url}` : ''}`);
+      log(`#${item.id} set aside: ${reason}`, 'bad');
+      emit('task.finished', { task, outcome: 'skipped', text: reason }, 'warning');
+    } else if (outcome.report.outcome === 'merged') {
+      const pr = outcome.report.pr ?? pull?.url;
+      merged.push(`#${item.id} ${pr}${risks.has(item.id) ? ` (risk ${risks.get(item.id)})` : ''}`);
+      log(`#${item.id} merged: ${pr}`, 'ok');
+      if (pull) {
+        try {
+          cleanup(item, pull);
+        } catch (error) {
+          log(`#${item.id} cleanup: ${firstLine(error)}`, 'warn');
+        }
+      }
+    } else {
+      // the step script wrote the hand-over (label, comment, events): the run keeps where the item stands
+      reason = outcome.report.reason;
+      const planned = reason.includes(HANDS_OFF);
+      const why = planned ? reason.split(HANDS_OFF)[0]! : reason;
+      const pr = outcome.report.pr ?? pull?.url;
+      (planned ? handedOver : aside).set(item.id, `${why}${pr ? `, ${pr}` : ''}`);
+      if (planned && pull) handedPulls.set(item.id, { item, pull });
+      log(
+        planned
+          ? `#${item.id} handed over: ${why}, merge it yourself`
+          : `#${item.id} set aside: ${reason}`,
+        planned ? 'warn' : 'bad',
+      );
+      blockedShown = true;
+      report({
+        state: 'blocked',
+        kind: 'question',
+        reason: blockedReason(`aside-${item.id}`),
+        title: statusTitle,
+        msg: `#${item.id} set aside: ${reason}`,
+      });
+      if (planned || reasonCode(why) === 'deliver.needs-decision')
+        await triage(
+          {
+            kind: planned ? 'handover' : 'needs-decision',
+            repo: tracker.repo,
+            issue: item.id,
+            ...(pr && { pr }),
+            reason: reasonCode(why),
+            text: why.slice(0, 1000),
+          },
+          item,
+        );
+    }
+    // not merged: the worktree may hold work that is not pushed
+    if (reason)
+      log(
+        `#${item.id} worktree kept: ${path.join(path.dirname(root), `${path.basename(root)}-wt-${item.id}`)}`,
+        'warn',
+      );
+    appendFileSync(
+      path.join(runDir, 'results.jsonl'),
+      `${JSON.stringify({
+        issue: item.id,
+        title: item.title,
+        risk: risks.get(item.id),
+        outcome: !reason ? 'merged' : reason === 'stopped' ? 'stopped' : 'aside',
+        reason,
+        pr: pull?.url,
+        minutes: Math.round((Date.now() - started) / 60_000),
+        sessions: host.sessions().map(({ role, model, exit }) => ({
+          ...(role === 'reviewer' && { role: 'review' }),
+          model,
+          exit,
+        })),
+      })}\n`,
+    );
+    emit('progress', { done: merged.length, total, label: 'PBIs' });
+    // its dependents become ready once the tracker closed it
+    if (!reason) await untilClosed(item.id);
+  }
+
   // The frontier: up to `slots.limit` items are worked at once, each in its own worktree. It is read again whenever one
   // of them ends (merged, set aside, handed over): an item becomes ready when its blocker is merged and closed.
   const running = new Map<number, Promise<void>>();
@@ -1918,13 +2178,16 @@ export async function runRepository(context: RepositoryContext): Promise<Reposit
           emit('task.started', { task: `issue-${item.id}`, subject: tracker.itemSubject(item) });
           started += 1;
           // a failing tracker or git call sets the issue aside, it does not end the run
-          const work = deliver(item)
-            .catch((error): { reason?: string; pull?: Pull } => ({
-              // a call that the stop broke off (Ctrl-C also reaches `git`) sets nothing aside
-              reason: signal.stopped ? 'stopped' : `error: ${firstLine(error)}`,
-            }))
-            .then((result) => settle(item, result))
-            .finally(() => running.delete(item.id));
+          const work = (
+            LEAF_FLOW === 'step'
+              ? driveItem(item)
+              : deliver(item)
+                  .catch((error): { reason?: string; pull?: Pull } => ({
+                    // a call that the stop broke off (Ctrl-C also reaches `git`) sets nothing aside
+                    reason: signal.stopped ? 'stopped' : `error: ${firstLine(error)}`,
+                  }))
+                  .then((result) => settle(item, result))
+          ).finally(() => running.delete(item.id));
           running.set(item.id, work);
         }
         if (running.size === 0) {

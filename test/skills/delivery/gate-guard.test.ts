@@ -290,6 +290,18 @@ describe('guard CLI', () => {
     });
   });
 
+  it('judges the paths and no risk with --paths-only (before a session, #1194)', async () => {
+    await expect(
+      run(['7', '--paths-only'], { deliver: { mergeRisk: 'low' } }),
+    ).resolves.toMatchObject({ result: 'pass' });
+    await expect(
+      run(['7', '--paths-only'], { scenario: { files: ['.github/workflows/x.yml'] } }),
+    ).resolves.toMatchObject({
+      result: 'owner',
+      reason: 'changes protected paths (.github/workflows/x.yml), merge it yourself',
+    });
+  });
+
   it('hands changed files that cannot be read to the owner', async () => {
     await expect(run(['7'], { scenario: { filesFailures: GUARD_READS } })).resolves.toMatchObject({
       result: 'owner',
@@ -304,6 +316,8 @@ describe('guard CLI', () => {
     ['a risk that is no level', ['7', '--risk', 'huge']],
     ['a merge risk that is no level', ['7', '--merge-risk', 'huge']],
     ['both risk sources', ['7', '--risk', 'low', '--result-file', 'x.json']],
+    ['a risk with --paths-only', ['7', '--paths-only', '--risk', 'low']],
+    ['a merge risk with --paths-only', ['7', '--paths-only', '--merge-risk', 'low']],
   ])('reports %s as usage', async (_name, args) => {
     await expect(run(args)).resolves.toMatchObject({ result: 'usage' });
   });

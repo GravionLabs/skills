@@ -131,6 +131,7 @@ const config: {
     mergeRisk?: unknown;
     parallel?: unknown;
     maxSessions?: unknown;
+    leafFlow?: unknown;
     review?: unknown;
     retro?: unknown;
   };
@@ -163,6 +164,21 @@ if (!Number.isInteger(PARALLEL) || PARALLEL < 1)
 const MAX_SESSIONS = Number(opt['max-sessions'] ?? config.deliver?.maxSessions ?? 3);
 if (opt.objective !== undefined && (!Number.isInteger(MAX_SESSIONS) || MAX_SESSIONS < 1))
   fail('--max-sessions (deliver.maxSessions) needs a whole number from 1', 64);
+// How the loop delivers one PBI or Bug (#1194): `legacy` (default) or `step`, the step script of deliver-lead driven
+// through child processes. An Objective run keeps `legacy`.
+const LEAF_FLOW = config.deliver?.leafFlow ?? 'legacy';
+if (LEAF_FLOW !== 'legacy' && LEAF_FLOW !== 'step')
+  fail(`deliver.leafFlow is legacy or step, not ${JSON.stringify(LEAF_FLOW)}`, 64);
+// the step script takes the models from the config layers and its gates read deliver.mergeRisk at the merge base
+// (no flag raises it): a flag that would change them is refused rather than ignored
+const stepRefused = ['model', 'review-model', 'merge-risk'].filter(
+  (name) => opt[name as 'model'] !== undefined,
+);
+if (LEAF_FLOW === 'step' && opt.objective === undefined && stepRefused.length)
+  fail(
+    `--${stepRefused.join(', --')} is not read with deliver.leafFlow step: set models (and deliver.mergeRisk) in .agents/config.json`,
+    64,
+  );
 for (const warning of legacyWarnings) log(warning, 'warn');
 const configWarning = unknownConfigKeys(config.deliver);
 if (configWarning) log(configWarning, 'warn');
@@ -366,6 +382,7 @@ const result = await runRepository({
     feature: opt.feature,
     issues: opt.issues,
     base: BASE,
+    leafFlow: LEAF_FLOW as 'legacy' | 'step',
   },
   tracker,
   token: { source: tokenSource, fixed: FIXED_TOKEN, name: TOKEN_SOURCE },

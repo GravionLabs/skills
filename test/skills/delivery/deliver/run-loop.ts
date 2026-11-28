@@ -35,7 +35,12 @@ export type Scenario = {
     body?: string;
     blockedBy?: number[];
     feature?: number;
+    labels?: string[];
   }[];
+  /** The comments of a pull request by its number (`recordedVerdicts`). */
+  pullComments?: Record<string, { login: string; body: string; edited?: boolean }[]>;
+  /** Trackers of one case share their gate calls and pushes (the gate CLIs of the step script load their own). */
+  shared?: boolean;
   gates?: unknown[];
   files?: string[];
   filesLater?: string[];
@@ -61,7 +66,7 @@ export type Scenario = {
   hangs?: boolean;
   /** The sessions that never end: `<id>` (implementer) or `review:<id>`. */
   hangsOn?: string[];
-  plan?: { exit?: number; noPull?: boolean; hangs?: boolean }[];
+  plan?: { exit?: number; noPull?: boolean; hangs?: boolean; silent?: boolean }[];
   closeAfterCalls?: number;
   releaseTests?: number[];
   releaseCommits?: number;

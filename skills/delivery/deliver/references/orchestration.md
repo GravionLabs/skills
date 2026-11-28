@@ -59,3 +59,32 @@ in the checkout of that repository and pass the output as `model` (agent call, p
 - docs: implement --tier fast
 Start deliver-loop without --model and --review-model unless you mean to override the config.
 ```
+
+## Leaf driver
+
+With `deliver.leafFlow: "step"` in `.agents/config.json` the loop delivers each PBI or Bug through the step script of [deliver-lead](../../deliver-lead/SKILL.md) (`leafStep`, imported in-process) instead of its own flow. The default is `"legacy"`; another value ends the run with exit 64 (`usage`) before a session starts, and so do `--model`, `--review-model` and `--merge-risk` with `"step"`: the step script takes the models from the config layers and its gates read `deliver.mergeRisk` at the merge base. An Objective run keeps `"legacy"`.
+
+The driver (`scripts/leaf-driver.mts`) only asks for the next action and executes it:
+
+```text
+result = none
+repeat:
+  action = leafStep({tracker, events, issue, run, result})
+  start-worker  -> start a harness session (HARNESSES) in the issue's worktree, keep the handle
+  wait-any      -> await the first session that ends, or the timeout
+  read-result   -> the session's result line and report path
+  answer-worker -> not offered by a child process: result "refused"
+  ask-owner     -> result "deferred"
+  end           -> return the report as the issue's result
+```
+
+The driver never decides, retries, skips or reorders an action and never calls a gate: it passes every outcome back unchanged as `result`. Stage labels, events, gates, limits, hand-over and merge happen inside `leafStep`.
+
+The five verbs map to child processes in `scripts/process-host.mts` (wake kind `block`):
+
+- `start-worker`: a harness session (`harness.mts`, the review harness for the reviewer) with the command of the brief, the issue file and the file variable of the start; the implementer works in `<repo>-wt-<nr>`, the reviewer in a fresh `<repo>-wt-<nr>-review` detached at the reviewed commit. Each session takes a slot. The handle is the session id of the run folder (`<handle>.jsonl` holds its output).
+- `wait-any`: a call that returns when the first of the sessions ends (`done` with a `result:` line, else `error`), or `timeout`; without handles a plain wait. `blocked` never occurs.
+- `read-result`: a report file with the result line, the exit code and the log path.
+- `answer-worker`: `refused`; `ask-owner`: `deferred`.
+
+What stays in the loop around the driver: the frontier (`next-issue`), the stop request (the sessions end, the task finishes `cancelled`), `deliver.parallel` and the slots, the rate-limit waits, the harness failures (a session that exits non-zero without a result line: a wait of 5, then 15 minutes before its outcome reaches the step script, the third in a row ends the run with exit 5), the base check, the progress output, `results.jsonl`, the summary and the wait for handed-over pull requests. Steps of the repository run one at a time under its merge lock, so the run file has one writer at a time and merges stay one at a time. An item in an `agent:*` stage starts with `--resume`, so a leaf left by a lead or by an earlier run goes on from its label.
