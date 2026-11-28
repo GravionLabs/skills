@@ -54,8 +54,11 @@ if (command === 'deliver-review') {
     },
     invalid: { verdict: 'maybe' },
   };
+  // the reviewed commit, as deliver-review names it: the head of the fake pull request (a push of a shared tracker)
+  const headFile = path.join(dir, `head-${100 + Number(id)}`);
+  const head = existsSync(headFile) ? readFileSync(headFile, 'utf8').trim() : 'abc123';
   if (verdict !== 'none')
-    writeFileSync(process.env.DELIVER_REVIEW_FILE, JSON.stringify(answers[verdict]));
+    writeFileSync(process.env.DELIVER_REVIEW_FILE, JSON.stringify({ ...answers[verdict], head }));
   console.log(`result: reviewed ${verdict}`);
   process.exit(0);
 }

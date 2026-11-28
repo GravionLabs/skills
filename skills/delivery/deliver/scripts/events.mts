@@ -3,7 +3,7 @@
 // session reports nothing. Writing never fails the caller. The types and fields of the loop are a contract,
 // documented in the SKILL.md of `deliver`; the profile `deliver@2` is `schema/deliver-profile.schema.json`.
 import { randomBytes } from 'node:crypto';
-import { appendFileSync, mkdirSync } from 'node:fs';
+import { appendFileSync, mkdirSync, readFileSync, statSync } from 'node:fs';
 import path from 'node:path';
 
 export type Tone = 'neutral' | 'info' | 'success' | 'warning' | 'danger';
@@ -53,22 +53,54 @@ export function reasonCode(reason: string): string {
   return `deliver.${found?.[1] ?? 'other'}`;
 }
 
-/** `dir` is the events directory (event-dir.mts), none writes nothing; the file is `<run>.jsonl`. */
+/** The size of a file, 0 when it is missing or unreadable. */
+const sizeOf = (file: string): number => {
+  try {
+    return statSync(file).size;
+  } catch {
+    return 0;
+  }
+};
+
+/**
+ * `dir` is the events directory (event-dir.mts), none writes nothing; the file is `<run>.jsonl`. The step script of
+ * deliver-lead may write to the same file in the same process (`deliver.leafFlow` `step`, #1194): when the file grew
+ * since the last write of this writer, `seq` continues after the highest one in it.
+ */
 export function openEvents(dir: string | undefined, run: string): Emit {
   if (!dir) return () => undefined;
   let seq = 0;
+  let seen = 0;
+  const file = path.join(dir, `${run}.jsonl`);
   try {
     mkdirSync(dir, { recursive: true });
   } catch {
     // the first write reports nothing either
   }
   return (type, body = {}, tone = 'neutral') => {
+    if (sizeOf(file) !== seen) {
+      let text = '';
+      try {
+        text = readFileSync(file, 'utf8');
+      } catch {
+        // unreadable: the seq of this writer goes on
+      }
+      for (const line of text.split('\n')) {
+        try {
+          const at = Number((JSON.parse(line) as { seq?: unknown }).seq);
+          if (Number.isFinite(at)) seq = Math.max(seq, at);
+        } catch {
+          // an empty or torn line holds no seq
+        }
+      }
+    }
     seq += 1;
     const event = { v: 1, seq, ts: new Date().toISOString(), run, type, tone, ...body };
     try {
-      appendFileSync(path.join(dir, `${run}.jsonl`), `${JSON.stringify(event)}\n`);
+      appendFileSync(file, `${JSON.stringify(event)}\n`);
     } catch {
       // a display must not stop a delivery
     }
+    seen = sizeOf(file);
   };
 }

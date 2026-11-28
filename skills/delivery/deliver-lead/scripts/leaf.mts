@@ -30,6 +30,7 @@ import {
   readFileSync,
   readdirSync,
   rmSync,
+  statSync,
   writeFileSync,
 } from 'node:fs';
 import path from 'node:path';
@@ -272,21 +273,38 @@ function runFolder(cwd: string, run: string): string {
 /**
  * The writer of the run file; it continues `seq` after the events already there. A failed write throws: events are
  * the state. A torn last line (a writer that died mid-line) is closed first, so it never swallows the next event.
+ * Another writer of the same file (the loop around a driver, #1194) may append in between: whenever the file grew
+ * since the last write of this one, `seq` continues after the events it holds now.
  */
 export function eventWriter(dir: string, run: string, known: RunEvent[], now: () => number) {
   let seq = known.reduce((max, event) => Math.max(max, seqOf(event)), 0);
   mkdirSync(dir, { recursive: true });
   const file = path.join(dir, `${run}.jsonl`);
-  let checked = false;
+  const sizeOf = () => {
+    try {
+      return statSync(file).size;
+    } catch (error) {
+      if ((error as NodeJS.ErrnoException).code === 'ENOENT') return 0;
+      throw error;
+    }
+  };
+  let seen: number | undefined;
   return (type: string, body: Body = {}, tone = 'neutral') => {
-    if (!checked) {
-      checked = true;
+    if (sizeOf() !== seen) {
       const text = readIfThere(file);
       if (text && !text.endsWith('\n')) appendFileSync(file, '\n');
+      for (const line of (text ?? '').split('\n')) {
+        try {
+          seq = Math.max(seq, seqOf(JSON.parse(line) as RunEvent));
+        } catch {
+          // a torn or foreign line holds no seq
+        }
+      }
     }
     seq += 1;
     const event = { v: 1, seq, ts: new Date(now()).toISOString(), run, type, tone, ...body };
     appendFileSync(file, `${JSON.stringify(event)}\n`);
+    seen = sizeOf();
     known.push(event);
   };
 }
@@ -471,7 +489,7 @@ export async function leafStep(input: LeafInput): Promise<Action> {
   let pr = str(fieldsOf(reviews.at(-1), 'deliver').pr);
 
   /** Ends the task: written before `end` is returned. */
-  const end = (
+  const finish = (
     reason: string,
     { gate, word, merged = false }: { gate?: string; word?: string; merged?: boolean } = {},
   ): Action => {
@@ -514,10 +532,23 @@ export async function leafStep(input: LeafInput): Promise<Action> {
       );
     }
     const reason = event.type === 'deliver.handover' ? `${why}${HANDS_OFF}` : why;
-    return end(notes.length ? `${reason}; ${notes.join('; ')}` : reason, {
+    const ended = finish(notes.length ? `${reason}; ${notes.join('; ')}` : reason, {
       gate: str(d.gate),
       word: str(d.result),
     });
+    // after the task, as the loop writes it: an attention of a finished task would close with it
+    emit(
+      'attention',
+      {
+        id: `aside-${issue}`,
+        reason: 'deliver.set-aside',
+        text: `#${issue} set aside: ${reason}`.slice(0, 1000),
+        needsYou: true,
+        links: pr ? [{ rel: 'pull-request', url: pr }] : [],
+      },
+      'warning',
+    );
+    return ended;
   };
 
   /** The hand-over of the loop: `deliver.handover` (a person merges) or `deliver.aside`, label, comment, end. */
@@ -540,7 +571,7 @@ export async function leafStep(input: LeafInput): Promise<Action> {
           ...(code === 'deliver.needs-decision' && { hold: 'needs-decision' }),
           head: str(fieldsOf(reviews.at(-1), 'deliver').head) ?? 'none',
           ...(gate && { gate }),
-          result: word,
+          ...(word && { result: word }),
         },
       },
       'warning',
@@ -551,7 +582,18 @@ export async function leafStep(input: LeafInput): Promise<Action> {
     return completeHandover(event);
   };
 
-  /** Seconds since an event was written, by the clock of the run. */
+  /**
+   * A task that ends without a merge is set aside as the loop sets it aside (#1194): `deliver.aside`, the
+   * `agent:handover` label, one hand-over comment and an attention, then the end.
+   */
+  const end = (
+    reason: string,
+    options: { gate?: string; word?: string; merged?: boolean } = {},
+  ): Action =>
+    options.merged
+      ? finish(reason, options)
+      : handOver(reason, options.gate, { word: options.word ?? '' });
+
   /** Seconds since an event was written, by the clock of the run; never from before the last resume. */
   const elapsed = (event: RunEvent): number => {
     const at = (e: RunEvent | undefined) => Date.parse(String(e?.ts ?? '')) || 0;
@@ -590,6 +632,22 @@ export async function leafStep(input: LeafInput): Promise<Action> {
     const cleared = gates.stage(tracker, item(), undefined);
     if (about('deliver.merged').length === 0) {
       const risk = riskOf(resultFile);
+      // a merge at risk high is told on the issue once, as the loop tells it (#1194)
+      if (risk === 'high') {
+        const head = str(fieldsOf(reviews.at(-1), 'deliver').head) ?? 'none';
+        const { marker, body } = handoverNote({
+          reason: 'high risk: merged',
+          planned: false,
+          head,
+          urls: pr ? [pr] : [],
+          risk,
+        });
+        try {
+          tracker.commentOnce(item(), marker, body);
+        } catch {
+          // a failing comment never undoes the merge
+        }
+      }
       emit('deliver.merged', { deliver: { repo, issue, pr, ...(risk && { risk }) } }, 'success');
     }
     return end(
@@ -748,7 +806,7 @@ export async function leafStep(input: LeafInput): Promise<Action> {
     stage: Stage,
   ): Promise<Action> {
     if (stage === 'handover')
-      return end(
+      return finish(
         `#${issue} is handed over (agent:handover): a person decides; remove the label to start it again`,
         { gate: 'stage' },
       );
@@ -879,6 +937,25 @@ export async function leafStep(input: LeafInput): Promise<Action> {
       },
     });
     return startAction(issue, all.at(-1)!);
+  }
+
+  /**
+   * The mark of the review on the pull request, as the loop records it (`recordVerdict`): a later run of the loop or
+   * a lead resumes `agent:approved` or `agent:changes` from it. A failed write is no verdict: the step goes on.
+   */
+  function recordMark(head: string, file: string): void {
+    try {
+      const review = JSON.parse(readIfThere(file) ?? '') as Verdict;
+      const pull: Pull = { id: Number(cd.number), title: '', url: String(cd.pr), branch: String(cd.branch) };
+      const verdict: Verdict = {
+        verdict: review.verdict,
+        findings: Array.isArray(review.findings) ? review.findings : [],
+        unmet: Array.isArray(review.unmet) ? review.unmet : [],
+      };
+      at.recordVerdict(pull, verdict, head, riskOf(resultFile));
+    } catch {
+      // unreadable or not written: the next run reviews again
+    }
   }
 
   const started = implement ?? current;
@@ -1022,6 +1099,7 @@ export async function leafStep(input: LeafInput): Promise<Action> {
         return handOver(`review failed: ${checked.reason}`, 'limits', { before: failed });
       }
       text = `review round ${round}: ${verdict}`;
+      recordMark(head, String(cd.verdictFile));
     }
     emit(
       'step.finished',

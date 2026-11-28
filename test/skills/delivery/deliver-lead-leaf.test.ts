@@ -409,7 +409,17 @@ describe('leafStep off the pass path', () => {
       text: 'changes protected paths (.github/workflows/ci.yml)',
       deliver: { issue: 12, pr: 'https://example.test/pull/112', head: 'abc123', gate: 'guard' },
     });
-    expect(out.events.slice(-2).map((e) => e.type)).toEqual(['deliver.handover', 'task.finished']);
+    expect(out.events.slice(-3).map((e) => e.type)).toEqual([
+      'deliver.handover',
+      'task.finished',
+      'attention',
+    ]);
+    expect(out.events.at(-1)).toMatchObject({
+      id: 'aside-12',
+      reason: 'deliver.set-aside',
+      needsYou: true,
+      links: [{ rel: 'pull-request', url: 'https://example.test/pull/112' }],
+    });
     profile.expectRun(out.events);
 
     // a lead that died after the event: the comment goes out under the same marker (commentOnce posts it once)
@@ -518,6 +528,16 @@ describe('leafStep off the pass path', () => {
   it('ends without a pull request, and acts on no report', async () => {
     const none = await lead(12, { host: { implementer: { noPull: true } } });
     expect(none.report).toMatchObject({ reason: 'session ended without a pull request' });
+    // set aside as the loop sets it aside (#1194): the label, one comment, deliver.aside and an attention
+    expect(none.stages.at(-1)).toBe('handover');
+    expect(none.comments).toHaveLength(1);
+    expect(none.comments[0]!.marker).toMatch(/^<!-- deliver-handover: \S+ none -->$/);
+    expect(ofType(none.events, 'deliver.aside')).toMatchObject([
+      { reason: 'deliver.no-pull-request', text: 'session ended without a pull request' },
+    ]);
+    expect(ofType(none.events, 'deliver.aside')[0]!.deliver).not.toHaveProperty('result');
+    expect(none.events.at(-1)).toMatchObject({ type: 'attention', id: 'aside-12', links: [] });
+    profile.expectRun(none.events);
     // the reports claim a failure and a changes verdict: the gates read the pull request and the verdict file
     const claims = await lead(12, { host: { report: 'outcome: failed\nverdict: changes\n' } });
     expect(claims.report).toMatchObject({ outcome: 'merged' });
