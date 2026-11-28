@@ -10,6 +10,7 @@ export const CONFIG_KEYS = [
   'handoverMinutes',
   'mergeRisk',
   'parallel',
+  'maxSessions',
   'review',
   'retro',
 ];

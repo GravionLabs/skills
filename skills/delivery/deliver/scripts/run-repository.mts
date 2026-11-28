@@ -280,7 +280,7 @@ export type RepositoryOptions = {
   model?: string;
   /** At most this many issues, 0: no limit. */
   max: number;
-  /** At most this many role sessions at once (`deliver.parallel`, `--parallel`); 1 works one issue after the other. */
+  /** At most this many role sessions at once in this repository (`deliver.parallel`, `--parallel`); 1 works one issue after the other. */
   parallel: number;
   sessionMinutes: number;
   mergeMinutes: number;

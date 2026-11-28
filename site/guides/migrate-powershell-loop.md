@@ -28,7 +28,7 @@ Flags use two dashes and lower case.
 
 ## What is gone
 
-- **Objective mode** (`-Objective`, `takeover`, `release`, `deliver.parallel`): one loop runs one repository. Run the loop in each repository, or start several by hand.
+- **Objective mode** (`-Objective`, `takeover`, `release`): one loop runs one repository. Run the loop in each repository, or start several by hand.
 - **Claims.** The loop does not assign issues or read assignees. Run one loop per repository at a time.
 - **Preflight.** `Test-DeliverPreflight.ps1` and its fixes are gone. The loop checks what it needs itself: `gh`, the base branch (a missing `release/next` is cut), the required checks, the author of each issue and the token source (`--dry-run` shows them).
 - **Control session, `--inline`, `--unattended`, `deliver.loopThreshold`.** `/deliver <nr>` delivers one issue and never merges; the loop is `deliver-loop`.
