@@ -385,25 +385,18 @@
     "shouldNotTrigger": ["Add a UI style guide to this project", "Summarize the open pull requests"]
   },
   {
-    "skill": "poimen-lead",
+    "skill": "host-poimen",
     "shouldTrigger": [
+      "Check the poimen host adapter: start, wait for and read one worker",
+      "The workflow says start-worker and wait-any; we are in poimen, which MCP tools are these?",
       "I run in poimen. Split this refactor across three worker agents, one worktree each, wait for them and collect their reports.",
       "Use the poimen MCP tools to start workers for these independent tasks and wait for their results."
     ],
     "shouldNotTrigger": [
+      "Add pagination to the users endpoint and its tests",
+      "Check the Orca host adapter",
       "Rename the config key in this Rust crate and update its tests",
       "Write release notes for the last milestone"
-    ]
-  },
-  {
-    "skill": "host-poimen",
-    "shouldTrigger": [
-      "Check the poimen host adapter: start, wait for and read one worker",
-      "The workflow says start-worker and wait-any; we are in poimen, which MCP tools are these?"
-    ],
-    "shouldNotTrigger": [
-      "Add pagination to the users endpoint and its tests",
-      "Check the Orca host adapter"
     ]
   },
   {
