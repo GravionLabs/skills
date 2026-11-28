@@ -100,6 +100,7 @@ export type Outcome = {
     run: string | null;
     ghToken: string | null;
     hasSessionTokenVariable: boolean;
+    mintingVariables: string[];
   }[];
   retros: { prompt: string; releasePulls: number }[];
   reviews: {

@@ -92,6 +92,8 @@ appendFileSync(
     run: process.env.DELIVER_RUN ?? null,
     ghToken: process.env.GH_TOKEN ?? null,
     hasSessionTokenVariable: 'DELIVER_SESSION_TOKEN' in process.env,
+    // the variables that mint a token: none may reach a session
+    mintingVariables: Object.keys(process.env).filter((name) => /^DELIVER_(MIN_)?APP_/.test(name)),
   })}\n`,
 );
 // per session (by index): { exit, noPull, hangs } overrides the scenario-wide fields for that session

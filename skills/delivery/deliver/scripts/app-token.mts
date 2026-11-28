@@ -26,15 +26,17 @@ export function appSettings(source: NodeJS.ProcessEnv = process.env): AppSetting
   return { appId, keyFile, keyCommand };
 }
 
-const base64url = (value: Buffer | string): string => Buffer.from(value).toString('base64url');
+const base64url = (value: string): string => Buffer.from(value).toString('base64url');
 
 /** The JWT that authenticates as the app (RS256, valid for 9 minutes, issued 60 s in the past for clock skew). */
 export function appJwt(appId: string, privateKey: string, now = Date.now()): string {
   const seconds = Math.floor(now / 1000);
   const head = base64url(JSON.stringify({ alg: 'RS256', typ: 'JWT' }));
   const claims = base64url(JSON.stringify({ iat: seconds - 60, exp: seconds + 540, iss: appId }));
-  const signature = createSign('RSA-SHA256').update(`${head}.${claims}`).sign(privateKey);
-  return `${head}.${claims}.${base64url(signature)}`;
+  const signature = createSign('RSA-SHA256')
+    .update(`${head}.${claims}`)
+    .sign(privateKey, 'base64url');
+  return `${head}.${claims}.${signature}`;
 }
 
 function readKey(settings: AppSettings): string {
@@ -102,5 +104,24 @@ export function tokenSource(
       held = await mint(settings, repo);
       return { token: held.token, renewed: true };
     },
+  };
+}
+
+/**
+ * One `tokenSource` per repository (`owner/name`, case-insensitive as GitHub reads it), made on first use: an
+ * installation token is limited to one repository, so an Objective run mints one for each repository it works on. A
+ * failed mint concerns the caller's repository only and is tried again at the next call.
+ */
+export function tokenSources(
+  settings: AppSettings,
+  minimumMs: number,
+  mint: typeof mintToken = mintToken,
+): (repo: string) => ReturnType<typeof tokenSource> {
+  const sources = new Map<string, ReturnType<typeof tokenSource>>();
+  return (repo) => {
+    const key = repo.toLowerCase();
+    let source = sources.get(key);
+    if (!source) sources.set(key, (source = tokenSource(settings, repo, minimumMs, mint)));
+    return source;
   };
 }
