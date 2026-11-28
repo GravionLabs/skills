@@ -147,7 +147,7 @@ The launcher finds the installed `deliver` skill (project first, then your home)
 
 ## Triage and learning
 
-An issue that waits for you (hand-over, set-aside with a question, a blocked run) comes to you: `deliver-triage`, a role session that would take one such case, is planned and not built yet ([three layers](../delivery/model.md#three-orchestration-layers)). After a milestone the [retro](learn-from-runs.md#after-a-milestone) turns the run into draft PBIs and [lessons](learn-from-runs.md#lessons); later runs read the approved lessons.
+An issue that waits for you (hand-over, set-aside with a question, a blocked run) comes to you: the skill `deliver-triage` judges one such case in a role session, but the loop does not start it yet ([three layers](../delivery/model.md#three-orchestration-layers)). After a milestone the [retro](learn-from-runs.md#after-a-milestone) turns the run into draft PBIs and [lessons](learn-from-runs.md#lessons); later runs read the approved lessons.
 
 ## Resume and feedback
 
