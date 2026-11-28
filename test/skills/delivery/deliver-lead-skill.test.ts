@@ -36,9 +36,11 @@ const HOST_TOOLS = [
 ];
 
 describe('deliver-lead skill', () => {
-  it('is user-invoked and within 100 lines', () => {
-    expect(skill).toContain('disable-model-invocation: true');
-    expect(skill).toContain("opencode/autoinvoke: 'false'");
+  it('is loadable by a lead, triggers on lead requests and is within 100 lines', () => {
+    // a tree lead briefs a leaf lead with `/deliver-lead <issue>`: a skill loaded by name is never gated
+    expect(skill).not.toContain('disable-model-invocation');
+    expect(skill).not.toContain('autoinvoke');
+    expect(skill).toMatch(/^description: .*lead the delivery.*Not for implementing/m);
     expect(skill.trimEnd().split('\n').length).toBeLessThanOrEqual(100);
   });
 

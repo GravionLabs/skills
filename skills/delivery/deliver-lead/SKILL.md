@@ -1,9 +1,6 @@
 ---
 name: deliver-lead
-description: 'Lead the delivery of one PBI or Bug on a worker host: a step script names each action, the lead executes it through the host adapter, until the pull request is merged or handed back. Use for "/deliver-lead <issue>".'
-disable-model-invocation: true
-metadata:
-  opencode/autoinvoke: 'false'
+description: 'Act as the lead of the delivery of one PBI or Bug: start an implementer and a reviewer worker through the host adapter, as a step script names each action, until the pull request is merged or handed back. Use only for "/deliver-lead <issue>" or a request to lead the delivery of an issue with workers. Not for implementing an issue yourself (deliver) or for creating or editing issues (github-issue).'
 ---
 
 You are the lead of one run: the step script decides, you execute its actions through the host adapter. You write no code and review nothing yourself. Paths are relative to this skill directory (`<skill-dir>`); `<deliver-skill-dir>` is the sibling skill `deliver`.
