@@ -8,6 +8,8 @@ import { appSettings, tokenSource as makeSource, tokenSources } from './app-toke
 import { cloneCheckouts } from './checkout.mts';
 import { eventsDirectory, pruneRuns, runOrigin } from './event-dir.mts';
 import { type Emit, openEvents, uuid7 } from './events.mts';
+import { appMint } from './gates/app-token.mts';
+import { mergeBase } from './gates/merge-base.mts';
 import { type Report, finishReport, programStatus } from './program-status.mts';
 import { HARNESSES } from './harness.mts';
 import { adoptLegacyEnv, unknownConfigKeys } from './legacy.mts';
@@ -129,6 +131,7 @@ const config: {
     mergeRisk?: unknown;
     parallel?: unknown;
     maxSessions?: unknown;
+    leafFlow?: unknown;
     review?: unknown;
     retro?: unknown;
   };
@@ -161,15 +164,32 @@ if (!Number.isInteger(PARALLEL) || PARALLEL < 1)
 const MAX_SESSIONS = Number(opt['max-sessions'] ?? config.deliver?.maxSessions ?? 3);
 if (opt.objective !== undefined && (!Number.isInteger(MAX_SESSIONS) || MAX_SESSIONS < 1))
   fail('--max-sessions (deliver.maxSessions) needs a whole number from 1', 64);
+// How the loop delivers one PBI or Bug (#1194): `legacy` (default) or `step`, the step script of deliver-lead driven
+// through child processes. An Objective run keeps `legacy`.
+const LEAF_FLOW = config.deliver?.leafFlow ?? 'legacy';
+if (LEAF_FLOW !== 'legacy' && LEAF_FLOW !== 'step')
+  fail(`deliver.leafFlow is legacy or step, not ${JSON.stringify(LEAF_FLOW)}`, 64);
+// the step script takes the models from the config layers and its gates read deliver.mergeRisk at the merge base
+// (no flag raises it): a flag that would change them is refused rather than ignored
+const stepRefused = ['model', 'review-model', 'merge-risk'].filter(
+  (name) => opt[name as 'model'] !== undefined,
+);
+if (LEAF_FLOW === 'step' && opt.objective === undefined && stepRefused.length)
+  fail(
+    `--${stepRefused.join(', --')} is not read with deliver.leafFlow step: set models (and deliver.mergeRisk) in .agents/config.json`,
+    64,
+  );
 for (const warning of legacyWarnings) log(warning, 'warn');
 const configWarning = unknownConfigKeys(config.deliver);
 if (configWarning) log(configWarning, 'warn');
 // The base: the flag, then the project config; else release/next for a milestone or a Feature and the default branch otherwise.
+// The run has one base for all its issues, so it takes only the default of a PBI from gates/merge-base.mts.
+const RELEASE_BASE = mergeBase({ type: 'pbi' }).evidence.base as string;
 const BASE: string =
   opt.base ??
   config.deliver?.base ??
   (opt.milestone || opt.feature
-    ? 'release/next'
+    ? RELEASE_BASE
     : (attempt('git', ['ls-remote', '--symref', 'origin', 'HEAD'], root)?.match(
         /^ref: refs\/heads\/(\S+)\s+HEAD/m,
       )?.[1] ?? 'main'));
@@ -351,7 +371,9 @@ const options: Omit<RepositoryOptions, 'base' | 'milestone' | 'feature' | 'issue
   harnessOverride: HARNESS_OVERRIDE,
 };
 if (opt.objective !== undefined) process.exit(await objectiveRun(opt.objective));
-const tokenSource = app ? makeSource(app, tracker.repo, SESSION_MINUTES * 60_000) : undefined;
+const tokenSource = app
+  ? makeSource(app, tracker.repo, SESSION_MINUTES * 60_000, appMint)
+  : undefined;
 const result = await runRepository({
   root,
   options: {
@@ -360,6 +382,7 @@ const result = await runRepository({
     feature: opt.feature,
     issues: opt.issues,
     base: BASE,
+    leafFlow: LEAF_FLOW as 'legacy' | 'step',
   },
   tracker,
   token: { source: tokenSource, fixed: FIXED_TOKEN, name: TOKEN_SOURCE },
@@ -382,12 +405,12 @@ async function objectiveRun(ref: string): Promise<number> {
   mkdirSync(path.join(commonDir, 'deliver'), { recursive: true });
   output.toFile(path.join(commonDir, 'deliver', 'loop.log'));
   signal.watch(path.join(runDir, 'stop'));
-  const base = opt.base ?? 'release/next';
+  const base = opt.base ?? RELEASE_BASE;
   const slots = new Slots(MAX_SESSIONS);
   const mergeLocks = new MergeLocks();
   // the attention cases of every unit go to deliver-triage, each once in the run; a CI job is re-run once
   const triage = triageRun();
-  const sources = app ? tokenSources(app, SESSION_MINUTES * 60_000) : undefined;
+  const sources = app ? tokenSources(app, SESSION_MINUTES * 60_000, appMint) : undefined;
   const reposDir = process.env.DELIVER_REPOS_DIR;
   const checkouts = cloneCheckouts({
     // the clones and the worktrees beside them stay below the git directory of the repository of the run

@@ -1,12 +1,15 @@
 {
   "delivery": [
     "deliver",
+    "deliver-lead",
     "deliver-review",
     "deliver-triage",
     "grill-me",
     "handoff",
+    "host-claude-code",
+    "host-orca",
+    "host-poimen",
     "planner",
-    "poimen-lead",
     "retro",
     "roadmap",
     "skills-manage"

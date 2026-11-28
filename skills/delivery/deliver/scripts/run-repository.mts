@@ -1,9 +1,10 @@
 // The work of one repository in a deliver run: a fresh agent session per issue, a review session for its pull
 // request, merge. Up to `parallel` issues are worked at once, merges one at a time; the state is read from the tracker
 // whenever an issue ends. The run only remembers what it set aside. `deliver-loop.mts` parses the arguments and calls `runRepository` once.
-// Tracker: tracker.mts. Progress events: events.mts. Review settings and verdict: review.mts. Issue stage: stage.mts.
+// Tracker: tracker.mts. Progress events: events.mts. Review settings and verdict: review.mts. Issue stage: stage.mts, gates/stage.mts.
 // Model of each session: session-models.mts. Comments on the issue: handover.mts. Stop request: stop-signal.mts.
-// Parallel sessions and the merge lock: parallel.mts.
+// Parallel sessions and the merge lock: parallel.mts. With `leafFlow` `step` (#1194) each item is driven through the
+// step script of deliver-lead (leaf-driver.mts, process-host.mts) instead of `deliver`.
 import { execFileSync } from 'node:child_process';
 import {
   appendFileSync,
@@ -17,21 +18,38 @@ import {
 } from 'node:fs';
 import path from 'node:path';
 import { createInterface } from 'node:readline';
+import { type ProjectConfig, type StepResult, leafStep } from '../../deliver-lead/scripts/leaf.mts';
 import type { tokenSource as makeSource } from './app-token.mts';
 import type { Origin } from './event-dir.mts';
 import { type Emit, reasonCode } from './events.mts';
+import {
+  BASE_REPAIRS,
+  FIX_ROUNDS,
+  type LimitKind,
+  type RunEvent,
+  limits,
+  readRunEvents,
+} from './gates/limits.mts';
+import { CLOSED, mergeApproved } from './gates/merge-approved.mts';
+import { mergedMeanwhile } from './gates/merged-meanwhile.mts';
+import { verifyVerdict } from './gates/verify-verdict.mts';
 import { type Note, handoverNote, reviewNote } from './handover.mts';
 import { type BlockedReason, type Report, finishReport } from './program-status.mts';
+import { HANDS_OFF, guardCheck, readChangedFiles, riskOf } from './gates/guard.mts';
 import { cargoTomlKeys } from './cargo-toml.mts';
 import { directoryPackagesPropsKeys } from './directory-packages-props.mts';
+import { releaseGate, retroMarker } from './gates/release-gate.mts';
+import { setStageGate } from './gates/stage.mts';
 import { goModKeys } from './go-mod.mts';
 import { pyprojectTomlKeys } from './pyproject-toml.mts';
 import { pnpmWorkspaceKeys } from './pnpm-workspace.mts';
+import { inPickOrder } from './gates/next-issue.mts';
 import type { Harness } from './harness.mts';
+import { driveLeaf } from './leaf-driver.mts';
+import { commandOf, processHost } from './process-host.mts';
 import { MergeLocks, Slots } from './parallel.mts';
 import { killTree, launch, promptPath } from './process.mts';
 import { progressLine } from './progress-bar.mts';
-import { MANIFESTS, exceptedManifest, protectedHits } from './protected-paths.mts';
 import {
   RISK_LEVELS,
   type ReviewMark,
@@ -39,14 +57,20 @@ import {
   type Verdict,
   findingsLine,
   featureText,
-  parseVerdict,
   type retroSettings,
 } from './review.mts';
-import type { Tier } from './resolve-model.mts';
+import { type Tier, readLayers } from './resolve-model.mts';
 import type { Pick, sessionModels } from './session-models.mts';
 import { type StageEvent, stageAfter, stageOf } from './stage.mts';
 import type { StopSignal } from './stop-signal.mts';
-import type { BaseState, Gate, Item, Pull, Tracker } from './tracker.mts';
+import {
+  type BaseState,
+  type Gate,
+  type Item,
+  type Pull,
+  type Tracker,
+  loadTracker,
+} from './tracker.mts';
 import {
   type Triage,
   type TriageCase,
@@ -147,32 +171,6 @@ const RETRO_DENY = [
   'gh pr merge',
   'gh pr close',
 ];
-// A fix round per `changes` verdict, at most this many per issue and run; the next `changes` sets the issue aside.
-const FIX_ROUNDS = 2;
-
-// A `package.json` whose difference is only in these keys is no hit. A fixed list: a repository cannot widen it.
-const DEPENDENCY_KEYS = [
-  'dependencies',
-  'devDependencies',
-  'peerDependencies',
-  'optionalDependencies',
-];
-const sameJson = (a: unknown, b: unknown) =>
-  JSON.stringify(sortKeys(a)) === JSON.stringify(sortKeys(b));
-function sortKeys(value: unknown): unknown {
-  if (Array.isArray(value)) return value.map(sortKeys);
-  if (value && typeof value === 'object') {
-    return Object.fromEntries(
-      Object.entries(value as Record<string, unknown>)
-        .sort(([x], [y]) => (x < y ? -1 : x > y ? 1 : 0))
-        .map(([k, v]) => [k, sortKeys(v)]),
-    );
-  }
-  return value;
-}
-
-const HANDS_OFF = ', merge it yourself';
-const GUARD_READS = 3;
 const MORE_PULLS = 'more than one open pull request';
 /** Two open pull requests of one item: a person closes the stale one, the loop merges neither. */
 function morePulls(pull: Pull | undefined): string | undefined {
@@ -261,14 +259,9 @@ type Task = {
   role?: 'review';
 };
 
-const CLOSED = 'pull request closed';
-
 // Harness failures (exit ≠ 0, no pull request, no timeout kill): wait 5, 15, 60 minutes, the third in a row ends the run.
 const HARNESS_WAITS_MINUTES = [5, 15, 60];
 const HARNESS_FAILED = 'harness failed';
-
-// A review without a valid verdict gets one more session, then the issue is set aside.
-const REVIEW_ATTEMPTS = 2;
 
 type Review = { round: number; verdict: Verdict['verdict'] | 'failed' };
 type Reviewed = { verdict: Verdict; file: string; head: string } | { reason: string };
@@ -329,6 +322,8 @@ export type RepositoryOptions = {
   harnessOverride?: string[];
   /** An Objective run: its attention cases go to `deliver-triage`, each once across the units of the run. */
   triage?: TriageRun;
+  /** `deliver.leafFlow`: `step` drives each item through the step script of deliver-lead; default `legacy`. */
+  leafFlow?: 'legacy' | 'step';
 };
 /** The events of the run: nothing is written before `open` (a dry run writes none). */
 export type EventSink = {
@@ -396,6 +391,7 @@ export async function runRepository(context: RepositoryContext): Promise<Reposit
     retro: RETRO,
     protectedPaths: PROTECTED,
     harnessOverride: HARNESS_OVERRIDE,
+    leafFlow: LEAF_FLOW = 'legacy',
   } = context.options;
   const { source: tokenSource, fixed: FIXED_TOKEN, name: TOKEN_SOURCE } = context.token;
   // what a run starts with: an issue of tier standard; the tier of each issue decides its own sessions
@@ -415,181 +411,48 @@ export async function runRepository(context: RepositoryContext): Promise<Reposit
     };
   };
 
-  /**
-   * The keys outside the dependency maps in which `package.json` differs between the merge base and `head`;
-   * `undefined` when unknown (added, deleted, renamed, not JSON), then the file is a plain hit.
-   * Throws when a read fails: the caller treats that as unknown too.
-   */
-  function packageJsonKeys(
-    file: string,
-    refs: { base: string; head: string },
-  ): string[] | undefined {
-    const before = tracker.fileAt(refs.base, file);
-    const after = tracker.fileAt(refs.head, file);
-    if (before === undefined || after === undefined) return undefined;
-    let a: unknown;
-    let b: unknown;
-    try {
-      a = JSON.parse(before);
-      b = JSON.parse(after);
-    } catch {
-      return undefined;
-    }
-    const isObject = (v: unknown): v is Record<string, unknown> =>
-      !!v && typeof v === 'object' && !Array.isArray(v);
-    if (!isObject(a) || !isObject(b)) return undefined;
-    return [...new Set([...Object.keys(a), ...Object.keys(b)])]
-      .filter((key) => !DEPENDENCY_KEYS.includes(key) && !sameJson(a[key], b[key]))
-      .sort();
-  }
-  /**
-   * The parts outside the dependency entries in which `Cargo.toml` differs between the merge base and `head`;
-   * `undefined` when unknown (added, deleted, a file the parser does not understand), then the file is a plain hit.
-   */
-  function cargoTomlParts(
-    file: string,
-    refs: { base: string; head: string },
-  ): string[] | undefined {
-    const before = tracker.fileAt(refs.base, file);
-    const after = tracker.fileAt(refs.head, file);
-    if (before === undefined || after === undefined) return undefined;
-    try {
-      return cargoTomlKeys(before, after);
-    } catch {
-      return undefined;
-    }
-  }
-  /**
-   * The top-level parts outside the catalog entries in which `pnpm-workspace.yaml` differs between the merge base and
-   * `head`; `undefined` when unknown (added, deleted, a file the strict parser does not understand).
-   */
-  function pnpmWorkspaceParts(
-    file: string,
-    refs: { base: string; head: string },
-  ): string[] | undefined {
-    const before = tracker.fileAt(refs.base, file);
-    const after = tracker.fileAt(refs.head, file);
-    if (before === undefined || after === undefined) return undefined;
-    try {
-      return pnpmWorkspaceKeys(before, after);
-    } catch {
-      return undefined;
-    }
-  }
-  /**
-   * The parts outside the requirement lists in which `pyproject.toml` differs between the merge base and `head`;
-   * `undefined` when unknown (added, deleted, a file the strict parser does not understand).
-   */
-  function pyprojectTomlParts(
-    file: string,
-    refs: { base: string; head: string },
-  ): string[] | undefined {
-    const before = tracker.fileAt(refs.base, file);
-    const after = tracker.fileAt(refs.head, file);
-    if (before === undefined || after === undefined) return undefined;
-    try {
-      return pyprojectTomlKeys(before, after);
-    } catch {
-      return undefined;
-    }
-  }
-  /**
-   * The directives other than `require` in which `go.mod` differs between the merge base and `head`;
-   * `undefined` when unknown (added, deleted, a line the strict parser does not understand).
-   */
-  function goModParts(file: string, refs: { base: string; head: string }): string[] | undefined {
-    const before = tracker.fileAt(refs.base, file);
-    const after = tracker.fileAt(refs.head, file);
-    if (before === undefined || after === undefined) return undefined;
-    try {
-      return goModKeys(before, after);
-    } catch {
-      return undefined;
-    }
-  }
-  /**
-   * The parts outside the `PackageVersion` items in which `Directory.Packages.props` differs between the merge base and
-   * `head`; `undefined` when unknown (added, deleted, markup the strict parser does not understand).
-   */
-  function directoryPackagesPropsParts(
-    file: string,
-    refs: { base: string; head: string },
-  ): string[] | undefined {
-    const before = tracker.fileAt(refs.base, file);
-    const after = tracker.fileAt(refs.head, file);
-    if (before === undefined || after === undefined) return undefined;
-    try {
-      return directoryPackagesPropsKeys(before, after);
-    } catch {
-      return undefined;
-    }
-  }
-  /** The files with a comparator, by lower-case name: what differs outside the allowed parts, `undefined` when unknown. */
-  const COMPARATORS: Record<(typeof MANIFESTS)[number], typeof packageJsonKeys> = {
-    'package.json': packageJsonKeys,
-    'cargo.toml': cargoTomlParts,
-    'pnpm-workspace.yaml': pnpmWorkspaceParts,
-    'pyproject.toml': pyprojectTomlParts,
-    'go.mod': goModParts,
-    'directory.packages.props': directoryPackagesPropsParts,
-  };
-  /** The protected hits, a `package.json`, `Cargo.toml`, `pnpm-workspace.yaml`, `pyproject.toml`, `go.mod` or `Directory.Packages.props` that differs only in its dependencies dropped, the others named with their parts. */
-  function judgeHits(pull: Pull, files: string[], head?: string): string[] {
-    const hits = protectedHits(files, PROTECTED);
-    if (
-      !hits.some((file) =>
-        (MANIFESTS as readonly string[]).includes(path.posix.basename(file.toLowerCase())),
-      )
-    )
-      return hits;
-    let refs: { base: string; head: string } | undefined;
-    try {
-      refs = tracker.compareRefs(pull, head);
-    } catch {
-      return hits;
-    }
-    const out: string[] = [];
-    for (const file of hits) {
-      // the case-folded name matches the manifest; the file itself is read under its own name
-      const manifest = exceptedManifest(file, PROTECTED);
-      if (!manifest) {
-        out.push(file);
-        continue;
-      }
-      const compare = COMPARATORS[manifest];
-      let keys: string[] | undefined;
-      try {
-        keys = compare(file, refs);
-      } catch {
-        keys = undefined;
-      }
-      if (keys === undefined) out.push(file);
-      else if (keys.length > 0) out.push(`${file}: ${keys.join(', ')}`);
-    }
-    return out;
-  }
   /** Why the loop does not merge the pull request as it is now, else nothing. A person decides then, no repair session. */
   async function guard(pull: Pull, head?: string): Promise<string | undefined> {
-    let hits: string[] = [];
-    for (let read = 1; ; read++) {
-      try {
-        hits = judgeHits(pull, tracker.changedFiles(pull), head);
-        break;
-      } catch (error) {
-        // a read that fails once (server load, rate limit) is asked again, as the gate is
-        if (read < GUARD_READS && !signal.stopped) {
-          for (let second = 0; second < 5 && !signal.stopped; second++) await sleep(1);
-          continue;
-        }
-        // unknown is not safe: a person looks
-        return `could not read the changed files (${firstLine(error)})${HANDS_OFF}`;
-      }
-    }
-    if (hits.length === 0) return undefined;
-    return `changes protected paths (${hits.slice(0, 3).join(', ')}${hits.length > 3 ? ', …' : ''})${HANDS_OFF}`;
+    // a read that fails once (server load, rate limit) is asked again, as the gate is
+    const files = await readChangedFiles(() => tracker.changedFiles(pull), {
+      pause: async () => {
+        for (let second = 0; second < 5 && !signal.stopped; second++) await sleep(1);
+      },
+      stopped: () => signal.stopped,
+    });
+    // unknown is not safe: a person looks
+    const check = guardCheck({
+      files,
+      compare: {
+        refs: () => tracker.compareRefs(pull, head),
+        fileAt: (sha, file) => tracker.fileAt(sha, file),
+      },
+      protectedList: PROTECTED,
+    });
+    return check.result === 'pass' ? undefined : check.reason;
   }
 
   let emit: Emit = () => {};
+  // the events this run emitted: the limits gate reads them besides the run file, which may be missing (no events
+  // directory) or miss a line (a failed write never stops a delivery)
+  const journal: RunEvent[] = [];
+  let limitSource: { dir: string | undefined; run: string } | undefined;
+  /** The limits gate (gates/limits.mts) over the events of this run: whether one more counted session may start. */
+  const allowed = (item: Item, kind: LimitKind) => {
+    const gate = (events: RunEvent[]) =>
+      limits({ events, issue: item.id, kind, repo: tracker.repo });
+    const own = gate(journal);
+    const written = limitSource?.dir && readRunEvents(limitSource.dir, limitSource.run);
+    // the stricter one: a count that misses an event never allows an extra session
+    return !written || own.result !== 'pass' ? own : gate(written);
+  };
+  /** The event of a counted session, written before the session starts: the limits gate counts it. */
+  const counted = (item: Item, kind: LimitKind, name: string, text: string, n?: number) =>
+    emit('step.started', {
+      task: `issue-${item.id}`,
+      step: { name, ...(n !== undefined && { n }), text },
+      deliver: { counted: kind },
+    });
   // every role session (implementer, review, repair, retro) takes a slot; the events report the running ones
   let reportedSessions = 0;
   const onSessions = (running: number) => {
@@ -649,11 +512,8 @@ export async function runRepository(context: RepositoryContext): Promise<Reposit
 
   /** Writes the stage of the issue after the event. A failing call is logged: the label never decides about the run. */
   function mark(item: Item, event: StageEvent): void {
-    try {
-      tracker.setStage(item, stageAfter(event));
-    } catch (error) {
-      log(`#${item.id} stage label not written: ${firstLine(error)}`, 'warn');
-    }
+    const { result, reason } = setStageGate(tracker, item, stageAfter(event));
+    if (result !== 'pass') log(`#${item.id} stage label not written: ${reason}`, 'warn');
   }
 
   /** Comments on the issue, once per marker. A failing call is logged, as for the label. */
@@ -729,14 +589,6 @@ export async function runRepository(context: RepositoryContext): Promise<Reposit
   const risks = new Map<number, string>();
   /** The implementer result the session writes (`risk.level`); the session never reports anything else to the loop. */
   const resultFile = (item: Item) => path.join(runDir, `${item.id}.result.json`);
-  function riskOf(file: string): string | undefined {
-    try {
-      const level = JSON.parse(readFileSync(file, 'utf8'))?.risk?.level;
-      return RISK_LEVELS.includes(level) ? level : undefined;
-    } catch {
-      return undefined;
-    }
-  }
   /** The levels the result files of earlier runs hold for the issue. */
   function earlierRisks(item: Item): (string | undefined)[] {
     const beside = path.dirname(runDir);
@@ -751,10 +603,8 @@ export async function runRepository(context: RepositoryContext): Promise<Reposit
   }
   /** Why the loop does not merge the pull request of the issue for its risk; a missing level counts as medium. */
   function riskHold(id: number): string | undefined {
-    const level = risks.get(id) ?? 'medium';
-    return RISK_LEVELS.indexOf(level) > RISK_LEVELS.indexOf(MERGE_RISK)
-      ? `risk ${level}${HANDS_OFF}`
-      : undefined;
+    const check = guardCheck({ risk: risks.get(id), mergeRisk: MERGE_RISK });
+    return check.result === 'pass' ? undefined : check.reason;
   }
 
   // a note about the model of an issue is logged once per run
@@ -777,6 +627,22 @@ export async function runRepository(context: RepositoryContext): Promise<Reposit
     // a pull request means the session did its work: the normal rules for a failed session apply
     delivered: () => Boolean(tracker.pullOf(item)),
   });
+
+  /**
+   * The argument that names what was merged into the base since the fork point of the worktree, empty when nothing
+   * was (ADR 0012, Parallelism). A list that cannot be made is logged: the session starts without it.
+   */
+  function mergedSince(item: Item, workspace: string): string {
+    try {
+      const gate = mergedMeanwhile({ workspace, base: BASE, issue: item.id, runDir });
+      const { file } = gate.evidence;
+      if (gate.result !== 'pass') log(`#${item.id} merged-meanwhile: ${gate.reason}`, 'warn');
+      else if (typeof file === 'string') return ` --merged-meanwhile-file ${promptPath(file)}`;
+    } catch (error) {
+      log(`#${item.id} merged-meanwhile: ${firstLine(error)}`, 'warn');
+    }
+    return '';
+  }
 
   /** `item`: the issue of the session; undefined for a session of the whole run (the retro). */
   async function startSession(
@@ -806,31 +672,20 @@ export async function runRepository(context: RepositoryContext): Promise<Reposit
           model: task.model,
           tier: task.tier,
         };
+      // an implementer session; read now, as the base may have moved while it waited for its slot
+      if (item && task.output.name === 'DELIVER_RESULT_FILE') prompt += mergedSince(item, cwd);
       return await launchSession(label, prompt, cwd, file, task);
     } finally {
       free();
     }
   }
 
-  /** One process of the harness, from its start to its end. */
-  async function launchSession(
-    label: string,
-    prompt: string,
-    cwd: string,
-    file: string,
-    task: Task,
-  ): Promise<Session> {
-    const { model, effort, deny } = task;
-    const argv = HARNESS_OVERRIDE
-      ? [...HARNESS_OVERRIDE, prompt]
-      : task.harness.command({ prompt, model, effort, deny });
-    // an app token is renewed when less than the session timeout is left; the merge keeps the login of the user
+  /** The environment of a session: its token (an app token is renewed when less than the session timeout is left). */
+  async function sessionEnv(): Promise<NodeJS.ProcessEnv> {
+    // the merge keeps the login of the user
     const sessionToken = tokenSource ? await tokenSource.current() : undefined;
     if (sessionToken?.renewed) log('app token minted for this session', 'dim');
     const token = sessionToken?.token ?? FIXED_TOKEN;
-    // a stop that came in during the mint: no process is started, nothing would end it
-    if (signal.stopped)
-      return { exit: null, turns: 0, costUsd: 0, peakContext: 0, model, tier: task.tier };
     const env: NodeJS.ProcessEnv = {
       // -p stops subagents 10 minutes after the last turn unless the ceiling is off
       CLAUDE_CODE_PRINT_BG_WAIT_CEILING_MS: '0',
@@ -852,6 +707,25 @@ export async function runRepository(context: RepositoryContext): Promise<Reposit
       'DELIVER_TRIAGE_FILE',
     ])
       delete env[name];
+    return env;
+  }
+
+  /** One process of the harness, from its start to its end. */
+  async function launchSession(
+    label: string,
+    prompt: string,
+    cwd: string,
+    file: string,
+    task: Task,
+  ): Promise<Session> {
+    const { model, effort, deny } = task;
+    const argv = HARNESS_OVERRIDE
+      ? [...HARNESS_OVERRIDE, prompt]
+      : task.harness.command({ prompt, model, effort, deny });
+    const env = await sessionEnv();
+    // a stop that came in during the mint: no process is started, nothing would end it
+    if (signal.stopped)
+      return { exit: null, turns: 0, costUsd: 0, peakContext: 0, model, tier: task.tier };
     env[task.output.name] = task.output.file;
     // the answer of an earlier session is not the answer of this one
     rmSync(task.output.file, { force: true });
@@ -918,8 +792,7 @@ export async function runRepository(context: RepositoryContext): Promise<Reposit
 
   let harnessFailures = 0;
   let harnessDead: { count: number; exit: number | null } | undefined;
-  // a session timeout gets one more session per PBI and run, the second sets the PBI aside
-  const timeouts = new Map<number, number>();
+  // a session timeout gets one more session per PBI and run (limits gate, `timeout`), the second sets the PBI aside
 
   /** Starts sessions for the item until one ends normally. Returns a reason when the item is to be set aside. */
   async function runSession(
@@ -938,10 +811,10 @@ export async function runRepository(context: RepositoryContext): Promise<Reposit
       sessions.push(session);
       if (signal.stopped) return { session };
       if (session.timedOut) {
-        const count = (timeouts.get(item.id) ?? 0) + 1;
-        timeouts.set(item.id, count);
-        if (count >= 2) return { session, reason: 'session timeout' };
+        const gate = allowed(item, 'timeout');
+        if (gate.result !== 'pass') return { session, reason: 'session timeout' };
         log(`#${item.id} session timeout (${SESSION_MINUTES} min), one more session`, 'warn');
+        counted(item, 'timeout', 'session-retry', 'one more session after a session timeout');
         continue;
       }
       if (session.exit === 0) {
@@ -977,7 +850,8 @@ export async function runRepository(context: RepositoryContext): Promise<Reposit
     const worktree = path.join(path.dirname(root), `${path.basename(root)}-wt-${item.id}-review`);
     const drop = () => attempt('git', ['worktree', 'remove', '--force', worktree], root);
     let problem = 'no valid verdict';
-    for (let tries = 1; tries <= REVIEW_ATTEMPTS; tries++) {
+    // a missing or invalid verdict gets another attempt while the limits gate (`review`) allows one
+    for (let tries = 1; ; tries++) {
       const file = path.join(runDir, `${item.id}.review-${round}-${tries}.json`);
       try {
         const { head } = tracker.compareRefs(pull);
@@ -1006,9 +880,11 @@ export async function runRepository(context: RepositoryContext): Promise<Reposit
         if (ran.reason) return { reason: ran.reason };
         if (ran.session.exit !== 0) problem = `session failed (exit ${ran.session.exit})`;
         else {
-          const verdict = existsSync(file) ? parseVerdict(readFileSync(file, 'utf8')) : undefined;
+          const content = existsSync(file) ? readFileSync(file, 'utf8') : undefined;
+          // the session reviewed `head`; the merge gate refuses a later push
+          const { verdict, reason } = verifyVerdict({ content, reviewedHead: head, prHead: head });
           if (verdict) return { verdict, file, head };
-          problem = existsSync(file) ? 'invalid verdict' : 'no verdict';
+          problem = reason;
         }
       } catch (error) {
         problem = firstLine(error);
@@ -1016,13 +892,21 @@ export async function runRepository(context: RepositoryContext): Promise<Reposit
         drop();
       }
       if (signal.stopped) return { reason: 'stopped' };
-      if (tries < REVIEW_ATTEMPTS) log(`#${item.id} review: ${problem}, one retry`, 'warn');
+      if (allowed(item, 'review').result !== 'pass') break;
+      log(`#${item.id} review: ${problem}, one retry`, 'warn');
+      counted(
+        item,
+        'review',
+        `retry-review-${round}`,
+        `review round ${round}: ${problem}, one retry`,
+        round,
+      );
     }
     return { reason: `review failed: ${problem}` };
   }
 
-  // a handed-over pull request with a conflict gets one repair session per run, never a merge by the loop
-  const conflictTried = new Set<number>();
+  // a handed-over pull request with a conflict gets one repair session per run (limits gate, `conflict`), never a
+  // merge by the loop
   /**
    * Returns nothing when the gate of the pull request is no conflict (or it was tried in this run), else one line:
    * `conflict repaired` or `conflict not repaired: <why>` after one session (`/deliver <nr>` merges the base in).
@@ -1033,7 +917,7 @@ export async function runRepository(context: RepositoryContext): Promise<Reposit
     worktree: string,
     sessions: Session[],
   ): Promise<string | undefined> {
-    if (conflictTried.has(item.id) || signal.stopped) return undefined;
+    if (signal.stopped || allowed(item, 'conflict').result !== 'pass') return undefined;
     const read = (): Gate | undefined => {
       try {
         return tracker.gate(pull);
@@ -1043,8 +927,8 @@ export async function runRepository(context: RepositoryContext): Promise<Reposit
       }
     };
     if (read()?.state !== 'conflict') return undefined;
-    conflictTried.add(item.id);
     log(`#${item.id} ${pull.url} has a conflict, one repair session`, 'warn');
+    counted(item, 'conflict', 'conflict-repair', `${pull.url} has a conflict, one repair session`);
     mark(item, 'session-started');
     const ran = await runSession(item, worktree, sessions);
     if (signal.stopped) return undefined;
@@ -1085,9 +969,7 @@ export async function runRepository(context: RepositoryContext): Promise<Reposit
       if (session.timedOut) return { failed: 'session timeout' };
       if (session.exit !== 0) return { failed: `session failed (exit ${session.exit})` };
       const url = existsSync(file) ? JSON.parse(readFileSync(file, 'utf8'))?.url : undefined;
-      // as the script writes it: the name without the version of a released milestone
-      const marker = `<!-- retro: ${milestone.replace(/ \(\d+\.\d+\.\d+\)$/, '')} -->`;
-      if (typeof url !== 'string' || !tracker.isRetroComment(url, marker))
+      if (typeof url !== 'string' || !tracker.isRetroComment(url, retroMarker(milestone)))
         return { failed: 'no retro comment' };
       return { url };
     } catch (error) {
@@ -1113,41 +995,42 @@ export async function runRepository(context: RepositoryContext): Promise<Reposit
     while (!signal.stopped) {
       const done = await mergeLock.run(
         async (): Promise<{ reason?: string; conflict?: true } | undefined> => {
-          let gate: Gate;
-          try {
-            gate = tracker.gate(pull);
-          } catch (error) {
-            // a tracker call that fails once (network, rate limit) is not a verdict on the pull request
-            problem = `tracker error: ${firstLine(error)}`;
-            gate = { state: 'pending', reported: false };
+          const attempt = await mergeApproved({
+            tracker,
+            pull,
+            sha: reviewed,
+            // the loop reaches the merge only with an approving verdict of `reviewed`: the review it ran, or the
+            // verdict it recorded on the pull request for that head
+            verdict: { result: 'pass', reason: 'approved', evidence: { head: reviewed } },
+            guard: async (head) => {
+              const handsOff = await guard(pull, head);
+              const reason = handsOff ?? held;
+              return reason === undefined
+                ? { result: 'pass', reason: 'guarded', evidence: {} }
+                : { result: 'owner', reason, evidence: {} };
+            },
+            // checks register a moment after the pull request opens: nothing reported is not green yet
+            unreportedOk: Date.now() - start > 90_000,
+            checkpoint: async () => {
+              await seeStop();
+              return signal.stopped
+                ? { result: 'retry', reason: 'stopped', evidence: { stopped: true } }
+                : undefined;
+            },
+          });
+          const { result, reason, evidence } = attempt;
+          if (evidence.stopped) return undefined;
+          if (result === 'pass') return {};
+          if (result === 'retry') {
+            if (evidence.error !== undefined) problem = reason;
+            return undefined;
           }
-          if (gate.state === 'merged') return {};
-          if (gate.state === 'closed') return { reason: CLOSED };
-          if (gate.state === 'conflict') return { reason: gate.detail, conflict: true };
-          if (gate.state === 'red') return { reason: `red: ${gate.detail}` };
-          // checks register a moment after the pull request opens: nothing reported is not green yet
-          if (gate.state === 'ready' && (gate.reported || Date.now() - start > 90_000)) {
-            await seeStop();
-            if (signal.stopped) return undefined;
-            // only the approved commit is merged: what was pushed after the review was seen by nobody
-            if (gate.head !== reviewed) return { reason: `pushed after the review${HANDS_OFF}` };
-            // the files of the commit that is merged, not of the one the session left: a later push is checked too.
-            // The merge names gate.head, so a push after this read is refused by the tracker.
-            const handsOff = await guard(pull, gate.head);
-            // the read of the files blocks too: a stop request that came in during it must be seen before the merge,
-            // and before a hand-over changes the label
-            await seeStop();
-            if (signal.stopped) return undefined;
-            if (handsOff) return { reason: handsOff };
-            if (held) return { reason: held };
-            try {
-              tracker.merge(pull, gate.head);
-              return {};
-            } catch (error) {
-              problem = `merge refused: ${(error as Error).message}`;
-            }
+          // a refused merge is tried again until the deadline
+          if (evidence.refused) {
+            problem = reason;
+            return undefined;
           }
-          return undefined;
+          return evidence.conflict ? { reason, conflict: true } : { reason };
         },
       );
       if (done) return done;
@@ -1228,7 +1111,6 @@ export async function runRepository(context: RepositoryContext): Promise<Reposit
       if (signal.stopped) return { reason: 'stopped', pull: earlier };
     }
     const reviews: Review[] = [];
-    let fixes = 0;
     let reviewFile: string | undefined;
     let repaired = false;
     let announced = false;
@@ -1331,13 +1213,15 @@ export async function runRepository(context: RepositoryContext): Promise<Reposit
         mark(item, `verdict-${reviewed.verdict.verdict}`);
         note(item, reviewNote(round, reviewed.verdict, reviewed.head, pull.url));
         if (reviewed.verdict.verdict === 'changes') {
-          if (fixes >= FIX_ROUNDS) {
+          const gate = allowed(item, 'fix');
+          if (gate.result !== 'pass') {
             // the findings are text of an agent: it never ends the reason, whose ending decides about a hand-over
-            reason = `needs-decision: review still asks for changes after ${FIX_ROUNDS} fix rounds (${findingsLine(reviewed.verdict)})`;
+            reason = `${gate.reason} (${findingsLine(reviewed.verdict)})`;
             settle();
             break;
           }
-          fixes += 1;
+          const fix = Number(gate.evidence.count) + 1;
+          counted(item, 'fix', `fix-${fix}`, `fix round ${fix} of ${FIX_ROUNDS}`, fix);
           reviewFile = reviewed.file;
           continue;
         }
@@ -1583,6 +1467,10 @@ export async function runRepository(context: RepositoryContext): Promise<Reposit
   out.toFile(path.join(path.dirname(runDir), 'loop.log'));
   // the run id of the events is a UUIDv7 (agent-events contract); the run folder keeps `runId`
   const { run: eventRun, dir: eventDir, origin } = events.open();
+  limitSource = { dir: eventDir, run: eventRun };
+  // the events are the state of the step script: without them it cannot run
+  if (LEAF_FLOW === 'step' && !eventDir)
+    return ended(64, 'deliver.leafFlow step needs an events directory (AGENT_EVENTS_DIR)');
   // OSC 7501 to the controlling terminal (ADR 0007): the events stay the source for displays
   const report = context.status;
   const statusTitle = titleOf(context.options);
@@ -1590,6 +1478,7 @@ export async function runRepository(context: RepositoryContext): Promise<Reposit
   const sessionsLine = () => `${slots.active} of ${slots.limit} sessions running`;
   emit = (type, body, tone) => {
     events.emit(type, body, tone);
+    journal.push({ ...body, type });
     if (type === 'run.started') {
       report({ state: 'working', title: statusTitle });
     } else if (type === 'attention' && body?.needsYou) {
@@ -1846,7 +1735,6 @@ export async function runRepository(context: RepositoryContext): Promise<Reposit
 
   // The base branch is checked before every issue: a red base would set every pull request aside.
   // A red one is rerun once, then a Bug is filed and delivered first. At most BASE_REPAIRS repairs per run.
-  const BASE_REPAIRS = 2;
   let repairs = 0;
   let repairBug: Item | undefined;
   let baseBlocked = '';
@@ -1985,6 +1873,243 @@ export async function runRepository(context: RepositoryContext): Promise<Reposit
     emit('progress', { done: merged.length, total, label: 'PBIs' });
   }
 
+  // `deliver.leafFlow` `step` (#1194): the step script of deliver-lead orders the flow of each item, the driver runs
+  // its verbs as child processes. Labels, events, gates, limits, hand-over and merge happen in `leafStep`; the loop
+  // around the driver keeps the frontier, the stop request, the slots and the output of the run.
+  const leafConfig: ProjectConfig = {
+    deliver: { base: BASE, tracker: tracker.name, harness: harnessName },
+  };
+  const leafTrackers = new Map<string, Promise<Tracker>>();
+  /** The tracker of pull requests into `at` (a hotfix goes into another base than the run). */
+  const trackerAt = (at: string): Tracker | Promise<Tracker> => {
+    if (at === BASE) return tracker;
+    if (!leafTrackers.has(at))
+      leafTrackers.set(
+        at,
+        loadTracker(tracker.name, {
+          cwd: root,
+          base: at,
+          selection: {},
+          trustAuthors: false,
+          log: (text) => log(text, 'warn'),
+        }),
+      );
+    return leafTrackers.get(at)!;
+  };
+  // one second of waiting lasts TICK_MS: the clock of the step script runs at the same pace
+  const clockStart = Date.now();
+  const leafClock = () => clockStart + ((Date.now() - clockStart) * 1000) / TICK_MS;
+
+  /** The prompt of a worker: the command of its brief, with the issue file (and the Feature file of a review). */
+  function workerPrompt(item: Item, role: 'implementer' | 'reviewer', brief: string) {
+    const command = commandOf(brief);
+    if (!command) return undefined;
+    const issueFile = path.join(runDir, `${item.id}.issue.md`);
+    writeFileSync(issueFile, `# ${item.title}\n\n${item.url}\n\n${item.body}\n`);
+    let prompt = `${command} --issue-file ${promptPath(issueFile)}`;
+    const feature = role === 'reviewer' ? tracker.parentFeature(item) : undefined;
+    if (feature) {
+      const featureFile = path.join(runDir, `${item.id}.feature.md`);
+      writeFileSync(featureFile, featureText(feature));
+      prompt += ` --feature-file ${promptPath(featureFile)}`;
+    }
+    return prompt;
+  }
+
+  /** One item through the leaf driver; what its end means for the run is kept as `settle` keeps it. */
+  async function driveItem(item: Item): Promise<void> {
+    const started = Date.now();
+    const shown: Session = {
+      exit: null,
+      turns: 0,
+      costUsd: 0,
+      peakContext: 0,
+      model: '',
+      tier: STANDARD.implement.tier,
+    };
+    const host = processHost({
+      root,
+      runDir,
+      command: ({ role, prompt, model }) =>
+        HARNESS_OVERRIDE
+          ? [...HARNESS_OVERRIDE, prompt]
+          : role === 'reviewer'
+            ? REVIEW.harness.command({ prompt, model, effort: REVIEW.effort })
+            : harness.command({ prompt, model }),
+      prompt: (start) => workerPrompt(item, start.role, start.brief),
+      env: sessionEnv,
+      acquire: () => slots.acquire(),
+      stopped: () => signal.stopped,
+      enlist: (stop) => signal.enlist(stop),
+      sessionMs: SESSION_MS_OVERRIDE ?? SESSION_MINUTES * 60_000,
+      graceMs: RESULT_GRACE_MS,
+      tickMs: TICK_MS,
+      onLine: (_, line) => {
+        if (harness.claudeStream) render(line, shown);
+        else {
+          const plain = line.replace(/\u001b\[[0-9;]*[A-Za-z]/g, '').trimEnd();
+          if (plain) say(`  ${plain}`);
+        }
+      },
+    });
+    // an item in an `agent:*` stage was left by an earlier run or a lead: the first step resumes it
+    let first = stageOf(item.labels) !== undefined;
+    const step = (result: StepResult | undefined) =>
+      // one step at a time in the repository: the run file has one writer at a time, merges are one at a time
+      mergeLock.run(() => {
+        const resume = first;
+        first = false;
+        return leafStep({
+          tracker,
+          trackerAt,
+          events: eventDir,
+          issue: item.id,
+          run: eventRun,
+          result,
+          resume,
+          cwd: root,
+          runDir,
+          config: leafConfig,
+          layers: readLayers(root),
+          now: leafClock,
+        });
+      });
+    // The harness failures of the loop (exit ≠ 0 without a result line, no timeout): the loop around the driver waits
+    // 5, 15, 60 minutes before the step script sees the failure, and the third in a row ends the run. The driver
+    // gets the outcome unchanged.
+    const verbs = {
+      ...host,
+      waitAny: async (handles: string[], timeout: number) => {
+        const result = await host.waitAny(handles, timeout);
+        const session = host.sessions().find((s) => s.handle === result.handle);
+        if (!session || signal.stopped) return result;
+        if (result.state === 'done') harnessFailures = 0;
+        else if (result.state === 'error' && session.exit !== 0 && !session.timedOut) {
+          harnessFailures += 1;
+          if (harnessFailures >= HARNESS_WAITS_MINUTES.length) {
+            harnessDead = { count: harnessFailures, exit: session.exit };
+            return result;
+          }
+          const minutes = HARNESS_WAITS_MINUTES[harnessFailures - 1]!;
+          log(
+            `#${item.id} harness failed (exit ${session.exit}, ${harnessFailures} in a row): waits ${minutes} min, then the step script goes on`,
+            'warn',
+          );
+          for (let half = 0; half < minutes * 2 && !signal.stopped; half++) await sleep(30);
+        }
+        return result;
+      },
+    };
+    let outcome: Awaited<ReturnType<typeof driveLeaf>> | { error: string };
+    try {
+      outcome = await driveLeaf({
+        step,
+        host: verbs,
+        stopped: () => signal.stopped || harnessDead !== undefined,
+      });
+    } catch (error) {
+      outcome = signal.stopped ? { stopped: true } : { error: firstLine(error) };
+    } finally {
+      await host.stop();
+    }
+    const task = `issue-${item.id}`;
+    noteRisk(item.id, riskOf(resultFile(item)));
+    let pull: Pull | undefined;
+    try {
+      pull = tracker.pullOf(item) ?? tracker.mergedPullOf(item);
+    } catch {
+      // the line of the issue names no pull request
+    }
+    let reason: string | undefined;
+    if ('stopped' in outcome && !signal.stopped && harnessDead) {
+      // the run ends: the item keeps its stage, the next run resumes it
+      reason = HARNESS_FAILED;
+      aside.set(item.id, `${reason}${pull ? `, ${pull.url}` : ''}`);
+      log(`#${item.id} set aside: ${reason}`, 'bad');
+      emit('task.finished', { task, outcome: 'skipped', text: reason }, 'warning');
+    } else if ('stopped' in outcome) {
+      reason = 'stopped';
+      log(`#${item.id} stopped: not merged${pull ? `, ${pull.url}` : ''}`, 'warn');
+      emit('task.finished', { task, outcome: 'cancelled', text: 'stopped' });
+    } else if ('error' in outcome) {
+      reason = `error: ${outcome.error}`;
+      aside.set(item.id, `${reason}${pull ? `, ${pull.url}` : ''}`);
+      log(`#${item.id} set aside: ${reason}`, 'bad');
+      emit('task.finished', { task, outcome: 'skipped', text: reason }, 'warning');
+    } else if (outcome.report.outcome === 'merged') {
+      const pr = outcome.report.pr ?? pull?.url;
+      merged.push(`#${item.id} ${pr}${risks.has(item.id) ? ` (risk ${risks.get(item.id)})` : ''}`);
+      log(`#${item.id} merged: ${pr}`, 'ok');
+      if (pull) {
+        try {
+          cleanup(item, pull);
+        } catch (error) {
+          log(`#${item.id} cleanup: ${firstLine(error)}`, 'warn');
+        }
+      }
+    } else {
+      // the step script wrote the hand-over (label, comment, events): the run keeps where the item stands
+      reason = outcome.report.reason;
+      const planned = reason.includes(HANDS_OFF);
+      const why = planned ? reason.split(HANDS_OFF)[0]! : reason;
+      const pr = outcome.report.pr ?? pull?.url;
+      (planned ? handedOver : aside).set(item.id, `${why}${pr ? `, ${pr}` : ''}`);
+      if (planned && pull) handedPulls.set(item.id, { item, pull });
+      log(
+        planned
+          ? `#${item.id} handed over: ${why}, merge it yourself`
+          : `#${item.id} set aside: ${reason}`,
+        planned ? 'warn' : 'bad',
+      );
+      blockedShown = true;
+      report({
+        state: 'blocked',
+        kind: 'question',
+        reason: blockedReason(`aside-${item.id}`),
+        title: statusTitle,
+        msg: `#${item.id} set aside: ${reason}`,
+      });
+      if (planned || reasonCode(why) === 'deliver.needs-decision')
+        await triage(
+          {
+            kind: planned ? 'handover' : 'needs-decision',
+            repo: tracker.repo,
+            issue: item.id,
+            ...(pr && { pr }),
+            reason: reasonCode(why),
+            text: why.slice(0, 1000),
+          },
+          item,
+        );
+    }
+    // not merged: the worktree may hold work that is not pushed
+    if (reason)
+      log(
+        `#${item.id} worktree kept: ${path.join(path.dirname(root), `${path.basename(root)}-wt-${item.id}`)}`,
+        'warn',
+      );
+    appendFileSync(
+      path.join(runDir, 'results.jsonl'),
+      `${JSON.stringify({
+        issue: item.id,
+        title: item.title,
+        risk: risks.get(item.id),
+        outcome: !reason ? 'merged' : reason === 'stopped' ? 'stopped' : 'aside',
+        reason,
+        pr: pull?.url,
+        minutes: Math.round((Date.now() - started) / 60_000),
+        sessions: host.sessions().map(({ role, model, exit }) => ({
+          ...(role === 'reviewer' && { role: 'review' }),
+          model,
+          exit,
+        })),
+      })}\n`,
+    );
+    emit('progress', { done: merged.length, total, label: 'PBIs' });
+    // its dependents become ready once the tracker closed it
+    if (!reason) await untilClosed(item.id);
+  }
+
   // The frontier: up to `slots.limit` items are worked at once, each in its own worktree. It is read again whenever one
   // of them ends (merged, set aside, handed over): an item becomes ready when its blocker is merged and closed.
   const running = new Map<number, Promise<void>>();
@@ -2038,8 +2163,7 @@ export async function runRepository(context: RepositoryContext): Promise<Reposit
           }
         }
         waiting = [];
-        for (const item of candidates) {
-          const reason = tracker.waitReason(item);
+        for (const { item, reason } of inPickOrder(candidates, (i) => tracker.waitReason(i))) {
           if (reason) waiting.push(`#${item.id} ${reason}`);
           else if (starts.length < room) starts.push(item);
         }
@@ -2054,13 +2178,16 @@ export async function runRepository(context: RepositoryContext): Promise<Reposit
           emit('task.started', { task: `issue-${item.id}`, subject: tracker.itemSubject(item) });
           started += 1;
           // a failing tracker or git call sets the issue aside, it does not end the run
-          const work = deliver(item)
-            .catch((error): { reason?: string; pull?: Pull } => ({
-              // a call that the stop broke off (Ctrl-C also reaches `git`) sets nothing aside
-              reason: signal.stopped ? 'stopped' : `error: ${firstLine(error)}`,
-            }))
-            .then((result) => settle(item, result))
-            .finally(() => running.delete(item.id));
+          const work = (
+            LEAF_FLOW === 'step'
+              ? driveItem(item)
+              : deliver(item)
+                  .catch((error): { reason?: string; pull?: Pull } => ({
+                    // a call that the stop broke off (Ctrl-C also reaches `git`) sets nothing aside
+                    reason: signal.stopped ? 'stopped' : `error: ${firstLine(error)}`,
+                  }))
+                  .then((result) => settle(item, result))
+          ).finally(() => running.delete(item.id));
           running.set(item.id, work);
         }
         if (running.size === 0) {
@@ -2135,60 +2262,72 @@ export async function runRepository(context: RepositoryContext): Promise<Reposit
           `milestone ${milestone} is not released: the triage took ${[...dropped].map((nr) => `#${nr}`).join(', ')} out of the run`,
           'warn',
         );
-      } else if (tracker.items().length === 0) {
-        // a pull request into the base that is not of this milestone would be lost with the release branch: a person decides
-        try {
-          for (const pull of tracker.foreignPulls()) {
+      } else {
+        const { evidence } = releaseGate({ tracker, milestone: milestone as string });
+        const { unread } = evidence;
+        if (unread.open) throw new Error(unread.open);
+        // an item that is open by now: no release; the publish state and a ready pull request hold nothing back here
+        if (evidence.open?.length === 0) {
+          // a pull request into the base that is not of this milestone would be lost with the release branch: a person decides
+          if (unread.pulls)
+            log(`open pull requests into ${BASE} not read: ${unread.pulls}`, 'warn');
+          for (const pull of evidence.pulls ?? []) {
             needsYou.push(
               `${pull.url} is open into ${BASE} and not in ${milestone}: merge, close or retarget it first`,
             );
           }
-        } catch (error) {
-          log(`open pull requests into ${BASE} not read: ${firstLine(error)}`, 'warn');
-        }
-        let release: Pull | undefined;
-        if (RETRO.enabled) {
-          try {
-            // without a Feature the retro comments on the release pull request: that one has to exist first
-            if (!tracker.hasRetroFeature()) release = tracker.ensureReleasePull();
-            retroResult = await retro(milestone as string, release);
-            if (retroResult.failed) retroFailed(retroResult.failed);
-            else if (retroResult.url) log(`retro: ${retroResult.url}`, 'info');
-          } catch (error) {
-            retroFailed(firstLine(error));
+          let release: Pull | undefined;
+          if (RETRO.enabled) {
+            try {
+              // once per release: the tracker says whether the retro comment exists
+              if (unread.retroDone) retroFailed(`retro comment not read: ${unread.retroDone}`);
+              else if (evidence.retroDone) {
+                retroResult = { url: evidence.retro };
+                log(`retro: already posted, ${evidence.retro}`, 'info');
+              } else {
+                // without a Feature the retro comments on the release pull request: that one has to exist first
+                if (!tracker.hasRetroFeature()) release = tracker.ensureReleasePull();
+                retroResult = await retro(milestone as string, release);
+                if (retroResult.failed) retroFailed(retroResult.failed);
+                else if (retroResult.url) log(`retro: ${retroResult.url}`, 'info');
+              }
+            } catch (error) {
+              retroFailed(firstLine(error));
+            }
+            await seeStop();
           }
-          await seeStop();
-        }
-        // a stop request during the retro ends the run: the next run opens the release pull request
-        if (signal.stopped && !release) throw new Error('stopped');
-        release ??= tracker.ensureReleasePull();
-        if (retroResult.url) {
-          try {
-            tracker.linkRetro(release, retroResult.url);
-          } catch (error) {
-            retroFailed(`release pull request body not updated: ${firstLine(error)}`);
+          // a stop request during the retro ends the run: the next run opens the release pull request
+          if (signal.stopped && !release) throw new Error('stopped');
+          release ??= tracker.ensureReleasePull();
+          if (retroResult.url) {
+            try {
+              tracker.linkRetro(release, retroResult.url);
+            } catch (error) {
+              retroFailed(`release pull request body not updated: ${firstLine(error)}`);
+            }
           }
-        }
-        releaseUrl = release.url;
-        log(`release pull request: ${release.url} (never merged by the loop)`, 'info');
-        emit('step.finished', {
-          task: 'release',
-          step: { name: 'release-pr', text: 'release pull request' },
-          links: [{ rel: 'pull-request', url: release.url, title: release.title }],
-        });
-        for (const test of tracker.releaseTests()) {
-          needsYou.push(`#${test.id} ${test.title}`);
-          emit(
-            'attention',
-            {
-              id: `release-test-${test.id}`,
-              reason: 'deliver.release-test',
-              text: `#${test.id} release test is open: a person tests the release candidate`,
-              needsYou: true,
-              links: [{ rel: 'issue', url: test.url }],
-            },
-            'warning',
-          );
+          releaseUrl = release.url;
+          log(`release pull request: ${release.url} (never merged by the loop)`, 'info');
+          emit('step.finished', {
+            task: 'release',
+            step: { name: 'release-pr', text: 'release pull request' },
+            links: [{ rel: 'pull-request', url: release.url, title: release.title }],
+          });
+          if (unread.releaseTests) throw new Error(unread.releaseTests);
+          for (const test of evidence.releaseTests ?? []) {
+            needsYou.push(`#${test.id} ${test.title}`);
+            emit(
+              'attention',
+              {
+                id: `release-test-${test.id}`,
+                reason: 'deliver.release-test',
+                text: `#${test.id} release test is open: a person tests the release candidate`,
+                needsYou: true,
+                links: [{ rel: 'issue', url: test.url }],
+              },
+              'warning',
+            );
+          }
         }
       }
     } catch (error) {

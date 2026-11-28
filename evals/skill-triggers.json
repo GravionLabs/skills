@@ -385,14 +385,51 @@
     "shouldNotTrigger": ["Add a UI style guide to this project", "Summarize the open pull requests"]
   },
   {
-    "skill": "poimen-lead",
+    "skill": "deliver-lead",
     "shouldTrigger": [
+      "/deliver-lead 42",
+      "Lead the delivery of PBI #42: start an implementer and a reviewer worker and merge once the gates pass"
+    ],
+    "shouldNotTrigger": [
+      "Implement PBI #42 yourself in this worktree and open its pull request",
+      "Create a PBI issue for the retry logic and link it to its Feature"
+    ]
+  },
+  {
+    "skill": "host-poimen",
+    "shouldTrigger": [
+      "Check the poimen host adapter: start, wait for and read one worker",
+      "The workflow says start-worker and wait-any; we are in poimen, which MCP tools are these?",
       "I run in poimen. Split this refactor across three worker agents, one worktree each, wait for them and collect their reports.",
       "Use the poimen MCP tools to start workers for these independent tasks and wait for their results."
     ],
     "shouldNotTrigger": [
+      "Add pagination to the users endpoint and its tests",
+      "Check the Orca host adapter",
       "Rename the config key in this Rust crate and update its tests",
       "Write release notes for the last milestone"
+    ]
+  },
+  {
+    "skill": "host-orca",
+    "shouldTrigger": [
+      "Check the Orca host adapter: start one worker and read its worker_done",
+      "The workflow says start-worker; this is an Orca coordinator session, which CLI command is that?"
+    ],
+    "shouldNotTrigger": [
+      "Set up the GNOME screen reader",
+      "Fix the flaky date parsing test in this Python package"
+    ]
+  },
+  {
+    "skill": "host-claude-code",
+    "shouldTrigger": [
+      "Check the Claude Code host adapter with one background agent",
+      "The workflow says start-worker and wait-any; this is plain Claude Code without poimen or Orca"
+    ],
+    "shouldNotTrigger": [
+      "Add a hook to my Claude Code settings",
+      "Bump the TypeScript version of this package and fix the type errors"
     ]
   },
   {

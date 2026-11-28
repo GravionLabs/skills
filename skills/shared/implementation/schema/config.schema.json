@@ -267,6 +267,10 @@
           "type": "integer",
           "minimum": 1
         },
+        "leafFlow": {
+          "description": "How deliver-loop delivers one PBI or Bug: legacy (default) runs its own flow, step drives the step script of deliver-lead (leafStep) through child processes (references/orchestration.md of deliver, Leaf driver). Another value ends the run with exit 64 before a session starts.",
+          "enum": ["legacy", "step"]
+        },
         "mergeRisk": {
           "description": "The highest risk level of the implementer result the loop merges (default medium); a pull request above it is handed over. --merge-risk wins.",
           "enum": ["low", "medium", "high"]
