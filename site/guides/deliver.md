@@ -57,7 +57,7 @@ A blocker in another repository holds an issue until the release of the blocker'
 
 Name the milestone `M<nnn>` (`M004`): the lookup finds the open `M004` and, after `/github-milestone close M004` renamed it, `M004 (0.2.0)`. A legacy title such as `1.3.0` works as before; to move a repository to `M<nnn>` see [Migrate legacy milestones](release.md#migrate-legacy-milestones).
 
-With `--milestone`, once no PBI or Bug of the milestone is open (none set aside or waiting), the loop opens the release pull request from the base into the default branch and prints its URL. It never merges it. An open `release-test` issue is never started: it is listed as needs you. A missing `release/next` (the release merge deletes it) is cut from the default branch.
+With `--milestone`, once no PBI or Bug of the milestone is open (none set aside or waiting), the loop opens the release pull request from the base into the default branch and prints its URL. It never merges it. An open `release-test` issue is never started: it is listed as needs you. An open pull request into the base that is not of the milestone is listed there too, to merge, close or retarget first. A missing `release/next` (the release merge deletes it) is cut from the default branch.
 
 Before that pull request the loop runs the [retro](learn-from-runs.md#after-a-milestone) of the milestone in a session of its own and links its comment in the pull request body (`Retro: <url>`). A failed or timed-out retro is reported as `retro failed` and never blocks the release. `--no-retro` or `deliver.retro.enabled: false` turns it off.
 

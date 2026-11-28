@@ -176,6 +176,12 @@ export interface Tracker extends ObjectiveReader {
   releaseTests(): Item[];
   /** The number of commits the base branch has that the default branch lacks; 0: a release pull request cannot be opened. */
   releaseCommits(): number;
+  /**
+   * The open pull requests into the base branch whose issue is not an issue of the milestone (its head branch
+   * `<type>/<nr>-…` or a closing keyword in its body names no issue of the milestone). The release gate reports them:
+   * a person merges, closes or retargets them. Nothing outside a milestone selection.
+   */
+  foreignPulls(): Pull[];
   /** The open release pull request from the base branch into the default branch; opens it when missing. Never merges it. */
   ensureReleasePull(): Pull;
   /** An item of the milestone (open or closed) has a Feature of this repository as parent: the retro comments there. */

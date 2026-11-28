@@ -77,6 +77,8 @@ export type Scenario = {
   releaseTests?: number[];
   /** Commits of the base branch beyond the default branch, default 1. */
   releaseCommits?: number;
+  /** Open pull requests into the base branch that are not of the milestone. */
+  foreignPulls?: { id: number; title: string; url: string; branch: string }[];
   /** One entry per baseState() call, the last one repeats. `throw` is a failing tracker call. */
   base?: ('green' | 'pending' | 'red' | 'throw')[];
   /** Items whose pull request is already merged before the loop starts the item. */
@@ -418,6 +420,7 @@ export function create({ selection, repo: named }: TrackerContext): Tracker {
         body: '',
       })),
     releaseCommits: () => scenario.releaseCommits ?? 1,
+    foreignPulls: (): Pull[] => scenario.foreignPulls ?? [],
     ensureReleasePull(): Pull {
       record({ call: 'releasePull', repo });
       if (scenario.releaseOnPull?.includes(repo))
