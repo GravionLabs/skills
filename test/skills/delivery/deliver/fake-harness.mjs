@@ -59,6 +59,29 @@ if (command === 'deliver-review') {
   console.log(`result: reviewed ${verdict}`);
   process.exit(0);
 }
+if (prompt.startsWith('/deliver-triage ')) {
+  // a triage session is recorded in triages.jsonl with its case; scenario.triage (by `<kind> <issue>`, else by case
+  // kind, default needs-owner):
+  // a result object, 'invalid' (not JSON), 'none' (no file) or 'fail' (exit 1)
+  const [, caseFile, resultFile] = /--case (\S+) --result (\S+)/.exec(prompt) ?? [];
+  const kase = JSON.parse(readFileSync(caseFile, 'utf8'));
+  appendFileSync(
+    path.join(dir, 'triages.jsonl'),
+    `${JSON.stringify({ prompt, case: kase, cwd: process.cwd(), pid: process.pid, at })}\n`,
+  );
+  await working();
+  const answer = scenario.triage?.[`${kase.kind} ${kase.issue}`] ??
+    scenario.triage?.[kase.kind] ?? {
+      action: 'needs-owner',
+      reason: 'the owner decides',
+      options: ['Decide it'],
+    };
+  if (answer === 'fail') process.exit(1);
+  if (answer === 'invalid') writeFileSync(resultFile, 'not json');
+  else if (answer !== 'none') writeFileSync(resultFile, JSON.stringify(answer));
+  console.log(`result: triaged ${answer.action ?? answer}`);
+  process.exit(0);
+}
 if (prompt.startsWith('/retro ')) {
   // a retro session is recorded in retros.jsonl; scenario.retro: 'post' (default), 'fail', 'none' or 'hang'.
   // retro.json holds the comments by URL: like `retro --post`, a rerun edits the comment of the marker.

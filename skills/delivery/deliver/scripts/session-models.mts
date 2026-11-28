@@ -69,5 +69,13 @@ export function sessionModels(input: {
   }
 
   const retro = resolveModel({ role: 'retro', harness: reviewHarness, layers });
-  return { implement, review, retro: { model: retro.model, tier: retro.tier }, warnings };
+  // the triage of an attention case of an Objective run (deliver-triage) runs on the review harness, as the retro
+  const triage = resolveModel({ role: 'triage', harness: reviewHarness, layers });
+  return {
+    implement,
+    review,
+    retro: { model: retro.model, tier: retro.tier },
+    triage: { model: triage.model, tier: triage.tier },
+    warnings,
+  };
 }

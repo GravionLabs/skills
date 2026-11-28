@@ -47,6 +47,17 @@ import type { Pick, sessionModels } from './session-models.mts';
 import { type StageEvent, stageAfter, stageOf } from './stage.mts';
 import type { StopSignal } from './stop-signal.mts';
 import type { BaseState, Gate, Item, Pull, Tracker } from './tracker.mts';
+import {
+  type Triage,
+  type TriageCase,
+  type TriageRun,
+  answerComment,
+  ANSWER_MARKER,
+  caseKey,
+  caseSlug,
+  parseTriage,
+  preparedText,
+} from './triage.mts';
 
 type Session = {
   exit: number | null;
@@ -236,9 +247,15 @@ type Task = {
   deny?: string[];
   /** The file the session writes its answer to, and the variable that names it. */
   output: {
-    name: 'DELIVER_RESULT_FILE' | 'DELIVER_REVIEW_FILE' | 'DELIVER_RETRO_FILE';
+    name:
+      | 'DELIVER_RESULT_FILE'
+      | 'DELIVER_REVIEW_FILE'
+      | 'DELIVER_RETRO_FILE'
+      | 'DELIVER_TRIAGE_FILE';
     file: string;
   };
+  /** The name of the session in the log; default the issue, else `retro`. */
+  label?: string;
   /** A failed session that left its work behind is no harness failure. */
   delivered(): boolean;
   role?: 'review';
@@ -265,6 +282,22 @@ async function seeStop(): Promise<void> {
   await new Promise((turn) => setImmediate(turn));
   await new Promise((turn) => setImmediate(turn));
 }
+
+// The triage of an attention case judges and changes nothing: the loop applies its result.
+const TRIAGE_DENY = [
+  ...RETRO_DENY,
+  'gh issue comment',
+  'gh pr comment',
+  'gh pr review',
+  'gh label',
+  'gh run rerun',
+  'gh run cancel',
+  'gh workflow run',
+  'git commit',
+];
+// a hand-over of these reasons is the owner's (deliver-triage, Limits): the loop applies no other action than the
+// prepared decision or a drafted follow-up, whatever the result says
+const OWNER_ONLY = ['deliver.protected-paths', 'deliver.merge-risk'];
 
 /** What the run of one repository is given; the CLI (deliver-loop.mts) builds it from the flags and the config. */
 export type RepositoryOptions = {
@@ -294,6 +327,8 @@ export type RepositoryOptions = {
   protectedPaths: string[];
   /** Tests only: the harness command from DELIVER_HARNESS (the prompt is appended). */
   harnessOverride?: string[];
+  /** An Objective run: its attention cases go to `deliver-triage`, each once across the units of the run. */
+  triage?: TriageRun;
 };
 /** The events of the run: nothing is written before `open` (a dry run writes none). */
 export type EventSink = {
@@ -330,6 +365,8 @@ export type RepositoryResult = {
   waiting: string[];
   needsYou: string[];
   handedOver: Map<number, string>;
+  /** What the triage of the run applied: an answer, an item dropped from the run, a CI job re-run. */
+  triaged: string[];
 };
 
 /** The title of the run in OSC 7501. */
@@ -374,6 +411,7 @@ export async function runRepository(context: RepositoryContext): Promise<Reposit
       waiting: [],
       needsYou: [],
       handedOver: new Map(),
+      triaged: [],
     };
   };
 
@@ -747,7 +785,7 @@ export async function runRepository(context: RepositoryContext): Promise<Reposit
     file: string,
     task: Task,
   ): Promise<Session> {
-    const label = item ? `#${item.id}` : 'retro';
+    const label = task.label ?? (item ? `#${item.id}` : 'retro');
     let prompt = task.prompt;
     if (item) {
       // the session works from this text, not from what the tracker shows when it runs
@@ -811,6 +849,7 @@ export async function runRepository(context: RepositoryContext): Promise<Reposit
       'DELIVER_RESULT_FILE',
       'DELIVER_REVIEW_FILE',
       'DELIVER_RETRO_FILE',
+      'DELIVER_TRIAGE_FILE',
     ])
       delete env[name];
     env[task.output.name] = task.output.file;
@@ -1665,6 +1704,138 @@ export async function runRepository(context: RepositoryContext): Promise<Reposit
       'warning',
     );
   }
+  // The triage of an Objective run (#1127): one `deliver-triage` session per attention case, its result applied only
+  // through `parseTriage`. Triage never merges and never writes an `agent:*` label.
+  const TRIAGE = context.options.triage;
+  const triaged: string[] = [];
+  /** The items the triage took out of the run: the frontier does not start them again. */
+  const dropped = new Set<number>();
+  /** The prepared decisions and drafted follow-ups of the triage: they go to "needs you". */
+  const triageNeeds: string[] = [];
+  /** Judges the case in a session of its own and applies its result. `item`: the issue of the case. */
+  async function triage(kase: TriageCase, item?: Item): Promise<void> {
+    if (!TRIAGE || signal.stopped) return;
+    const key = caseKey(kase);
+    if (TRIAGE.seen.has(key)) return;
+    TRIAGE.seen.add(key);
+    const slug = caseSlug(kase);
+    const label = kase.issue
+      ? `#${kase.issue}`
+      : kase.milestone
+        ? `milestone ${kase.milestone}`
+        : BASE;
+    const fields = {
+      repo: tracker.repo,
+      case: kase.kind,
+      ...(kase.issue !== undefined && { issue: kase.issue }),
+      ...(kase.pr && { pr: kase.pr }),
+      ...(kase.milestone && { milestone: kase.milestone }),
+    };
+    const caseFile = path.join(runDir, `${slug}.case.json`);
+    const resultFile = path.join(runDir, `${slug}.result.json`);
+    writeFileSync(caseFile, `${JSON.stringify(kase, null, 2)}\n`);
+    emit('deliver.triage.started', { deliver: fields }, 'info');
+    log(
+      `${label} triage of the ${kase.kind} case (${REVIEW.harnessName}, ${MODELS.triage.model})`,
+      'info',
+    );
+    const worktree = path.join(path.dirname(root), `${path.basename(root)}-wt-${slug}`);
+    const drop = () => attempt('git', ['worktree', 'remove', '--force', worktree], root);
+    let content: string | undefined;
+    let failed = '';
+    try {
+      run('git', ['fetch', '--quiet', 'origin', BASE], root);
+      drop();
+      run('git', ['worktree', 'add', '--quiet', '--detach', worktree, `origin/${BASE}`], root);
+      const session = await startSession(undefined, worktree, path.join(runDir, `${slug}.jsonl`), {
+        prompt: `/deliver-triage --case ${promptPath(caseFile)} --result ${promptPath(resultFile)}`,
+        label: `${label} triage`,
+        harness: REVIEW.harness,
+        model: MODELS.triage.model,
+        tier: MODELS.triage.tier,
+        effort: REVIEW.effort,
+        deny: TRIAGE_DENY,
+        output: { name: 'DELIVER_TRIAGE_FILE', file: resultFile },
+        delivered: () => existsSync(resultFile),
+      });
+      if (session.timedOut) failed = 'session timeout';
+      else if (session.exit !== 0) failed = `session failed (exit ${session.exit})`;
+      else if (existsSync(resultFile)) content = readFileSync(resultFile, 'utf8');
+    } catch (error) {
+      failed = firstLine(error);
+    } finally {
+      drop();
+    }
+    // a stop ends the run: the case is judged again by the next run
+    if (signal.stopped) return;
+    let result: Triage = failed
+      ? {
+          action: 'needs-owner',
+          reason: `triage failed: ${failed}`,
+          options: ['Decide the case yourself'],
+        }
+      : parseTriage(content);
+    const owner = (reason: string): Triage => ({
+      action: 'needs-owner',
+      reason,
+      options: ['Decide the case yourself'],
+    });
+    if (OWNER_ONLY.includes(kase.reason) && result.action !== 'draft-issue')
+      result =
+        result.action === 'needs-owner'
+          ? result
+          : owner(`${result.action} refused: the case is the owner's (${kase.reason})`);
+    if (result.action === 'answer' && (kase.kind !== 'needs-decision' || !item))
+      result = owner('answer refused: only a needs-decision of an issue is answered');
+    if (result.action === 'drop' && !item) result = owner('drop refused: the case names no issue');
+    if (result.action === 'rerun-ci' && TRIAGE.reruns.has(`${tracker.repo}:${result.job}`))
+      result = owner(`rerun-ci refused: job ${result.job} was re-run in this run already`);
+    const resolved = () => {
+      if (item) emit('attention.resolved', { id: `aside-${item.id}` }, 'neutral');
+    };
+    try {
+      if (result.action === 'answer' && item) {
+        tracker.commentOnce(item, ANSWER_MARKER, answerComment(result));
+        tracker.removeLabel(item, 'needs-decision');
+        aside.set(
+          item.id,
+          'needs-decision answered by the triage, label removed: the next run starts it',
+        );
+        triaged.push(`#${item.id} answered: needs-decision removed`);
+        resolved();
+      } else if (result.action === 'drop' && item) {
+        aside.delete(item.id);
+        handedOver.delete(item.id);
+        handedPulls.delete(item.id);
+        dropped.add(item.id);
+        triaged.push(`#${item.id} dropped from the run: ${result.reason}`);
+        resolved();
+      } else if (result.action === 'rerun-ci') {
+        TRIAGE.reruns.add(`${tracker.repo}:${result.job}`);
+        tracker.rerunJob(result.job, await actEnv());
+        triaged.push(`${label} CI job ${result.job} re-run: ${result.reason}`);
+      }
+    } catch (error) {
+      result = owner(`${result.action} not applied: ${firstLine(error)}`);
+    }
+    const text = preparedText(kase, result);
+    if (text) {
+      const file = path.join(runDir, `${slug}.md`);
+      writeFileSync(file, text);
+      triageNeeds.push(
+        result.action === 'draft-issue'
+          ? `${label} follow-up drafted: ${result.title} (${file})`
+          : `${label} decide: ${(result as Extract<Triage, { action: 'needs-owner' }>).reason} (${file})`,
+      );
+    }
+    log(`${label} triage: ${result.action}`, text ? 'warn' : 'ok');
+    emit(
+      'deliver.triage.done',
+      { deliver: { ...fields, action: result.action } },
+      text ? 'warning' : 'success',
+    );
+  }
+
   try {
     const created = tracker.syncStageLabels();
     if (created.length) log(`labels created: ${created.join(', ')}`, 'info');
@@ -1796,6 +1967,20 @@ export async function runRepository(context: RepositoryContext): Promise<Reposit
         },
         'warning',
       );
+      // an Objective run: the triage judges a hand-over or a needs-decision (it counts as a session of the item)
+      if (planned || reasonCode(why) === 'deliver.needs-decision') {
+        await triage(
+          {
+            kind: planned ? 'handover' : 'needs-decision',
+            repo: tracker.repo,
+            issue: item.id,
+            ...(pull && { pr: pull.url }),
+            reason: reasonCode(why),
+            text: why.slice(0, 1000),
+          },
+          item,
+        );
+      }
     }
     emit('progress', { done: merged.length, total, label: 'PBIs' });
   }
@@ -1811,6 +1996,7 @@ export async function runRepository(context: RepositoryContext): Promise<Reposit
       merged.some((line) => line.startsWith(`#${id} `)) ||
       aside.has(id) ||
       handedOver.has(id) ||
+      dropped.has(id) ||
       waiting.some((line) => line.startsWith(`#${id} `));
     return tracker.items().filter((item) => !known(item.id));
   };
@@ -1836,7 +2022,11 @@ export async function runRepository(context: RepositoryContext): Promise<Reposit
             : Math.min(slots.limit - running.size, MAX > 0 ? MAX - started : slots.limit);
         let starts: Item[] = [];
         let candidates = open.filter(
-          (item) => !running.has(item.id) && !aside.has(item.id) && !handedOver.has(item.id),
+          (item) =>
+            !running.has(item.id) &&
+            !aside.has(item.id) &&
+            !handedOver.has(item.id) &&
+            !dropped.has(item.id),
         );
         if (room > 0) {
           const bug = await checkBase();
@@ -1940,6 +2130,11 @@ export async function runRepository(context: RepositoryContext): Promise<Reposit
           `milestone ${milestone} has no open issue and ${BASE} has no commit beyond ${tracker.defaultBranch()}, nothing to deliver`,
           'info',
         );
+      } else if (dropped.size > 0) {
+        log(
+          `milestone ${milestone} is not released: the triage took ${[...dropped].map((nr) => `#${nr}`).join(', ')} out of the run`,
+          'warn',
+        );
       } else if (tracker.items().length === 0) {
         let release: Pull | undefined;
         if (RETRO.enabled) {
@@ -1995,6 +2190,64 @@ export async function runRepository(context: RepositoryContext): Promise<Reposit
     }
   }
 
+  // The attention cases of the end of the run: a red base, a milestone that is not done. The milestone event comes
+  // before its triage, which a reader follows.
+  if (baseBlocked) {
+    emit(
+      'attention',
+      {
+        id: 'base-red',
+        reason: 'deliver.base-red',
+        text: `blocked: ${baseBlocked}`,
+        needsYou: true,
+        links: repairBug ? [{ rel: 'issue', url: repairBug.url }] : [],
+      },
+      'warning',
+    );
+    await triage(
+      {
+        kind: 'blocked',
+        repo: tracker.repo,
+        ...(repairBug && { issue: repairBug.id }),
+        reason: 'deliver.base-red',
+        text: `blocked: ${baseBlocked}`.slice(0, 1000),
+      },
+      repairBug,
+    );
+  }
+  const clean =
+    !baseBlocked &&
+    !releaseError &&
+    aside.size === 0 &&
+    handedOver.size === 0 &&
+    waiting.length === 0;
+  if (milestone && !signal.stopped) {
+    emit(
+      'deliver.milestone.done',
+      {
+        deliver: {
+          repo: tracker.repo,
+          milestone,
+          merged: merged.length,
+          aside: aside.size,
+          pr: releaseUrl,
+        },
+      },
+      clean && !releaseError ? 'success' : 'warning',
+    );
+    if (!clean)
+      await triage({
+        kind: 'milestone-done',
+        repo: tracker.repo,
+        milestone,
+        reason: 'deliver.incomplete',
+        text: `milestone ${milestone}: merged ${merged.length}, set aside ${aside.size}, handed over ${handedOver.size}, waiting ${waiting.length}${releaseError ? `, release pull request failed: ${releaseError}` : ''}${releaseUrl ? `, release ${releaseUrl}` : ''}`.slice(
+          0,
+          1000,
+        ),
+      });
+  }
+
   // an issue of level high is listed first: a person looks at it before the rest. A handed-over one has its own
   // line, and one a person merged was looked at.
   const isHigh = (nr: number) => risks.get(nr) === 'high';
@@ -2004,7 +2257,7 @@ export async function runRepository(context: RepositoryContext): Promise<Reposit
   const handedLines = [...handedOver]
     .sort(([a], [b]) => Number(isHigh(b)) - Number(isHigh(a)))
     .map(([nr, why]) => `#${nr} ${why}`);
-  needsYou = [...highRisk, ...handedLines, ...needsYou];
+  needsYou = [...highRisk, ...handedLines, ...needsYou, ...triageNeeds];
   // the open PBIs that wait for a handed-over pull request: their blockers name its issue
   const waitingFor = new Map<number, string[]>();
   for (const nr of handedOver.keys()) {
@@ -2027,6 +2280,8 @@ export async function runRepository(context: RepositoryContext): Promise<Reposit
     `waiting (${waiting.length}):${waiting.map((line) => `\n  ${line}`).join('')}`,
     waiting.length ? 'warn' : undefined,
   );
+  if (triaged.length)
+    say(`triaged (${triaged.length}):${triaged.map((line) => `\n  ${line}`).join('')}`, 'info');
   if (releaseError) say(`release pull request failed: ${releaseError}`, 'bad');
   if (retroResult.failed) say(`retro failed: ${retroResult.failed}`, 'warn');
   say(
@@ -2035,17 +2290,6 @@ export async function runRepository(context: RepositoryContext): Promise<Reposit
   );
   if (baseBlocked) {
     say(`blocked: ${baseBlocked}`, 'bad');
-    emit(
-      'attention',
-      {
-        id: 'base-red',
-        reason: 'deliver.base-red',
-        text: `blocked: ${baseBlocked}`,
-        needsYou: true,
-        links: repairBug ? [{ rel: 'issue', url: repairBug.url }] : [],
-      },
-      'warning',
-    );
   }
   for (const [nr, dependents] of waitingFor) {
     say(
@@ -2059,12 +2303,6 @@ export async function runRepository(context: RepositoryContext): Promise<Reposit
       'warn',
     );
   }
-  const clean =
-    !baseBlocked &&
-    !releaseError &&
-    aside.size === 0 &&
-    handedOver.size === 0 &&
-    waiting.length === 0;
   // done, blocked (a red base, an issue set aside, an error) or waiting for a handed-over pull request
   const status = harnessDead
     ? 'failed'
@@ -2096,21 +2334,6 @@ export async function runRepository(context: RepositoryContext): Promise<Reposit
       ...(retroResult.failed && { retroFailed: retroResult.failed }),
     })}\n`,
   );
-  if (milestone && !signal.stopped) {
-    emit(
-      'deliver.milestone.done',
-      {
-        deliver: {
-          repo: tracker.repo,
-          milestone,
-          merged: merged.length,
-          aside: aside.size,
-          pr: releaseUrl,
-        },
-      },
-      clean && !releaseError ? 'success' : 'warning',
-    );
-  }
   // An incomplete run (issues set aside or waiting) is no success: the agent-events format has no
   // other outcome for it than `failed`; the counts are in the text. OSC 7501 shows it as `done` with
   // `tone=warning`; only `reason: 'deliver.harness'` (the harness failed) is an `error`.
@@ -2135,5 +2358,5 @@ export async function runRepository(context: RepositoryContext): Promise<Reposit
         : status === 'waiting-for-handed-over'
           ? 3
           : 2;
-  return { exitCode, status, merged, aside, waiting, needsYou, handedOver };
+  return { exitCode, status, merged, aside, waiting, needsYou, handedOver, triaged };
 }

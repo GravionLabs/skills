@@ -291,6 +291,11 @@ export function create({ selection, repo: named }: TrackerContext): Tracker {
       if (named) record({ call: 'syncStageLabels', repo });
       return [];
     },
+    removeLabel: (item: Item, label: string) => {
+      if (label.startsWith('agent:')) throw new Error(`refused: ${label}`);
+      record({ call: 'removeLabel', id: item.id, label, repo: named });
+    },
+    rerunJob: (job: number) => record({ call: 'rerunJob', job, repo: named }),
     commentOnce: (item: Item, marker: string, body: string) =>
       appendFileSync(
         path.join(dir, 'comments.jsonl'),

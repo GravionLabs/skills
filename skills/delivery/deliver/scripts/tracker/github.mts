@@ -543,6 +543,27 @@ export function create({
       return syncLabels((...args) => gh(...args), repo);
     },
 
+    removeLabel(item: Item, label: string): void {
+      // only the loop writes the stage labels, and never through this call
+      if (label.toLowerCase().startsWith(LABEL_PREFIX)) throw new Error(`refused: ${label}`);
+      try {
+        gh(
+          'api',
+          '-X',
+          'DELETE',
+          `repos/${repo}/issues/${item.id}/labels/${encodeURIComponent(label)}`,
+        );
+      } catch (error) {
+        // not on the issue (any more)
+        if (!/HTTP 404/.test((error as { stderr?: string }).stderr ?? '')) throw error;
+      }
+    },
+
+    rerunJob(job: number, env: Record<string, string>): void {
+      if (!Number.isSafeInteger(job) || job < 1) throw new Error(`invalid job id: ${job}`);
+      gh('api', '-X', 'POST', `repos/${repo}/actions/jobs/${job}/rerun`, env);
+    },
+
     commentOnce(item: Item, marker: string, body: string): void {
       const route = `repos/${repo}/issues/${item.id}/comments`;
       const login = gh('api', 'user', '--jq', '.login');
