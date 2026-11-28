@@ -17,8 +17,21 @@
 // same gate again; `owner` of guard, merge-approved or limits hands over as the loop does (`deliver.handover` or
 // `deliver.aside`, the `agent:handover` label, one `deliver-handover` comment). Another word ends the task
 // (task.finished `skipped`, `deliver.gate` and `deliver.result` name the gate).
+// Resume (`resume`, the first call of a new lead): the step `resume` (step.started and step.finished, `deliver.restart`)
+// marks where the new lead took over. A worker recorded before it belongs to the lead before and is never waited for:
+// an implementer whose pull request is open goes to review, a reviewer whose verdict file is there to its verdict, any
+// other starts again (`deliver.counted` timeout). A task that ended without a merge, or that has no step of a lead (a
+// run of the loop), restarts (`deliver.restart`): the events before it are history, the `agent:*` label and the pull
+// request decide the next step (`deliver.resumed` on the replayed steps). Times run from the resume, never from before.
 import { execFileSync } from 'node:child_process';
-import { appendFileSync, mkdirSync, readFileSync, rmSync } from 'node:fs';
+import {
+  appendFileSync,
+  mkdirSync,
+  readFileSync,
+  readdirSync,
+  rmSync,
+  writeFileSync,
+} from 'node:fs';
 import path from 'node:path';
 import { runOrigin } from '../../deliver/scripts/event-dir.mts';
 import { reasonCode } from '../../deliver/scripts/events.mts';
@@ -40,7 +53,12 @@ import { getStageGate, setStageGate } from '../../deliver/scripts/gates/stage.mt
 import { verifyVerdict } from '../../deliver/scripts/gates/verify-verdict.mts';
 import { handoverNote } from '../../deliver/scripts/handover.mts';
 import { type ConfigLayer, resolveModel } from '../../deliver/scripts/resolve-model.mts';
-import { type Verdict, findingsLine } from '../../deliver/scripts/review.mts';
+import {
+  RISK_LEVELS,
+  type ReviewMark,
+  type Verdict,
+  findingsLine,
+} from '../../deliver/scripts/review.mts';
 import { issueTier } from '../../deliver/scripts/session-models.mts';
 import type { Stage } from '../../deliver/scripts/stage.mts';
 import type { Item, Pull, Tracker } from '../../deliver/scripts/tracker.mts';
@@ -175,11 +193,18 @@ export type LeafInput = {
   gates?: Partial<LeafGates>;
   /** The clock of the events and of the waits after `retry`, in milliseconds; default `Date.now`. */
   now?: () => number;
+  /**
+   * The first call of a new lead for a run or an issue another lead or the loop left (`--resume`): no handle of the
+   * lead before is waited for, and an issue in an `agent:*` stage resumes from it. Never with `result`.
+   */
+  resume?: boolean;
 };
 
 const RUN = /^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$/;
 /** The steps a worker runs. */
 const WORKER_STEP = /^(implement|fix-\d+|review-\d+)$/;
+/** The step that marks a resume; `deliver.restart` restarts the task from its label. */
+const RESUME_STEP = 'resume';
 /** The gates whose `owner` hands the issue over; `owner` of another gate ends the task. */
 const HANDOVER_GATES = new Set(['guard', 'merge-approved', 'limits']);
 
@@ -354,22 +379,89 @@ export async function leafStep(input: LeafInput): Promise<Action> {
   const repo = tracker.repo;
   const task = `issue-${issue}`;
 
+  if (input.resume && result) throw new UsageError('--resume starts a new lead: no --result');
   const all = readRunEvents(input.events, run) ?? [];
   const emit = eventWriter(input.events, run, all, now);
-  const own = () => all.filter((event) => event.task === task);
+  /** Every event of the task, before a restart too. */
+  const history = () => all.filter((event) => event.task === task);
+  const resumes = () =>
+    history().filter((event) => event.type === 'step.started' && stepName(event) === RESUME_STEP);
+  /** The restart the task's state begins with: the events before it are history (limits still count them). */
+  const epoch = () =>
+    seqOf(
+      resumes()
+        .filter((event) => fieldsOf(event, 'deliver').restart === true)
+        .at(-1),
+    );
+  const own = () => {
+    const from = epoch();
+    return history().filter((event) => seqOf(event) >= from);
+  };
   const ofType = (type: string) => own().filter((event) => event.type === type);
-  /** Events without a task that name the issue under `deliver`. */
+  /** Events without a task that name the issue under `deliver`, since the restart. */
   const about = (type: string) =>
     all.filter((event) => {
       const d = fieldsOf(event, 'deliver');
-      return event.type === type && d.issue === issue && (d.repo ?? repo) === repo;
+      return (
+        event.type === type &&
+        d.issue === issue &&
+        (d.repo ?? repo) === repo &&
+        seqOf(event) > epoch()
+      );
     });
+  const item = (title = ''): Item => ({ id: issue, title, url: '', labels: [], body: '' });
+  /** A `task.started` after the last `task.finished`: the task runs. */
+  const taskOpen = () => {
+    const ended = seqOf(
+      history()
+        .filter((event) => event.type === 'task.finished')
+        .at(-1),
+    );
+    return history().some((event) => event.type === 'task.started' && seqOf(event) > ended);
+  };
+  const startRun = (found: { title: string; url: string }) => {
+    if (!all.some((event) => event.type === 'run.started'))
+      emit('run.started', {
+        profiles: ['deliver@2'],
+        origin: runOrigin(cwd),
+        subject: tracker.itemSubject({ ...item(found.title), url: found.url }),
+      });
+    if (!taskOpen())
+      emit('task.started', {
+        task,
+        subject: tracker.itemSubject({ ...item(found.title), url: found.url }),
+      });
+  };
+
+  if (input.resume) {
+    const done = ofType('task.finished').at(-1);
+    if (done?.outcome === 'succeeded') return { do: 'end', report: reportOf(issue, done) };
+    // the steps of a lead carry their role; the loop's steps do not
+    const leadSteps = own().some(
+      (event) =>
+        event.type === 'step.started' &&
+        WORKER_STEP.test(stepName(event)) &&
+        fieldsOf(event, 'deliver').role !== undefined,
+    );
+    const restart = done !== undefined || !leadSteps;
+    if (restart) {
+      const found = tracker.issue({ repo, number: issue });
+      if (!found) throw new UsageError(`#${issue} not found in ${repo}`);
+      startRun(found);
+    }
+    const text = restart
+      ? 'a new lead resumes from the stage label'
+      : 'a new lead resumes from the events';
+    emit('step.started', { task, step: { name: RESUME_STEP, text }, deliver: { restart } });
+    emit('step.finished', { task, step: { name: RESUME_STEP, text } });
+  }
 
   const finished = ofType('task.finished').at(-1);
   if (finished) return { do: 'end', report: reportOf(issue, finished) };
 
   const resultFile = path.join(runDir, `${issue}.result.json`);
-  const item = (title = ''): Item => ({ id: issue, title, url: '', labels: [], body: '' });
+  /** The last resume: a worker recorded before it belongs to a lead that is gone. */
+  const resumed = resumes().at(-1);
   const steps = own().filter(
     (event) => event.type === 'step.started' && WORKER_STEP.test(stepName(event)),
   );
@@ -460,8 +552,11 @@ export async function leafStep(input: LeafInput): Promise<Action> {
   };
 
   /** Seconds since an event was written, by the clock of the run. */
-  const elapsed = (event: RunEvent): number =>
-    Math.max(0, (now() - (Date.parse(String(event.ts ?? '')) || now())) / 1000);
+  /** Seconds since an event was written, by the clock of the run; never from before the last resume. */
+  const elapsed = (event: RunEvent): number => {
+    const at = (e: RunEvent | undefined) => Date.parse(String(e?.ts ?? '')) || 0;
+    return Math.max(0, (now() - (Math.max(at(event), at(resumed)) || now())) / 1000);
+  };
 
   /** `retry`: a wait with back-off, then the same gate again; past `RETRY_LIMIT_S` without progress the task ends. */
   const waitOrEnd = (name: string, gate: GateResult): Action => {
@@ -539,43 +634,222 @@ export async function leafStep(input: LeafInput): Promise<Action> {
     if (!found) throw new UsageError(`#${issue} not found in ${repo}`);
     // the issue was read once: the gates apply their rule to it
     const reader = { repo, issue: () => found } as unknown as Tracker;
-    if (own().length === 0) {
-      // an issue an earlier run left in a stage: a start would repeat its work. Resuming it from the label is a
-      // step of its own (deliver-lead resume); this one writes nothing and ends.
-      const stage = getStageGate(reader, issue).evidence.stage;
-      if (typeof stage === 'string')
-        return {
-          do: 'end',
-          report: {
-            issue,
-            outcome: 'ended',
-            reason: `#${issue} is in stage ${stage} and run ${run} has no events of it: resume it, or remove the agent:${stage} label to start it again`,
-            gate: 'stage',
-          },
-        };
-    }
+    const stage = getStageGate(reader, issue).evidence.stage;
+    if (epoch() > 0 && typeof stage === 'string') return fromStage(found, reader, stage as Stage);
+    if (own().length === 0 && typeof stage === 'string')
+      // an issue an earlier run left in a stage: a start would repeat its work; this call writes nothing
+      return {
+        do: 'end',
+        report: {
+          issue,
+          outcome: 'ended',
+          reason: `#${issue} is in stage ${stage} and run ${run} has no events of it: resume it with --resume, or remove the agent:${stage} label to start it again`,
+          gate: 'stage',
+        },
+      };
+    return startFresh(found, reader);
+  }
+
+  /** Stage, merge base, what was merged meanwhile, then the implementer; `extra` goes into its `step.started`. */
+  function startFresh(
+    found: { number: number; title: string; url: string; body: string; labels: string[] },
+    reader: Tracker,
+    extra: Body = {},
+  ): Action {
     const level = issueType(found.labels, found.title);
-    if (!all.some((event) => event.type === 'run.started'))
-      emit('run.started', {
-        profiles: ['deliver@2'],
-        origin: runOrigin(cwd),
-        subject: tracker.itemSubject({ ...item(found.title), url: found.url }),
-      });
-    if (ofType('task.started').length === 0)
-      emit('task.started', {
-        task,
-        subject: tracker.itemSubject({ ...item(found.title), url: found.url }),
-      });
+    startRun(found);
     const staged = decide('stage', gates.stage(tracker, item(found.title), 'implementing'));
     if (staged) return staged;
     const base = gates.mergeBase(reader, issue, config);
-    return decide('merge-base', base) ?? startImplementer(found, level ?? 'pbi', base);
+    return decide('merge-base', base) ?? startImplementer(found, level ?? 'pbi', base, extra);
+  }
+
+  /** The pull request of the issue that is merged, by anyone; unknown is not merged. */
+  function mergedOf(at: Tracker, pull?: Pull): Pull | undefined {
+    try {
+      return (
+        at.mergedPullOf(item()) ?? (pull && at.gate(pull).state === 'merged' ? pull : undefined)
+      );
+    } catch {
+      return undefined;
+    }
+  }
+
+  /**
+   * The verdict known for `head`: the newest verdict file of a review of this run, else the newest of the `marks` the
+   * login of the loop recorded on the pull request, written to a verdict file of the run. Neither bound to `head`: none.
+   */
+  function knownVerdict(
+    marks: ReviewMark[],
+    head: string,
+  ): { file: string; verdict: Verdict['verdict']; source: string } | undefined {
+    const rounds = history().filter(
+      (event) =>
+        event.type === 'step.started' &&
+        fieldsOf(event, 'deliver').role === 'reviewer' &&
+        fieldsOf(event, 'deliver').head === head,
+    );
+    for (const round of rounds.reverse()) {
+      const file = String(fieldsOf(round, 'deliver').verdictFile);
+      const checked = gates.verifyVerdict({
+        content: readIfThere(file),
+        reviewedHead: head,
+        prHead: head,
+      });
+      if (checked.result === 'pass') return { file, verdict: 'approve', source: 'run' };
+      if (Array.isArray(checked.evidence.findings))
+        return { file, verdict: 'changes', source: 'run' };
+    }
+    const mark = [...marks].reverse().find((m) => m.head === head);
+    if (!mark || (mark.verdict === 'changes' && !mark.review)) return undefined;
+    const verdict: Verdict = mark.review ?? { verdict: 'approve', findings: [], unmet: [] };
+    const file = path.join(runDir, `${issue}.review-recorded.json`);
+    mkdirSync(runDir, { recursive: true });
+    writeFileSync(file, `${JSON.stringify({ ...verdict, head }, null, 2)}\n`);
+    return { file, verdict: mark.verdict, source: 'mark' };
+  }
+
+  /**
+   * The risk level of the pull request for guard and merge: the highest of the marks, this result file and those of
+   * earlier runs, as in the loop. None known: the result file stays as it is, and the guard hands over.
+   */
+  function keepRisk(marks: ReviewMark[]): void {
+    const levels = [...marks.map((m) => m.risk), riskOf(resultFile), ...earlierRisks()];
+    const level = levels.reduce<string | undefined>(
+      (max, next) =>
+        next && RISK_LEVELS.indexOf(next) > RISK_LEVELS.indexOf(max ?? '') ? next : max,
+      undefined,
+    );
+    if (!level || level === riskOf(resultFile)) return;
+    mkdirSync(runDir, { recursive: true });
+    writeFileSync(resultFile, `${JSON.stringify({ risk: { level } })}\n`);
+  }
+
+  /** The risk levels of the result files of the issue in the other run folders beside this one. */
+  function earlierRisks(): (string | undefined)[] {
+    const beside = path.dirname(runDir);
+    let names: string[] = [];
+    try {
+      names = readdirSync(beside).filter((name) => path.join(beside, name) !== runDir);
+    } catch {
+      // no earlier run
+    }
+    return names.map((name) => riskOf(path.join(beside, name, `${issue}.result.json`)));
+  }
+
+  /**
+   * A restarted task resumes from its stage label: merged ends, `handover` stays with the person, no pull request
+   * starts the implementer again (counted), an open one is replayed as a finished implementer and, from `review` on,
+   * with the verdict known for its head; the next call goes on from there.
+   */
+  async function fromStage(
+    found: { number: number; title: string; url: string; body: string; labels: string[] },
+    reader: Tracker,
+    stage: Stage,
+  ): Promise<Action> {
+    if (stage === 'handover')
+      return end(
+        `#${issue} is handed over (agent:handover): a person decides; remove the label to start it again`,
+        { gate: 'stage' },
+      );
+    const mergeBase = gates.mergeBase(reader, issue, config);
+    const stop = decide('merge-base', mergeBase);
+    if (stop) return stop;
+    const base = String(mergeBase.evidence.base);
+    backmerge = str(mergeBase.evidence.backmerge);
+    const at = await (input.trackerAt ?? (() => tracker))(base);
+    const pull = at.pullOf(item());
+    const merged = mergedOf(at, pull);
+    if (merged) {
+      // merged before: never through the merge gate again
+      pr = merged.url;
+      const cleared = gates.stage(at, item(), undefined);
+      return end(
+        cleared.result === 'pass'
+          ? 'already merged'
+          : `already merged; stage not cleared: ${cleared.reason}`,
+        { merged: true },
+      );
+    }
+    if (!pull) {
+      const limit = gates.limits({ events: all, issue, kind: 'timeout', repo });
+      if (limit.result === 'owner')
+        return handOver(
+          `session failed: resumed from agent:${stage} without a pull request`,
+          'limits',
+        );
+      return (
+        decide('limits', limit) ?? startFresh(found, reader, { counted: 'timeout', resumed: stage })
+      );
+    }
+    const target = at.pullRequest(pull.id).base;
+    if (target !== base) return end(`the pull request goes into ${target}, not into ${base}`);
+    const head = at.compareRefs(pull).head;
+    // the marks of the loop's login only (`recordedVerdicts`): anyone else's comment is ignored
+    let marks: ReviewMark[] = [];
+    try {
+      marks = at.recordedVerdicts(pull);
+    } catch {
+      // unreadable marks: the pull request is reviewed
+    }
+    keepRisk(marks);
+    const model = (role: 'implement' | 'review') =>
+      resolveModel({
+        role,
+        ...(role === 'implement' && { issueTier: issueTier(found.body).tier }),
+        harness: config.deliver?.harness,
+        layers: input.layers ?? [],
+      }).model;
+    const text = `resumed from agent:${stage}: the pull request is open`;
+    emit('step.started', {
+      task,
+      step: { name: 'implement', text },
+      deliver: {
+        role: 'implementer',
+        base,
+        branch: pull.branch,
+        model: model('implement'),
+        resultFile,
+        resumed: stage,
+        ...(backmerge && { backmerge }),
+      },
+    });
+    emit('step.finished', { task, step: { name: 'implement', text } }, 'success');
+    // `implementing`: the implementer may have pushed after any verdict, so the pull request is reviewed
+    const known = stage === 'implementing' ? undefined : knownVerdict(marks, head);
+    if (known) {
+      const round = reviewRound(history(), issue);
+      const step = { name: `review-${round}`, n: round };
+      emit('step.started', {
+        task,
+        step: { ...step, text: `review round ${round} of ${head}: the ${known.source} verdict` },
+        deliver: {
+          role: 'reviewer',
+          base,
+          branch: pull.branch,
+          pr: pull.url,
+          number: pull.id,
+          head,
+          model: model('review'),
+          verdictFile: known.file,
+          resumed: known.source,
+        },
+      });
+      emit(
+        'step.finished',
+        { task, step: { ...step, text: `review round ${round}: ${known.verdict}` } },
+        known.verdict === 'changes' ? 'warning' : 'success',
+      );
+    }
+    // the replayed steps are the state now: the flow goes on from them
+    return leafStep({ ...input, resume: false, result: undefined });
   }
 
   function startImplementer(
     found: { number: number; title: string; body: string },
     level: string,
     mergeBase: GateResult,
+    extra: Body = {},
   ): Action {
     const base = String(mergeBase.evidence.base);
     backmerge = str(mergeBase.evidence.backmerge);
@@ -601,6 +875,7 @@ export async function leafStep(input: LeafInput): Promise<Action> {
         resultFile,
         ...(str(meanwhile.evidence.file) && { mergedMeanwhile: meanwhile.evidence.file }),
         ...(backmerge && { backmerge }),
+        ...extra,
       },
     });
     return startAction(issue, all.at(-1)!);
@@ -616,6 +891,9 @@ export async function leafStep(input: LeafInput): Promise<Action> {
     (event) => stepName(event) === name && after(event),
   );
   const workers = all.filter((event) => event.type === 'deliver.worker');
+
+  const base = String(fieldsOf(started, 'deliver').base);
+  const at = await (input.trackerAt ?? (() => tracker))(base);
 
   if (!isFinished) {
     const worker = workers.find((event) => {
@@ -647,42 +925,70 @@ export async function leafStep(input: LeafInput): Promise<Action> {
         );
       return startAction(issue, current);
     }
-    const handle = String(fieldsOf(worker, 'deliver').handle);
-    const answer = result?.handle === handle ? result : undefined;
-    // the session budget: a timeout or a question waits again within it; the worker may still push, so no second
-    // worker starts on its branch
-    const left = SESSION_BUDGET_S - elapsed(worker);
-    const wait = (): Action =>
-      left > 0
-        ? { do: 'wait-any', handles: [handle], timeout: Math.max(60, Math.ceil(left)) }
-        : handOver('session timeout', undefined, { word: 'timeout' });
-    if (answer?.answer === 'owner')
-      return handOver(
-        `needs-decision: the ${role} asks what only the owner answers: ${quoted(answer.question ?? 'no question given')}`,
-      );
-    if (answer?.answer) return wait();
-    if (answer?.report === undefined) {
-      if (answer?.state === 'done') return { do: 'read-result', handle };
-      if (answer?.state === 'blocked')
-        return left > 0
-          ? { do: 'read-result', handle, question: answer.question ?? 'no question given' }
-          : wait();
-      if (answer?.state === 'timeout') return wait();
-      if (answer?.state === 'error' || answer?.state === 'gone') {
-        const limit = gates.limits({ events: all, issue, kind: 'timeout', repo });
-        if (limit.result === 'pass')
-          return again(current, 'timeout', `one more session after ${answer.state}`);
-        if (limit.result !== 'owner') return decide('limits', limit)!;
-        return handOver(
-          `session failed: the ${role} ended without a result (${answer.state})`,
-          'limits',
+    // a worker of the lead before the resume: it is gone, its handle is never waited for. What it left counts.
+    const stale = seqOf(worker) < seqOf(resumed);
+    /** The stale worker's step once more, counted as a timeout. */
+    const restartStale = (): Action => {
+      const limit = gates.limits({ events: all, issue, kind: 'timeout', repo });
+      if (limit.result === 'pass')
+        return again(
+          current,
+          'timeout',
+          `one more session: the ${role} of the lead before is gone`,
         );
+      if (limit.result !== 'owner') return decide('limits', limit)!;
+      return handOver(`session failed: the ${role} of the lead before left no result`, 'limits');
+    };
+    if (stale) {
+      const open = role === 'implementer' ? at.pullOf(item()) : undefined;
+      const known =
+        open ??
+        (role === 'reviewer' ? ({ id: Number(cd.number), url: String(cd.pr) } as Pull) : undefined);
+      const merged = mergedOf(at, known);
+      if (merged) {
+        pr = merged.url;
+        return finishMerged();
       }
-      return wait();
+      if (role === 'implementer' && !open) return restartStale();
     }
-    if (!answer.report.trim()) return end(`the ${role} left no report: the work is not done`);
+    if (!stale) {
+      const handle = String(fieldsOf(worker, 'deliver').handle);
+      const answer = result?.handle === handle ? result : undefined;
+      // the session budget: a timeout or a question waits again within it; the worker may still push, so no second
+      // worker starts on its branch
+      const left = SESSION_BUDGET_S - elapsed(worker);
+      const wait = (): Action =>
+        left > 0
+          ? { do: 'wait-any', handles: [handle], timeout: Math.max(60, Math.ceil(left)) }
+          : handOver('session timeout', undefined, { word: 'timeout' });
+      if (answer?.answer === 'owner')
+        return handOver(
+          `needs-decision: the ${role} asks what only the owner answers: ${quoted(answer.question ?? 'no question given')}`,
+        );
+      if (answer?.answer) return wait();
+      if (answer?.report === undefined) {
+        if (answer?.state === 'done') return { do: 'read-result', handle };
+        if (answer?.state === 'blocked')
+          return left > 0
+            ? { do: 'read-result', handle, question: answer.question ?? 'no question given' }
+            : wait();
+        if (answer?.state === 'timeout') return wait();
+        if (answer?.state === 'error' || answer?.state === 'gone') {
+          const limit = gates.limits({ events: all, issue, kind: 'timeout', repo });
+          if (limit.result === 'pass')
+            return again(current, 'timeout', `one more session after ${answer.state}`);
+          if (limit.result !== 'owner') return decide('limits', limit)!;
+          return handOver(
+            `session failed: the ${role} ended without a result (${answer.state})`,
+            'limits',
+          );
+        }
+        return wait();
+      }
+      if (!answer.report.trim()) return end(`the ${role} left no report: the work is not done`);
+    }
     // the report is a claim: what counts is the pull request and the verdict file the gates read
-    let text = `${name === 'implement' ? 'implementer' : name} finished`;
+    let text = `${name === 'implement' ? 'implementer' : name} finished${stale ? ' (its lead is gone, the pull request is open)' : ''}`;
     if (role === 'reviewer') {
       // the file of this round for the commit it reviewed; the head of the pull request is checked before the merge
       const head = String(cd.head);
@@ -699,6 +1005,7 @@ export async function leafStep(input: LeafInput): Promise<Action> {
             : undefined;
       const round = String(fieldsOf(current, 'step').n);
       if (!verdict) {
+        if (stale) return restartStale();
         const limit = gates.limits({ events: all, issue, kind: 'review', repo });
         if (limit.result === 'pass')
           return again(current, 'review', `review round ${round}: ${checked.reason}, one retry`);
@@ -723,8 +1030,6 @@ export async function leafStep(input: LeafInput): Promise<Action> {
     );
   }
 
-  const base = String(fieldsOf(started, 'deliver').base);
-  const at = await (input.trackerAt ?? (() => tracker))(base);
   if (role === 'implementer') {
     // the implementer finished: its pull request goes to review, a fix round to the next one
     const pull = at.pullOf(item());

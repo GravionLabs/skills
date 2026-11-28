@@ -24,6 +24,10 @@ import {
   objectiveLeaves,
   parseObjective,
 } from '../../../../../skills/delivery/deliver/scripts/objective.mts';
+import { reviewMarks } from '../../../../../skills/delivery/deliver/scripts/tracker/github.mts';
+
+/** The login of the loop on the fake tracker. */
+export const FAKE_LOGIN = 'deliver-bot';
 
 /** An issue of `repositories`. `subIssues`: numbers of the same repository or `owner/repo#n`. */
 export type FakeIssue = Partial<Omit<TrackedIssue, 'repo' | 'url'>> & {
@@ -97,6 +101,11 @@ export type Scenario = {
   base?: ('green' | 'pending' | 'red' | 'throw')[];
   /** Items whose pull request is already merged before the loop starts the item. */
   mergedBefore?: number[];
+  /**
+   * The comments on a pull request by its number, read as the GitHub tracker reads them (`reviewMarks`): only an
+   * unedited comment of `FAKE_LOGIN` counts. `edited` sets `updated_at` after `created_at`.
+   */
+  pullComments?: Record<string, { login: string; body: string; edited?: boolean }[]>;
   /** Items whose pull request is merged by someone else while their session runs. */
   mergedDuring?: number[];
   /** The publish state of the default branch (default none). */
@@ -376,7 +385,16 @@ export function create({ selection, repo: named, base }: TrackerContext): Tracke
         `${JSON.stringify({ id: item.id, marker, body })}\n`,
       ),
     recordVerdict: () => {},
-    recordedVerdicts: () => [],
+    recordedVerdicts: (pull: Pull) =>
+      reviewMarks(
+        (scenario.pullComments?.[String(pull.id)] ?? []).map(({ login, body, edited }) => ({
+          body,
+          user: { login },
+          created_at: '2026-01-01T00:00:00Z',
+          updated_at: edited ? '2026-01-02T00:00:00Z' : '2026-01-01T00:00:00Z',
+        })),
+        FAKE_LOGIN,
+      ),
     pullOf(item: Item): Pull | undefined {
       if (!existsSync(path.join(dir, `pr-${item.id}`))) return undefined;
       const id = 100 + item.id;

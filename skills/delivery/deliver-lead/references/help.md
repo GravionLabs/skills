@@ -12,7 +12,7 @@ Leads the delivery of one PBI or Bug on a worker host: an implementer worker, a 
 ## Arguments and flags
 
 - `<issue>`: a PBI or Bug of the repository of this checkout. Features, Epics and milestones are not supported yet, Objectives are not covered.
-- `--run <run>`: resume that run from its agent-events; without it a new run id is created and printed.
+- `--run <run>`: resume that run from its agent-events; without it a new run id is created and printed. An issue another run or the loop left in an `agent:*` stage resumes from that stage, without repeating a merge.
 - `help` (also `--help`, `-h`): print this text.
 
 Hosts: poimen, Orca, plain Claude Code. On other hosts use the loop of `deliver`.

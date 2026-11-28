@@ -33,7 +33,9 @@ A `read-result` with `question` says so. A question about the flow of the work (
 
 ## Resume
 
-Call the script with the same run id and no `--result`: it repeats the pending action. If it is `start-worker` and a worker of that `name` already exists on the host, pass its handle instead of starting a second one.
+A new lead (new session, the workers of the lead before gone) passes `--resume` on its first call, never with `--result`; every later call is as usual. With the run id of the lead before, the script goes on from its events: a pending start is returned again, a worker the lead before started is never waited for, and what that worker left counts (an open pull request goes to review, a verdict file to its verdict, else the step starts once more). With a new run id, or after a task that ended without a merge, the `agent:*` label decides: `implementing` with an open pull request goes to review, without one the implementer starts again; `review`, `approved` and `changes` take the verdict bound to the head of the pull request (a verdict file of the run, or the loop's mark of its own login), else review; `handover` stays with the person; a merged pull request ends without a merge.
+
+Always start a new worker: never pass a handle of the lead before.
 
 ## End
 
