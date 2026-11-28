@@ -7,6 +7,7 @@ import type { ObjectiveReader, TrackedIssue } from './tracker.mts';
 // two segments of letters, digits, `.`, `_`, `-`, neither `.` nor `..` (#574)
 const SEGMENT = '(?!\\.{1,2}(?![\\w.-]))[A-Za-z0-9_.-]+';
 const REFERENCE = new RegExp(`^(${SEGMENT}/${SEGMENT})#([1-9]\\d*)$`);
+const REPOSITORY = new RegExp(`^${SEGMENT}/${SEGMENT}$`);
 // a list item of `## Affected repos`
 const AFFECTED = new RegExp(`^\\s*[-*]\\s+(?:\\[[ xX]\\]\\s+)?[\`\\[]*(${SEGMENT}/${SEGMENT})`);
 const REQUIRES_LINE = /^[ \t]*(?:[-*][ \t]+)?Requires:(.*)$/gm;
@@ -47,6 +48,9 @@ export function parseObjective(value: string): IssueRef {
   if (!match) throw new Error('--objective is <owner>/<repo>#<nr>');
   return { repo: match[1] as string, number: Number(match[2]) };
 }
+
+/** `owner/name` with two valid segments. */
+export const isRepository = (value: string): boolean => REPOSITORY.test(value);
 
 export const isKind = (
   issue: { title: string; labels: (string | { name: string })[] },
