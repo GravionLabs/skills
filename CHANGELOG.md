@@ -5,6 +5,12 @@ Versioning follows [Semantic Versioning](https://semver.org/).
 
 ---
 
+## [6.0.1] — 2026-11-28
+
+### Documentation
+- **adr**: Deliver-triage takes an issue out of the run instead of deferring it (#1114) (#1115)
+
+
 ## [6.0.0] — 2026-11-27
 
 ### Bug Fixes
