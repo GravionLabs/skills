@@ -26,9 +26,13 @@ node <deliver-skill-dir>/scripts/resolve-model.mts <role> [--tier <fast|standard
 
 A PBI without a `Tier:` line: no `--tier` (`standard`). "Of the role": no `--tier`, the config decides.
 
-`deliver-loop --objective` (Feature [GravionLabs/skills#1041](https://github.com/GravionLabs/skills/issues/1041)) uses the same resolver for the sessions it starts.
+`deliver-loop --objective` uses the same resolver for the sessions it starts.
 
-## Start prompt template of an Objective run
+## Start an Objective run
+
+`deliver-loop --objective <owner>/<repo>#<nr>` starts the run itself: no orchestrator agent has to stay open, and it resolves the models of its sessions. Start it again to resume. Use the template below only for an orchestrator you run by hand (a subagent, a poimen pane) that works the Objective around the loop.
+
+## Start prompt template of a hand-run orchestrator
 
 Drawn from the orchestrated run of GravionLabs/helix#1204. Fill the `<…>` parts and give it to the orchestrator session.
 
