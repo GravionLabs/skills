@@ -9,8 +9,26 @@ import { adoptLegacyEnv } from './legacy.mts';
 /** Contents, pull requests and issues. No `workflows`, no `administration`. */
 export const APP_PERMISSIONS = { contents: 'write', pull_requests: 'write', issues: 'write' };
 
-export type AppSettings = { appId: string; keyFile?: string; keyCommand?: string };
+/** `commandDir`: the working directory of the key command, default the one of the process. */
+export type AppSettings = {
+  appId: string;
+  keyFile?: string;
+  keyCommand?: string;
+  commandDir?: string;
+};
 export type AppToken = { token: string; expiresAt: number };
+
+/** A mint call that GitHub answered with an error status. */
+export class MintError extends Error {
+  override name = 'MintError';
+  readonly status: number;
+  readonly rateLimited: boolean;
+  constructor(message: string, status: number, rateLimited: boolean) {
+    super(message);
+    this.status = status;
+    this.rateLimited = rateLimited;
+  }
+}
 
 /** The app settings of the environment, else nothing. A half-set configuration is an error. */
 export function appSettings(source: NodeJS.ProcessEnv = process.env): AppSettings | undefined {
@@ -43,12 +61,22 @@ function readKey(settings: AppSettings): string {
   const key = settings.keyFile
     ? readFileSync(settings.keyFile, 'utf8')
     : execSync(settings.keyCommand!, {
+        cwd: settings.commandDir,
         encoding: 'utf8',
         stdio: ['ignore', 'pipe', 'pipe'],
         maxBuffer: 1024 * 1024,
       });
   if (!key.includes('PRIVATE KEY')) throw new Error('the app key is not a PEM private key');
   return key;
+}
+
+/** A 429, or a 403 that names a rate limit in its headers or message (the primary and the secondary limit). */
+async function isRateLimit(response: Response): Promise<boolean> {
+  if (response.status === 429) return true;
+  if (response.status !== 403) return false;
+  const { headers } = response;
+  if (headers.get('x-ratelimit-remaining') === '0' || headers.has('retry-after')) return true;
+  return /rate limit/i.test(await response.text().catch(() => ''));
 }
 
 /** Mints an installation token for `repo` (`owner/name`). Errors never contain the key or a token. */
@@ -79,8 +107,19 @@ export async function mintToken(
       },
       body: body ? JSON.stringify(body) : undefined,
     });
-    if (!response.ok) throw new Error(`GitHub ${method} ${route}: HTTP ${response.status}`);
-    return (await response.json()) as Record<string, unknown>;
+    const what = `GitHub ${method} ${route}`;
+    if (!response.ok)
+      throw new MintError(
+        `${what}: HTTP ${response.status}`,
+        response.status,
+        await isRateLimit(response),
+      );
+    try {
+      return (await response.json()) as Record<string, unknown>;
+    } catch {
+      // the message of a parse error quotes the body, which can hold the token
+      throw new Error(`${what}: unreadable response`);
+    }
   };
   const installation = await call('GET', `/repos/${repo}/installation`);
   const created = await call('POST', `/app/installations/${installation.id}/access_tokens`, {
