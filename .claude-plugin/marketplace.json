@@ -52,7 +52,7 @@
     },
     {
       "name": "delivery",
-      "description": "Issue-driven delivery: /deliver, one pull request per issue on any harness, its review in a session of its own (deliver-review), judgment of one attention case (deliver-triage), open-decision interview (grill-me), planning (planner), milestone plan and ROADMAP.md (roadmap), run retrospective (retro), session handoff document (handoff) and the installer and updater (skills-manage). Needs shared and github.",
+      "description": "Issue-driven delivery: /deliver, one pull request per issue on any harness, its review in a session of its own (deliver-review), judgment of one attention case (deliver-triage), open-decision interview (grill-me), planning (planner), milestone plan and ROADMAP.md (roadmap), run retrospective (retro), session handoff document (handoff), the host adapters of workflow skills (host-poimen, host-orca, host-claude-code) and the installer and updater (skills-manage). Needs shared and github.",
       "source": "./",
       "strict": false,
       "skills": [
@@ -61,6 +61,9 @@
         "./skills/delivery/deliver-triage",
         "./skills/delivery/grill-me",
         "./skills/delivery/handoff",
+        "./skills/delivery/host-claude-code",
+        "./skills/delivery/host-orca",
+        "./skills/delivery/host-poimen",
         "./skills/delivery/planner",
         "./skills/delivery/poimen-lead",
         "./skills/delivery/retro",
