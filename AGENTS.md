@@ -27,7 +27,7 @@ docs/                          # internal documents only (adr/, spikes/), not pu
 Groups: `shared`, `delivery`, `github`, `dotnet`, `ts`, `py`, `rust`, `go`, `ng`, `skill-tooling`, `statusline`, `vault`, `school`. The per-group descriptions of the skills live in reference files; read the one of the group you change (also to learn whether a skill already exists):
 
 - Before changing `skills/shared/` (check-prerequisites, implementation, detect-techstack, diagnose, code-review, lessons, project-setup, adr, glossary, ratchet, ast-grep-rules, ui-styleguide, agents-md, secret-scan, prototype, wizard, architecture-survey), read `docs/agents-md-refs/shared.md` (what each skill of the `shared` group does and its constraints).
-- Before changing `skills/delivery/` (poimen-lead, planner, deliver, deliver-review, grill-me, retro, roadmap, skills-manage), read `docs/agents-md-refs/delivery.md` (what each skill of the `delivery` group does and its constraints).
+- Before changing `skills/delivery/` (poimen-lead, planner, deliver, deliver-review, deliver-triage, grill-me, retro, roadmap, skills-manage), read `docs/agents-md-refs/delivery.md` (what each skill of the `delivery` group does and its constraints).
 - Before changing `skills/github/` (github-issue, github-pull-request, github-release, github-milestone, github-pages, github-project, github-workflow-lint), read `docs/agents-md-refs/github.md` (what each skill of the `github` group does and its constraints).
 - Before changing `skills/dotnet/`, read `docs/agents-md-refs/dotnet.md` (what each skill of the `dotnet` group does and its constraints).
 - Before changing `skills/ts/`, read `docs/agents-md-refs/ts.md` (what each skill of the `ts` group does and its constraints).
