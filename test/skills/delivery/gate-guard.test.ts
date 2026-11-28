@@ -167,20 +167,37 @@ describe('guard CLI', () => {
   });
   afterAll(() => rmSync(path.dirname(repo), { recursive: true, force: true }));
 
+  /** `deliver` is the config at the merge base; `head` the one the pull request and the checkout bring. */
   const run = (
     args: string[],
-    { scenario = {}, deliver = { tracker: 'fake' } }: { scenario?: object; deliver?: object } = {},
+    {
+      scenario = {},
+      deliver = {},
+      head,
+    }: { scenario?: object; deliver?: object; head?: object } = {},
   ) => {
-    writeFileSync(path.join(repo, '.agents/config.json'), JSON.stringify({ deliver }));
-    writeFileSync(path.join(fake, 'scenario.json'), JSON.stringify({ items: [], ...scenario }));
-    return runGate(script, args, {
+    const config = (value: object | undefined) =>
+      value === undefined ? undefined : JSON.stringify({ deliver: value });
+    writeFileSync(path.join(repo, '.agents/config.json'), config(head) ?? '{}');
+    writeFileSync(
+      path.join(fake, 'scenario.json'),
+      JSON.stringify({
+        items: [],
+        projectConfig: { base: config(deliver), head: config(head) },
+        ...scenario,
+      }),
+    );
+    return runGate(script, ['--tracker', 'fake', ...args], {
       cwd: repo,
       env: { ...process.env, DELIVER_TRACKER_DIR: tracker, FAKE_DIR: fake, DELIVER_TICK_MS: '1' },
     });
   };
 
-  it('passes a pull request without a protected path', async () => {
-    await expect(run(['7'])).resolves.toMatchObject({ result: 'pass', evidence: { pr: 7 } });
+  it('passes a pull request without a protected path, with the judged head in the evidence', async () => {
+    await expect(run(['7'])).resolves.toMatchObject({
+      result: 'pass',
+      evidence: { pr: 7, head: 'abc123', base: 'base-sha' },
+    });
   });
 
   it('hands a protected path to the owner', async () => {
@@ -188,29 +205,76 @@ describe('guard CLI', () => {
     expect(out).toMatchObject({
       result: 'owner',
       reason: 'changes protected paths (.github/workflows/x.yml), merge it yourself',
+      evidence: { head: 'abc123' },
     });
   });
 
-  it('judges a manifest at --head', async () => {
+  it('judges a manifest at the head of the pull request', async () => {
     const scenario = {
       files: ['package.json'],
       packageJson: { base: pkg({}), head: pkg({ scripts: { x: 'y' } }) },
     };
-    await expect(run(['7', '--head', 'def456'], { scenario })).resolves.toMatchObject({
+    await expect(run(['7', '--head', 'abc123'], { scenario })).resolves.toMatchObject({
       result: 'owner',
       reason: 'changes protected paths (package.json: scripts), merge it yourself',
     });
   });
 
-  it('reads deliver.protectedPaths and deliver.mergeRisk of the project config', async () => {
-    const deliver = { tracker: 'fake', protectedPaths: ['src/'], mergeRisk: 'high' };
-    await expect(run(['7', '--risk', 'high'], { deliver })).resolves.toMatchObject({
+  it('does not pass a --head the pull request is not at', async () => {
+    await expect(run(['7', '--head', 'def456'])).resolves.toMatchObject({
+      result: 'owner',
+      reason: 'head mismatch: asked for def456, the pull request is at abc123, merge it yourself',
+      evidence: { head: 'abc123', askedHead: 'def456' },
+    });
+  });
+
+  it('does not pass when the pull request is pushed while its files are read', async () => {
+    await expect(run(['7'], { scenario: { pushedAtCompare: 2 } })).resolves.toMatchObject({
+      result: 'owner',
+      reason: expect.stringMatching(/^pushed while guarded: judged abc123/),
+      evidence: { head: 'abc123', prHead: 'def456' },
+    });
+  });
+
+  it('reads deliver.protectedPaths and deliver.mergeRisk of the config at the merge base', async () => {
+    await expect(
+      run(['7', '--risk', 'high'], { deliver: { protectedPaths: ['src/'], mergeRisk: 'high' } }),
+    ).resolves.toMatchObject({
       result: 'owner',
       reason: 'changes protected paths (src/a.ts), merge it yourself',
     });
     await expect(
-      run(['7', '--risk', 'high'], { deliver: { tracker: 'fake', mergeRisk: 'high' } }),
+      run(['7', '--risk', 'high'], { deliver: { mergeRisk: 'high' } }),
     ).resolves.toMatchObject({ result: 'pass' });
+  });
+
+  it('ignores a config the pull request and the checkout bring', async () => {
+    const out = await run(['7', '--risk', 'high'], {
+      scenario: { files: ['.github/workflows/x.yml'] },
+      head: { protectedPaths: [], mergeRisk: 'high', tracker: 'other' },
+    });
+    expect(out).toMatchObject({
+      result: 'owner',
+      reason: 'changes protected paths (.github/workflows/x.yml), merge it yourself',
+    });
+  });
+
+  it.each([
+    ['a failing read', 'throw'],
+    ['no JSON', { base: '{' }],
+    ['no object', { base: '[]' }],
+  ])('does not pass when the config at the merge base is %s', async (_name, projectConfig) => {
+    await expect(run(['7'], { scenario: { projectConfig } })).resolves.toMatchObject({
+      result: 'owner',
+      reason: expect.stringMatching(/^could not read \.agents\/config\.json at the base base-sha/),
+    });
+  });
+
+  it('holds a protected list the matcher cannot read', async () => {
+    await expect(run(['7'], { deliver: { protectedPaths: [7] } })).resolves.toMatchObject({
+      result: 'owner',
+      reason: expect.stringMatching(/^could not read the changed files \(.+\), merge it yourself$/),
+    });
   });
 
   it('hands a risk above --merge-risk to the owner, from --risk or --result-file', async () => {
@@ -244,9 +308,15 @@ describe('guard CLI', () => {
     await expect(run(args)).resolves.toMatchObject({ result: 'usage' });
   });
 
+  it('reports a base config that names another tracker as usage', async () => {
+    await expect(run(['7'], { deliver: { tracker: 'github' } })).resolves.toMatchObject({
+      result: 'usage',
+      reason: expect.stringContaining('--tracker github'),
+    });
+  });
+
   it('refuses a tracker directory inside the repository', async () => {
-    writeFileSync(path.join(repo, '.agents/config.json'), JSON.stringify({ deliver: {} }));
-    const out = await runGate(script, ['7'], {
+    const out = await runGate(script, ['7', '--tracker', 'fake'], {
       cwd: repo,
       env: { ...process.env, DELIVER_TRACKER_DIR: path.join(repo, '.agents'), FAKE_DIR: fake },
     });
@@ -257,7 +327,7 @@ describe('guard CLI', () => {
   });
 
   it('reports a tracker that does not load as fail', async () => {
-    await expect(run(['7'], { deliver: { tracker: 'missing' } })).resolves.toMatchObject({
+    await expect(run(['7', '--tracker', 'missing'])).resolves.toMatchObject({
       result: 'fail',
       reason: expect.stringMatching(/^tracker: /),
     });

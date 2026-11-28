@@ -2,6 +2,7 @@
 // path, or whose risk is above `mergeRisk`, is handed to the owner; the loop never merges it. `guardCheck` is the
 // check every executor calls in-process; the CLI below wraps it:
 //   node scripts/gates/guard.mts <pr> [--head <sha>] [--risk <level> | --result-file <file>] [--merge-risk <level>]
+//     [--tracker <name>]
 import { execFileSync } from 'node:child_process';
 import { readFileSync, realpathSync } from 'node:fs';
 import path from 'node:path';
@@ -223,7 +224,18 @@ export function guardCheck({
         reason: `could not read the changed files (${files.error})${HANDS_OFF}`,
         evidence: { error: files.error },
       };
-    const hits = judgeHits(files, compare, list);
+    let hits: string[];
+    try {
+      hits = judgeHits(files, compare, list);
+    } catch (error) {
+      // a protected list the matcher cannot read (an entry that is no string): unknown is not safe
+      const message = firstLine(error);
+      return {
+        result: 'owner',
+        reason: `could not read the changed files (${message})${HANDS_OFF}`,
+        evidence: { error: message },
+      };
+    }
     if (hits.length > 0)
       return {
         result: 'owner',
@@ -252,7 +264,17 @@ const level = (value: string | undefined, flag: string): string | undefined => {
   return value;
 };
 
-/** The CLI: loads the tracker and the protected paths of the project config and runs `guardCheck`. */
+/** The project config as the guard reads it: from the merge base of the pull request, never from its head. */
+type ProjectConfig = {
+  deliver?: { tracker?: unknown; protectedPaths?: string[]; mergeRisk?: unknown };
+};
+const CONFIG_FILE = '.agents/config.json';
+
+/**
+ * The CLI: loads the tracker (`--tracker`, default github), reads `deliver.protectedPaths` and `deliver.mergeRisk` of
+ * the project config at the merge base of the pull request and runs `guardCheck` on its current head. The reviewed
+ * pull request never chooses its own guard: a config it changes counts from the next pull request on.
+ */
 export async function guardCli(args: string[]): Promise<GateResult> {
   const { values, positionals } = parseArgs({
     args,
@@ -262,18 +284,21 @@ export async function guardCli(args: string[]): Promise<GateResult> {
       risk: { type: 'string' },
       'result-file': { type: 'string' },
       'merge-risk': { type: 'string' },
+      tracker: { type: 'string' },
     },
   });
   const [pr, ...rest] = positionals;
   if (!pr || rest.length > 0 || !/^[1-9]\d*$/.test(pr))
     throw new UsageError(
-      'usage: guard <pr> [--head <sha>] [--risk <level> | --result-file <file>] [--merge-risk <level>]',
+      'usage: guard <pr> [--head <sha>] [--risk <level> | --result-file <file>] [--merge-risk <level>] [--tracker <name>]',
     );
   if (values.risk !== undefined && values['result-file'] !== undefined)
     throw new UsageError('--risk and --result-file exclude each other');
   const risk =
     level(values.risk, '--risk') ??
     (values['result-file'] === undefined ? undefined : riskOf(values['result-file']));
+  level(values['merge-risk'], '--merge-risk');
+  const trackerName = values.tracker ?? 'github';
 
   let root = process.cwd();
   try {
@@ -282,20 +307,8 @@ export async function guardCli(args: string[]): Promise<GateResult> {
       stdio: ['ignore', 'pipe', 'ignore'],
     }).trim();
   } catch {
-    // not a git checkout: the config is read from the working directory
+    // not a git checkout
   }
-  let config: {
-    deliver?: { base?: string; tracker?: string; protectedPaths?: string[]; mergeRisk?: unknown };
-  } = {};
-  try {
-    config = JSON.parse(readFileSync(path.join(root, '.agents/config.json'), 'utf8'));
-  } catch {
-    // no project config
-  }
-  const mergeRisk = level(
-    values['merge-risk'] ?? (config.deliver?.mergeRisk as string | undefined) ?? 'medium',
-    '--merge-risk (deliver.mergeRisk)',
-  ) as string;
   // as in the loop: a tracker from inside the repository would let a merged pull request decide what the guard runs
   const trackerDir = process.env.DELIVER_TRACKER_DIR;
   if (trackerDir) {
@@ -313,30 +326,83 @@ export async function guardCli(args: string[]): Promise<GateResult> {
 
   let tracker;
   try {
-    tracker = await loadTracker(config.deliver?.tracker ?? 'github', {
+    tracker = await loadTracker(trackerName, {
       cwd: root,
-      base: config.deliver?.base ?? '',
+      base: '',
       selection: {},
       trustAuthors: false,
     });
   } catch (error) {
     return { result: 'fail', reason: `tracker: ${firstLine(error)}`, evidence: {} };
   }
-  const pull = { id: Number(pr), title: '', url: '', branch: '' };
+  const id = Number(pr);
+  const pull = { id, title: '', url: '', branch: '' };
+  const owner = (reason: string, evidence: Record<string, unknown>): GateResult => ({
+    result: 'owner',
+    reason: `${reason}${HANDS_OFF}`,
+    evidence: { pr: id, ...evidence },
+  });
+
+  // the commit that is judged is the current head of the pull request; another one is not judged
+  let refs: Refs;
+  try {
+    refs = tracker.compareRefs(pull);
+  } catch (error) {
+    return owner(`could not read the head of the pull request (${firstLine(error)})`, {});
+  }
+  const head = refs.head;
+  if (values.head !== undefined && values.head !== head)
+    return owner(`head mismatch: asked for ${values.head}, the pull request is at ${head}`, {
+      head,
+      askedHead: values.head,
+    });
+
+  let config: ProjectConfig;
+  try {
+    const text = tracker.fileAt(refs.base, CONFIG_FILE);
+    config = text === undefined ? {} : (JSON.parse(text) as ProjectConfig);
+    if (!config || typeof config !== 'object' || Array.isArray(config))
+      throw new Error(`${CONFIG_FILE} is not an object`);
+  } catch (error) {
+    return owner(`could not read ${CONFIG_FILE} at the base ${refs.base} (${firstLine(error)})`, {
+      head,
+      base: refs.base,
+    });
+  }
+  const configured = config.deliver?.tracker;
+  if (configured !== undefined && configured !== trackerName)
+    throw new UsageError(
+      `the base config names tracker ${JSON.stringify(configured)}: run with --tracker ${String(configured)}`,
+    );
+  const mergeRisk = level(
+    values['merge-risk'] ?? (config.deliver?.mergeRisk as string | undefined) ?? 'medium',
+    '--merge-risk (deliver.mergeRisk)',
+  ) as string;
+
   const files = await readChangedFiles(() => tracker.changedFiles(pull), {
     pause: () => new Promise((done) => setTimeout(done, 5 * TICK_MS)),
   });
+  // a push while the files were read: they may belong to another commit
+  let after: string;
+  try {
+    after = tracker.compareRefs(pull).head;
+  } catch (error) {
+    return owner(`could not read the head of the pull request (${firstLine(error)})`, { head });
+  }
+  if (after !== head)
+    return owner(`pushed while guarded: judged ${head}, the pull request is at ${after}`, {
+      head,
+      prHead: after,
+    });
+
   const result = guardCheck({
     files,
-    compare: {
-      refs: () => tracker.compareRefs(pull, values.head),
-      fileAt: (sha, file) => tracker.fileAt(sha, file),
-    },
+    compare: { refs: () => refs, fileAt: (sha, file) => tracker.fileAt(sha, file) },
     protectedList: protectedList(config.deliver?.protectedPaths),
     risk,
     mergeRisk,
   });
-  result.evidence = { pr: Number(pr), ...result.evidence };
+  result.evidence = { pr: id, head, base: refs.base, ...result.evidence };
   return result;
 }
 
