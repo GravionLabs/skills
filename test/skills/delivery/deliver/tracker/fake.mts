@@ -7,14 +7,43 @@ import type {
   BaseState,
   Gate,
   Item,
+  ObjectiveReader,
   Pull,
   Subject,
   Tracker,
+  TrackedIssue,
   TrackerContext,
 } from '../../../../../skills/delivery/deliver/scripts/tracker.mts';
+import {
+  blockerState,
+  parseObjective,
+} from '../../../../../skills/delivery/deliver/scripts/objective.mts';
 
-type Scenario = {
-  items: { id: number; title: string; body?: string; blockedBy?: number[]; feature?: number }[];
+/** An issue of `repositories`. `subIssues`: numbers of the same repository or `owner/repo#n`. */
+export type FakeIssue = Partial<Omit<TrackedIssue, 'repo' | 'url'>> & {
+  number: number;
+  title: string;
+  subIssues?: (number | string)[];
+  /** Native `blocked-by` links: numbers of the same repository or `owner/repo#n`. */
+  blockedBy?: (number | string)[];
+  /** Not an item of a unit before the item of this number is closed: an issue added during the run. */
+  addedAfter?: number;
+};
+
+export type Scenario = {
+  /** `blockedBy`: ids of items, or `owner/repo#n` of an issue of `repositories`. */
+  items: {
+    id: number;
+    title: string;
+    body?: string;
+    blockedBy?: (number | string)[];
+    feature?: number;
+  }[];
+  /** By `owner/repo`: what `readObjective` reads. A release is its milestone and its tag. */
+  repositories?: Record<
+    string,
+    { issues?: FakeIssue[]; milestones?: { title: string; closed: boolean }[]; tags?: string[] }
+  >;
   /** One entry per gate() call, the last one repeats. `throw` is a failing tracker call. */
   gates?: (Gate | 'throw')[];
   files?: string[];
@@ -48,6 +77,8 @@ type Scenario = {
   releaseTests?: number[];
   /** Commits of the base branch beyond the default branch, default 1. */
   releaseCommits?: number;
+  /** Open pull requests into the base branch that are not of the milestone. */
+  foreignPulls?: { id: number; title: string; url: string; branch: string }[];
   /** One entry per baseState() call, the last one repeats. `throw` is a failing tracker call. */
   base?: ('green' | 'pending' | 'red' | 'throw')[];
   /** Items whose pull request is already merged before the loop starts the item. */
@@ -60,11 +91,17 @@ type Scenario = {
   features?: Record<number, { title: string; body: string }>;
   /** Items that have a second open pull request once their first one exists. */
   twoPulls?: number[];
+  /** Repositories whose release pull request is merged and tagged at once: its milestone closes (`released.jsonl`). */
+  releaseOnPull?: string[];
 };
 
-export function create({ selection }: TrackerContext): Tracker {
+export function create({ selection, repo: named }: TrackerContext): Tracker {
   const dir = String(process.env.FAKE_DIR);
-  writeFileSync(path.join(dir, 'selection.json'), JSON.stringify(selection));
+  // a unit of an Objective run names its repository: its items come from `repositories`
+  const repo = named ?? 'fake/repo';
+  if (named)
+    appendFileSync(path.join(dir, 'units.jsonl'), `${JSON.stringify({ repo, selection })}\n`);
+  else writeFileSync(path.join(dir, 'selection.json'), JSON.stringify(selection));
   // like the GitHub tracker: the Bug of a red base is one of the items from its filing until it is merged
   let baseBug: Item | undefined;
   const scenario: Scenario = JSON.parse(readFileSync(path.join(dir, 'scenario.json'), 'utf8'));
@@ -72,29 +109,147 @@ export function create({ selection }: TrackerContext): Tracker {
     appendFileSync(path.join(dir, 'calls.jsonl'), `${JSON.stringify(call)}\n`);
   const merged = new Set<number>();
   const closed = new Set<number>();
+  // a second run of an Objective on the same $FAKE_DIR: what an earlier run merged stays closed, and the stages it
+  // wrote are the labels of the items
+  const earlier = (file: string): Record<string, unknown>[] =>
+    existsSync(path.join(dir, file))
+      ? readFileSync(path.join(dir, file), 'utf8')
+          .split('\n')
+          .filter(Boolean)
+          .map((line) => JSON.parse(line))
+          .filter((line) => named !== undefined && line.repo === named)
+      : [];
+  for (const call of earlier('calls.jsonl'))
+    if (call.call === 'merge') {
+      merged.add(Number(call.pull) - 100);
+      closed.add(Number(call.pull) - 100);
+    }
+  const stageLabels = (id: number): string[] => {
+    const stage = earlier('stages.jsonl')
+      .filter((line) => line.id === id)
+      .at(-1)?.stage;
+    return stage ? [`agent:${stage}`] : [];
+  };
   const listedCalls = new Map<number, number>();
   let gateCalls = 0;
   let fileReads = 0;
   let baseCalls = 0;
   const itemOf = (pull: Pull) => pull.id - 100;
 
+  const repository = (name: string) => scenario.repositories?.[name];
+  const readLines = (file: string): Record<string, unknown>[] =>
+    existsSync(file)
+      ? readFileSync(file, 'utf8')
+          .split('\n')
+          .filter(Boolean)
+          .map((line) => JSON.parse(line))
+      : [];
+  const refOf = (repo: string, value: number | string) =>
+    typeof value === 'number' ? { repo, number: value } : parseObjective(value);
+  const tracked = (repo: string, issue: FakeIssue): TrackedIssue => {
+    const { subIssues: _, ...fields } = issue;
+    return {
+      body: '',
+      labels: [],
+      state: 'open',
+      ...fields,
+      repo,
+      url: `https://example.test/${repo}/issues/${issue.number}`,
+    };
+  };
+  const reader: ObjectiveReader = {
+    issue(ref) {
+      const issue = repository(ref.repo)?.issues?.find((i) => i.number === ref.number);
+      return issue && tracked(ref.repo, issue);
+    },
+    parent(ref) {
+      for (const [repo, { issues = [] }] of Object.entries(scenario.repositories ?? {})) {
+        const parent = issues.find((i) =>
+          i.subIssues?.some((value) => {
+            const child = refOf(repo, value);
+            return child.repo === ref.repo && child.number === ref.number;
+          }),
+        );
+        if (parent) return tracked(repo, parent);
+      }
+      return undefined;
+    },
+    subIssues(ref) {
+      const issue = repository(ref.repo)?.issues?.find((i) => i.number === ref.number);
+      return (issue?.subIssues ?? []).flatMap(
+        (value) => reader.issue(refOf(ref.repo, value)) ?? [],
+      );
+    },
+    milestones: (name) =>
+      (repository(name)?.milestones ?? []).map((m) => ({
+        ...m,
+        closed:
+          m.closed ||
+          readLines(path.join(dir, 'released.jsonl')).some(
+            (r) => r.repo === name && r.milestone === m.title,
+          ),
+      })),
+    hasTag: (repo, tag) => repository(repo)?.tags?.includes(tag) ?? false,
+    blockers(ref) {
+      const issue = repository(ref.repo)?.issues?.find((i) => i.number === ref.number);
+      return (issue?.blockedBy ?? []).map((value) => {
+        const blocker = refOf(ref.repo, value);
+        return { ...blocker, state: reader.issue(blocker)?.state ?? 'open' };
+      });
+    },
+  };
+
+  const isWork = (issue: FakeIssue) =>
+    (issue.state ?? 'open') === 'open' &&
+    (issue.labels ?? []).some((label) => label === 'pbi' || label === 'bug');
+  /** The open PBIs and Bugs of the unit: in its milestone or below its Feature (or the open Features of its milestone). */
+  const unitIssues = (): FakeIssue[] => {
+    const issues = repository(repo)?.issues ?? [];
+    const below = (feature: FakeIssue) =>
+      (feature.subIssues ?? []).flatMap((value) =>
+        typeof value === 'number' ? issues.filter((i) => i.number === value) : [],
+      );
+    const features = selection.feature
+      ? issues.filter((i) => i.number === Number(selection.feature))
+      : issues.filter(
+          (i) =>
+            i.milestone === selection.milestone &&
+            i.title.startsWith('[Feature]') &&
+            (i.state ?? 'open') === 'open' &&
+            !(selection.skipDeferred && i.labels?.includes('deferred')),
+        );
+    const direct = selection.feature
+      ? []
+      : issues.filter((i) => i.milestone === selection.milestone);
+    const found = new Map<number, FakeIssue>();
+    for (const issue of [...direct, ...features.flatMap(below)])
+      if (isWork(issue) && (issue.addedAfter === undefined || closed.has(issue.addedAfter)))
+        found.set(issue.number, issue);
+    return [...found.values()].sort((a, b) => a.number - b.number);
+  };
+  const listed = (): Scenario['items'] =>
+    named
+      ? unitIssues().map((i) => ({ id: i.number, title: i.title, body: i.body }))
+      : scenario.items;
+
   return {
     name: 'fake',
-    repo: 'fake/repo',
-    subject: (): Subject => ({ kind: 'fake.repository', id: 'fake/repo', title: 'fake/repo' }),
+    repo,
+    ...reader,
+    subject: (): Subject => ({ kind: 'fake.repository', id: repo, title: repo }),
     items: (): Item[] => {
       for (const id of merged) {
         const calls = (listedCalls.get(id) ?? 0) + 1;
         listedCalls.set(id, calls);
         if (calls > (scenario.closeAfterCalls ?? 0)) closed.add(id);
       }
-      return scenario.items
+      return listed()
         .filter((item) => !closed.has(item.id))
         .map((item) => ({
           id: item.id,
           title: item.title,
           url: `https://example.test/issues/${item.id}`,
-          labels: ['pbi'],
+          labels: ['pbi', ...stageLabels(item.id)],
           body: item.body ?? 'body of the issue',
           ...(item.feature && { feature: item.feature }),
         }))
@@ -107,10 +262,15 @@ export function create({ selection }: TrackerContext): Tracker {
       url: item.url,
     }),
     waitReason(item: Item): string | undefined {
-      const open = (scenario.items.find((i) => i.id === item.id)?.blockedBy ?? []).filter(
-        (id) => !closed.has(id),
-      );
-      return open.length > 0 ? `blocked by ${open.map((id) => `#${id}`).join(', ')}` : undefined;
+      const blockers = scenario.items.find((i) => i.id === item.id)?.blockedBy ?? [];
+      const open = blockers.filter((id) => typeof id === 'number' && !closed.has(id));
+      if (open.length > 0) return `blocked by ${open.map((id) => `#${id}`).join(', ')}`;
+      for (const value of blockers.filter((b) => typeof b === 'string')) {
+        const blocked = { repo: 'fake/repo', number: item.id };
+        const state = blockerState(parseObjective(value), blocked, reader);
+        if (state.state === 'waiting') return state.reason;
+      }
+      return undefined;
     },
     needsDecision: () => scenario.needsDecision ?? false,
     parentFeature(item: Item): Item | undefined {
@@ -127,9 +287,17 @@ export function create({ selection }: TrackerContext): Tracker {
     setStage: (item: Item, stage?: string) =>
       appendFileSync(
         path.join(dir, 'stages.jsonl'),
-        `${JSON.stringify({ id: item.id, stage: stage ?? null })}\n`,
+        `${JSON.stringify({ id: item.id, stage: stage ?? null, repo: named })}\n`,
       ),
-    syncStageLabels: () => [],
+    syncStageLabels: () => {
+      if (named) record({ call: 'syncStageLabels', repo });
+      return [];
+    },
+    removeLabel: (item: Item, label: string) => {
+      if (label.startsWith('agent:')) throw new Error(`refused: ${label}`);
+      record({ call: 'removeLabel', id: item.id, label, repo: named });
+    },
+    rerunJob: (job: number) => record({ call: 'rerunJob', job, repo: named }),
     commentOnce: (item: Item, marker: string, body: string) =>
       appendFileSync(
         path.join(dir, 'comments.jsonl'),
@@ -187,7 +355,7 @@ export function create({ selection }: TrackerContext): Tracker {
       return gate;
     },
     merge(pull: Pull, head: string): void {
-      record({ call: 'merge', pull: pull.id, head });
+      record({ call: 'merge', pull: pull.id, head, repo: named });
       merged.add(itemOf(pull));
     },
     dropBranch: (pull: Pull) => record({ call: 'dropBranch', pull: pull.id }),
@@ -252,8 +420,14 @@ export function create({ selection }: TrackerContext): Tracker {
         body: '',
       })),
     releaseCommits: () => scenario.releaseCommits ?? 1,
+    foreignPulls: (): Pull[] => scenario.foreignPulls ?? [],
     ensureReleasePull(): Pull {
-      record({ call: 'releasePull' });
+      record({ call: 'releasePull', repo });
+      if (scenario.releaseOnPull?.includes(repo))
+        appendFileSync(
+          path.join(dir, 'released.jsonl'),
+          `${JSON.stringify({ repo, milestone: selection.milestone })}\n`,
+        );
       return {
         id: 900,
         title: 'release: release/next',

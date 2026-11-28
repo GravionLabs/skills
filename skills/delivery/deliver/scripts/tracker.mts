@@ -44,12 +44,22 @@ export type BaseState = {
   failed: { name: string; url: string }[];
 };
 
-/** Exactly one is set. `feature`: the number of a Feature. */
-export type Selection = { milestone?: string; feature?: string; issues?: string[] };
+/**
+ * Exactly one of `milestone`, `feature` and `issues` is set. `feature`: the number of a Feature. `skipDeferred`: the
+ * items below a Feature labeled `deferred` are no work (the milestone of an Objective run).
+ */
+export type Selection = {
+  milestone?: string;
+  feature?: string;
+  issues?: string[];
+  skipDeferred?: boolean;
+};
 
 export type TrackerContext = {
   /** The checkout the loop runs in. */
   cwd: string;
+  /** `owner/name` of the repository (an Objective run names each one); default: the repository of `cwd`. */
+  repo?: string;
   /** The branch the pull requests go into. */
   base: string;
   selection: Selection;
@@ -65,7 +75,38 @@ export type TrackerContext = {
   log?: (text: string) => void;
 };
 
-export interface Tracker {
+/** An issue of any repository, as `readObjective` reads it (`objective.mts`). */
+export type TrackedIssue = {
+  repo: string;
+  number: number;
+  title: string;
+  url: string;
+  body: string;
+  labels: string[];
+  state: 'open' | 'closed';
+  /** `completed`, `not_planned`, `duplicate`. */
+  stateReason?: string;
+  closedAt?: string;
+  /** The title of its milestone. */
+  milestone?: string;
+};
+
+/** Reads of any repository. Missing is `undefined` or `false`; any other failure throws. */
+export interface ObjectiveReader {
+  issue(ref: { repo: string; number: number }): TrackedIssue | undefined;
+  parent(ref: { repo: string; number: number }): TrackedIssue | undefined;
+  subIssues(ref: { repo: string; number: number }): TrackedIssue[];
+  /** Open and closed milestones. */
+  milestones(repo: string): { title: string; closed: boolean }[];
+  hasTag(repo: string, tag: string): boolean;
+  /** The native `blocked-by` links of the issue, of any repository, with their state. */
+  blockers(ref: {
+    repo: string;
+    number: number;
+  }): { repo: string; number: number; state: string }[];
+}
+
+export interface Tracker extends ObjectiveReader {
   /** `github`, `ado`, … Names the subject kinds (`github.issue`). */
   readonly name: string;
   /** The repository as the tracker names it, for example `GravionLabs/poimen`. */
@@ -88,6 +129,10 @@ export interface Tracker {
   setStage(item: Item, stage: Stage | undefined): void;
   /** Creates the missing `agent:*` labels and returns their names. */
   syncStageLabels(): string[];
+  /** Removes the label from the item (a hold label such as `needs-decision`); never an `agent:*` label: that throws. */
+  removeLabel(item: Item, label: string): void;
+  /** Re-runs one CI job by its numeric id. `env` is the environment of the session token. */
+  rerunJob(job: number, env: Record<string, string>): void;
   /** Comments `body` on the item unless a comment of the login of the loop already starts with `marker`. */
   commentOnce(item: Item, marker: string, body: string): void;
   /** Marks on the pull request the verdict the loop accepted for the commit `head` (`markBody`), with the risk level. */
@@ -131,6 +176,12 @@ export interface Tracker {
   releaseTests(): Item[];
   /** The number of commits the base branch has that the default branch lacks; 0: a release pull request cannot be opened. */
   releaseCommits(): number;
+  /**
+   * The open pull requests into the base branch whose issue is not an issue of the milestone (its head branch
+   * `<type>/<nr>-…` or a closing keyword in its body names no issue of the milestone). The release gate reports them:
+   * a person merges, closes or retargets them. Nothing outside a milestone selection.
+   */
+  foreignPulls(): Pull[];
   /** The open release pull request from the base branch into the default branch; opens it when missing. Never merges it. */
   ensureReleasePull(): Pull;
   /** An item of the milestone (open or closed) has a Feature of this repository as parent: the retro comments there. */

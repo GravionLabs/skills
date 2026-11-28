@@ -1,12 +1,28 @@
 // The agent CLI of the tests of the deliver loop (DELIVER_HARNESS): `node fake-harness.mjs <dir> <prompt>`.
 // It records the session in <dir>/sessions.jsonl, "opens" the pull request by writing <dir>/pr-<id> (unless the
 // scenario says noPull) and exits with the code the scenario names for this session.
+// Every session line has its pid and start time (`at`); <dir>/ends.jsonl gets `{ pid, at }` when it exits.
 import { appendFileSync, existsSync, readFileSync, writeFileSync } from 'node:fs';
 import path from 'node:path';
 
 const [dir, prompt] = process.argv.slice(2);
 const [, command, id] = /^\/(deliver|deliver-review) (\d+)/.exec(prompt) ?? [];
 const scenario = JSON.parse(readFileSync(path.join(dir, 'scenario.json'), 'utf8'));
+const at = Date.now();
+process.on('exit', () =>
+  appendFileSync(
+    path.join(dir, 'ends.jsonl'),
+    `${JSON.stringify({ pid: process.pid, at: Date.now() })}\n`,
+  ),
+);
+// scenario.hangsOn: the sessions that never end, `<id>` (implementer) or `review:<id>`
+const hang = async () => {
+  console.log('working');
+  setInterval(() => {}, 1000);
+  await new Promise(() => {});
+};
+// scenario.sessionMs: every implementer and review session works this long before it answers
+const working = () => new Promise((done) => setTimeout(done, scenario.sessionMs ?? 0));
 if (command === 'deliver-review') {
   // a review session is recorded in reviews.jsonl; scenario.verdicts (by review index, default approve):
   // 'approve', 'changes', 'invalid', 'none' (no file) or 'fail' (exit 1 without a file)
@@ -18,10 +34,14 @@ if (command === 'deliver-review') {
       id: Number(id),
       prompt,
       cwd: process.cwd(),
+      pid: process.pid,
+      at,
       hasResultFileVariable: 'DELIVER_RESULT_FILE' in process.env,
       hasStyleguide: existsSync('docs/STYLEGUIDE.md'),
     })}\n`,
   );
+  if (scenario.hangsOn?.includes(`review:${id}`)) await hang();
+  await working();
   const verdict = scenario.verdicts?.[nr] ?? 'approve';
   if (verdict === 'fail') process.exit(1);
   const finding = { severity: 'blocking', file: 'src/a.ts', summary: scenario.summary ?? 'broken' };
@@ -37,6 +57,29 @@ if (command === 'deliver-review') {
   if (verdict !== 'none')
     writeFileSync(process.env.DELIVER_REVIEW_FILE, JSON.stringify(answers[verdict]));
   console.log(`result: reviewed ${verdict}`);
+  process.exit(0);
+}
+if (prompt.startsWith('/deliver-triage ')) {
+  // a triage session is recorded in triages.jsonl with its case; scenario.triage (by `<kind> <issue>`, else by case
+  // kind, default needs-owner):
+  // a result object, 'invalid' (not JSON), 'none' (no file) or 'fail' (exit 1)
+  const [, caseFile, resultFile] = /--case (\S+) --result (\S+)/.exec(prompt) ?? [];
+  const kase = JSON.parse(readFileSync(caseFile, 'utf8'));
+  appendFileSync(
+    path.join(dir, 'triages.jsonl'),
+    `${JSON.stringify({ prompt, case: kase, cwd: process.cwd(), pid: process.pid, at })}\n`,
+  );
+  await working();
+  const answer = scenario.triage?.[`${kase.kind} ${kase.issue}`] ??
+    scenario.triage?.[kase.kind] ?? {
+      action: 'needs-owner',
+      reason: 'the owner decides',
+      options: ['Decide it'],
+    };
+  if (answer === 'fail') process.exit(1);
+  if (answer === 'invalid') writeFileSync(resultFile, 'not json');
+  else if (answer !== 'none') writeFileSync(resultFile, JSON.stringify(answer));
+  console.log(`result: triaged ${answer.action ?? answer}`);
   process.exit(0);
 }
 if (prompt.startsWith('/retro ')) {
@@ -74,18 +117,24 @@ appendFileSync(
     id: Number(id),
     prompt,
     cwd: process.cwd(),
+    pid: process.pid,
+    at,
     run: process.env.DELIVER_RUN ?? null,
     ghToken: process.env.GH_TOKEN ?? null,
     hasSessionTokenVariable: 'DELIVER_SESSION_TOKEN' in process.env,
+    // the variables that mint a token: none may reach a session
+    mintingVariables: Object.keys(process.env).filter((name) => /^DELIVER_(MIN_)?APP_/.test(name)),
   })}\n`,
 );
 // per session (by index): { exit, noPull, hangs } overrides the scenario-wide fields for that session
 const own = scenario.plan?.[index] ?? {};
+if (scenario.hangsOn?.includes(id)) await hang();
 if (own.hangs ?? scenario.hangs) {
   // a session that never ends: only the loop's stop request ends it
   console.log('working');
   setInterval(() => {}, 1000);
 } else {
+  await working();
   // the implementer result of the scenario (risk by issue id), written where the loop says
   const level = scenario.risks?.[id];
   if (level && process.env.DELIVER_RESULT_FILE && !(scenario.riskOnce && index > 0))

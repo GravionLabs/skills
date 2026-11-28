@@ -33,8 +33,10 @@ describe('deliver legacy names', () => {
   it('warns once about unknown deliver keys', () => {
     expect(unknownConfigKeys({ base: 'main', harness: 'claude' })).toBeUndefined();
     expect(unknownConfigKeys(undefined)).toBeUndefined();
-    const line = unknownConfigKeys({ roles: {}, parallel: 2, base: 'x' });
-    expect(line).toContain('deliver.roles, deliver.parallel');
+    const line = unknownConfigKeys({ roles: {}, loopThreshold: 2, parallel: 2, base: 'x' });
+    expect(line).toContain('deliver.roles, deliver.loopThreshold');
+    // read since #1121
+    expect(line).not.toContain('deliver.parallel');
     expect(line).not.toContain('\n');
   });
 });

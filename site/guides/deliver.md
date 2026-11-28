@@ -51,11 +51,13 @@ Install the `deliver-loop` command with `skills-manage` ([launcher](#the-deliver
 
 The loop reads the state from the tracker before every issue and remembers only what it set aside, so it can be stopped and started again. It orders the issues by their blocked-by links, skips those with `needs-decision`, `needs-refinement` or an open blocker, and merges one pull request before the next issue starts. The merge method follows the base: a merge commit when the base is the default branch (its ruleset allows only merge commits, so the Conventional Commits stay visible to GitVersion and git-cliff), squash for every other base. `--dry-run` prints the order, the required checks and the session token source and starts nothing.
 
+A blocker in another repository holds an issue until the release of the blocker's Feature is tagged, also after the blocker is closed (`upstream <owner>/<repo>#<n> not released`).
+
 `--milestone` works the open PBIs and Bugs in the milestone and the open ones below its open Features (sub-issues of the same repository, each once, by number; [ADR 0010](https://github.com/GravionLabs/skills/blob/main/docs/adr/0010-milestones-hold-features-as-a-roadmap-and-record-what-a-release-shipped.md)). `--feature <nr>` works the open PBIs and Bugs below one Feature, into `release/next`, without retro and release pull request. An issue added to the selection during the run is picked up, and `--dry-run` names the Feature of each issue.
 
 Name the milestone `M<nnn>` (`M004`): the lookup finds the open `M004` and, after `/github-milestone close M004` renamed it, `M004 (0.2.0)`. A legacy title such as `1.3.0` works as before; to move a repository to `M<nnn>` see [Migrate legacy milestones](release.md#migrate-legacy-milestones).
 
-With `--milestone`, once no PBI or Bug of the milestone is open (none set aside or waiting), the loop opens the release pull request from the base into the default branch and prints its URL. It never merges it. An open `release-test` issue is never started: it is listed as needs you. A missing `release/next` (the release merge deletes it) is cut from the default branch.
+With `--milestone`, once no PBI or Bug of the milestone is open (none set aside or waiting), the loop opens the release pull request from the base into the default branch and prints its URL. It never merges it. An open `release-test` issue is never started: it is listed as needs you. An open pull request into the base that is not of the milestone is listed there too, to merge, close or retarget first. A missing `release/next` (the release merge deletes it) is cut from the default branch.
 
 Before that pull request the loop runs the [retro](learn-from-runs.md#after-a-milestone) of the milestone in a session of its own and links its comment in the pull request body (`Retro: <url>`). A failed or timed-out retro is reported as `retro failed` and never blocks the release. `--no-retro` or `deliver.retro.enabled: false` turns it off.
 
@@ -77,6 +79,8 @@ After the implementer session the loop starts `/deliver-review` in a fresh workt
 | `--no-retro`                 | No retro session after the milestone.                                                                                |
 | `--merge-risk <level>`       | Highest risk the loop merges: `low`, `medium` (default) or `high`.                                                   |
 | `--max <n>`                  | Stops after `n` issues.                                                                                              |
+| `--parallel <n>`             | Role sessions at once per repository. Default `deliver.parallel`, else 1.                                            |
+| `--max-sessions <n>`         | Cap across the repositories of an Objective run. Default `deliver.maxSessions`, else 3.                              |
 | `--session-minutes <n>`      | Longest session. Default 90.                                                                                         |
 | `--merge-minutes <n>`        | How long it waits for checks after a pull request. Default 30.                                                       |
 | `--handover-minutes <n>`     | How long it waits for handed-over pull requests to be merged. Default 120; `0` ends the run at once.                 |
@@ -90,20 +94,22 @@ Exit codes: 0 everything done or `--max` reached, 2 open issues remain and none 
 
 Optional, under `deliver` in `.agents/config.json` ([project config](../usage/project-config.md#deliver)); the flag of the same name wins.
 
-| Key               | Default                                                         |
-| :---------------- | :-------------------------------------------------------------- |
-| `base`            | `release/next` with `--milestone`, else the default branch      |
-| `tracker`         | `github` (`scripts/tracker/<name>.mts`)                         |
-| `harness`         | `claude`; a name only, a repository cannot set a command        |
-| `review`          | `{ "model", "harness", "effort" }` of the review session        |
-| `retro`           | `{ "enabled", "model" }` of the retro session after a milestone |
-| `handoverMinutes` | `120`: how long the loop waits for handed-over pull requests    |
-| `mergeRisk`       | `medium`: an approved pull request above it is handed over      |
-| `protectedPaths`  | `.github/`, `.agents/`, `.claude/` and the package manifests    |
+| Key               | Default                                                                        |
+| :---------------- | :----------------------------------------------------------------------------- |
+| `base`            | `release/next` with `--milestone`, else the default branch                     |
+| `tracker`         | `github` (`scripts/tracker/<name>.mts`)                                        |
+| `harness`         | `claude`; a name only, a repository cannot set a command                       |
+| `review`          | `{ "model", "harness", "effort" }` of the review session                       |
+| `retro`           | `{ "enabled", "model" }` of the retro session after a milestone                |
+| `handoverMinutes` | `120`: how long the loop waits for handed-over pull requests                   |
+| `parallel`        | `1`: role sessions at once per repository (`--parallel`); merges one at a time |
+| `maxSessions`     | `3`: sessions of an Objective run across repositories (`--max-sessions`)       |
+| `mergeRisk`       | `medium`: an approved pull request above it is handed over                     |
+| `protectedPaths`  | `.github/`, `.agents/`, `.claude/` and the package manifests                   |
 
 The top-level key [`models`](../usage/project-config.md#models) maps roles to models for `scripts/resolve-model.mts`; the loop picks the model of every session with it (the implementer by the `Tier:` line of the issue).
 
-Other keys (`roles`, `loopThreshold`, `parallel`, `sessionTimeoutMinutes`) are ignored with one warning line. `DELIVER_MIN_<X>` variables are read as `DELIVER_<X>` for one more release, with a warning.
+Other keys (`roles`, `loopThreshold`, `sessionTimeoutMinutes`) are ignored with one warning line. `DELIVER_MIN_<X>` variables are read as `DELIVER_<X>` for one more release, with a warning.
 
 ## What the loop refuses
 
@@ -122,8 +128,8 @@ These are the gates of the loop; with the publish gate of the release they are l
 The agent session runs with a token of its own instead of your login, so it can push its branch and open the pull request but nothing more.
 
 - **Harness failure and session timeout.** A session that exits ≠ 0 without opening a pull request and was not ended by the session timeout is a harness failure. The loop waits 5, 15 and 60 minutes before the retry (a fresh session for the same issue); a successful session resets the count. The third failure in a row, counted across issues, ends the run `failed` with exit 5, and the last line names the count and the last exit code. A session that runs into `--session-minutes` (default 90) gets one more session; a second timeout of the same issue in the run sets it aside with the reason `session timeout`. `deliver.sessionTimeoutMinutes` stays ignored.
-- **GitHub App (preferred).** Set `DELIVER_APP_ID` and the private key as a file (`DELIVER_APP_KEY_FILE`) or as a command that prints it (`DELIVER_APP_KEY_COMMAND`, for example `op read …`). The loop mints an installation token for the repository of the run (contents, pull requests and issues write; no workflows, no administration) and renews it before a session starts when less than `--session-minutes` of it is left. A token lives one hour, so keep `--session-minutes` below 60 with an app. A failed mint sets the issue aside; the loop never falls back to your login.
-- **`DELIVER_SESSION_TOKEN`.** A fine-grained token limited to the repository.
+- **GitHub App (preferred).** Set `DELIVER_APP_ID` and the private key as a file (`DELIVER_APP_KEY_FILE`) or as a command that prints it (`DELIVER_APP_KEY_COMMAND`, for example `op read …`). The loop mints an installation token for the repository of the run (contents, pull requests and issues write; no workflows, no administration) and renews it before a session starts when less than `--session-minutes` of it is left. A token lives one hour, so keep `--session-minutes` below 60 with an app. A failed mint sets the issue aside; the loop never falls back to your login. An Objective run (`--objective`) holds one token per repository, minted on first use: the app needs an installation in each, and a repository whose token cannot be minted is listed under "needs you" while the others go on. `--objective … --dry-run` prints the token source of each repository.
+- **`DELIVER_SESSION_TOKEN`.** A fine-grained token limited to the repository. An Objective run uses it for every repository, so it needs access to all of them.
 - **Neither.** The loop says that the session uses your login.
 
 The key is never logged, written to events or the run folder, or passed to the session.
@@ -144,7 +150,7 @@ The launcher finds the installed `deliver` skill (project first, then your home)
 
 ## Triage and learning
 
-An issue that waits for you (hand-over, set-aside with a question, a blocked run) comes to you: `deliver-triage`, a role session that would take one such case, is planned and not built yet ([three layers](../delivery/model.md#three-orchestration-layers)). After a milestone the [retro](learn-from-runs.md#after-a-milestone) turns the run into draft PBIs and [lessons](learn-from-runs.md#lessons); later runs read the approved lessons.
+An issue that waits for you (hand-over, set-aside with a question, a blocked run) comes to you: in an `--objective` run the loop starts `deliver-triage` once per case in a role session and applies its result: it answers a fact-check question, takes an issue out of the run, re-runs a failed CI job once, or hands you a prepared decision or drafted follow-up under "needs you" ([three layers](../delivery/model.md#three-orchestration-layers)). A plain `--milestone` run does not triage. After a milestone the [retro](learn-from-runs.md#after-a-milestone) turns the run into draft PBIs and [lessons](learn-from-runs.md#lessons); later runs read the approved lessons.
 
 ## Resume and feedback
 
@@ -162,7 +168,7 @@ Feature pull requests are transport; read the issue. After every review round wi
 
 The loop writes [agent-events](https://github.com/GravionLabs/agent-events) to `<run>.jsonl` in one directory per user (`$XDG_STATE_HOME/agent-events/`, else `~/.local/state/agent-events/`; Windows `%LOCALAPPDATA%\agent-events\`; `AGENT_EVENTS_DIR` overrides): the run, one task per issue with its pull request, progress, and an attention for an issue set aside. The session reports nothing itself. Displays such as [herdr](herdr.md) and [poimen](https://gravionlabs.github.io/poimen/guide/runs) read the file. Format and location: [jsonl-file binding](https://gravionlabs.github.io/agent-events/bindings/jsonl-file). `github-release finish` writes the publish check there as a run of its own (`ci.publish.ok` or `ci.publish.failed`).
 
-An orchestrator reacts to the events `deliver.merged` (with `risk`), `deliver.handover` and `deliver.aside` (with `reason`, `deliver.aside` with the hold label) and `deliver.milestone.done` of the profile `deliver@2`; their fields are a contract in the `SKILL.md` of `deliver`. The loops of all repositories write there (also an Objective run); `run.started` names the repository, branch, worktree and machine in `origin`. A writer deletes only old runs of its own repository and old runs without `origin`. Older versions wrote to `<git-common-dir>/.agents/events/`; nothing is deleted there, and a display that reads only that directory sees no new runs. In a terminal the OSC 7501 state `blocked` names why it waits (`reason=handover`, `decision` or `risk-high`).
+An orchestrator reacts to the events `deliver.merged` (with `risk`), `deliver.handover` and `deliver.aside` (with `reason`, `deliver.aside` with the hold label) and `deliver.milestone.done` of the profile `deliver@2`; their fields are a contract in the `SKILL.md` of `deliver`. The loops of all repositories write there; `run.started` names the repository, branch, worktree and machine in `origin`. An Objective run is one run there, with its run folder `deliver/<run>/` beside it: `run.started` names the Objective and the events carry `deliver.objective` and `deliver.repo`. A writer deletes only old runs of its own repository and old runs without `origin`. Older versions wrote to `<git-common-dir>/.agents/events/`; nothing is deleted there, and a display that reads only that directory sees no new runs. In a terminal the OSC 7501 state `blocked` names why it waits (`reason=handover`, `decision` or `risk-high`).
 
 ## Troubleshooting
 

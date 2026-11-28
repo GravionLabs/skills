@@ -1,6 +1,6 @@
 # ADR 0011: Objective runs in three layers: loop code, deliver-triage, poimen as host
 
-- Status: Proposed
+- Status: Proposed; the rejection of an orchestrator agent and the rule that the flow lives only in loop code superseded in part by [ADR 0012](0012-delivery-runs-as-host-neutral-workflow-skills-next-to-the-loop-with-gates-in-scripts.md)
 - Date: 2026-11-27
 - Issues: #1081, #1041, #1114
 - Builds on: [ADR 0009](0009-deliver-loop-runs-role-sessions-and-keeps-the-stage-in-labels.md)
@@ -25,7 +25,7 @@ An Objective run has three layers. No orchestrator agent stays open for the run.
 
 **Flow.** Everything that can be checked mechanically is code of the loop: what starts, what waits, what merges, and which event needs judgment. The judgment layer never decides the order or passes a gate.
 
-**Judgment.** The loop starts `deliver-triage` on an attention event: `blocked`, `deliver.handover`, `deliver.aside` with `needs-decision`, or `deliver.milestone.done`. One session handles one case. The allowed actions are this list and nothing else:
+**Judgment.** The loop starts `deliver-triage` on an attention event: `blocked`, an attention with the reason `deliver.handed-over`, one with the reason `deliver.set-aside` for an issue that waits on `needs-decision`, or `deliver.milestone.done`. One session handles one case. The allowed actions are this list and nothing else:
 
 1. Answer a `needs-decision` that is a fact check, with the evidence.
 2. Take an issue out of the current run, with the reason. The issue stays open and no milestone changes: under ADR 0010 a PBI or a Bug has no planned milestone.
@@ -58,7 +58,7 @@ In every other case it prepares the decision for the owner, with the reasons and
 - The loop works from a terminal or CI as it does in poimen. `poimen-lead` stays a skill for interactive sessions; the loop does not use it.
 - Harder: a judgment that needs a view across cases, such as the rubric audit or observations about the whole run, has no place in a session that sees one case. It needs its own role session or a planned issue.
 - Harder: the allowed actions are a fixed list; a new one needs a change of the skill, and the cases outside the list wait for the owner.
-- `deliver-triage` is not built yet. It is planned as a PBI of #1041.
+- The skill `deliver-triage` exists (#1126). The loop does not start it yet; that is a PBI of #1041.
 
 ## Alternatives
 

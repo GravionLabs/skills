@@ -3,10 +3,20 @@ import { execFileSync } from 'node:child_process';
 import { existsSync } from 'node:fs';
 import { LABEL_PREFIX, labelOf } from '../stage.mts';
 import { type ReviewMark, type Verdict, markBody, parseMark } from '../review.mts';
+import { DEFERRED, HOLD_LABELS, blockReason } from '../objective.mts';
 import { syncLabels } from '../sync-labels.mts';
-import type { BaseState, Gate, Item, Pull, Subject, Tracker, TrackerContext } from '../tracker.mts';
+import type {
+  BaseState,
+  Gate,
+  Item,
+  ObjectiveReader,
+  Pull,
+  Subject,
+  TrackedIssue,
+  Tracker,
+  TrackerContext,
+} from '../tracker.mts';
 
-const HOLD = ['needs-decision', 'needs-refinement', 'interactive', 'release-test'];
 // only these can change the text of an issue they wrote; anyone can write a comment
 const TRUSTED = ['OWNER', 'MEMBER', 'COLLABORATOR'];
 
@@ -23,6 +33,18 @@ type Issue = {
   milestone?: { number: number } | null;
 };
 type Milestone = { number: number; title: string; html_url: string };
+type RestIssue = {
+  number: number;
+  title: string;
+  state: string;
+  state_reason?: string | null;
+  closed_at?: string | null;
+  html_url: string;
+  repository_url: string;
+  body: string | null;
+  labels: { name: string }[];
+  milestone?: { title: string } | null;
+};
 type PullRecord = {
   number: number;
   title: string;
@@ -158,6 +180,19 @@ const isFeature = (issue: Issue): boolean =>
 const isWork = (issue: Issue): boolean =>
   !issue.pull_request && issue.labels.some((l) => l.name === 'pbi' || l.name === 'bug');
 
+const tracked = (issue: RestIssue): TrackedIssue => ({
+  repo: issue.repository_url.split('/repos/')[1] as string,
+  number: issue.number,
+  title: issue.title,
+  url: issue.html_url,
+  body: issue.body ?? '',
+  labels: issue.labels.map((l) => l.name),
+  state: issue.state === 'closed' ? 'closed' : 'open',
+  ...(issue.state_reason && { stateReason: issue.state_reason }),
+  ...(issue.closed_at && { closedAt: issue.closed_at }),
+  ...(issue.milestone && { milestone: issue.milestone.title }),
+});
+
 /** The body with exactly one line `Retro: <url>`: an earlier one is replaced, else it is appended. */
 export function withRetroLine(body: string | null | undefined, url: string): string {
   const line = `Retro: ${url}`;
@@ -200,6 +235,7 @@ const pause = (ms: number): void => {
 
 export function create({
   cwd,
+  repo: named,
   base,
   selection,
   trustAuthors,
@@ -267,7 +303,7 @@ export function create({
   const api = <T,>(route: string): T => JSON.parse(gh('api', route));
   const list = <T,>(route: string): T[] =>
     (JSON.parse(gh('api', route, '--paginate', '--slurp')) as T[][]).flat();
-  const repo = gh('repo', 'view', '--json', 'nameWithOwner', '-q', '.nameWithOwner');
+  const repo = named ?? gh('repo', 'view', '--json', 'nameWithOwner', '-q', '.nameWithOwner');
 
   let milestoneCache: Milestone | undefined;
   const milestone = (): Milestone => {
@@ -313,7 +349,9 @@ export function create({
         `repos/${repo}/issues?milestone=${milestone().number}&state=open&per_page=100`,
       );
       for (const issue of open.filter(isWork)) add(issue);
-      for (const feature of open.filter((i) => !i.pull_request && isFeature(i)))
+      const deferred = (i: Issue) =>
+        !!selection.skipDeferred && i.labels.some((l) => l.name.toLowerCase() === DEFERRED);
+      for (const feature of open.filter((i) => !i.pull_request && isFeature(i) && !deferred(i)))
         for (const issue of workBelow(feature.number)) add(issue, feature.number);
     }
     return [...found.values()].sort((a, b) => a.id - b.id);
@@ -342,6 +380,43 @@ export function create({
       if (/HTTP 404/.test((error as { stderr?: string }).stderr ?? '')) return undefined;
       throw error;
     }
+  };
+
+  /** `undefined` for HTTP 404 (and 410, a deleted issue). */
+  const found = <T,>(route: string): T | undefined => {
+    try {
+      return api<T>(route);
+    } catch (error) {
+      if (/HTTP (404|410)/.test((error as { stderr?: string }).stderr ?? '')) return undefined;
+      throw error;
+    }
+  };
+  const reader: ObjectiveReader = {
+    issue(ref) {
+      const issue = found<RestIssue>(`repos/${ref.repo}/issues/${ref.number}`);
+      return issue && tracked(issue);
+    },
+    parent(ref) {
+      const issue = found<RestIssue>(`repos/${ref.repo}/issues/${ref.number}/parent`);
+      return issue && tracked(issue);
+    },
+    subIssues: (ref) =>
+      list<RestIssue>(`repos/${ref.repo}/issues/${ref.number}/sub_issues?per_page=100`).map(
+        tracked,
+      ),
+    milestones: (name) =>
+      list<{ title: string; state: string }>(`repos/${name}/milestones?state=all&per_page=100`).map(
+        (m) => ({ title: m.title, closed: m.state === 'closed' }),
+      ),
+    hasTag: (name, tag) => !!found(`repos/${name}/git/ref/tags/${encodeURIComponent(tag)}`),
+    blockers: (ref) =>
+      list<{ number: number; state: string; repository_url: string }>(
+        `repos/${ref.repo}/issues/${ref.number}/dependencies/blocked_by`,
+      ).map((b) => ({
+        repo: b.repository_url.split('/repos/')[1] as string,
+        number: b.number,
+        state: b.state,
+      })),
   };
 
   const checksOf = (id: number): Check[] => {
@@ -390,6 +465,7 @@ export function create({
   return {
     name: 'github',
     repo,
+    ...reader,
 
     subject(): Subject {
       if (selection.milestone) {
@@ -467,6 +543,27 @@ export function create({
       return syncLabels((...args) => gh(...args), repo);
     },
 
+    removeLabel(item: Item, label: string): void {
+      // only the loop writes the stage labels, and never through this call
+      if (label.toLowerCase().startsWith(LABEL_PREFIX)) throw new Error(`refused: ${label}`);
+      try {
+        gh(
+          'api',
+          '-X',
+          'DELETE',
+          `repos/${repo}/issues/${item.id}/labels/${encodeURIComponent(label)}`,
+        );
+      } catch (error) {
+        // not on the issue (any more)
+        if (!/HTTP 404/.test((error as { stderr?: string }).stderr ?? '')) throw error;
+      }
+    },
+
+    rerunJob(job: number, env: Record<string, string>): void {
+      if (!Number.isSafeInteger(job) || job < 1) throw new Error(`invalid job id: ${job}`);
+      gh('api', '-X', 'POST', `repos/${repo}/actions/jobs/${job}/rerun`, env);
+    },
+
     commentOnce(item: Item, marker: string, body: string): void {
       const route = `repos/${repo}/issues/${item.id}/comments`;
       const login = gh('api', 'user', '--jq', '.login');
@@ -491,17 +588,17 @@ export function create({
     },
 
     waitReason(item: Item): string | undefined {
-      const held = item.labels.find((name) => HOLD.includes(name));
+      const held = item.labels.find((name) => HOLD_LABELS.includes(name));
       if (held) return held;
       const author = authors.get(item.id) ?? 'NONE';
       if (!trustAuthors && !TRUSTED.includes(author)) {
         return `author has no write access (${author.toLowerCase()}), --trust-authors delivers it`;
       }
-      const blockers = list<{ number: number; state: string; repository_url: string }>(
-        `repos/${repo}/issues/${item.id}/dependencies/blocked_by`,
-      ).filter((b) => b.state === 'open');
-      if (blockers.length === 0) return undefined;
-      return `blocked by ${blockers.map((b) => `${b.repository_url.split('/repos/')[1]}#${b.number}`).join(', ')}`;
+      return blockReason(
+        { repo, number: item.id },
+        reader.blockers({ repo, number: item.id }),
+        reader,
+      );
     },
 
     needsDecision(item: Item): boolean {
@@ -749,6 +846,24 @@ export function create({
     releaseCommits(): number {
       const target = this.defaultBranch();
       return Number(gh('api', `repos/${repo}/compare/${target}...${base}`, '-q', '.ahead_by'));
+    },
+
+    foreignPulls(): Pull[] {
+      if (!selection.milestone) return [];
+      // every issue of the milestone, closed ones too: a pull request of a delivered issue is no foreign one
+      const members = new Set(
+        list<Issue>(`repos/${repo}/issues?milestone=${milestone().number}&state=all&per_page=100`)
+          .filter((issue) => !issue.pull_request)
+          .map((issue) => issue.number),
+      );
+      const named = (p: PullRecord) =>
+        [...members].some(
+          (id) => new RegExp(`^[a-z]+/${id}-`).test(p.head.ref) || closesIssue(p.body, id),
+        );
+      return list<PullRecord>(`repos/${repo}/pulls?state=open&base=${base}&per_page=100`)
+        .filter((p) => !named(p))
+        .sort((a, b) => a.number - b.number)
+        .map((p) => ({ id: p.number, title: p.title, url: p.html_url, branch: p.head.ref }));
     },
 
     ensureReleasePull(): Pull {

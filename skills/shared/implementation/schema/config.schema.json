@@ -198,7 +198,7 @@
       }
     },
     "deliver": {
-      "description": "Settings of deliver. Other keys of the old loop (roles, loopThreshold, parallel, sessionTimeoutMinutes) are ignored with a warning.",
+      "description": "Settings of deliver. Other keys of the old loop (roles, loopThreshold, sessionTimeoutMinutes) are ignored with a warning.",
       "type": "object",
       "additionalProperties": false,
       "properties": {
@@ -256,6 +256,16 @@
           "description": "How long the loop waits for handed-over pull requests when nothing else can start (default 120); 0 ends the run at once with exit 3.",
           "type": "integer",
           "minimum": 0
+        },
+        "parallel": {
+          "description": "How many role sessions (implementer, review, repair) deliver-loop runs at once per repository (per base branch), each issue in its own worktree; merges stay one at a time (default 1: one issue after the other). --parallel wins.",
+          "type": "integer",
+          "minimum": 1
+        },
+        "maxSessions": {
+          "description": "The most role sessions an Objective run of deliver-loop runs at once across all its repositories (default 3); each repository also stays within parallel. A run of one repository ignores it. --max-sessions wins.",
+          "type": "integer",
+          "minimum": 1
         },
         "mergeRisk": {
           "description": "The highest risk level of the implementer result the loop merges (default medium); a pull request above it is handed over. --merge-risk wins.",

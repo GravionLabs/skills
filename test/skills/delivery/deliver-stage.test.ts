@@ -314,6 +314,28 @@ describe('GitHub tracker: labels', () => {
     ]);
   });
 
+  it('removes a hold label for the triage, refuses an agent label and re-runs one job', () => {
+    const tracker = create({
+      cwd: dir,
+      base: 'main',
+      selection: { issues: [] },
+      trustAuthors: false,
+    });
+    const item = { id: 8, title: '', url: '', labels: [], body: '' };
+    const before = fake.calls().length;
+    expect(() => tracker.removeLabel(item, 'Agent:Approved')).toThrow(/refused/);
+    tracker.removeLabel(item, 'needs-decision');
+    tracker.rerunJob(42, {});
+    const writes = fake
+      .calls()
+      .slice(before)
+      .filter((c) => c.args.includes('-X'));
+    expect(writes.map((c) => c.args.slice(2, 4).join(' '))).toEqual([
+      'DELETE repos/o/r/issues/8/labels/needs-decision',
+      'POST repos/o/r/actions/jobs/42/rerun',
+    ]);
+  });
+
   it('syncLabels creates only the missing labels, with color and description', () => {
     const calls: string[][] = [];
     const existing = [{ name: 'agent:review' }];

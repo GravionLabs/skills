@@ -2,17 +2,32 @@
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "https://raw.githubusercontent.com/GravionLabs/skills/main/skills/delivery/deliver/schema/deliver-profile.schema.json",
   "title": "deliver profile v2 (deliver@2) of agent-events",
-  "description": "Applied in addition to the agent-events core schema (GravionLabs/agent-events, schema/v0/core.schema.json) to every line of a run that declares deliver@2. Owner: the skill deliver; writer: scripts/deliver-loop.mts. Profile types: deliver.merged (an issue is merged), deliver.handover (a pull request is handed to a person), deliver.aside (an issue is set aside), deliver.milestone.done (the end of a milestone run). Their fields sit under `deliver`; deliver.handover and deliver.aside also carry the core fields reason and text. Every reason of the run is prefixed deliver.. Tone: deliver.merged success; deliver.handover and deliver.aside warning; deliver.milestone.done success for a clean run, else warning.",
+  "description": "Applied in addition to the agent-events core schema (GravionLabs/agent-events, schema/v0/core.schema.json) to every line of a run that declares deliver@2. Owner: the skill deliver; writer: scripts/deliver-loop.mts. Profile types: deliver.merged (an issue is merged), deliver.handover (a pull request is handed to a person), deliver.aside (an issue is set aside), deliver.milestone.done (the end of a milestone run), deliver.sessions (the number of running role sessions changed), deliver.triage.started and deliver.triage.done (an Objective run judges an attention case with deliver-triage; done names the action the loop applied). Their fields sit under `deliver`; deliver.handover and deliver.aside also carry the core fields reason and text. Every reason of the run is prefixed deliver.. An Objective run (--objective) is one run: every event carries deliver.objective, every task, attention and merge event also deliver.repo (so does every other event of a repository), task ids are <owner>/<repo>:<task>; an attention deliver.waiting-upstream names a repository that waits for an upstream release. Tone: deliver.merged success; deliver.handover and deliver.aside warning; deliver.milestone.done success for a clean run, else warning; deliver.sessions neutral; deliver.triage.started info; deliver.triage.done success for an applied action, warning for needs-owner and draft-issue.",
   "type": "object",
   "required": ["type"],
   "properties": {
     "type": {
       "if": { "pattern": "^deliver\\." },
       "then": {
-        "enum": ["deliver.merged", "deliver.handover", "deliver.aside", "deliver.milestone.done"]
+        "enum": [
+          "deliver.merged",
+          "deliver.handover",
+          "deliver.aside",
+          "deliver.milestone.done",
+          "deliver.sessions",
+          "deliver.triage.started",
+          "deliver.triage.done"
+        ]
       }
     },
-    "reason": { "type": "string", "pattern": "^deliver\\.[a-z0-9.-]+$" }
+    "reason": { "type": "string", "pattern": "^deliver\\.[a-z0-9.-]+$" },
+    "deliver": {
+      "type": "object",
+      "properties": {
+        "objective": { "$ref": "#/$defs/objective" },
+        "repo": { "$ref": "#/$defs/repo" }
+      }
+    }
   },
   "allOf": [
     {
@@ -56,10 +71,37 @@
           "deliver": { "$ref": "#/$defs/milestoneDone" }
         }
       }
+    },
+    {
+      "if": { "properties": { "type": { "const": "deliver.sessions" } } },
+      "then": {
+        "required": ["deliver"],
+        "properties": {
+          "tone": { "const": "neutral" },
+          "deliver": { "$ref": "#/$defs/sessions" }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": { "type": { "enum": ["deliver.triage.started", "deliver.triage.done"] } }
+      },
+      "then": {
+        "required": ["deliver"],
+        "properties": {
+          "tone": { "enum": ["info", "success", "warning"] },
+          "deliver": { "$ref": "#/$defs/triage" }
+        }
+      }
+    },
+    {
+      "if": { "properties": { "type": { "const": "deliver.triage.done" } } },
+      "then": { "properties": { "deliver": { "required": ["action"] } } }
     }
   ],
   "$defs": {
     "repo": { "type": "string", "pattern": "^[^/\\s]+/[^/\\s]+$" },
+    "objective": { "type": "string", "pattern": "^[^/\\s]+/[^/\\s#]+#[1-9][0-9]*$" },
     "issue": { "type": "integer", "minimum": 1 },
     "count": { "type": "integer", "minimum": 0 },
     "url": { "type": "string", "pattern": "^https?://" },
@@ -92,6 +134,27 @@
         "merged": { "$ref": "#/$defs/count" },
         "aside": { "$ref": "#/$defs/count" },
         "pr": { "$ref": "#/$defs/url" }
+      }
+    },
+    "sessions": {
+      "type": "object",
+      "required": ["repo", "running", "limit"],
+      "properties": {
+        "repo": { "$ref": "#/$defs/repo" },
+        "running": { "$ref": "#/$defs/count" },
+        "limit": { "type": "integer", "minimum": 1 }
+      }
+    },
+    "triage": {
+      "type": "object",
+      "required": ["repo", "case"],
+      "properties": {
+        "repo": { "$ref": "#/$defs/repo" },
+        "case": { "enum": ["handover", "needs-decision", "blocked", "milestone-done"] },
+        "issue": { "$ref": "#/$defs/issue" },
+        "pr": { "$ref": "#/$defs/url" },
+        "milestone": { "type": "string", "minLength": 1 },
+        "action": { "enum": ["answer", "drop", "draft-issue", "rerun-ci", "needs-owner"] }
       }
     }
   }

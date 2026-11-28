@@ -9,6 +9,7 @@ import {
   APP_PERMISSIONS,
   appSettings,
   tokenSource,
+  tokenSources,
 } from '../../../skills/delivery/deliver/scripts/app-token.mts';
 import {
   cmdLine,
@@ -125,7 +126,8 @@ describe('deliver loop', () => {
     expect(out.sessions[0]?.prompt).toMatch(
       /^\/deliver 11 --base main --issue-file \S+11\.issue\.md$/,
     );
-    expect(out.events.map((e) => e.type)).toEqual([
+    // the running sessions are counted in deliver.sessions events of their own (parallel cases)
+    expect(out.events.map((e) => e.type).filter((type) => type !== 'deliver.sessions')).toEqual([
       'run.started',
       'progress',
       'task.started',
@@ -239,6 +241,10 @@ describe('deliver loop', () => {
   it.skipIf(process.platform === 'win32').each([
     ['gate', { stopInGate: true }],
     ['the read of the changed files', { stopInChangedFiles: true }],
+    [
+      'the read of protected files',
+      { stopInChangedFiles: true, files: ['.github/x.yml'] as string[] },
+    ],
   ] as const)('does not merge when the stop request arrives during %s', async (_name, stop) => {
     // the fake tracker sends the stop request inside the call: no timing window in the test
     const out = await loop({
@@ -248,6 +254,8 @@ describe('deliver loop', () => {
     expect(out.status).toBe(130);
     expect(out.merges).toEqual([]);
     expect(out.results[0]).toMatchObject({ outcome: 'stopped' });
+    // the item keeps the label of its stage
+    expect(out.stages.map((s) => s.stage)).not.toContain('handover');
   });
 
   it('does not merge a pull request that got a protected path after the session ended', async () => {
@@ -1499,6 +1507,23 @@ describe('deliver loop', () => {
       expect(requests).toHaveLength(0);
     });
 
+    it('makes one token source per repository, on first use, and keeps their tokens apart', async () => {
+      const settings = appSettings({ DELIVER_APP_ID: '4242', DELIVER_APP_KEY_FILE: keyFile() });
+      const asked: string[] = [];
+      const sources = tokenSources(settings!, 0, async (_, repo) => {
+        asked.push(repo);
+        if (repo === 'o/none') throw new Error('not installed');
+        return { token: `token of ${repo}`, expiresAt: Date.now() + 60_000 };
+      });
+      expect(asked).toEqual([]);
+      expect((await sources('o/a').current()).token).toBe('token of o/a');
+      expect((await sources('o/b').current()).token).toBe('token of o/b');
+      await expect(sources('o/none').current()).rejects.toThrow('not installed');
+      // GitHub reads names without case: the same source, no new token
+      expect(await sources('O/A').current()).toEqual({ token: 'token of o/a', renewed: false });
+      expect(asked).toEqual(['o/a', 'o/b', 'o/none']);
+    });
+
     it('renews a token when less than the session timeout is left, not before', async () => {
       const settings = appSettings({
         DELIVER_APP_ID: '4242',
@@ -1610,6 +1635,36 @@ describe('deliver loop', () => {
       profile.expectRun(out.events as ProfileEvent[]);
       // the release pull request is never merged
       expect(out.merges.map((m) => m.pull)).not.toContain(900);
+    });
+
+    it('reports an open pull request into release/next that is not of the milestone as needs you', async () => {
+      const foreign = {
+        id: 77,
+        title: 'feat: other',
+        url: 'https://example.test/pull/77',
+        branch: 'feat/88-other',
+      };
+      const out = await loop(
+        { items: [{ id: 31, title: '[PBI] feat: last' }], foreignPulls: [foreign] },
+        { milestone: true },
+      );
+      expect(out.status).toBe(0);
+      expect(out.releasePulls).toBe(1);
+      expect(out.stdout).toMatch(
+        /needs you \(1\):\n {2}https:\/\/example\.test\/pull\/77 is open into release\/next and not in .+: merge, close or retarget it first\n/,
+      );
+      // the loop never touches a pull request of another item
+      expect(out.merges.map((m) => m.pull)).not.toContain(77);
+    });
+
+    it('reports no foreign pull request when none is open into release/next', async () => {
+      const out = await loop(
+        { items: [{ id: 31, title: '[PBI] feat: last' }] },
+        { milestone: true },
+      );
+      expect(out.releasePulls).toBe(1);
+      expect(out.stdout).toContain('needs you (0):');
+      expect(out.stdout).not.toContain('is open into release/next');
     });
 
     it('opens no release pull request for a milestone without open issues and without commits', async () => {
