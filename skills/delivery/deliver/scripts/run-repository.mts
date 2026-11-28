@@ -1,7 +1,7 @@
 // The work of one repository in a deliver run: a fresh agent session per issue, a review session for its pull
 // request, merge. Up to `parallel` issues are worked at once, merges one at a time; the state is read from the tracker
 // whenever an issue ends. The run only remembers what it set aside. `deliver-loop.mts` parses the arguments and calls `runRepository` once.
-// Tracker: tracker.mts. Progress events: events.mts. Review settings and verdict: review.mts. Issue stage: stage.mts.
+// Tracker: tracker.mts. Progress events: events.mts. Review settings and verdict: review.mts. Issue stage: stage.mts, gates/stage.mts.
 // Model of each session: session-models.mts. Comments on the issue: handover.mts. Stop request: stop-signal.mts.
 // Parallel sessions and the merge lock: parallel.mts.
 import { execFileSync } from 'node:child_process';
@@ -21,10 +21,12 @@ import type { tokenSource as makeSource } from './app-token.mts';
 import type { Origin } from './event-dir.mts';
 import { type Emit, reasonCode } from './events.mts';
 import { mergedMeanwhile } from './gates/merged-meanwhile.mts';
+import { verifyVerdict } from './gates/verify-verdict.mts';
 import { type Note, handoverNote, reviewNote } from './handover.mts';
 import { type BlockedReason, type Report, finishReport } from './program-status.mts';
 import { cargoTomlKeys } from './cargo-toml.mts';
 import { directoryPackagesPropsKeys } from './directory-packages-props.mts';
+import { setStageGate } from './gates/stage.mts';
 import { goModKeys } from './go-mod.mts';
 import { pyprojectTomlKeys } from './pyproject-toml.mts';
 import { pnpmWorkspaceKeys } from './pnpm-workspace.mts';
@@ -40,7 +42,6 @@ import {
   type Verdict,
   findingsLine,
   featureText,
-  parseVerdict,
   type retroSettings,
 } from './review.mts';
 import type { Tier } from './resolve-model.mts';
@@ -650,11 +651,8 @@ export async function runRepository(context: RepositoryContext): Promise<Reposit
 
   /** Writes the stage of the issue after the event. A failing call is logged: the label never decides about the run. */
   function mark(item: Item, event: StageEvent): void {
-    try {
-      tracker.setStage(item, stageAfter(event));
-    } catch (error) {
-      log(`#${item.id} stage label not written: ${firstLine(error)}`, 'warn');
-    }
+    const { result, reason } = setStageGate(tracker, item, stageAfter(event));
+    if (result !== 'pass') log(`#${item.id} stage label not written: ${reason}`, 'warn');
   }
 
   /** Comments on the issue, once per marker. A failing call is logged, as for the label. */
@@ -1025,9 +1023,11 @@ export async function runRepository(context: RepositoryContext): Promise<Reposit
         if (ran.reason) return { reason: ran.reason };
         if (ran.session.exit !== 0) problem = `session failed (exit ${ran.session.exit})`;
         else {
-          const verdict = existsSync(file) ? parseVerdict(readFileSync(file, 'utf8')) : undefined;
+          const content = existsSync(file) ? readFileSync(file, 'utf8') : undefined;
+          // the session reviewed `head`; the merge gate refuses a later push
+          const { verdict, reason } = verifyVerdict({ content, reviewedHead: head, prHead: head });
           if (verdict) return { verdict, file, head };
-          problem = existsSync(file) ? 'invalid verdict' : 'no verdict';
+          problem = reason;
         }
       } catch (error) {
         problem = firstLine(error);
