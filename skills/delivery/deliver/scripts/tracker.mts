@@ -65,7 +65,33 @@ export type TrackerContext = {
   log?: (text: string) => void;
 };
 
-export interface Tracker {
+/** An issue of any repository, as `readObjective` reads it (`objective.mts`). */
+export type TrackedIssue = {
+  repo: string;
+  number: number;
+  title: string;
+  url: string;
+  body: string;
+  labels: string[];
+  state: 'open' | 'closed';
+  /** `completed`, `not_planned`, `duplicate`. */
+  stateReason?: string;
+  closedAt?: string;
+  /** The title of its milestone. */
+  milestone?: string;
+};
+
+/** Reads of any repository. Missing is `undefined` or `false`; any other failure throws. */
+export interface ObjectiveReader {
+  issue(ref: { repo: string; number: number }): TrackedIssue | undefined;
+  parent(ref: { repo: string; number: number }): TrackedIssue | undefined;
+  subIssues(ref: { repo: string; number: number }): TrackedIssue[];
+  /** Open and closed milestones. */
+  milestones(repo: string): { title: string; closed: boolean }[];
+  hasTag(repo: string, tag: string): boolean;
+}
+
+export interface Tracker extends ObjectiveReader {
   /** `github`, `ado`, … Names the subject kinds (`github.issue`). */
   readonly name: string;
   /** The repository as the tracker names it, for example `GravionLabs/poimen`. */

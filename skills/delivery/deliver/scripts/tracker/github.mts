@@ -3,8 +3,19 @@ import { execFileSync } from 'node:child_process';
 import { existsSync } from 'node:fs';
 import { LABEL_PREFIX, labelOf } from '../stage.mts';
 import { type ReviewMark, type Verdict, markBody, parseMark } from '../review.mts';
+import { blockerState } from '../objective.mts';
 import { syncLabels } from '../sync-labels.mts';
-import type { BaseState, Gate, Item, Pull, Subject, Tracker, TrackerContext } from '../tracker.mts';
+import type {
+  BaseState,
+  Gate,
+  Item,
+  ObjectiveReader,
+  Pull,
+  Subject,
+  TrackedIssue,
+  Tracker,
+  TrackerContext,
+} from '../tracker.mts';
 
 const HOLD = ['needs-decision', 'needs-refinement', 'interactive', 'release-test'];
 // only these can change the text of an issue they wrote; anyone can write a comment
@@ -23,6 +34,18 @@ type Issue = {
   milestone?: { number: number } | null;
 };
 type Milestone = { number: number; title: string; html_url: string };
+type RestIssue = {
+  number: number;
+  title: string;
+  state: string;
+  state_reason?: string | null;
+  closed_at?: string | null;
+  html_url: string;
+  repository_url: string;
+  body: string | null;
+  labels: { name: string }[];
+  milestone?: { title: string } | null;
+};
 type PullRecord = {
   number: number;
   title: string;
@@ -157,6 +180,19 @@ const isFeature = (issue: Issue): boolean =>
 /** An issue the loop delivers: a PBI or a Bug, not a pull request. */
 const isWork = (issue: Issue): boolean =>
   !issue.pull_request && issue.labels.some((l) => l.name === 'pbi' || l.name === 'bug');
+
+const tracked = (issue: RestIssue): TrackedIssue => ({
+  repo: issue.repository_url.split('/repos/')[1] as string,
+  number: issue.number,
+  title: issue.title,
+  url: issue.html_url,
+  body: issue.body ?? '',
+  labels: issue.labels.map((l) => l.name),
+  state: issue.state === 'closed' ? 'closed' : 'open',
+  ...(issue.state_reason && { stateReason: issue.state_reason }),
+  ...(issue.closed_at && { closedAt: issue.closed_at }),
+  ...(issue.milestone && { milestone: issue.milestone.title }),
+});
 
 /** The body with exactly one line `Retro: <url>`: an earlier one is replaced, else it is appended. */
 export function withRetroLine(body: string | null | undefined, url: string): string {
@@ -344,6 +380,35 @@ export function create({
     }
   };
 
+  /** `undefined` for HTTP 404 (and 410, a deleted issue). */
+  const found = <T,>(route: string): T | undefined => {
+    try {
+      return api<T>(route);
+    } catch (error) {
+      if (/HTTP (404|410)/.test((error as { stderr?: string }).stderr ?? '')) return undefined;
+      throw error;
+    }
+  };
+  const reader: ObjectiveReader = {
+    issue(ref) {
+      const issue = found<RestIssue>(`repos/${ref.repo}/issues/${ref.number}`);
+      return issue && tracked(issue);
+    },
+    parent(ref) {
+      const issue = found<RestIssue>(`repos/${ref.repo}/issues/${ref.number}/parent`);
+      return issue && tracked(issue);
+    },
+    subIssues: (ref) =>
+      list<RestIssue>(`repos/${ref.repo}/issues/${ref.number}/sub_issues?per_page=100`).map(
+        tracked,
+      ),
+    milestones: (name) =>
+      list<{ title: string; state: string }>(`repos/${name}/milestones?state=all&per_page=100`).map(
+        (m) => ({ title: m.title, closed: m.state === 'closed' }),
+      ),
+    hasTag: (name, tag) => !!found(`repos/${name}/git/ref/tags/${encodeURIComponent(tag)}`),
+  };
+
   const checksOf = (id: number): Check[] => {
     try {
       return JSON.parse(gh('pr', 'checks', String(id), '--repo', repo, '--json', 'name,bucket'));
@@ -390,6 +455,7 @@ export function create({
   return {
     name: 'github',
     repo,
+    ...reader,
 
     subject(): Subject {
       if (selection.milestone) {
@@ -499,9 +565,22 @@ export function create({
       }
       const blockers = list<{ number: number; state: string; repository_url: string }>(
         `repos/${repo}/issues/${item.id}/dependencies/blocked_by`,
-      ).filter((b) => b.state === 'open');
-      if (blockers.length === 0) return undefined;
-      return `blocked by ${blockers.map((b) => `${b.repository_url.split('/repos/')[1]}#${b.number}`).join(', ')}`;
+      ).map((b) => ({
+        repo: b.repository_url.split('/repos/')[1] as string,
+        number: b.number,
+        state: b.state,
+      }));
+      const open = blockers.filter((b) => b.state === 'open');
+      if (open.length > 0)
+        return `blocked by ${open.map((b) => `${b.repo}#${b.number}`).join(', ')}`;
+      // a closed blocker of another repository is not enough: its Feature must be released
+      const upstream = blockers
+        .filter((b) => b.repo.toLowerCase() !== repo.toLowerCase())
+        .flatMap((b) => {
+          const state = blockerState(b, { repo, number: item.id }, reader);
+          return state.state === 'waiting' ? [state.reason] : [];
+        });
+      return upstream.length > 0 ? [...new Set(upstream)].join(', ') : undefined;
     },
 
     needsDecision(item: Item): boolean {
