@@ -7,6 +7,7 @@ import type {
   BaseState,
   Gate,
   Item,
+  Leaf,
   ObjectiveReader,
   Pull,
   Subject,
@@ -15,7 +16,11 @@ import type {
   TrackerContext,
 } from '../../../../../skills/delivery/deliver/scripts/tracker.mts';
 import {
+  HOLD_LABELS,
+  blockReason,
   blockerState,
+  isKind,
+  objectiveLeaves,
   parseObjective,
 } from '../../../../../skills/delivery/deliver/scripts/objective.mts';
 
@@ -203,24 +208,22 @@ export function create({ selection, repo: named }: TrackerContext): Tracker {
     (issue.state ?? 'open') === 'open' &&
     (issue.labels ?? []).some((label) => label === 'pbi' || label === 'bug');
   /** The open PBIs and Bugs of the unit: in its milestone or below its Feature (or the open Features of its milestone). */
-  const unitIssues = (): FakeIssue[] => {
+  const unitIssues = (of = selection): FakeIssue[] => {
     const issues = repository(repo)?.issues ?? [];
     const below = (feature: FakeIssue) =>
       (feature.subIssues ?? []).flatMap((value) =>
         typeof value === 'number' ? issues.filter((i) => i.number === value) : [],
       );
-    const features = selection.feature
-      ? issues.filter((i) => i.number === Number(selection.feature))
+    const features = of.feature
+      ? issues.filter((i) => i.number === Number(of.feature))
       : issues.filter(
           (i) =>
-            i.milestone === selection.milestone &&
+            i.milestone === of.milestone &&
             i.title.startsWith('[Feature]') &&
             (i.state ?? 'open') === 'open' &&
-            !(selection.skipDeferred && i.labels?.includes('deferred')),
+            !(of.skipDeferred && i.labels?.includes('deferred')),
         );
-    const direct = selection.feature
-      ? []
-      : issues.filter((i) => i.milestone === selection.milestone);
+    const direct = of.feature ? [] : issues.filter((i) => i.milestone === of.milestone);
     const found = new Map<number, FakeIssue>();
     for (const issue of [...direct, ...features.flatMap(below)])
       if (isWork(issue) && (issue.addedAfter === undefined || closed.has(issue.addedAfter)))
@@ -231,6 +234,31 @@ export function create({ selection, repo: named }: TrackerContext): Tracker {
     named
       ? unitIssues().map((i) => ({ id: i.number, title: i.title, body: i.body }))
       : scenario.items;
+
+  const leafOf = (issue: Omit<FakeIssue, 'subIssues'>, held?: string): Leaf => ({
+    id: issue.number,
+    title: issue.title,
+    url: `https://example.test/issues/${issue.number}`,
+    labels: issue.labels ?? [],
+    body: issue.body ?? '',
+    ...(held && { held }),
+  });
+  /** `ref`: a milestone of the repository, or the number of a Feature, Epic or Objective of it. */
+  const leaves = (ref: string): Leaf[] | undefined => {
+    const number = /^#?([1-9]\d*)$/.exec(ref)?.[1];
+    if (!number)
+      return repository(repo)?.milestones?.some((m) => m.title === ref)
+        ? unitIssues({ milestone: ref }).map((i) => leafOf(i))
+        : undefined;
+    const issue = reader.issue({ repo, number: Number(number) });
+    if (!issue) return undefined;
+    if (isKind(issue, 'feature')) return unitIssues({ feature: number }).map((i) => leafOf(i));
+    if (!isKind(issue, 'epic') && !isKind(issue, 'objective')) return undefined;
+    return objectiveLeaves(`${repo}#${number}`, reader).map(({ issue: leaf, held }) => ({
+      ...leafOf(leaf, held),
+      repo: leaf.repo,
+    }));
+  };
 
   return {
     name: 'fake',
@@ -255,6 +283,7 @@ export function create({ selection, repo: named }: TrackerContext): Tracker {
         }))
         .concat(baseBug && !closed.has(baseBug.id) ? [baseBug] : []);
     },
+    leaves,
     itemSubject: (item: Item): Subject => ({
       kind: 'fake.issue',
       id: `fake/repo#${item.id}`,
@@ -262,6 +291,13 @@ export function create({ selection, repo: named }: TrackerContext): Tracker {
       url: item.url,
     }),
     waitReason(item: Item): string | undefined {
+      // a leaf of a tree is judged by its labels and the blockers of its issue
+      const own = repository(item.repo ?? repo)?.issues?.find((i) => i.number === item.id);
+      if (!named && own && !scenario.items.some((i) => i.id === item.id)) {
+        const held = item.labels.find((label) => HOLD_LABELS.includes(label));
+        const blocked = { repo: item.repo ?? repo, number: item.id };
+        return held ?? blockReason(blocked, reader.blockers(blocked), reader);
+      }
       const blockers = scenario.items.find((i) => i.id === item.id)?.blockedBy ?? [];
       const open = blockers.filter((id) => typeof id === 'number' && !closed.has(id));
       if (open.length > 0) return `blocked by ${open.map((id) => `#${id}`).join(', ')}`;

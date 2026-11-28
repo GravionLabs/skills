@@ -209,6 +209,36 @@ export function readObjective(ref: string, reader: ObjectiveReader): Objective {
   };
 }
 
+/**
+ * The open PBIs and Bugs below the Epic or Objective `ref` in the order the loop starts them: by the start order of
+ * their repositories, then by number. Those of `deferred` Features are no work; `held` names the first `Requires:` line
+ * of the Objective or the Feature that is not met.
+ */
+export function objectiveLeaves(
+  ref: string,
+  reader: ObjectiveReader,
+): { issue: TrackedIssue; held?: string }[] {
+  const read = readObjective(ref, reader);
+  const order = startOrder(read).map((repo) => repo.toLowerCase());
+  const rank = (issue: TrackedIssue) => order.indexOf(issue.repo.toLowerCase());
+  const found = new Map<string, { issue: TrackedIssue; held?: string }>();
+  for (const feature of read.features) {
+    if (feature.work.length === 0) continue;
+    let held: string | undefined;
+    for (const requirement of [...read.requires, ...feature.requires]) {
+      const state = requirementState(requirement, reader);
+      if (state.state === 'met') continue;
+      held = state.reason;
+      break;
+    }
+    for (const issue of feature.work)
+      found.set(`${issue.repo.toLowerCase()}#${issue.number}`, { issue, ...(held && { held }) });
+  }
+  return [...found.values()].sort(
+    (a, b) => rank(a.issue) - rank(b.issue) || a.issue.number - b.issue.number,
+  );
+}
+
 /** The wait reason of an issue from its native `blocked-by` links (the loop's `waitReason` and the plan share it). */
 export function blockReason(
   blocked: IssueRef,
