@@ -22,5 +22,6 @@ A run counts as `fail` when it prints no JSON object, an unknown word, or a word
 
 ## Scripts
 
-| Script | Arguments | Checks |
-| :----- | :-------- | :----- |
+| Script                 | Arguments                                                                        | Checks                                                                                                                                                                                                                                                                                                                                                                                                               |
+| :--------------------- | :------------------------------------------------------------------------------- | :------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `merged-meanwhile.mts` | `<workspace> --base <branch> --issue <nr> [--run <run>]` (default `DELIVER_RUN`) | what was merged into `origin/<base>` since the fork point (`git merge-base HEAD origin/<base>` after a fetch). `pass` with `evidence.commits`, `evidence.files` and `evidence.file` (`<git-common-dir>/deliver/<run>/<issue>.merged-meanwhile.md`; the loop writes it to its run folder), empty lists and no file when nothing was; `usage` for no git worktree; `retry` when the fetch fails. Never commit the file |
