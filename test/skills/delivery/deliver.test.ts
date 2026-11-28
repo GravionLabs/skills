@@ -9,6 +9,7 @@ import {
   APP_PERMISSIONS,
   appSettings,
   tokenSource,
+  tokenSources,
 } from '../../../skills/delivery/deliver/scripts/app-token.mts';
 import {
   cmdLine,
@@ -1504,6 +1505,23 @@ describe('deliver loop', () => {
       );
       expect(out.stdout).toContain('session token: GitHub App');
       expect(requests).toHaveLength(0);
+    });
+
+    it('makes one token source per repository, on first use, and keeps their tokens apart', async () => {
+      const settings = appSettings({ DELIVER_APP_ID: '4242', DELIVER_APP_KEY_FILE: keyFile() });
+      const asked: string[] = [];
+      const sources = tokenSources(settings!, 0, async (_, repo) => {
+        asked.push(repo);
+        if (repo === 'o/none') throw new Error('not installed');
+        return { token: `token of ${repo}`, expiresAt: Date.now() + 60_000 };
+      });
+      expect(asked).toEqual([]);
+      expect((await sources('o/a').current()).token).toBe('token of o/a');
+      expect((await sources('o/b').current()).token).toBe('token of o/b');
+      await expect(sources('o/none').current()).rejects.toThrow('not installed');
+      // GitHub reads names without case: the same source, no new token
+      expect(await sources('O/A').current()).toEqual({ token: 'token of o/a', renewed: false });
+      expect(asked).toEqual(['o/a', 'o/b', 'o/none']);
     });
 
     it('renews a token when less than the session timeout is left, not before', async () => {

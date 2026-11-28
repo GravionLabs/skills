@@ -2,9 +2,11 @@
 // Objective (objective-run.mts). Each repository is cloned from DELIVER_REPOS_DIR; the fake tracker works the
 // milestone of a unit from `repositories`.
 import { execFileSync } from 'node:child_process';
+import { generateKeyPairSync } from 'node:crypto';
 import { mkdirSync, readdirSync, writeFileSync } from 'node:fs';
+import { type Server, createServer } from 'node:http';
 import path from 'node:path';
-import { beforeAll, describe, expect, it } from 'vitest';
+import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import {
   type Scenario,
   type Span,
@@ -117,6 +119,86 @@ describe('deliver-loop --objective', () => {
     const [upstream, dependent] = [implementer(out.spans, 22), implementer(out.spans, 12)];
     expect(dependent?.at).toBeGreaterThanOrEqual(upstream?.end ?? Number.POSITIVE_INFINITY);
     expect(out.merges.map((m) => m.pull)).toEqual([122, 112]);
+  });
+
+  describe('with a GitHub App', () => {
+    const { privateKey } = generateKeyPairSync('rsa', {
+      modulusLength: 2048,
+      privateKeyEncoding: { type: 'pkcs8', format: 'pem' },
+      publicKeyEncoding: { type: 'spki', format: 'pem' },
+    });
+    let server: Server;
+    let apiUrl = '';
+    // a fake API: the installation id and the token name the repository; `x/lib` has no installation in `missing`
+    let missing: string[] = [];
+    beforeAll(async () => {
+      server = createServer((req, res) => {
+        let raw = '';
+        req.on('data', (chunk) => {
+          raw += chunk;
+        });
+        req.on('end', () => {
+          const installation = /^\/repos\/(.+)\/installation$/.exec(req.url ?? '')?.[1];
+          res.setHeader('Content-Type', 'application/json');
+          if (installation) {
+            res.statusCode = missing.includes(installation) ? 404 : 200;
+            res.end(JSON.stringify({ id: 77 }));
+            return;
+          }
+          const name = (JSON.parse(raw) as { repositories: string[] }).repositories[0];
+          res.end(
+            JSON.stringify({
+              token: `token-of-${name}`,
+              expires_at: new Date(Date.now() + 3_600_000).toISOString(),
+            }),
+          );
+        });
+      });
+      await new Promise<void>((ready) => server.listen(0, '127.0.0.1', ready));
+      apiUrl = `http://127.0.0.1:${(server.address() as { port: number }).port}`;
+    });
+    afterAll(() => {
+      server.close();
+    });
+    const withApp = () => {
+      const keyFile = path.join(root, 'app-key.pem');
+      writeFileSync(keyFile, privateKey);
+      return run(objective({ 'x/app': [{ work: [16] }], 'x/lib': [{ work: [29] }] }), {
+        env: {
+          DELIVER_APP_ID: '4242',
+          DELIVER_APP_KEY_FILE: keyFile,
+          DELIVER_APP_KEY_COMMAND: '',
+          DELIVER_APP_API_URL: apiUrl,
+        },
+      });
+    };
+
+    it('gives each session the token of its repository and nothing to mint one', async () => {
+      missing = [];
+      const out = await withApp();
+      expect(out.status, out.stdout + out.stderr).toBe(0);
+      expect(Object.fromEntries(out.sessions.map((s) => [s.id, s.ghToken]))).toEqual({
+        16: 'token-of-app',
+        29: 'token-of-lib',
+      });
+      for (const session of out.sessions) {
+        expect(session.mintingVariables).toEqual([]);
+        expect(session.hasSessionTokenVariable).toBe(false);
+      }
+    });
+
+    it('makes a failed mint a needs-you of that repository only', async () => {
+      missing = ['x/lib'];
+      const out = await withApp();
+      expect(out.status, out.stdout + out.stderr).toBe(2);
+      expect(out.sessions.map((s) => s.id)).toEqual([16]);
+      expect(out.merges.map((m) => m.pull)).toEqual([116]);
+      const needsYou = out.stdout.slice(out.stdout.lastIndexOf('needs you ('));
+      expect(needsYou).toContain(
+        'x/lib: clone failed: GitHub GET /repos/x/lib/installation: HTTP 404',
+      );
+      expect(needsYou).not.toContain('x/app');
+    });
   });
 
   it('holds back only the dependents of a repository that waits for a person', async () => {

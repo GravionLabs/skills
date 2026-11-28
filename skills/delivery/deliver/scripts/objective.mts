@@ -260,7 +260,12 @@ export function startOrder(objective: Objective): string[] {
  * hold label, an Objective or Feature `Requires:` not met, a `blocked-by` link. A Feature with no open PBI or Bug is a
  * gap. Reads only; nothing starts.
  */
-export function planObjective(ref: string, reader: ObjectiveReader): string[] {
+export function planObjective(
+  ref: string,
+  reader: ObjectiveReader,
+  /** The name of the token source of a repository's sessions and checkout. */
+  tokenOf: (repo: string) => string,
+): string[] {
   const read = readObjective(ref, reader);
   const waiting = (reqs: Requirement[]): string[] =>
     reqs.flatMap((req) => {
@@ -274,7 +279,7 @@ export function planObjective(ref: string, reader: ObjectiveReader): string[] {
     `  requires: ${read.requires.length === 0 ? 'none' : shared.join(', ') || 'met'}`,
   ];
   for (const repo of order) {
-    lines.push(repo);
+    lines.push(repo, `  session token: ${tokenOf(repo)}`);
     const features = read.features.filter((f) => f.repo.toLowerCase() === repo.toLowerCase());
     if (features.length === 0) lines.push('  no Feature');
     for (const feature of features) {
