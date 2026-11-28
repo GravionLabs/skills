@@ -241,6 +241,10 @@ describe('deliver loop', () => {
   it.skipIf(process.platform === 'win32').each([
     ['gate', { stopInGate: true }],
     ['the read of the changed files', { stopInChangedFiles: true }],
+    [
+      'the read of protected files',
+      { stopInChangedFiles: true, files: ['.github/x.yml'] as string[] },
+    ],
   ] as const)('does not merge when the stop request arrives during %s', async (_name, stop) => {
     // the fake tracker sends the stop request inside the call: no timing window in the test
     const out = await loop({
@@ -250,6 +254,8 @@ describe('deliver loop', () => {
     expect(out.status).toBe(130);
     expect(out.merges).toEqual([]);
     expect(out.results[0]).toMatchObject({ outcome: 'stopped' });
+    // the item keeps the label of its stage
+    expect(out.stages.map((s) => s.stage)).not.toContain('handover');
   });
 
   it('does not merge a pull request that got a protected path after the session ended', async () => {
@@ -1629,6 +1635,36 @@ describe('deliver loop', () => {
       profile.expectRun(out.events as ProfileEvent[]);
       // the release pull request is never merged
       expect(out.merges.map((m) => m.pull)).not.toContain(900);
+    });
+
+    it('reports an open pull request into release/next that is not of the milestone as needs you', async () => {
+      const foreign = {
+        id: 77,
+        title: 'feat: other',
+        url: 'https://example.test/pull/77',
+        branch: 'feat/88-other',
+      };
+      const out = await loop(
+        { items: [{ id: 31, title: '[PBI] feat: last' }], foreignPulls: [foreign] },
+        { milestone: true },
+      );
+      expect(out.status).toBe(0);
+      expect(out.releasePulls).toBe(1);
+      expect(out.stdout).toMatch(
+        /needs you \(1\):\n {2}https:\/\/example\.test\/pull\/77 is open into release\/next and not in .+: merge, close or retarget it first\n/,
+      );
+      // the loop never touches a pull request of another item
+      expect(out.merges.map((m) => m.pull)).not.toContain(77);
+    });
+
+    it('reports no foreign pull request when none is open into release/next', async () => {
+      const out = await loop(
+        { items: [{ id: 31, title: '[PBI] feat: last' }] },
+        { milestone: true },
+      );
+      expect(out.releasePulls).toBe(1);
+      expect(out.stdout).toContain('needs you (0):');
+      expect(out.stdout).not.toContain('is open into release/next');
     });
 
     it('opens no release pull request for a milestone without open issues and without commits', async () => {

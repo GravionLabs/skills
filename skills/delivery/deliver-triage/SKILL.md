@@ -6,7 +6,7 @@ metadata:
   opencode/autoinvoke: 'false'
 ---
 
-Judges one attention case of a `deliver` run (a handed-over or set-aside issue, a blocked run, a finished milestone) and ends. The judgment layer of [ADR 0011](https://github.com/GravionLabs/skills/blob/main/docs/adr/0011-objective-runs-in-three-layers-loop-code-deliver-triage-poimen-as-host.md): it decides inside a fixed list of actions, else it prepares the decision for the owner. The loop does not start it yet.
+Judges one attention case of a `deliver` run (a handed-over or set-aside issue, a blocked run, a finished milestone) and ends. The judgment layer of [ADR 0011](https://github.com/GravionLabs/skills/blob/main/docs/adr/0011-objective-runs-in-three-layers-loop-code-deliver-triage-poimen-as-host.md): it decides inside a fixed list of actions, else it prepares the decision for the owner. An `--objective` run of the loop starts it once per case and applies the result; a plain run does not.
 
 `help` (or `--help`, `-h`): print `references/help.md` unchanged, nothing else.
 

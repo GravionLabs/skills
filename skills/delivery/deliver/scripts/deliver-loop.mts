@@ -13,8 +13,10 @@ import { HARNESSES } from './harness.mts';
 import { adoptLegacyEnv, unknownConfigKeys } from './legacy.mts';
 import { protectedList } from './protected-paths.mts';
 import { parseObjective, planObjective } from './objective.mts';
+import { objectiveFolders, objectiveStatus, objectiveStream } from './objective-report.mts';
 import { type Unit, runObjective, unitName } from './objective-run.mts';
 import { MergeLocks, Slots } from './parallel.mts';
+import { triageRun } from './triage.mts';
 import { RISK_LEVELS, type ReviewSettings, retroSettings, reviewSettings } from './review.mts';
 import { type HarnessName, readLayers } from './resolve-model.mts';
 import {
@@ -261,7 +263,10 @@ const app = (() => {
 const FIXED_TOKEN = app ? undefined : process.env.DELIVER_SESSION_TOKEN;
 const TOKEN_SOURCE = app ? 'GitHub App' : FIXED_TOKEN ? 'DELIVER_SESSION_TOKEN' : undefined;
 const runId = `${new Date().toISOString().replace(/[-:]/g, '').slice(0, 15)}-${process.pid}`;
-const runDir = path.join(commonDir, 'deliver', runId);
+// an Objective run has its run folder below the per-user events directory, with one folder per repository
+const folders =
+  opt.objective === undefined ? undefined : objectiveFolders(eventsDirectory(), commonDir, runId);
+const runDir = folders?.run ?? path.join(commonDir, 'deliver', runId);
 // OSC 7501 to the controlling terminal (ADR 0007): the events stay the source for displays. The terminal is opened
 // with the first report: a dry run reports nothing.
 const report = (() => {
@@ -269,7 +274,7 @@ const report = (() => {
   return (status: Report) => (send ??= programStatus())(status);
 })();
 // the run id of the events is a UUIDv7 (agent-events contract); the run folder keeps `runId`. A dry run opens none.
-// An Objective run has one sink per unit (one events run each, until the report of the Objective, #1041 p8).
+// An Objective run has one run too: its units write through views of this sink (objective-report.mts).
 const makeEvents = (): EventSink & { isOpen(): boolean } => {
   let write: Emit | undefined;
   return {
@@ -292,7 +297,11 @@ const trackerContext = {
   stopFile: path.join(runDir, 'stop'),
   onStop: signal.request,
   onExhausted: (error: Error) => {
-    const body = { outcome: 'failed', text: firstLine(error).slice(0, 300) };
+    const body = {
+      outcome: 'failed',
+      text: firstLine(error).slice(0, 300),
+      ...(opt.objective && { deliver: { objective: opt.objective } }),
+    };
     events.emit('run.finished', body, 'danger');
     if (events.isOpen() || opt.objective) report(finishReport(body, titleOf(opt), 0));
     log(`run failed: rate limit, ${firstLine(error)}`, 'bad');
@@ -364,21 +373,25 @@ const result = await runRepository({
 process.exit(result.exitCode);
 
 /**
- * The run of an Objective: one frontier over its repositories (objective-run.mts), each in a clone of its own below the
- * run folder, each within `--parallel` sessions and all of them within `--max-sessions`. The base of every repository is `--base`, else
+ * The run of an Objective: one frontier over its repositories (objective-run.mts), each in a clone of its own below
+ * `<git-common-dir>/deliver/<run>/repos`, each within `--parallel` sessions and all of them within `--max-sessions`. The base of every repository is `--base`, else
  * `release/next`; a unit's lines name its repository.
  */
 async function objectiveRun(ref: string): Promise<number> {
   mkdirSync(runDir, { recursive: true });
+  mkdirSync(path.join(commonDir, 'deliver'), { recursive: true });
   output.toFile(path.join(commonDir, 'deliver', 'loop.log'));
   signal.watch(path.join(runDir, 'stop'));
   const base = opt.base ?? 'release/next';
   const slots = new Slots(MAX_SESSIONS);
   const mergeLocks = new MergeLocks();
+  // the attention cases of every unit go to deliver-triage, each once in the run; a CI job is re-run once
+  const triage = triageRun();
   const sources = app ? tokenSources(app, SESSION_MINUTES * 60_000) : undefined;
   const reposDir = process.env.DELIVER_REPOS_DIR;
   const checkouts = cloneCheckouts({
-    runRoot: runDir,
+    // the clones and the worktrees beside them stay below the git directory of the repository of the run
+    runRoot: path.join(commonDir, 'deliver', runId),
     token: async (repo) => {
       const source = sources?.(repo);
       return source ? (await source.current()).token : FIXED_TOKEN;
@@ -390,7 +403,10 @@ async function objectiveRun(ref: string): Promise<number> {
     `run ${runId}: ${title}, base ${base}, up to ${PARALLEL} sessions per repository, ${MAX_SESSIONS} across them`,
     'dim',
   );
-  report({ state: 'working', title });
+  // one file for every repository of the run
+  log(`stop file: ${path.join(runDir, 'stop')}`, 'dim');
+  const status = objectiveStatus(title, report);
+  const stream = objectiveStream(events, ref);
   const runUnit = async (unit: Unit, unitRoot: string) => {
     const slug = unitName(unit).replace(/[^A-Za-z0-9._-]+/g, '-');
     const unitTracker = await loadTracker(trackerName, {
@@ -416,22 +432,22 @@ async function objectiveRun(ref: string): Promise<number> {
         ...options,
         base,
         ...(unit.milestone ? { milestone: unit.milestone } : { feature: String(unit.feature) }),
+        triage,
       },
       tracker: unitTracker,
       token: { source: sources?.(unit.repo), fixed: FIXED_TOKEN, name: TOKEN_SOURCE },
       runId: `${runId}-${slug}`,
-      // a run folder of its own beside the one of the Objective: `results.jsonl`, verdicts, the stop file
-      runDir: path.join(commonDir, 'deliver', `${runId}-${slug}`),
-      events: makeEvents(),
+      // the folder of the repository in the run folder: `results.jsonl`, verdicts, a stop file
+      runDir: folders!.repository(unit.repo),
+      earlierRunDirs: () => folders!.earlier(unit.repo),
+      events: stream.unit(unit.repo, unit.milestone ?? `#${unit.feature}`),
       // the end of one unit is not the end of the run
-      status: (status) => {
-        if (status.state === 'working' || status.state === 'blocked') report({ ...status, title });
-      },
+      status: (own) => status.unit(unitName(unit), own),
       signal,
       out,
       mergeLocks,
       slots,
-    });
+    }).finally(() => status.unit(unitName(unit)));
   };
   const tick = Number(process.env.DELIVER_TICK_MS ?? 1000);
   try {
@@ -449,20 +465,28 @@ async function objectiveRun(ref: string): Promise<number> {
       signal,
       say: output.say,
       log,
+      events: stream,
+      started: {
+        host: {
+          'jsonl-file.pid': String(process.pid),
+          ...(process.env.POIMEN_TERMINAL_ID
+            ? { 'poimen.terminal': process.env.POIMEN_TERMINAL_ID }
+            : {}),
+        },
+        agent: { harness: harnessName, model: MODELS.implement('').model },
+      },
+      onCounts: (counts) => status.counts(counts),
     });
-    report(
-      result.exitCode === 130
-        ? { state: 'idle', title }
-        : result.exitCode === 0
-          ? { state: 'done', title }
-          : result.exitCode === 5
-            ? { state: 'error', title }
-            : { state: 'done', tone: 'warning', title, msg: `needs you ${result.needsYou.length}` },
-    );
+    status.finish(result.exitCode, result.needsYou.length);
     return result.exitCode;
   } catch (error) {
     log(`objective: ${firstLine(error)}`, 'bad');
-    report({ state: 'error', title });
+    stream.emit(
+      'run.finished',
+      { outcome: 'failed', text: firstLine(error).slice(0, 300) },
+      'danger',
+    );
+    status.finish(1, 0);
     return 1;
   }
 }

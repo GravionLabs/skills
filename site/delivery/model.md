@@ -53,7 +53,7 @@ flowchart TB
     L[order, gates, waiting, resume]
   end
   subgraph Judgment["Judgment: role sessions"]
-    J[implement, review, retro, planned: triage]
+    J[implement, review, retro, triage]
   end
   H -->|shows and wakes| L
   L -->|starts with a bounded input| J
@@ -68,9 +68,7 @@ flowchart TB
 | Judgment | A session for one question with a bounded input and a fixed limit.                               | Decides the order or a gate |
 | Host     | Shows, waits and notifies. The loop also runs from a terminal or CI without it.                  | Holds delivery logic        |
 
-**Built today.** The loop works one repository (`--milestone`, `--feature` or `--issues`) or, with `--objective <owner>/<repo>#<nr>`, every repository of an Objective in one frontier: a repository's milestone starts once what it requires is released, and a repository that waits for you holds back only the repositories that require it. Its report and events across repositories are planned in [skills#1041](https://github.com/GravionLabs/skills/issues/1041), as is:
-
-- The skill `deliver-triage`, a session the loop starts for one attention event (`blocked`, `deliver.handover`, `deliver.aside` with `needs-decision`, `deliver.milestone.done`). It may only answer a `needs-decision` that is a fact check, take an issue out of the current run with the reason (the issue stays open, no milestone changes), draft a follow-up issue or re-run a failed CI job once; else it prepares the decision for you. Until then those events come to you.
+**Built today.** The loop works one repository (`--milestone`, `--feature` or `--issues`) or, with `--objective <owner>/<repo>#<nr>`, every repository of an Objective in one frontier: a repository's milestone starts once what it requires is released, and a repository that waits for you holds back only the repositories that require it. It reports them as one run: one run folder, one events stream and a summary per repository, `partly released` when only `deferred` Features are open. One `stop` file (or Ctrl-C) ends every session of the run, and the same `--objective` resumes each repository from the `agent:*` labels. In an `--objective` run each attention case (a hand-over, a set-aside with `needs-decision`, a run blocked by a red base, a milestone that is not done) starts one `deliver-triage` session. It may only answer a `needs-decision` that is a fact check (the loop posts the answer and removes the label), take an issue out of the current run with the reason (the issue stays open, no milestone changes), draft a follow-up issue or re-run a failed CI job once; else it prepares the decision for you. Drafts and prepared decisions come to you under "needs you"; an invalid result counts as a prepared decision.
 
 What stays with the owner in every layer: the merge of a release pull request, a change on a protected path, a change of risk `high`, and a decision between options.
 
@@ -103,7 +101,7 @@ sequenceDiagram
 | implement | For a ready issue, and for fix rounds | A pull request with `Closes #<nr>` and its risk        | Never merges, never reviews itself    |
 | review    | For one open pull request             | A verdict (`approve` or `changes`) and one comment     | Never pushes; only that commit merges |
 | retro     | After the last merge of a milestone   | One comment with draft PBIs and lessons as a checklist | Files nothing; you tick what is filed |
-| triage    | Planned: on an attention event        | An allowed action or a prepared decision               | The fixed list above                  |
+| triage    | On an attention case (`--objective`)  | An allowed action or a prepared decision               | The fixed list above                  |
 
 Why the roles are separate: [ADR 0009](https://github.com/GravionLabs/skills/blob/main/docs/adr/0009-deliver-loop-runs-role-sessions-and-keeps-the-stage-in-labels.md). Commands and options: [delivery reference](../delivery.md).
 

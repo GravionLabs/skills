@@ -21,6 +21,13 @@ const HANDLER = `(call, ctx) => {
     repository_url: 'https://api.github.com/repos/o/r',
     ...extra,
   });
+  const pull = (number, ref, body) => ({
+    number,
+    title: 'feat: x',
+    html_url: 'https://example.test/pull/' + number,
+    head: { ref, repo: { full_name: 'o/r' } },
+    body,
+  });
   const a = call.args;
   if (a[0] === 'repo') return { rest: 'o/r' };
   const route = a.includes('POST') ? a[a.indexOf('POST') + 1] : a[1];
@@ -33,6 +40,12 @@ const HANDLER = `(call, ctx) => {
       issue(25, 'bug'),
       issue(10, 'feature'),
       issue(3, 'pbi'),
+    ]] };
+  if (route.includes('pulls?state=open'))
+    return { rest: [[
+      pull(51, 'feat/77-other', ''),
+      pull(52, 'feat/3-member', ''),
+      pull(53, 'fix/88-closes', 'Fixes #10'),
     ]] };
   if (route.includes('issues/10/sub_issues'))
     return { rest: [[
@@ -85,6 +98,17 @@ describe('GitHub tracker: selections (fake gh)', () => {
     expect(made.subject()).toMatchObject({ kind: 'github.issue', id: 'o/r#10' });
     expect(made.releaseTests()).toEqual([]);
     expect(fake.calls().some((c) => c.args.join(' ').includes('milestone'))).toBe(false);
+  });
+
+  it('lists the open pull requests into the base that name no issue of the milestone', () => {
+    const { made } = tracker({ milestone: 'M001' });
+    expect(made.foreignPulls().map((p) => [p.id, p.branch])).toEqual([[51, 'feat/77-other']]);
+  });
+
+  it('lists no foreign pull request outside a milestone', () => {
+    const { made, fake } = tracker({ feature: '10' });
+    expect(made.foreignPulls()).toEqual([]);
+    expect(fake.calls().some((c) => c.args.join(' ').includes('pulls?state=open'))).toBe(false);
   });
 
   it('files the Bug of a red base without milestone and lists it until it is closed', () => {

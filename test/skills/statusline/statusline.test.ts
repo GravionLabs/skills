@@ -312,7 +312,8 @@ describe.skipIf(!hasPwsh || !posix)('Install-Statusline.ps1', () => {
       fs.copyFileSync(INSTALLER, inst);
       const r = spawnCopy(inst, {});
       expect(r.status).not.toBe(0);
-      expect(r.stderr).toContain('statusline.mjs not found');
+      // pwsh wraps the error report at a width that depends on the length of the temp path
+      expect(strip(r.stderr).replace(/[\s|]+/g, ' ')).toContain('statusline.mjs not found');
       expect(fs.readFileSync(settings, 'utf8')).toBe('{"a":1}');
       expect(backups()).toHaveLength(0);
     });

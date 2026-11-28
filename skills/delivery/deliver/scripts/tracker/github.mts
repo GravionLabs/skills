@@ -543,6 +543,27 @@ export function create({
       return syncLabels((...args) => gh(...args), repo);
     },
 
+    removeLabel(item: Item, label: string): void {
+      // only the loop writes the stage labels, and never through this call
+      if (label.toLowerCase().startsWith(LABEL_PREFIX)) throw new Error(`refused: ${label}`);
+      try {
+        gh(
+          'api',
+          '-X',
+          'DELETE',
+          `repos/${repo}/issues/${item.id}/labels/${encodeURIComponent(label)}`,
+        );
+      } catch (error) {
+        // not on the issue (any more)
+        if (!/HTTP 404/.test((error as { stderr?: string }).stderr ?? '')) throw error;
+      }
+    },
+
+    rerunJob(job: number, env: Record<string, string>): void {
+      if (!Number.isSafeInteger(job) || job < 1) throw new Error(`invalid job id: ${job}`);
+      gh('api', '-X', 'POST', `repos/${repo}/actions/jobs/${job}/rerun`, env);
+    },
+
     commentOnce(item: Item, marker: string, body: string): void {
       const route = `repos/${repo}/issues/${item.id}/comments`;
       const login = gh('api', 'user', '--jq', '.login');
@@ -825,6 +846,24 @@ export function create({
     releaseCommits(): number {
       const target = this.defaultBranch();
       return Number(gh('api', `repos/${repo}/compare/${target}...${base}`, '-q', '.ahead_by'));
+    },
+
+    foreignPulls(): Pull[] {
+      if (!selection.milestone) return [];
+      // every issue of the milestone, closed ones too: a pull request of a delivered issue is no foreign one
+      const members = new Set(
+        list<Issue>(`repos/${repo}/issues?milestone=${milestone().number}&state=all&per_page=100`)
+          .filter((issue) => !issue.pull_request)
+          .map((issue) => issue.number),
+      );
+      const named = (p: PullRecord) =>
+        [...members].some(
+          (id) => new RegExp(`^[a-z]+/${id}-`).test(p.head.ref) || closesIssue(p.body, id),
+        );
+      return list<PullRecord>(`repos/${repo}/pulls?state=open&base=${base}&per_page=100`)
+        .filter((p) => !named(p))
+        .sort((a, b) => a.number - b.number)
+        .map((p) => ({ id: p.number, title: p.title, url: p.html_url, branch: p.head.ref }));
     },
 
     ensureReleasePull(): Pull {
