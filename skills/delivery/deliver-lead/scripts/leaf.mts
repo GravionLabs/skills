@@ -472,7 +472,12 @@ export async function leafStep(input: LeafInput): Promise<Action> {
   const d = fieldsOf(current, 'deliver');
   const head = String(d.head);
   const verdictFile = String(d.verdictFile);
-  const pull: Pull = { id: Number(d.number), title: '', url: String(d.pr), branch: String(d.branch) };
+  const pull: Pull = {
+    id: Number(d.number),
+    title: '',
+    url: String(d.pr),
+    branch: String(d.branch),
+  };
   const verdict = gates.verifyVerdict({
     content: readIfThere(verdictFile),
     reviewedHead: head,
@@ -512,7 +517,10 @@ export async function leafStep(input: LeafInput): Promise<Action> {
     { deliver: { repo, issue, pr: pull.url, ...(risk && { risk }) } },
     'success',
   );
-  return end(cleared.result === 'pass' ? 'merged' : `merged; stage not cleared: ${cleared.reason}`, {
-    merged: true,
-  });
+  return end(
+    cleared.result === 'pass' ? 'merged' : `merged; stage not cleared: ${cleared.reason}`,
+    {
+      merged: true,
+    },
+  );
 }

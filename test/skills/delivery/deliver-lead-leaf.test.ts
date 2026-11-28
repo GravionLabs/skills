@@ -17,6 +17,7 @@ import {
   type Action,
   GATES,
   type LeafGates,
+  STAGE_TIMEOUT_S,
   type StepResult,
   leafStep,
 } from '../../../skills/delivery/deliver-lead/scripts/leaf.mts';
@@ -67,7 +68,18 @@ beforeAll(() => {
   execFileSync('git', ['init', '-q', '--bare', origin]);
   execFileSync('git', ['init', '-q', '-b', 'main', seed]);
   const commit = (message: string) =>
-    git(seed, '-c', 'user.name=t', '-c', 'user.email=t@t', 'commit', '-q', '--allow-empty', '-m', message);
+    git(
+      seed,
+      '-c',
+      'user.name=t',
+      '-c',
+      'user.email=t@t',
+      'commit',
+      '-q',
+      '--allow-empty',
+      '-m',
+      message,
+    );
   commit('first');
   git(seed, 'push', '-q', origin, 'main', 'main:release/next');
   // a hotfix forks from main, which moved on since the checkout of the lead
@@ -176,7 +188,10 @@ describe('leafStep on the pass path', () => {
       '`/deliver-review 12 --base release/next --pr https://example.test/pull/112`',
     );
     expect(reviewer!.env.DELIVER_REVIEW_FILE).toMatch(/deliver\/[^/]+\/12\.review-1\.json$/);
-    expect(out.actions.find((a) => a.do === 'wait-any')).toMatchObject({ timeout: 5400 });
+    // one wait lasts the session timeout of the loop, 90 minutes
+    const wait = out.actions.find((a) => a.do === 'wait-any') as { timeout: number };
+    expect(wait.timeout).toBe(STAGE_TIMEOUT_S);
+    expect(STAGE_TIMEOUT_S).toBe(90 * 60);
     expect(out.report).toEqual({
       issue: 12,
       outcome: 'merged',
@@ -235,9 +250,7 @@ describe('leafStep on the pass path', () => {
     );
     expect(reviewer!.brief).toContain('--base main --pr https://example.test/pull/113');
     expect(out.report).toMatchObject({ outcome: 'merged', backmerge: 'main→release/next' });
-    expect(out.merges).toEqual([
-      { pull: 113, head: 'abc123', base: 'main', title: 'fake #113' },
-    ]);
+    expect(out.merges).toEqual([{ pull: 113, head: 'abc123', base: 'main', title: 'fake #113' }]);
     profile.expectRun(out.events);
   });
 });
@@ -289,7 +302,13 @@ describe('the actions', () => {
   ];
 
   it('are verbs of host-verbs.md or end, and name no host tool', async () => {
-    expect(verbs).toEqual(['start-worker', 'wait-any', 'read-result', 'answer-worker', 'ask-owner']);
+    expect(verbs).toEqual([
+      'start-worker',
+      'wait-any',
+      'read-result',
+      'answer-worker',
+      'ask-owner',
+    ]);
     const { actions } = await lead(12);
     for (const action of actions) expect([...verbs, 'end']).toContain(action.do);
     const text = JSON.stringify(actions);
@@ -304,7 +323,10 @@ describe('step.mts', () => {
       JSON.stringify({ items: [], repositories: { 'fake/repo': { issues: ISSUES } } }),
     );
     mkdirSync(path.join(repo, '.agents'), { recursive: true });
-    writeFileSync(path.join(repo, '.agents/config.json'), JSON.stringify({ deliver: { tracker: 'fake' } }));
+    writeFileSync(
+      path.join(repo, '.agents/config.json'),
+      JSON.stringify({ deliver: { tracker: 'fake' } }),
+    );
     const env = { ...process.env };
     const run = uuid7();
     const out = execFileSync(process.execPath, [stepScript, 'leaf', '12', '--run', run], {
@@ -314,7 +336,9 @@ describe('step.mts', () => {
     });
     expect(out.trim().split('\n')).toHaveLength(1);
     expect(JSON.parse(out)).toMatchObject({ do: 'start-worker', role: 'implementer' });
-    await expect(runGate(stepScript, ['tree', '12', '--run', run], { cwd: repo, env })).resolves.toMatchObject({
+    await expect(
+      runGate(stepScript, ['tree', '12', '--run', run], { cwd: repo, env }),
+    ).resolves.toMatchObject({
       result: 'usage',
     });
     rmSync(path.join(repo, '.agents'), { recursive: true, force: true });

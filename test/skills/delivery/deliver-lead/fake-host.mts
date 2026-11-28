@@ -27,7 +27,12 @@ type Start = Extract<Action, { do: 'start-worker' }>;
 /** Runs the lead until it ends: `step` is one call of the step script with the outcome of the previous verb. */
 export async function runLead(
   step: (result: StepResult | undefined) => Promise<Action>,
-  { fakeDir, issue, scenario = {}, max = 20 }: {
+  {
+    fakeDir,
+    issue,
+    scenario = {},
+    max = 20,
+  }: {
     fakeDir: string;
     issue: number;
     scenario?: HostScenario;
