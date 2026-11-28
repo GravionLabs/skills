@@ -20,7 +20,12 @@ export type Item = {
   labels: string[];
   body: string;
   feature?: number;
+  /** The repository of a leaf of an Objective or Epic tree (`leaves()`); default: the tracker's. */
+  repo?: string;
 };
+
+/** A work item of `leaves()`. `held`: why its tree holds it back (a `Requires:` line that is not met). */
+export type Leaf = Item & { held?: string };
 
 /** `others`: the URLs of further open pull requests of the same item (`pullOf` only); the loop merges none of them. */
 export type Pull = { id: number; title: string; url: string; branch: string; others?: string[] };
@@ -119,6 +124,12 @@ export interface Tracker extends ObjectiveReader {
    * also list the Bug of a red base this run got from `reportBaseRed`, while it is open.
    */
   items(): Item[];
+  /**
+   * The open PBIs and Bugs below `ref` in delivery order, whatever the selection. A milestone title or a Feature
+   * number: as `items()` of that selection. An Epic or Objective number: the sub-issue tree (`objectiveLeaves`).
+   * `undefined`: `ref` names no milestone, Feature, Epic or Objective of this repository.
+   */
+  leaves(ref: string): Leaf[] | undefined;
   itemSubject(item: Item): Subject;
   /**
    * The parent Feature of the item in this repository, whose scope and criteria the review reads; `undefined`

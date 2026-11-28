@@ -31,6 +31,7 @@ import { setStageGate } from './gates/stage.mts';
 import { goModKeys } from './go-mod.mts';
 import { pyprojectTomlKeys } from './pyproject-toml.mts';
 import { pnpmWorkspaceKeys } from './pnpm-workspace.mts';
+import { inPickOrder } from './gates/next-issue.mts';
 import type { Harness } from './harness.mts';
 import { MergeLocks, Slots } from './parallel.mts';
 import { killTree, launch, promptPath } from './process.mts';
@@ -1871,8 +1872,7 @@ export async function runRepository(context: RepositoryContext): Promise<Reposit
           }
         }
         waiting = [];
-        for (const item of candidates) {
-          const reason = tracker.waitReason(item);
+        for (const { item, reason } of inPickOrder(candidates, (i) => tracker.waitReason(i))) {
           if (reason) waiting.push(`#${item.id} ${reason}`);
           else if (starts.length < room) starts.push(item);
         }
