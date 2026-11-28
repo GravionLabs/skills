@@ -2,7 +2,7 @@
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "https://raw.githubusercontent.com/GravionLabs/skills/main/skills/delivery/deliver/schema/deliver-profile.schema.json",
   "title": "deliver profile v2 (deliver@2) of agent-events",
-  "description": "Applied in addition to the agent-events core schema (GravionLabs/agent-events, schema/v0/core.schema.json) to every line of a run that declares deliver@2. Owner: the skill deliver; writer: scripts/deliver-loop.mts. Profile types: deliver.merged (an issue is merged), deliver.handover (a pull request is handed to a person), deliver.aside (an issue is set aside), deliver.milestone.done (the end of a milestone run), deliver.sessions (the number of running role sessions changed), deliver.triage.started and deliver.triage.done (an Objective run judges an attention case with deliver-triage; done names the action the loop applied). Their fields sit under `deliver`; deliver.handover and deliver.aside also carry the core fields reason and text. Every reason of the run is prefixed deliver.. An Objective run (--objective) is one run: every event carries deliver.objective, every task, attention and merge event also deliver.repo (so does every other event of a repository), task ids are <owner>/<repo>:<task>; an attention deliver.waiting-upstream names a repository that waits for an upstream release. Tone: deliver.merged success; deliver.handover and deliver.aside warning; deliver.milestone.done success for a clean run, else warning; deliver.sessions neutral; deliver.triage.started info; deliver.triage.done success for an applied action, warning for needs-owner and draft-issue.",
+  "description": "Applied in addition to the agent-events core schema (GravionLabs/agent-events, schema/v0/core.schema.json) to every line of a run that declares deliver@2. Owner: the skill deliver; writer: scripts/deliver-loop.mts. Profile types: deliver.merged (an issue is merged), deliver.handover (a pull request is handed to a person), deliver.aside (an issue is set aside), deliver.milestone.done (the end of a milestone run), deliver.sessions (the number of running role sessions changed), deliver.triage.started and deliver.triage.done (an Objective run judges an attention case with deliver-triage; done names the action the loop applied). Their fields sit under `deliver`; deliver.handover and deliver.aside also carry the core fields reason and text. Every reason of the run is prefixed deliver.. A core step.started may carry deliver.counted (fix, review, conflict, timeout): a counted session that the limits gate counts. An Objective run (--objective) is one run: every event carries deliver.objective, every task, attention and merge event also deliver.repo (so does every other event of a repository), task ids are <owner>/<repo>:<task>; an attention deliver.waiting-upstream names a repository that waits for an upstream release. Tone: deliver.merged success; deliver.handover and deliver.aside warning; deliver.milestone.done success for a clean run, else warning; deliver.sessions neutral; deliver.triage.started info; deliver.triage.done success for an applied action, warning for needs-owner and draft-issue.",
   "type": "object",
   "required": ["type"],
   "properties": {
@@ -25,7 +25,8 @@
       "type": "object",
       "properties": {
         "objective": { "$ref": "#/$defs/objective" },
-        "repo": { "$ref": "#/$defs/repo" }
+        "repo": { "$ref": "#/$defs/repo" },
+        "counted": { "enum": ["fix", "review", "conflict", "timeout"] }
       }
     }
   },
