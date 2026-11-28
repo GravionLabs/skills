@@ -52,7 +52,7 @@ Pass `[modules]="modules"` on `<ag-grid-angular>` (type `Module[]`) when grids n
 
 ## AG Grid MCP server (`ag-mcp`)
 
-`npx ag-mcp` gives the assistant version-specific AG Grid docs, examples and API refs. Node 22 LTS; no install, no `devDependencies` entry (npx fetches the latest CLI).
+`npx ag-mcp` gives the assistant version-specific AG Grid docs, examples and API refs. Node 26 LTS; no install, no `devDependencies` entry (npx fetches the latest CLI).
 
 Client config files and the server block: the MCP reference of `ng-implementation` (skill name, not a path). Command: `npx ag-mcp`.
 

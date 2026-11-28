@@ -147,8 +147,34 @@ Write-Host "`n=== RUNTIME Prerequisites ===" -ForegroundColor Cyan
 # Node.js
 if (Test-Tool 'node') {
     $nodeVersion = node --version
-    $results.runtime['Node.js'] = "✓ $nodeVersion"
-    Write-Host "  ✓ Node.js: $nodeVersion" -ForegroundColor Green
+    # the version the project asks for: .nvmrc of the working directory or git toplevel, else the current LTS
+    $nodeWanted = '26'
+    $nodeSource = 'current LTS'
+    $nodeTop = if (Test-Tool 'git') { git rev-parse --show-toplevel 2>$null | Select-Object -First 1 }
+    foreach ($root in @((Get-Location).Path, $nodeTop)) {
+        $nvmrc = if ($root) { Join-Path $root '.nvmrc' }
+        if (-not $nvmrc -or -not (Test-Path -LiteralPath $nvmrc)) { continue }
+        # an alias such as lts/* names no version: the default stays
+        $pinned = [regex]::Match("$(Get-Content -LiteralPath $nvmrc -TotalCount 1)", '^\s*v?(\d+(\.\d+){0,2})\s*$')
+        if ($pinned.Success) { $nodeWanted = $pinned.Groups[1].Value; $nodeSource = '.nvmrc' }
+        break
+    }
+    $nodeNote = ''
+    $nodeFound = [regex]::Match("$nodeVersion", '\d+\.\d+\.\d+')
+    if ($nodeFound.Success) {
+        $wantedParts = @($nodeWanted.Split('.') | ForEach-Object { [int]$_ })
+        $foundParts = @($nodeFound.Value.Split('.') | ForEach-Object { [int]$_ })
+        for ($i = 0; $i -lt $wantedParts.Count; $i++) {
+            if ($foundParts[$i] -gt $wantedParts[$i]) { break }
+            if ($foundParts[$i] -lt $wantedParts[$i]) {
+                $nodeNote = " (older than $nodeWanted from $($nodeSource): nvm install $nodeWanted && nvm use $nodeWanted)"
+                break
+            }
+        }
+    }
+    $mark = $nodeNote ? '!' : '✓'
+    $results.runtime['Node.js'] = "$mark $nodeVersion$nodeNote"
+    Write-Host "  $mark Node.js: $nodeVersion$nodeNote" -ForegroundColor ($nodeNote ? 'Yellow' : 'Green')
 } else {
     $results.runtime['Node.js'] = "✗ NOT FOUND"
     Write-Host "  ✗ Node.js: NOT FOUND" -ForegroundColor Red

@@ -35,7 +35,7 @@ New-Item -ItemType Directory -Path $TargetDir | Out-Null
 New-Item -ItemType Directory -Path (Join-Path $TargetDir 'src') | Out-Null
 
 # Copy templates
-$files = @('package.json', 'tsconfig.json', '.gitignore', 'vitest.config.ts')
+$files = @('package.json', 'tsconfig.json', '.gitignore', '.nvmrc', 'vitest.config.ts')
 foreach ($f in $files) {
   Copy-Item (Join-Path $TemplatesDir $f) (Join-Path $TargetDir $f)
 }
@@ -49,6 +49,8 @@ $safeName = $ProjectName.ToLower() -replace '[^a-z0-9@/.-]', '-'
 $pkgPath = Join-Path $TargetDir 'package.json'
 $pkg = Get-Content $pkgPath -Raw | ConvertFrom-Json
 $pkg.name = $safeName
+# the template pins pnpm; an npm project gets no packageManager field
+if ($PackageManager -ne 'pnpm') { $pkg.PSObject.Properties.Remove('packageManager') }
 
 # Patch entry point / type-specific fields
 switch ($ProjectType) {

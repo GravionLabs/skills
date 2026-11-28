@@ -11,6 +11,9 @@
 .PARAMETER ProjectType
   Project type: 'app' (standard application) or 'workspace' (multi-project workspace).
 
+.PARAMETER PackageManager
+  Package manager of the project: 'npm' (default) or 'pnpm'. A pnpm project pins pnpm 12 in packageManager.
+
 .PARAMETER SkipVitest
   Do not set up Vitest (Vitest with the template config is installed by default).
 
@@ -24,6 +27,7 @@ param(
   [Parameter(Mandatory)][string]$ProjectName,
   [string]$SelectorPrefix = 'app',
   [ValidateSet('app', 'workspace')][string]$ProjectType = 'app',
+  [ValidateSet('npm', 'pnpm')][string]$PackageManager = 'npm',
   [switch]$SkipVitest,
   [Alias('SkipEslint')][switch]$SkipLint,
   [string]$OutputDirectory = '.'
@@ -45,6 +49,7 @@ $ngArgs = @(
   'new', $ProjectName,
   '--style', 'css',
   '--ssr', 'false',
+  '--package-manager', $PackageManager,
   '--skip-tests'  # we'll set up Vitest separately
 )
 if ($SelectorPrefix -ne 'app') { $ngArgs += @('--prefix', $SelectorPrefix) }
@@ -63,10 +68,20 @@ try {
   Write-Host "Applying strict TypeScript configuration..." -ForegroundColor Cyan
   Copy-Item (Join-Path $TemplatesDir 'tsconfig.json') 'tsconfig.json' -Force
 
+  # Pin the Node.js version, and pnpm in a pnpm project (templates/package.json)
+  Copy-Item (Join-Path $TemplatesDir '.nvmrc') '.nvmrc' -Force
+  $pins = Get-Content (Join-Path $TemplatesDir 'package.json') -Raw | ConvertFrom-Json
+  $pkg = Get-Content 'package.json' -Raw | ConvertFrom-Json
+  $pkg | Add-Member -NotePropertyName 'engines' -NotePropertyValue $pins.engines -Force
+  if ($PackageManager -eq 'pnpm') {
+    $pkg | Add-Member -NotePropertyName 'packageManager' -NotePropertyValue $pins.packageManager -Force
+  }
+  $pkg | ConvertTo-Json -Depth 10 | Set-Content 'package.json'
+
   # Set up Vitest
   if (-not $SkipVitest) {
     Write-Host "Setting up Vitest..." -ForegroundColor Cyan
-    npm install --save-dev vitest jsdom
+    if ($PackageManager -eq 'pnpm') { pnpm add --save-dev vitest jsdom } else { npm install --save-dev vitest jsdom }
 
     Copy-Item (Join-Path $TemplatesDir 'vitest.config.ts') 'vitest.config.ts' -Force
     Copy-Item (Join-Path $TemplatesDir 'vitest.setup.ts') 'vitest.setup.ts' -Force
@@ -99,7 +114,7 @@ try {
   Write-Host "`nDone! Next steps:" -ForegroundColor Green
   Write-Host "  ng serve         — start dev server at http://localhost:4200" -ForegroundColor DarkGray
   Write-Host "  ng build         — production build" -ForegroundColor DarkGray
-  Write-Host "  npm test         — run unit tests with Vitest" -ForegroundColor DarkGray
+  Write-Host "  $PackageManager test        — run unit tests with Vitest" -ForegroundColor DarkGray
 } finally {
   Pop-Location
 }

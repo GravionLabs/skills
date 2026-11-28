@@ -10,18 +10,19 @@ Scaffold a new Angular 21+ project with a production-ready baseline. Paths to `s
 
 ## Stack
 
-- **`@angular/cli`** ≥ 21 (global or via `npx @angular/cli@latest`), Node 22 LTS
+- **`@angular/cli`** ≥ 21 (global or via `npx @angular/cli@latest`), Node 26 LTS (`.nvmrc`, `engines.node`)
+- **npm** (default) or **pnpm 12**, pinned in `packageManager`
 - **TypeScript** strict mode with Angular compiler options
 - **Vitest** with jsdom (replaces Karma/Jest), on by default
 - **oxlint + oxfmt + Husky** via the `setup-oxc-husky` skill, on by default; ESLint lints the `.html` templates only (ADR 0006 of GravionLabs/skills)
 
 ## Steps
 
-1. Ask: project name, selector prefix (default `app`), type **app** or **workspace**, whether to skip Vitest or the lint setup
+1. Ask: project name, selector prefix (default `app`), type **app** or **workspace**, package manager npm or pnpm, whether to skip Vitest or the lint setup
 2. Run the scaffold script:
 
    ```powershell
-   pwsh scripts/New-AngularProject.ps1 -ProjectName <Name> [-SelectorPrefix app] [-ProjectType app|workspace] [-SkipVitest] [-SkipLint] [-OutputDirectory .]
+   pwsh scripts/New-AngularProject.ps1 -ProjectName <Name> [-SelectorPrefix app] [-ProjectType app|workspace] [-PackageManager npm|pnpm] [-SkipVitest] [-SkipLint] [-OutputDirectory .]
    ```
 
    It runs `ng new --style css --ssr false`, replaces `tsconfig.json` with the strict template, installs Vitest with the template config and patches the `test` scripts, then runs the code-quality setup.
@@ -33,6 +34,8 @@ Scaffold a new Angular 21+ project with a production-ready baseline. Paths to `s
 
 | File                         | Purpose                                                                                                        |
 | ---------------------------- | -------------------------------------------------------------------------------------------------------------- |
+| `templates/package.json`     | The pinned `engines.node` and pnpm version, merged into `package.json`                                         |
+| `templates/.nvmrc`           | Node.js version of the project                                                                                 |
 | `templates/tsconfig.json`    | Strict Angular compiler options: `noImplicitOverride`, `strictTemplates`, `module: preserve`, `target: ES2022` |
 | `templates/vitest.config.ts` | jsdom environment, globals, setup file, `include: ['**/*.spec.ts']`                                            |
 | `templates/vitest.setup.ts`  | Empty setup file, extend as needed                                                                             |
