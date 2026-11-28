@@ -22,5 +22,6 @@ A run counts as `fail` when it prints no JSON object, an unknown word, or a word
 
 ## Scripts
 
-| Script | Arguments | Checks |
-| :----- | :-------- | :----- |
+| Script           | Arguments                                                               | Checks                                                                                                                                                                                                                                                                                                                |
+| :--------------- | :---------------------------------------------------------------------- | :-------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `merge-base.mts` | `<issue>`, `--base <branch>`, `--tracker <name>`, `--repo <owner/name>` | the base of the pull request of a PBI or Bug: `evidence.base` is `--base`; else `main` for a Bug labeled `hotfix`, with `evidence.branch` `fix/<nr>-<slug>` and `evidence.backmerge` `main→release/next` (named, not run); else `deliver.base`, else `release/next`; another level: `usage`; unreadable issue: `fail` |
