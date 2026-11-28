@@ -20,6 +20,7 @@ import { createInterface } from 'node:readline';
 import type { tokenSource as makeSource } from './app-token.mts';
 import type { Origin } from './event-dir.mts';
 import { type Emit, reasonCode } from './events.mts';
+import { mergedMeanwhile } from './gates/merged-meanwhile.mts';
 import { verifyVerdict } from './gates/verify-verdict.mts';
 import { type Note, handoverNote, reviewNote } from './handover.mts';
 import { type BlockedReason, type Report, finishReport } from './program-status.mts';
@@ -776,6 +777,22 @@ export async function runRepository(context: RepositoryContext): Promise<Reposit
     delivered: () => Boolean(tracker.pullOf(item)),
   });
 
+  /**
+   * The argument that names what was merged into the base since the fork point of the worktree, empty when nothing
+   * was (ADR 0012, Parallelism). A list that cannot be made is logged: the session starts without it.
+   */
+  function mergedSince(item: Item, workspace: string): string {
+    try {
+      const gate = mergedMeanwhile({ workspace, base: BASE, issue: item.id, runDir });
+      const { file } = gate.evidence;
+      if (gate.result !== 'pass') log(`#${item.id} merged-meanwhile: ${gate.reason}`, 'warn');
+      else if (typeof file === 'string') return ` --merged-meanwhile-file ${promptPath(file)}`;
+    } catch (error) {
+      log(`#${item.id} merged-meanwhile: ${firstLine(error)}`, 'warn');
+    }
+    return '';
+  }
+
   /** `item`: the issue of the session; undefined for a session of the whole run (the retro). */
   async function startSession(
     item: Item | undefined,
@@ -804,6 +821,8 @@ export async function runRepository(context: RepositoryContext): Promise<Reposit
           model: task.model,
           tier: task.tier,
         };
+      // an implementer session; read now, as the base may have moved while it waited for its slot
+      if (item && task.output.name === 'DELIVER_RESULT_FILE') prompt += mergedSince(item, cwd);
       return await launchSession(label, prompt, cwd, file, task);
     } finally {
       free();
