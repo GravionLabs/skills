@@ -4,7 +4,7 @@
 import { mkdirSync, readFileSync, realpathSync } from 'node:fs';
 import path from 'node:path';
 import { parseArgs } from 'node:util';
-import { appSettings, tokenSource as makeSource } from './app-token.mts';
+import { appSettings, tokenSource as makeSource, tokenSources } from './app-token.mts';
 import { cloneCheckouts } from './checkout.mts';
 import { eventsDirectory, pruneRuns, runOrigin } from './event-dir.mts';
 import { type Emit, openEvents, uuid7 } from './events.mts';
@@ -16,6 +16,7 @@ import { parseObjective, planObjective } from './objective.mts';
 import { objectiveFolders, objectiveStatus, objectiveStream } from './objective-report.mts';
 import { type Unit, runObjective, unitName } from './objective-run.mts';
 import { MergeLocks, Slots } from './parallel.mts';
+import { triageRun } from './triage.mts';
 import { RISK_LEVELS, type ReviewSettings, retroSettings, reviewSettings } from './review.mts';
 import { type HarnessName, readLayers } from './resolve-model.mts';
 import {
@@ -250,7 +251,8 @@ if (process.env.DELIVER_REPOS_DIR && inside(process.env.DELIVER_REPOS_DIR)) {
 // (the matching rules: protected-paths.mts, which `planner` uses too).
 const PROTECTED: string[] = protectedList(config.deliver?.protectedPaths);
 // The session acts with a token instead of the login of the user: an installation token of the GitHub App
-// (DELIVER_APP_ID and a key file or command), else DELIVER_SESSION_TOKEN (a token limited to this repository).
+// (DELIVER_APP_ID and a key file or command), else DELIVER_SESSION_TOKEN (a token limited to this repository). An
+// Objective run holds one installation token per repository (`tokenSources`).
 const app = (() => {
   try {
     return appSettings();
@@ -320,7 +322,11 @@ const tracker = await loadTracker(trackerName, {
 if (opt.objective !== undefined && opt['dry-run']) {
   // the plan reads only: the Objective's repositories in start order, with the wait reason of every item
   try {
-    for (const line of planObjective(opt.objective, tracker)) console.log(line);
+    const source = (repo: string) =>
+      app
+        ? `${TOKEN_SOURCE}, a token of ${repo}`
+        : (TOKEN_SOURCE ?? 'none, the session uses your login');
+    for (const line of planObjective(opt.objective, tracker, source)) console.log(line);
   } catch (error) {
     fail(`objective: ${firstLine(error)}`, 1);
   }
@@ -379,19 +385,15 @@ async function objectiveRun(ref: string): Promise<number> {
   const base = opt.base ?? 'release/next';
   const slots = new Slots(MAX_SESSIONS);
   const mergeLocks = new MergeLocks();
-  const sources = new Map<string, ReturnType<typeof makeSource>>();
-  const sourceOf = (repo: string) => {
-    if (!app) return undefined;
-    let source = sources.get(repo);
-    if (!source) sources.set(repo, (source = makeSource(app, repo, SESSION_MINUTES * 60_000)));
-    return source;
-  };
+  // the attention cases of every unit go to deliver-triage, each once in the run; a CI job is re-run once
+  const triage = triageRun();
+  const sources = app ? tokenSources(app, SESSION_MINUTES * 60_000) : undefined;
   const reposDir = process.env.DELIVER_REPOS_DIR;
   const checkouts = cloneCheckouts({
     // the clones and the worktrees beside them stay below the git directory of the repository of the run
     runRoot: path.join(commonDir, 'deliver', runId),
     token: async (repo) => {
-      const source = sourceOf(repo);
+      const source = sources?.(repo);
       return source ? (await source.current()).token : FIXED_TOKEN;
     },
     ...(reposDir && { url: (repo: string) => path.join(reposDir, `${repo}.git`) }),
@@ -401,6 +403,8 @@ async function objectiveRun(ref: string): Promise<number> {
     `run ${runId}: ${title}, base ${base}, up to ${PARALLEL} sessions per repository, ${MAX_SESSIONS} across them`,
     'dim',
   );
+  // one file for every repository of the run
+  log(`stop file: ${path.join(runDir, 'stop')}`, 'dim');
   const status = objectiveStatus(title, report);
   const stream = objectiveStream(events, ref);
   const runUnit = async (unit: Unit, unitRoot: string) => {
@@ -428,9 +432,10 @@ async function objectiveRun(ref: string): Promise<number> {
         ...options,
         base,
         ...(unit.milestone ? { milestone: unit.milestone } : { feature: String(unit.feature) }),
+        triage,
       },
       tracker: unitTracker,
-      token: { source: sourceOf(unit.repo), fixed: FIXED_TOKEN, name: TOKEN_SOURCE },
+      token: { source: sources?.(unit.repo), fixed: FIXED_TOKEN, name: TOKEN_SOURCE },
       runId: `${runId}-${slug}`,
       // the folder of the repository in the run folder: `results.jsonl`, verdicts, a stop file
       runDir: folders!.repository(unit.repo),

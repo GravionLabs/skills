@@ -59,6 +59,55 @@ describe('StopSignal', () => {
   });
 });
 
+describe('runObjective', () => {
+  it('starts no unit after a stop request during its checkout', async () => {
+    const { runObjective } = (await import(
+      path.join(scripts, 'objective-run.mts')
+    )) as typeof import('../../../skills/delivery/deliver/scripts/objective-run.mts');
+    const signal = new StopSignal();
+    const issue = (number: number, title: string, labels: string[]) => ({
+      repo: 'x/app',
+      number,
+      title,
+      labels,
+      body: number === 1 ? '## Affected repos\n- x/app' : '',
+      url: '',
+      state: 'open' as const,
+      milestone: 'M001',
+    });
+    const runUnit = vi.fn<() => Promise<never>>();
+    const result = await runObjective({
+      ref: 'x/app#1',
+      reader: {
+        issue: () => issue(1, '[Objective] o', ['objective']),
+        parent: () => undefined,
+        subIssues: ({ number }) => (number === 1 ? [issue(2, '[Feature] f', ['feature'])] : []),
+        milestones: () => [],
+        hasTag: () => false,
+        blockers: () => [],
+      },
+      checkouts: {
+        checkout: async (repo) => {
+          signal.request();
+          return { repo, root: '/nowhere' };
+        },
+      },
+      runUnit,
+      pollSeconds: 1,
+      idlePolls: 0,
+      sleep: async () => {},
+      signal,
+      say: () => {},
+      log: () => {},
+      events: { open: () => ({ run: 'r', dir: undefined, origin: {} }), emit: () => {} } as never,
+      started: {},
+      onCounts: () => {},
+    });
+    expect(runUnit).not.toHaveBeenCalled();
+    expect(result.exitCode).toBe(130);
+  });
+});
+
 describe('deliver-loop.mts', () => {
   const cli = readFileSync(path.join(scripts, 'deliver-loop.mts'), 'utf8');
 

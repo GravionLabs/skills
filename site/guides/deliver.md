@@ -57,7 +57,7 @@ A blocker in another repository holds an issue until the release of the blocker'
 
 Name the milestone `M<nnn>` (`M004`): the lookup finds the open `M004` and, after `/github-milestone close M004` renamed it, `M004 (0.2.0)`. A legacy title such as `1.3.0` works as before; to move a repository to `M<nnn>` see [Migrate legacy milestones](release.md#migrate-legacy-milestones).
 
-With `--milestone`, once no PBI or Bug of the milestone is open (none set aside or waiting), the loop opens the release pull request from the base into the default branch and prints its URL. It never merges it. An open `release-test` issue is never started: it is listed as needs you. A missing `release/next` (the release merge deletes it) is cut from the default branch.
+With `--milestone`, once no PBI or Bug of the milestone is open (none set aside or waiting), the loop opens the release pull request from the base into the default branch and prints its URL. It never merges it. An open `release-test` issue is never started: it is listed as needs you. An open pull request into the base that is not of the milestone is listed there too, to merge, close or retarget first. A missing `release/next` (the release merge deletes it) is cut from the default branch.
 
 Before that pull request the loop runs the [retro](learn-from-runs.md#after-a-milestone) of the milestone in a session of its own and links its comment in the pull request body (`Retro: <url>`). A failed or timed-out retro is reported as `retro failed` and never blocks the release. `--no-retro` or `deliver.retro.enabled: false` turns it off.
 
@@ -128,8 +128,8 @@ These are the gates of the loop; with the publish gate of the release they are l
 The agent session runs with a token of its own instead of your login, so it can push its branch and open the pull request but nothing more.
 
 - **Harness failure and session timeout.** A session that exits ≠ 0 without opening a pull request and was not ended by the session timeout is a harness failure. The loop waits 5, 15 and 60 minutes before the retry (a fresh session for the same issue); a successful session resets the count. The third failure in a row, counted across issues, ends the run `failed` with exit 5, and the last line names the count and the last exit code. A session that runs into `--session-minutes` (default 90) gets one more session; a second timeout of the same issue in the run sets it aside with the reason `session timeout`. `deliver.sessionTimeoutMinutes` stays ignored.
-- **GitHub App (preferred).** Set `DELIVER_APP_ID` and the private key as a file (`DELIVER_APP_KEY_FILE`) or as a command that prints it (`DELIVER_APP_KEY_COMMAND`, for example `op read …`). The loop mints an installation token for the repository of the run (contents, pull requests and issues write; no workflows, no administration) and renews it before a session starts when less than `--session-minutes` of it is left. A token lives one hour, so keep `--session-minutes` below 60 with an app. A failed mint sets the issue aside; the loop never falls back to your login.
-- **`DELIVER_SESSION_TOKEN`.** A fine-grained token limited to the repository.
+- **GitHub App (preferred).** Set `DELIVER_APP_ID` and the private key as a file (`DELIVER_APP_KEY_FILE`) or as a command that prints it (`DELIVER_APP_KEY_COMMAND`, for example `op read …`). The loop mints an installation token for the repository of the run (contents, pull requests and issues write; no workflows, no administration) and renews it before a session starts when less than `--session-minutes` of it is left. A token lives one hour, so keep `--session-minutes` below 60 with an app. A failed mint sets the issue aside; the loop never falls back to your login. An Objective run (`--objective`) holds one token per repository, minted on first use: the app needs an installation in each, and a repository whose token cannot be minted is listed under "needs you" while the others go on. `--objective … --dry-run` prints the token source of each repository.
+- **`DELIVER_SESSION_TOKEN`.** A fine-grained token limited to the repository. An Objective run uses it for every repository, so it needs access to all of them.
 - **Neither.** The loop says that the session uses your login.
 
 The key is never logged, written to events or the run folder, or passed to the session.
@@ -150,7 +150,7 @@ The launcher finds the installed `deliver` skill (project first, then your home)
 
 ## Triage and learning
 
-An issue that waits for you (hand-over, set-aside with a question, a blocked run) comes to you: the skill `deliver-triage` judges one such case in a role session, but the loop does not start it yet ([three layers](../delivery/model.md#three-orchestration-layers)). After a milestone the [retro](learn-from-runs.md#after-a-milestone) turns the run into draft PBIs and [lessons](learn-from-runs.md#lessons); later runs read the approved lessons.
+An issue that waits for you (hand-over, set-aside with a question, a blocked run) comes to you: in an `--objective` run the loop starts `deliver-triage` once per case in a role session and applies its result: it answers a fact-check question, takes an issue out of the run, re-runs a failed CI job once, or hands you a prepared decision or drafted follow-up under "needs you" ([three layers](../delivery/model.md#three-orchestration-layers)). A plain `--milestone` run does not triage. After a milestone the [retro](learn-from-runs.md#after-a-milestone) turns the run into draft PBIs and [lessons](learn-from-runs.md#lessons); later runs read the approved lessons.
 
 ## Resume and feedback
 

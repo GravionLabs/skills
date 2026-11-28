@@ -2,9 +2,11 @@
 // Objective (objective-run.mts). Each repository is cloned from DELIVER_REPOS_DIR; the fake tracker works the
 // milestone of a unit from `repositories`.
 import { execFileSync } from 'node:child_process';
-import { mkdirSync, readdirSync } from 'node:fs';
+import { generateKeyPairSync } from 'node:crypto';
+import { mkdirSync, readdirSync, writeFileSync } from 'node:fs';
+import { type Server, createServer } from 'node:http';
 import path from 'node:path';
-import { beforeAll, describe, expect, it } from 'vitest';
+import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import {
   type Scenario,
   type Span,
@@ -15,6 +17,7 @@ import {
   repo,
   root,
 } from './deliver/run-loop';
+import { objective } from './deliver/objective-scenario';
 import { type ProfileEvent, profileValidator } from '../../helpers/agent-events-profile.ts';
 
 type Event = ProfileEvent & {
@@ -31,50 +34,6 @@ const profile = profileValidator(
 
 const overlap = (a: Span, b: Span) => a.at < b.end && b.at < a.end;
 const implementer = (spans: Span[], id: number) => spans.find((s) => s.id === id && !s.review);
-
-/** An Objective in `x/app` over `x/app`, `x/lib` and `x/cli`; `features` by repository. */
-function objective(
-  features: Record<
-    string,
-    { body?: string; milestone?: string; labels?: string[]; work: number[] }[]
-  >,
-  extra: Record<
-    string,
-    { number: number; title: string; labels?: string[]; addedAfter?: number }[]
-  > = {},
-  milestones: Record<string, { title: string; closed: boolean }[]> = {},
-): Scenario {
-  let next = 100;
-  const repositories: Record<string, { issues: unknown[]; milestones?: unknown[] }> = {};
-  const children: string[] = [];
-  for (const name of ['x/app', 'x/lib', 'x/cli']) {
-    const issues: unknown[] =
-      name === 'x/app' ? [{ number: 1, title: '[Objective] o', labels: ['objective'] }] : [];
-    for (const feature of features[name] ?? []) {
-      next += 1;
-      children.push(`${name}#${next}`);
-      issues.push({
-        number: next,
-        title: '[Feature] f',
-        milestone: feature.milestone ?? 'M001',
-        body: feature.body ?? '',
-        labels: ['feature', ...(feature.labels ?? [])],
-        subIssues: [...feature.work, ...(extra[name] ?? []).map((i) => i.number)],
-      });
-      for (const nr of feature.work)
-        issues.push({ number: nr, title: `[PBI] feat: work ${nr}`, labels: ['pbi'] });
-    }
-    for (const issue of extra[name] ?? []) issues.push({ labels: ['pbi'], ...issue });
-    repositories[name] = {
-      issues,
-      milestones: milestones[name] ?? [{ title: 'M001', closed: false }],
-    };
-  }
-  const objectiveIssue = repositories['x/app']?.issues[0] as Record<string, unknown>;
-  objectiveIssue.body = '## Affected repos\n- x/app\n- x/lib\n- x/cli';
-  objectiveIssue.subIssues = children;
-  return { items: [], repositories };
-}
 
 describe('deliver-loop --objective', () => {
   fixture();
@@ -162,6 +121,86 @@ describe('deliver-loop --objective', () => {
     expect(out.merges.map((m) => m.pull)).toEqual([122, 112]);
   });
 
+  describe('with a GitHub App', () => {
+    const { privateKey } = generateKeyPairSync('rsa', {
+      modulusLength: 2048,
+      privateKeyEncoding: { type: 'pkcs8', format: 'pem' },
+      publicKeyEncoding: { type: 'spki', format: 'pem' },
+    });
+    let server: Server;
+    let apiUrl = '';
+    // a fake API: the installation id and the token name the repository; `x/lib` has no installation in `missing`
+    let missing: string[] = [];
+    beforeAll(async () => {
+      server = createServer((req, res) => {
+        let raw = '';
+        req.on('data', (chunk) => {
+          raw += chunk;
+        });
+        req.on('end', () => {
+          const installation = /^\/repos\/(.+)\/installation$/.exec(req.url ?? '')?.[1];
+          res.setHeader('Content-Type', 'application/json');
+          if (installation) {
+            res.statusCode = missing.includes(installation) ? 404 : 200;
+            res.end(JSON.stringify({ id: 77 }));
+            return;
+          }
+          const name = (JSON.parse(raw) as { repositories: string[] }).repositories[0];
+          res.end(
+            JSON.stringify({
+              token: `token-of-${name}`,
+              expires_at: new Date(Date.now() + 3_600_000).toISOString(),
+            }),
+          );
+        });
+      });
+      await new Promise<void>((ready) => server.listen(0, '127.0.0.1', ready));
+      apiUrl = `http://127.0.0.1:${(server.address() as { port: number }).port}`;
+    });
+    afterAll(() => {
+      server.close();
+    });
+    const withApp = () => {
+      const keyFile = path.join(root, 'app-key.pem');
+      writeFileSync(keyFile, privateKey);
+      return run(objective({ 'x/app': [{ work: [16] }], 'x/lib': [{ work: [29] }] }), {
+        env: {
+          DELIVER_APP_ID: '4242',
+          DELIVER_APP_KEY_FILE: keyFile,
+          DELIVER_APP_KEY_COMMAND: '',
+          DELIVER_APP_API_URL: apiUrl,
+        },
+      });
+    };
+
+    it('gives each session the token of its repository and nothing to mint one', async () => {
+      missing = [];
+      const out = await withApp();
+      expect(out.status, out.stdout + out.stderr).toBe(0);
+      expect(Object.fromEntries(out.sessions.map((s) => [s.id, s.ghToken]))).toEqual({
+        16: 'token-of-app',
+        29: 'token-of-lib',
+      });
+      for (const session of out.sessions) {
+        expect(session.mintingVariables).toEqual([]);
+        expect(session.hasSessionTokenVariable).toBe(false);
+      }
+    });
+
+    it('makes a failed mint a needs-you of that repository only', async () => {
+      missing = ['x/lib'];
+      const out = await withApp();
+      expect(out.status, out.stdout + out.stderr).toBe(2);
+      expect(out.sessions.map((s) => s.id)).toEqual([16]);
+      expect(out.merges.map((m) => m.pull)).toEqual([116]);
+      const needsYou = out.stdout.slice(out.stdout.lastIndexOf('needs you ('));
+      expect(needsYou).toContain(
+        'x/lib: clone failed: GitHub GET /repos/x/lib/installation: HTTP 404',
+      );
+      expect(needsYou).not.toContain('x/app');
+    });
+  });
+
   it('holds back only the dependents of a repository that waits for a person', async () => {
     const out = await run({
       ...objective({
@@ -195,6 +234,59 @@ describe('deliver-loop --objective', () => {
     expect(out.status, out.stdout + out.stderr).toBe(0);
     expect(out.merges.map((m) => m.pull)).toEqual([124, 126]);
     expect(implementer(out.spans, 25)).toBeUndefined();
+  });
+
+  it('stops every repository with one stop file and resumes each where it stopped', async () => {
+    const scenario = objective({
+      'x/app': [{ work: [41] }],
+      'x/lib': [{ work: [42] }],
+      'x/cli': [{ work: [43] }],
+    });
+    let stopped = false;
+    // x/cli merges its issue, x/app hangs in its review, x/lib hangs in its implementer session
+    const first = await loop(
+      { sessionMs: 0, ...scenario, hangsOn: ['review:41', '42'] },
+      {
+        args: ['--objective', 'x/app#1', '--no-retro', '--max-sessions', '3'],
+        env: { DELIVER_REPOS_DIR: reposDir },
+        whenStdout: (stdout) => {
+          const file = /stop file: (.+)/.exec(stdout)?.[1];
+          const hanging = stdout.match(/\[x\/(app|lib)\] {3}working/g)?.length ?? 0;
+          if (stopped || !file || hanging < 2 || !stdout.includes('#43 merged:')) return;
+          stopped = true;
+          writeFileSync(file, '');
+        },
+      },
+    );
+    expect(first.status, first.stdout + first.stderr).toBe(130);
+    expect(first.merges.map((m) => m.pull)).toEqual([143]);
+    // no session of the run is alive
+    for (const { pid } of first.spans) expect(() => process.kill(pid, 0)).toThrow(/ESRCH/);
+    // each stopped item keeps the label of its stage
+    const stageOf = (id: number) => first.stages.filter((s) => s.id === id).at(-1)?.stage;
+    expect([stageOf(41), stageOf(42), stageOf(43)]).toEqual(['review', 'implementing', null]);
+
+    const second = await loop(
+      { sessionMs: 0, ...scenario },
+      {
+        args: ['--objective', 'x/app#1', '--no-retro', '--max-sessions', '3'],
+        env: { DELIVER_REPOS_DIR: reposDir },
+        resume: first.dir,
+      },
+    );
+    expect(second.status, second.stdout + second.stderr).toBe(0);
+    expect(second.merges.map((m) => m.pull).sort()).toEqual([141, 142, 143]);
+    expect(second.stdout).toContain('#41 resumes at the review');
+    // both runs together: #41 was built once, #43 is not touched again, #42 got one new implementer session
+    const started = (review: boolean) =>
+      second.spans
+        .filter((s) => s.review === review)
+        .map((s) => s.id)
+        .sort();
+    expect(started(false)).toEqual([41, 42, 42, 43]);
+    expect(started(true)).toEqual([41, 41, 42, 43]);
+    // every repository syncs its labels in both runs
+    expect(second.calls.filter((c) => c === 'syncStageLabels')).toHaveLength(6);
   });
 
   it('writes one run folder and one events run for two repositories', async () => {

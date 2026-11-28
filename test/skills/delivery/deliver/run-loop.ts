@@ -59,10 +59,13 @@ export type Scenario = {
   twoPulls?: number[];
   lingers?: boolean;
   hangs?: boolean;
+  /** The sessions that never end: `<id>` (implementer) or `review:<id>`. */
+  hangsOn?: string[];
   plan?: { exit?: number; noPull?: boolean; hangs?: boolean }[];
   closeAfterCalls?: number;
   releaseTests?: number[];
   releaseCommits?: number;
+  foreignPulls?: { id: number; title: string; url: string; branch: string }[];
   base?: string[];
   mergedBefore?: number[];
   mergedDuring?: number[];
@@ -78,10 +81,14 @@ export type Scenario = {
   sessionMs?: number;
   /** Repositories of an Objective run whose release pull request releases its milestone at once. */
   releaseOnPull?: string[];
+  /** The result of a `deliver-triage` session by case kind (default needs-owner): an object, `invalid`, `none` or `fail`. */
+  triage?: Record<string, unknown>;
 };
 /** A session of the fake harness: its process and when it started and ended (ms since the epoch). */
 export type Span = { id: number; pid: number; at: number; end: number; review: boolean };
 export type Outcome = {
+  /** The case directory: `resume` of a further run. */
+  dir: string;
   status: number | null;
   stdout: string;
   stderr: string;
@@ -100,8 +107,11 @@ export type Outcome = {
     run: string | null;
     ghToken: string | null;
     hasSessionTokenVariable: boolean;
+    mintingVariables: string[];
   }[];
   retros: { prompt: string; releasePulls: number }[];
+  /** The triage sessions with their case. */
+  triages: { prompt: string; case: Record<string, unknown>; pid: number; at: number }[];
   reviews: {
     id: number;
     prompt: string;
@@ -148,12 +158,14 @@ export function loop(
     /** Sessions at once; default 1 (one issue after the other), `default`: no flag, the config or the loop decides. */
     parallel?: number | 'default';
     env?: Record<string, string>;
+    /** The case directory of an earlier run: this run finds its pull requests, stages and merges. */
+    resume?: string;
     whenStdout?: (out: string, stop: () => void) => void;
   } = {},
 ): Promise<Outcome> {
   count += 1;
-  const dir = path.join(root, `case-${count}`);
-  mkdirSync(dir);
+  const dir = options.resume ?? path.join(root, `case-${count}`);
+  if (!options.resume) mkdirSync(dir);
   writeFileSync(path.join(dir, 'scenario.json'), JSON.stringify(scenario));
   if (scenario.earlierPull)
     for (const item of scenario.items) writeFileSync(path.join(dir, `pr-${item.id}`), '');
@@ -227,6 +239,7 @@ export function loop(
           'none.jsonl',
       );
       done({
+        dir,
         status,
         stdout,
         stderr,
@@ -245,6 +258,7 @@ export function loop(
         sessions: lines(path.join(dir, 'sessions.jsonl')),
         reviews: lines(path.join(dir, 'reviews.jsonl')),
         retros: lines(path.join(dir, 'retros.jsonl')),
+        triages: lines(path.join(dir, 'triages.jsonl')),
         spans: spansOf(dir),
         results: results
           ? lines<Result | { issue?: undefined }>(results).filter(

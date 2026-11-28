@@ -126,6 +126,8 @@ type Repository = {
   aside: string[];
   /** The waiting issues of its worked units. */
   waiting: string[];
+  /** What the triage applied in its units. */
+  triaged: string[];
   needsYou: string[];
 };
 
@@ -141,6 +143,7 @@ export async function runObjective(context: ObjectiveRunContext): Promise<Object
       merged: [],
       aside: [],
       waiting: [],
+      triaged: [],
       needsYou: [],
     };
   });
@@ -251,6 +254,11 @@ export async function runObjective(context: ObjectiveRunContext): Promise<Object
       }
       repo.root = checkout.root;
     }
+    // stopped during the checkout: the unit does not start, so it changes nothing on the tracker or on origin
+    if (signal.stopped) {
+      repo.halted = 'stopped';
+      return;
+    }
     let result: RepositoryResult;
     try {
       result = await context.runUnit(unit, repo.root);
@@ -265,6 +273,7 @@ export async function runObjective(context: ObjectiveRunContext): Promise<Object
     repo.merged.push(...result.merged);
     repo.aside.push(...[...result.aside].map(([nr, why]) => `#${nr} ${why}`));
     repo.waiting.push(...result.waiting);
+    repo.triaged.push(...(result.triaged ?? []));
     const merged = `merged ${result.merged.length}`;
     if (result.exitCode === 0) {
       log(`${name} done, ${merged}`, 'ok');
@@ -382,6 +391,7 @@ export async function runObjective(context: ObjectiveRunContext): Promise<Object
       deferred: open
         .filter((f) => f.deferred && f.repo.toLowerCase() === repo.name.toLowerCase())
         .map((f) => `#${f.number} ${f.title}`),
+      triaged: repo.triaged,
       needsYou: repo.needsYou,
     })),
     say,

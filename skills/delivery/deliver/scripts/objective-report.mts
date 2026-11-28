@@ -114,6 +114,8 @@ export type RepositorySummary = {
   aside: string[];
   waiting: string[];
   deferred: string[];
+  /** What the triage applied: an answer, an item dropped from the run (with the reason), a CI job re-run. */
+  triaged: string[];
   needsYou: string[];
 };
 
@@ -122,13 +124,14 @@ const GROUPS = [
   ['set aside', 'aside', 'bad'],
   ['waiting', 'waiting', 'warn'],
   ['deferred', 'deferred', 'dim'],
+  ['triaged', 'triaged', 'info'],
   ['needs you', 'needsYou', 'warn'],
 ] as const;
 
 /** One section per repository, each with every group and its count. */
 export function sayRepositories(
   repositories: RepositorySummary[],
-  say: (line: string, tone?: 'ok' | 'bad' | 'warn' | 'dim' | 'bold') => void,
+  say: (line: string, tone?: 'ok' | 'bad' | 'warn' | 'info' | 'dim' | 'bold') => void,
 ): void {
   for (const summary of repositories) {
     say(summary.repo, 'bold');

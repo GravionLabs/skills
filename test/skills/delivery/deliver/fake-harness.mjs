@@ -15,6 +15,12 @@ process.on('exit', () =>
     `${JSON.stringify({ pid: process.pid, at: Date.now() })}\n`,
   ),
 );
+// scenario.hangsOn: the sessions that never end, `<id>` (implementer) or `review:<id>`
+const hang = async () => {
+  console.log('working');
+  setInterval(() => {}, 1000);
+  await new Promise(() => {});
+};
 // scenario.sessionMs: every implementer and review session works this long before it answers
 const working = () => new Promise((done) => setTimeout(done, scenario.sessionMs ?? 0));
 if (command === 'deliver-review') {
@@ -34,6 +40,7 @@ if (command === 'deliver-review') {
       hasStyleguide: existsSync('docs/STYLEGUIDE.md'),
     })}\n`,
   );
+  if (scenario.hangsOn?.includes(`review:${id}`)) await hang();
   await working();
   const verdict = scenario.verdicts?.[nr] ?? 'approve';
   if (verdict === 'fail') process.exit(1);
@@ -50,6 +57,29 @@ if (command === 'deliver-review') {
   if (verdict !== 'none')
     writeFileSync(process.env.DELIVER_REVIEW_FILE, JSON.stringify(answers[verdict]));
   console.log(`result: reviewed ${verdict}`);
+  process.exit(0);
+}
+if (prompt.startsWith('/deliver-triage ')) {
+  // a triage session is recorded in triages.jsonl with its case; scenario.triage (by `<kind> <issue>`, else by case
+  // kind, default needs-owner):
+  // a result object, 'invalid' (not JSON), 'none' (no file) or 'fail' (exit 1)
+  const [, caseFile, resultFile] = /--case (\S+) --result (\S+)/.exec(prompt) ?? [];
+  const kase = JSON.parse(readFileSync(caseFile, 'utf8'));
+  appendFileSync(
+    path.join(dir, 'triages.jsonl'),
+    `${JSON.stringify({ prompt, case: kase, cwd: process.cwd(), pid: process.pid, at })}\n`,
+  );
+  await working();
+  const answer = scenario.triage?.[`${kase.kind} ${kase.issue}`] ??
+    scenario.triage?.[kase.kind] ?? {
+      action: 'needs-owner',
+      reason: 'the owner decides',
+      options: ['Decide it'],
+    };
+  if (answer === 'fail') process.exit(1);
+  if (answer === 'invalid') writeFileSync(resultFile, 'not json');
+  else if (answer !== 'none') writeFileSync(resultFile, JSON.stringify(answer));
+  console.log(`result: triaged ${answer.action ?? answer}`);
   process.exit(0);
 }
 if (prompt.startsWith('/retro ')) {
@@ -92,10 +122,13 @@ appendFileSync(
     run: process.env.DELIVER_RUN ?? null,
     ghToken: process.env.GH_TOKEN ?? null,
     hasSessionTokenVariable: 'DELIVER_SESSION_TOKEN' in process.env,
+    // the variables that mint a token: none may reach a session
+    mintingVariables: Object.keys(process.env).filter((name) => /^DELIVER_(MIN_)?APP_/.test(name)),
   })}\n`,
 );
 // per session (by index): { exit, noPull, hangs } overrides the scenario-wide fields for that session
 const own = scenario.plan?.[index] ?? {};
+if (scenario.hangsOn?.includes(id)) await hang();
 if (own.hangs ?? scenario.hangs) {
   // a session that never ends: only the loop's stop request ends it
   console.log('working');

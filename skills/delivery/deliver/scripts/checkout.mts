@@ -79,7 +79,8 @@ export function cloneCheckouts({
         const source = url(repo);
         const secret = await token?.(repo);
         const env = {
-          ...(secret ? tokenEnv(source, secret) : process.env),
+          // a local path (tests) takes no header
+          ...(secret && /^https?:/i.test(source) ? tokenEnv(source, secret) : process.env),
           // nobody answers a question
           GIT_TERMINAL_PROMPT: '0',
         };

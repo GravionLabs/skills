@@ -77,6 +77,8 @@ export type Scenario = {
   releaseTests?: number[];
   /** Commits of the base branch beyond the default branch, default 1. */
   releaseCommits?: number;
+  /** Open pull requests into the base branch that are not of the milestone. */
+  foreignPulls?: { id: number; title: string; url: string; branch: string }[];
   /** One entry per baseState() call, the last one repeats. `throw` is a failing tracker call. */
   base?: ('green' | 'pending' | 'red' | 'throw')[];
   /** Items whose pull request is already merged before the loop starts the item. */
@@ -107,6 +109,27 @@ export function create({ selection, repo: named }: TrackerContext): Tracker {
     appendFileSync(path.join(dir, 'calls.jsonl'), `${JSON.stringify(call)}\n`);
   const merged = new Set<number>();
   const closed = new Set<number>();
+  // a second run of an Objective on the same $FAKE_DIR: what an earlier run merged stays closed, and the stages it
+  // wrote are the labels of the items
+  const earlier = (file: string): Record<string, unknown>[] =>
+    existsSync(path.join(dir, file))
+      ? readFileSync(path.join(dir, file), 'utf8')
+          .split('\n')
+          .filter(Boolean)
+          .map((line) => JSON.parse(line))
+          .filter((line) => named !== undefined && line.repo === named)
+      : [];
+  for (const call of earlier('calls.jsonl'))
+    if (call.call === 'merge') {
+      merged.add(Number(call.pull) - 100);
+      closed.add(Number(call.pull) - 100);
+    }
+  const stageLabels = (id: number): string[] => {
+    const stage = earlier('stages.jsonl')
+      .filter((line) => line.id === id)
+      .at(-1)?.stage;
+    return stage ? [`agent:${stage}`] : [];
+  };
   const listedCalls = new Map<number, number>();
   let gateCalls = 0;
   let fileReads = 0;
@@ -226,7 +249,7 @@ export function create({ selection, repo: named }: TrackerContext): Tracker {
           id: item.id,
           title: item.title,
           url: `https://example.test/issues/${item.id}`,
-          labels: ['pbi'],
+          labels: ['pbi', ...stageLabels(item.id)],
           body: item.body ?? 'body of the issue',
           ...(item.feature && { feature: item.feature }),
         }))
@@ -264,9 +287,17 @@ export function create({ selection, repo: named }: TrackerContext): Tracker {
     setStage: (item: Item, stage?: string) =>
       appendFileSync(
         path.join(dir, 'stages.jsonl'),
-        `${JSON.stringify({ id: item.id, stage: stage ?? null })}\n`,
+        `${JSON.stringify({ id: item.id, stage: stage ?? null, repo: named })}\n`,
       ),
-    syncStageLabels: () => [],
+    syncStageLabels: () => {
+      if (named) record({ call: 'syncStageLabels', repo });
+      return [];
+    },
+    removeLabel: (item: Item, label: string) => {
+      if (label.startsWith('agent:')) throw new Error(`refused: ${label}`);
+      record({ call: 'removeLabel', id: item.id, label, repo: named });
+    },
+    rerunJob: (job: number) => record({ call: 'rerunJob', job, repo: named }),
     commentOnce: (item: Item, marker: string, body: string) =>
       appendFileSync(
         path.join(dir, 'comments.jsonl'),
@@ -324,7 +355,7 @@ export function create({ selection, repo: named }: TrackerContext): Tracker {
       return gate;
     },
     merge(pull: Pull, head: string): void {
-      record({ call: 'merge', pull: pull.id, head });
+      record({ call: 'merge', pull: pull.id, head, repo: named });
       merged.add(itemOf(pull));
     },
     dropBranch: (pull: Pull) => record({ call: 'dropBranch', pull: pull.id }),
@@ -389,6 +420,7 @@ export function create({ selection, repo: named }: TrackerContext): Tracker {
         body: '',
       })),
     releaseCommits: () => scenario.releaseCommits ?? 1,
+    foreignPulls: (): Pull[] => scenario.foreignPulls ?? [],
     ensureReleasePull(): Pull {
       record({ call: 'releasePull', repo });
       if (scenario.releaseOnPull?.includes(repo))

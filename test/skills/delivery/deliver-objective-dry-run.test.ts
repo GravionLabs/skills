@@ -45,21 +45,29 @@ const scenario: Scenario = {
   },
 };
 
+// the app settings of the user must not decide what the test sees
+const noApp = { DELIVER_APP_ID: '', DELIVER_APP_KEY_FILE: '', DELIVER_APP_KEY_COMMAND: '' };
+
 describe('deliver-loop --objective', () => {
   fixture();
 
   it('prints the repositories in start order, each Feature and the wait reason of each item, and starts nothing', async () => {
-    const out = await loop(scenario, { args: ['--objective', 'x/app#1', '--dry-run'] });
+    const out = await loop(scenario, {
+      args: ['--objective', 'x/app#1', '--dry-run'],
+      env: noApp,
+    });
     expect(out.status).toBe(0);
     expect(out.stdout.trim().split('\n')).toEqual([
       'Objective x/app#1 starts in: x/lib, x/app',
       '  requires: upstream x/lib@M001 not released',
       'x/lib',
+      '  session token: none, the session uses your login',
       '  feature x/lib#3 M001',
       '    x/lib#7 upstream x/lib@M001 not released',
       '  feature x/lib#8',
       '    gap: no open PBI or Bug',
       'x/app',
+      '  session token: none, the session uses your login',
       '  feature x/app#2 M002',
       '    x/app#4 upstream x/lib@M001 not released, upstream x/lib#10 not released',
       '    x/app#5 needs-decision, upstream x/lib@M001 not released, upstream x/lib#10 not released',
@@ -69,6 +77,31 @@ describe('deliver-loop --objective', () => {
     expect(out.sessions).toEqual([]);
     expect(out.merges).toEqual([]);
   });
+
+  it.each([
+    [
+      'the GitHub App',
+      { DELIVER_APP_ID: '4242', DELIVER_APP_KEY_FILE: 'unread.pem' },
+      (repo: string) => `GitHub App, a token of ${repo}`,
+    ],
+    [
+      'DELIVER_SESSION_TOKEN',
+      { DELIVER_SESSION_TOKEN: 'secret-value' },
+      () => 'DELIVER_SESSION_TOKEN',
+    ],
+  ])(
+    'prints %s as the token source of each repository and mints nothing',
+    async (_, env, source) => {
+      const out = await loop(scenario, {
+        args: ['--objective', 'x/app#1', '--dry-run'],
+        env: { ...noApp, ...env },
+      });
+      expect(out.status, out.stderr).toBe(0);
+      expect(out.stdout).toContain(`x/lib\n  session token: ${source('x/lib')}\n`);
+      expect(out.stdout).toContain(`x/app\n  session token: ${source('x/app')}\n`);
+      expect(out.stdout).not.toContain('secret-value');
+    },
+  );
 
   it('exits 64 for a malformed reference', async () => {
     const out = await loop(scenario, { args: ['--objective', 'x/app', '--dry-run'] });
