@@ -544,6 +544,114 @@ describe('a new lead resumes an issue from its agent:* label', () => {
   });
 });
 
+describe('a resume trusts only what the run or the loop recorded', () => {
+  /** A task that ended in its fix round: what an implementer that ends without a report leaves. */
+  function endTask(file: string) {
+    const events = lines(file);
+    const last = events.at(-1)!;
+    const { step: _step, deliver: _deliver, ...envelope } = last;
+    const finished = {
+      ...envelope,
+      seq: Number(last.seq) + 1,
+      type: 'task.finished',
+      task: 'issue-12',
+      outcome: 'skipped',
+      text: 'the implementer left no report: the work is not done',
+      tone: 'warning',
+    };
+    writeFileSync(file, `${[...events, finished].map((e) => JSON.stringify(e)).join('\n')}\n`);
+  }
+
+  it.each([
+    ['rewritten to approve', 'approve'],
+    ['removed', 'missing'],
+  ])(
+    'a verdict file of a changes round %s after its round: reviewed again, never merged unreviewed',
+    async (_, attack) => {
+      const run = uuid7();
+      const before = await leads(
+        [{ stopAfter: 7, host: { reviewer: { verdict: 'changes' } } }],
+        run,
+      );
+      const review = startsOf(before.perPhase[0]!).find((a) => a.role === 'reviewer')!;
+      const file = review.env.DELIVER_REVIEW_FILE!;
+      // the fix implementer pushes nothing, rewrites the file of round 1 and ends
+      if (attack === 'approve')
+        writeFileSync(
+          file,
+          JSON.stringify({ verdict: 'approve', findings: [], unmet: [], head: 'abc123' }),
+        );
+      else rmSync(file);
+      endTask(before.eventFile);
+      const out = await leads(
+        [
+          { stopAfter: 0, labels: ['agent:approved'] },
+          { labels: ['agent:approved'], host: { reviewer: { verdict: 'changes' } } },
+        ],
+        run,
+      );
+      expect(out.perPhase[1]![0]).toMatchObject({ do: 'start-worker', role: 'reviewer' });
+      expect(out.merges).toEqual([]);
+    },
+  );
+
+  it('a fix round of the lead before that pushed nothing starts again', async () => {
+    const out = await leads([
+      { stopAfter: 8, host: { reviewer: [{ verdict: 'changes' }, {}] } },
+      {},
+    ]);
+    expect(startsOf(out.perPhase[1]!).map((a) => a.name)).toEqual([
+      'issue-12-fix-1-try-2',
+      'issue-12-review-2',
+    ]);
+    expect(named(out.events, 'step.started', 'fix-1').at(-1)).toMatchObject({
+      deliver: { counted: 'timeout' },
+    });
+    expect(out.report).toMatchObject({ outcome: 'merged' });
+  });
+
+  it('a fix round of the lead before that pushed goes to review', async () => {
+    const shared = { shared: true };
+    const out = await leads([
+      { stopAfter: 8, tracker: shared, host: { reviewer: { verdict: 'changes' } } },
+      { tracker: shared },
+    ]);
+    expect(startsOf(out.perPhase[1]!)).toMatchObject([
+      { name: 'issue-12-review-2', head: 'fade02' },
+    ]);
+    expect(out.merges).toEqual([
+      { pull: 112, head: 'fade02', base: 'release/next', title: 'fake #112' },
+    ]);
+  });
+
+  it('a task the run handed over stays handed over, whatever the label says', async () => {
+    const run = uuid7();
+    const protectedFiles = { files: ['.github/workflows/ci.yml'] };
+    const first = await leads([{ tracker: protectedFiles }], run);
+    expect(first.report).toMatchObject({ outcome: 'ended', gate: 'guard' });
+    // the label write of the hand-over failed: the issue still says review
+    const out = await leads(
+      [
+        { stopAfter: 0, labels: ['agent:review'] },
+        { labels: ['agent:review'], tracker: protectedFiles },
+      ],
+      run,
+    );
+    expect(out.perPhase[1]).toMatchObject([{ do: 'end', report: { gate: 'guard' } }]);
+    expect(out.merges).toEqual([]);
+    expect(out.stages.at(-1)).toBe('handover');
+  });
+
+  it('a restarted task without a label whose pull request is merged starts nothing', async () => {
+    const out = await leads([
+      { stopAfter: 0, tracker: { mergedBefore: [12] } },
+      { tracker: { mergedBefore: [12] } },
+    ]);
+    expect(out.report).toMatchObject({ outcome: 'merged', reason: 'already merged' });
+    expect(startsOf(out.perPhase[1]!)).toEqual([]);
+  });
+});
+
 describe('step.mts --resume', () => {
   it('passes --resume and refuses it with --result', async () => {
     scenario();
