@@ -100,6 +100,37 @@ describe.skipIf(!hasPwsh || process.platform === 'win32')('Check-Prerequisites.p
     expect(r.out).toContain('Node.js');
   });
 
+  describe('Node.js version', () => {
+    const withNode = (version: string) => {
+      const bin = path.join(dir, `node-${version}`);
+      if (!fs.existsSync(bin)) {
+        linkTools(bin, ['git', 'npm', 'uname', 'sh']);
+        fs.writeFileSync(path.join(bin, 'node'), `#!/bin/sh\necho "v${version}"\n`, {
+          mode: 0o755,
+        });
+      }
+      return bin;
+    };
+
+    it.each([
+      ['older than the default without .nvmrc', undefined, '24.18.0', '26 from current LTS'],
+      ['the default without .nvmrc', undefined, '26.13.1', undefined],
+      ['older than .nvmrc', 'v28\n', '26.13.1', '28 from .nvmrc'],
+      ['older in the minor than .nvmrc', '26.14\n', '26.13.1', '26.14 from .nvmrc'],
+      ['newer than .nvmrc', '24\n', '26.13.1', undefined],
+      ['an alias in .nvmrc', 'lts/*\n', '24.18.0', '26 from current LTS'],
+    ])('%s', async (_name, nvmrc, version, warning) => {
+      if (nvmrc) fs.writeFileSync(path.join(proj, '.nvmrc'), nvmrc);
+      const r = await run(withNode(version));
+      expect(r.code).toBe(0);
+      expect(r.out).toContain(`v${version}`);
+      if (warning) {
+        expect(r.out).toContain(`older than ${warning}`);
+        expect(r.out).toContain('nvm install');
+      } else expect(r.out).not.toContain('older than');
+    });
+  });
+
   describe('ast-grep with sgconfig.yml', () => {
     it('fails and names ast-grep when sgconfig.yml exists and ast-grep is missing', async () => {
       fs.writeFileSync(path.join(proj, 'sgconfig.yml'), 'ruleDirs:\n  - rules\n');

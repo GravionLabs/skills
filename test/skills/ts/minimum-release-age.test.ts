@@ -27,6 +27,8 @@ describe('minimumReleaseAge of pnpm projects (#833)', () => {
       const yaml = fs.readFileSync(path.join(out, 'demo/pnpm-workspace.yaml'), 'utf-8');
       expect(yaml).toMatch(/^minimumReleaseAge: 10080$/m);
       expect(yaml).toContain('# minimumReleaseAgeExclude: [<package>]');
+      // pnpm 11+ fails the install on a build script that is not allowed (#1187)
+      expect(yaml).toMatch(/^allowBuilds:\n  esbuild: true/m);
     } finally {
       fs.rmSync(out, { recursive: true, force: true });
     }

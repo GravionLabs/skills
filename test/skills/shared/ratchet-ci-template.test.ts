@@ -20,6 +20,12 @@ describe('ratchet CI template (#805)', () => {
     expect(steps.some((s) => s.run === 'node scripts/ratchets/run-ratchets.mts')).toBe(true);
   });
 
+  it('runs on Node 26', () => {
+    expect(fs.readFileSync(path.join(skill, 'templates/ratchet.yml'), 'utf-8')).toContain(
+      'node-version: 26',
+    );
+  });
+
   it('is named in SKILL.md', () => {
     expect(fs.readFileSync(path.join(skill, 'SKILL.md'), 'utf-8')).toContain(
       'templates/ratchet.yml',
