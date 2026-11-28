@@ -5,6 +5,12 @@ Versioning follows [Semantic Versioning](https://semver.org/).
 
 ---
 
+## [6.2.0] — 2026-11-28
+
+### Features
+- **skills**: Target Node.js 26 and pnpm 12 in templates and new projects (#1187)
+
+
 ## [6.1.0] — 2026-11-28
 
 ### Documentation
