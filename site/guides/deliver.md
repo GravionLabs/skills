@@ -79,6 +79,8 @@ After the implementer session the loop starts `/deliver-review` in a fresh workt
 | `--no-retro`                 | No retro session after the milestone.                                                                                |
 | `--merge-risk <level>`       | Highest risk the loop merges: `low`, `medium` (default) or `high`.                                                   |
 | `--max <n>`                  | Stops after `n` issues.                                                                                              |
+| `--parallel <n>`             | Role sessions at once per repository. Default `deliver.parallel`, else 1.                                            |
+| `--max-sessions <n>`         | Cap across the repositories of an Objective run. Default `deliver.maxSessions`, else 3.                              |
 | `--session-minutes <n>`      | Longest session. Default 90.                                                                                         |
 | `--merge-minutes <n>`        | How long it waits for checks after a pull request. Default 30.                                                       |
 | `--handover-minutes <n>`     | How long it waits for handed-over pull requests to be merged. Default 120; `0` ends the run at once.                 |
@@ -92,17 +94,18 @@ Exit codes: 0 everything done or `--max` reached, 2 open issues remain and none 
 
 Optional, under `deliver` in `.agents/config.json` ([project config](../usage/project-config.md#deliver)); the flag of the same name wins.
 
-| Key               | Default                                                         |
-| :---------------- | :-------------------------------------------------------------- |
-| `base`            | `release/next` with `--milestone`, else the default branch      |
-| `tracker`         | `github` (`scripts/tracker/<name>.mts`)                         |
-| `harness`         | `claude`; a name only, a repository cannot set a command        |
-| `review`          | `{ "model", "harness", "effort" }` of the review session        |
-| `retro`           | `{ "enabled", "model" }` of the retro session after a milestone |
-| `handoverMinutes` | `120`: how long the loop waits for handed-over pull requests    |
-| `parallel`        | `2`: role sessions at once (`--parallel`); merges one at a time |
-| `mergeRisk`       | `medium`: an approved pull request above it is handed over      |
-| `protectedPaths`  | `.github/`, `.agents/`, `.claude/` and the package manifests    |
+| Key               | Default                                                                        |
+| :---------------- | :----------------------------------------------------------------------------- |
+| `base`            | `release/next` with `--milestone`, else the default branch                     |
+| `tracker`         | `github` (`scripts/tracker/<name>.mts`)                                        |
+| `harness`         | `claude`; a name only, a repository cannot set a command                       |
+| `review`          | `{ "model", "harness", "effort" }` of the review session                       |
+| `retro`           | `{ "enabled", "model" }` of the retro session after a milestone                |
+| `handoverMinutes` | `120`: how long the loop waits for handed-over pull requests                   |
+| `parallel`        | `1`: role sessions at once per repository (`--parallel`); merges one at a time |
+| `maxSessions`     | `3`: sessions of an Objective run across repositories (`--max-sessions`)       |
+| `mergeRisk`       | `medium`: an approved pull request above it is handed over                     |
+| `protectedPaths`  | `.github/`, `.agents/`, `.claude/` and the package manifests                   |
 
 The top-level key [`models`](../usage/project-config.md#models) maps roles to models for `scripts/resolve-model.mts`; the loop picks the model of every session with it (the implementer by the `Tier:` line of the issue).
 

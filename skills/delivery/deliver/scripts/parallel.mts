@@ -1,5 +1,5 @@
-// The limits of a parallel deliver run (`deliver.parallel`, `--parallel`): at most `limit` role sessions at once
-// (`Slots`) and one merge at a time per repository and base branch (`MergeLocks`). Waiters are served in order.
+// The limits of a parallel deliver run (`deliver.parallel`, `--parallel`, per repository): at most `limit` role
+// sessions at once (`Slots`) and one merge at a time per repository and base branch (`MergeLocks`). Waiters are served in order.
 
 /** At most `limit` holders at a time. `onChange` hears the number of holders after every change. */
 export class Slots {
