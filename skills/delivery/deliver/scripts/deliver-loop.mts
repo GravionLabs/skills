@@ -8,6 +8,7 @@ import { appSettings, tokenSource as makeSource, tokenSources } from './app-toke
 import { cloneCheckouts } from './checkout.mts';
 import { eventsDirectory, pruneRuns, runOrigin } from './event-dir.mts';
 import { type Emit, openEvents, uuid7 } from './events.mts';
+import { mergeBase } from './gates/merge-base.mts';
 import { type Report, finishReport, programStatus } from './program-status.mts';
 import { HARNESSES } from './harness.mts';
 import { adoptLegacyEnv, unknownConfigKeys } from './legacy.mts';
@@ -165,11 +166,13 @@ for (const warning of legacyWarnings) log(warning, 'warn');
 const configWarning = unknownConfigKeys(config.deliver);
 if (configWarning) log(configWarning, 'warn');
 // The base: the flag, then the project config; else release/next for a milestone or a Feature and the default branch otherwise.
+// The run has one base for all its issues, so it takes only the default of a PBI from gates/merge-base.mts.
+const RELEASE_BASE = mergeBase({ type: 'pbi' }).evidence.base as string;
 const BASE: string =
   opt.base ??
   config.deliver?.base ??
   (opt.milestone || opt.feature
-    ? 'release/next'
+    ? RELEASE_BASE
     : (attempt('git', ['ls-remote', '--symref', 'origin', 'HEAD'], root)?.match(
         /^ref: refs\/heads\/(\S+)\s+HEAD/m,
       )?.[1] ?? 'main'));
@@ -382,7 +385,7 @@ async function objectiveRun(ref: string): Promise<number> {
   mkdirSync(path.join(commonDir, 'deliver'), { recursive: true });
   output.toFile(path.join(commonDir, 'deliver', 'loop.log'));
   signal.watch(path.join(runDir, 'stop'));
-  const base = opt.base ?? 'release/next';
+  const base = opt.base ?? RELEASE_BASE;
   const slots = new Slots(MAX_SESSIONS);
   const mergeLocks = new MergeLocks();
   // the attention cases of every unit go to deliver-triage, each once in the run; a CI job is re-run once
