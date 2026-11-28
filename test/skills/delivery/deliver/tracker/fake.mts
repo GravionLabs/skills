@@ -111,6 +111,12 @@ export type Scenario = {
   twoPulls?: number[];
   /** Repositories whose release pull request is merged and tagged at once: its milestone closes (`released.jsonl`). */
   releaseOnPull?: string[];
+  /**
+   * State shared by every tracker of $FAKE_DIR, as a real tracker keeps it (the gate CLIs load one each): the gate()
+   * calls count across them, a merge of one is seen by the others (`merges.jsonl`), and `head-<pull>` holds the head
+   * of a pull request (a push), else `abc123`.
+   */
+  shared?: boolean;
 };
 
 export function create({ selection, repo: named, base }: TrackerContext): Tracker {
@@ -155,6 +161,21 @@ export function create({ selection, repo: named, base }: TrackerContext): Tracke
   let baseCalls = 0;
   let pullReads = 0;
   const itemOf = (pull: Pull) => pull.id - 100;
+  const headFile = (id: number) => path.join(dir, `head-${id}`);
+  const pushed = (id: number): string | undefined =>
+    scenario.shared && existsSync(headFile(id))
+      ? readFileSync(headFile(id), 'utf8').trim()
+      : undefined;
+  const mergedElsewhere = (pull: Pull) =>
+    Boolean(scenario.shared) &&
+    readLines(path.join(dir, 'merges.jsonl')).some((line) => line.pull === pull.id);
+  const countGate = (): number => {
+    if (!scenario.shared) return gateCalls++;
+    const file = path.join(dir, 'gate-calls');
+    const calls = existsSync(file) ? Number(readFileSync(file, 'utf8')) : 0;
+    writeFileSync(file, String(calls + 1));
+    return calls;
+  };
 
   const repository = (name: string) => scenario.repositories?.[name];
   const readLines = (file: string): Record<string, unknown>[] =>
@@ -401,7 +422,7 @@ export function create({ selection, repo: named, base }: TrackerContext): Tracke
       };
     },
     gate(pull: Pull): Gate {
-      if (merged.has(itemOf(pull))) return { state: 'merged' };
+      if (merged.has(itemOf(pull)) || mergedElsewhere(pull)) return { state: 'merged' };
       if (scenario.gateBlockMs) {
         Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, scenario.gateBlockMs);
       }
@@ -411,9 +432,10 @@ export function create({ selection, repo: named, base }: TrackerContext): Tracke
         Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, 200);
       }
       const gates = scenario.gates ?? [{ state: 'ready', reported: true, head: 'abc123' }];
-      const gate = gates[Math.min(gateCalls, gates.length - 1)];
-      gateCalls += 1;
+      const gate = gates[Math.min(countGate(), gates.length - 1)];
       if (gate === 'throw') throw new Error('network down');
+      const head = pushed(pull.id);
+      if (head && 'head' in gate) return { ...gate, head };
       // merged by a person: the item closes like after a merge of the loop
       if (gate.state === 'merged') merged.add(itemOf(pull));
       return gate;
@@ -464,10 +486,12 @@ export function create({ selection, repo: named, base }: TrackerContext): Tracke
       return files ?? ['src/a.ts'];
     },
     // `abc123` is a tag of the fixture repository: the loop checks the head out for the review
-    compareRefs: (_pull: Pull, head?: string) => {
+    compareRefs: (pull: Pull, head?: string) => {
       compareCalls++;
       const current =
-        scenario.pushedAtCompare && compareCalls >= scenario.pushedAtCompare ? 'def456' : 'abc123';
+        scenario.pushedAtCompare && compareCalls >= scenario.pushedAtCompare
+          ? 'def456'
+          : (pushed(pull.id) ?? 'abc123');
       return { base: 'base-sha', head: head ?? current };
     },
     fileAt(sha: string, file: string): string | undefined {
