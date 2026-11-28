@@ -51,6 +51,10 @@ export type Scenario = {
   filesLater?: string[];
   /** The first this many reads of the changed files fail. */
   filesFailures?: number;
+  /** `.agents/config.json` by commit, as the guard gate reads it (missing: no such file; `throw`: a failing read). */
+  projectConfig?: { base?: string; head?: string } | 'throw';
+  /** The head of the pull request from this compareRefs() call on (1-based): a push while the guard reads. */
+  pushedAtCompare?: number;
   /** `package.json` contents by commit: `base` is the merge base, `head` the commit that is judged (missing: no such file). */
   packageJson?: { base?: string; head?: string };
   /** The same for `Cargo.toml`. */
@@ -133,6 +137,7 @@ export function create({ selection, repo: named }: TrackerContext): Tracker {
   const listedCalls = new Map<number, number>();
   let gateCalls = 0;
   let fileReads = 0;
+  let compareCalls = 0;
   let baseCalls = 0;
   const itemOf = (pull: Pull) => pull.id - 100;
 
@@ -394,8 +399,17 @@ export function create({ selection, repo: named }: TrackerContext): Tracker {
       return files ?? ['src/a.ts'];
     },
     // `abc123` is a tag of the fixture repository: the loop checks the head out for the review
-    compareRefs: (_pull: Pull, head?: string) => ({ base: 'base-sha', head: head ?? 'abc123' }),
+    compareRefs: (_pull: Pull, head?: string) => {
+      compareCalls++;
+      const current =
+        scenario.pushedAtCompare && compareCalls >= scenario.pushedAtCompare ? 'def456' : 'abc123';
+      return { base: 'base-sha', head: head ?? current };
+    },
     fileAt(sha: string, file: string): string | undefined {
+      if (file === '.agents/config.json') {
+        if (scenario.projectConfig === 'throw') throw new Error('HTTP 500');
+        return sha === 'base-sha' ? scenario.projectConfig?.base : scenario.projectConfig?.head;
+      }
       const contents = /cargo\.toml$/i.test(file)
         ? scenario.cargoToml
         : /pnpm-workspace\.yaml$/i.test(file)
