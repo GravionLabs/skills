@@ -9,8 +9,8 @@ import { mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { parseArgs } from 'node:util';
+import { parseObjective } from '../../deliver/scripts/objective.mts';
 import { findMilestone } from './escaped.mts';
-import { parseObjective } from './objective.mts';
 
 /** GitHub refuses a longer comment. */
 const MAX_BODY = 65_536;

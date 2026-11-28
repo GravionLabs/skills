@@ -5,12 +5,10 @@
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { parseArgs } from 'node:util';
+// the parsing of an Objective belongs to `deliver`
+import { affectedRepos, isKind, parseObjective } from '../../deliver/scripts/objective.mts';
 import { clean, gh, TRUSTED } from './escaped.mts';
 
-const SEGMENT = '(?!\\.{1,2}(?![\\w.-]))[A-Za-z0-9_.-]+';
-const OBJECTIVE = new RegExp(`^(${SEGMENT}/${SEGMENT})#([1-9]\\d*)$`);
-// a list item of `## Affected repos`
-const AFFECTED = new RegExp(`^\\s*[-*]\\s+(?:\\[[ xX]\\]\\s+)?[\`\\[]*(${SEGMENT}/${SEGMENT})`);
 const MARKER = /^<!-- retro: (.+?) -->/;
 const REVIEW = /loop review:\s*(\d+|n\/a) changes requested,\s*(\d+|n\/a) escaped/i;
 
@@ -30,12 +28,6 @@ type Comment = {
 };
 export type Retro = { milestone: string; url: string; feature: string; body: string };
 
-export function parseObjective(value: string): { repo: string; number: number } {
-  const match = OBJECTIVE.exec(value);
-  if (!match) throw new Error('--objective is <owner>/<repo>#<nr>');
-  return { repo: match[1] as string, number: Number(match[2]) };
-}
-
 const list = <T,>(route: string): T[] => gh<T[][]>('api', '--paginate', '--slurp', route).flat();
 
 /** Anyone can write a comment: only authors with write access and apps installed on the repository count. */
@@ -43,16 +35,6 @@ const comments = (repo: string, number: number): Comment[] =>
   list<Comment>(`repos/${repo}/issues/${number}/comments?per_page=100`).filter(
     (c) => TRUSTED.includes(c.author_association) || c.user?.type === 'Bot',
   );
-
-const isKind = (issue: Issue, kind: string): boolean =>
-  issue.title.toLowerCase().startsWith(`[${kind}]`) ||
-  issue.labels.some((label) => label.name.toLowerCase() === kind);
-
-/** The repositories of `## Affected repos`. */
-function affected(body: string): string[] {
-  const section = /^##\s+Affected repos\s*$([\s\S]*?)(?=^##\s|(?![\s\S]))/im.exec(body)?.[1] ?? '';
-  return section.split('\n').flatMap((line) => AFFECTED.exec(line)?.[1] ?? []);
-}
 
 /** `<x> changes requested, <y> escaped` summed over the retros; one unmeasured figure makes the sum `n/a`. */
 function metricsLine(repo: string, retros: Retro[]): string {
@@ -84,7 +66,7 @@ export function collect(value: string) {
     'api',
     `repos/${repo}/issues/${number}`,
   );
-  for (const name of affected(objective.body ?? '')) entry(name);
+  for (const name of affectedRepos(objective.body ?? '')) entry(name);
 
   const seen = new Set<string>();
   const walk = (parentRepo: string, parent: number): void => {

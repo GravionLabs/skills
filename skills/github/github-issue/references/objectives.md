@@ -22,7 +22,8 @@ One of two forms:
 - `#<feature>`: the Feature is closed and the release that shipped its last PBI is tagged.
 - `released`: the milestone is closed (`github-milestone close`).
 - `rc` (the normal case): the `release-test` issue of the milestone carries the marker `<!-- release-test-rc -->`.
-- Code dependencies between issues stay native `blocked-by` links, never `Requires`.
+- Code dependencies between issues stay native `blocked-by` links, never `Requires`. Into another repository, `deliver` waits for the release of the blocker's Feature, not only for the blocker to close.
+- A Feature left out on purpose gets the label `deferred`: it stays a child and contributes no work, so the Objective is only partly released.
 - An invalid `<owner>/<repo>` (not two segments of letters, digits, `.`, `_`, `-`, and neither `.` nor `..`; #574) is not used: the line is dropped, the other `Requires:` lines still count.
 
 ## Closing

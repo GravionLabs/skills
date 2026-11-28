@@ -38,7 +38,7 @@ Order between repositories is written in the `## Requires` section of an Objecti
 - `Requires: <owner>/<repo>@<milestone> released|rc`: the milestone is closed (`released`), or its release test carries the release candidate marker (`rc`).
 - `Requires: <owner>/<repo>#<feature>`: the Feature is closed and the release that shipped its last PBI is tagged.
 
-Code dependencies between issues stay native blocked-by links.
+Code dependencies between issues stay native blocked-by links. A blocker in another repository holds an issue until the release of the blocker's Feature is tagged, not only until the blocker is closed. A Feature labeled `deferred` contributes no work.
 
 ## Three orchestration layers
 

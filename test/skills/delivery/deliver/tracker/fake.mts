@@ -7,14 +7,39 @@ import type {
   BaseState,
   Gate,
   Item,
+  ObjectiveReader,
   Pull,
   Subject,
   Tracker,
+  TrackedIssue,
   TrackerContext,
 } from '../../../../../skills/delivery/deliver/scripts/tracker.mts';
+import {
+  blockerState,
+  parseObjective,
+} from '../../../../../skills/delivery/deliver/scripts/objective.mts';
 
-type Scenario = {
-  items: { id: number; title: string; body?: string; blockedBy?: number[]; feature?: number }[];
+/** An issue of `repositories`. `subIssues`: numbers of the same repository or `owner/repo#n`. */
+export type FakeIssue = Partial<Omit<TrackedIssue, 'repo' | 'url'>> & {
+  number: number;
+  title: string;
+  subIssues?: (number | string)[];
+};
+
+export type Scenario = {
+  /** `blockedBy`: ids of items, or `owner/repo#n` of an issue of `repositories`. */
+  items: {
+    id: number;
+    title: string;
+    body?: string;
+    blockedBy?: (number | string)[];
+    feature?: number;
+  }[];
+  /** By `owner/repo`: what `readObjective` reads. A release is its milestone and its tag. */
+  repositories?: Record<
+    string,
+    { issues?: FakeIssue[]; milestones?: { title: string; closed: boolean }[]; tags?: string[] }
+  >;
   /** One entry per gate() call, the last one repeats. `throw` is a failing tracker call. */
   gates?: (Gate | 'throw')[];
   files?: string[];
@@ -78,9 +103,51 @@ export function create({ selection }: TrackerContext): Tracker {
   let baseCalls = 0;
   const itemOf = (pull: Pull) => pull.id - 100;
 
+  const repository = (name: string) => scenario.repositories?.[name];
+  const refOf = (repo: string, value: number | string) =>
+    typeof value === 'number' ? { repo, number: value } : parseObjective(value);
+  const tracked = (repo: string, issue: FakeIssue): TrackedIssue => {
+    const { subIssues: _, ...fields } = issue;
+    return {
+      body: '',
+      labels: [],
+      state: 'open',
+      ...fields,
+      repo,
+      url: `https://example.test/${repo}/issues/${issue.number}`,
+    };
+  };
+  const reader: ObjectiveReader = {
+    issue(ref) {
+      const issue = repository(ref.repo)?.issues?.find((i) => i.number === ref.number);
+      return issue && tracked(ref.repo, issue);
+    },
+    parent(ref) {
+      for (const [repo, { issues = [] }] of Object.entries(scenario.repositories ?? {})) {
+        const parent = issues.find((i) =>
+          i.subIssues?.some((value) => {
+            const child = refOf(repo, value);
+            return child.repo === ref.repo && child.number === ref.number;
+          }),
+        );
+        if (parent) return tracked(repo, parent);
+      }
+      return undefined;
+    },
+    subIssues(ref) {
+      const issue = repository(ref.repo)?.issues?.find((i) => i.number === ref.number);
+      return (issue?.subIssues ?? []).flatMap(
+        (value) => reader.issue(refOf(ref.repo, value)) ?? [],
+      );
+    },
+    milestones: (repo) => repository(repo)?.milestones ?? [],
+    hasTag: (repo, tag) => repository(repo)?.tags?.includes(tag) ?? false,
+  };
+
   return {
     name: 'fake',
     repo: 'fake/repo',
+    ...reader,
     subject: (): Subject => ({ kind: 'fake.repository', id: 'fake/repo', title: 'fake/repo' }),
     items: (): Item[] => {
       for (const id of merged) {
@@ -107,10 +174,15 @@ export function create({ selection }: TrackerContext): Tracker {
       url: item.url,
     }),
     waitReason(item: Item): string | undefined {
-      const open = (scenario.items.find((i) => i.id === item.id)?.blockedBy ?? []).filter(
-        (id) => !closed.has(id),
-      );
-      return open.length > 0 ? `blocked by ${open.map((id) => `#${id}`).join(', ')}` : undefined;
+      const blockers = scenario.items.find((i) => i.id === item.id)?.blockedBy ?? [];
+      const open = blockers.filter((id) => typeof id === 'number' && !closed.has(id));
+      if (open.length > 0) return `blocked by ${open.map((id) => `#${id}`).join(', ')}`;
+      for (const value of blockers.filter((b) => typeof b === 'string')) {
+        const blocked = { repo: 'fake/repo', number: item.id };
+        const state = blockerState(parseObjective(value), blocked, reader);
+        if (state.state === 'waiting') return state.reason;
+      }
+      return undefined;
     },
     needsDecision: () => scenario.needsDecision ?? false,
     parentFeature(item: Item): Item | undefined {

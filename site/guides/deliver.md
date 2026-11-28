@@ -51,6 +51,8 @@ Install the `deliver-loop` command with `skills-manage` ([launcher](#the-deliver
 
 The loop reads the state from the tracker before every issue and remembers only what it set aside, so it can be stopped and started again. It orders the issues by their blocked-by links, skips those with `needs-decision`, `needs-refinement` or an open blocker, and merges one pull request before the next issue starts. The merge method follows the base: a merge commit when the base is the default branch (its ruleset allows only merge commits, so the Conventional Commits stay visible to GitVersion and git-cliff), squash for every other base. `--dry-run` prints the order, the required checks and the session token source and starts nothing.
 
+A blocker in another repository holds an issue until the release of the blocker's Feature is tagged, also after the blocker is closed (`upstream <owner>/<repo>#<n> not released`).
+
 `--milestone` works the open PBIs and Bugs in the milestone and the open ones below its open Features (sub-issues of the same repository, each once, by number; [ADR 0010](https://github.com/GravionLabs/skills/blob/main/docs/adr/0010-milestones-hold-features-as-a-roadmap-and-record-what-a-release-shipped.md)). `--feature <nr>` works the open PBIs and Bugs below one Feature, into `release/next`, without retro and release pull request. An issue added to the selection during the run is picked up, and `--dry-run` names the Feature of each issue.
 
 Name the milestone `M<nnn>` (`M004`): the lookup finds the open `M004` and, after `/github-milestone close M004` renamed it, `M004 (0.2.0)`. A legacy title such as `1.3.0` works as before; to move a repository to `M<nnn>` see [Migrate legacy milestones](release.md#migrate-legacy-milestones).
