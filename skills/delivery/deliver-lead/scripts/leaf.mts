@@ -969,7 +969,12 @@ export async function leafStep(input: LeafInput): Promise<Action> {
   function recordMark(head: string, file: string): void {
     try {
       const review = JSON.parse(readIfThere(file) ?? '') as Verdict;
-      const pull: Pull = { id: Number(cd.number), title: '', url: String(cd.pr), branch: String(cd.branch) };
+      const pull: Pull = {
+        id: Number(cd.number),
+        title: '',
+        url: String(cd.pr),
+        branch: String(cd.branch),
+      };
       const verdict: Verdict = {
         verdict: review.verdict,
         findings: Array.isArray(review.findings) ? review.findings : [],

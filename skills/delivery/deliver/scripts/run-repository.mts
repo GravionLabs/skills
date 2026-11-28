@@ -18,11 +18,7 @@ import {
 } from 'node:fs';
 import path from 'node:path';
 import { createInterface } from 'node:readline';
-import {
-  type ProjectConfig,
-  type StepResult,
-  leafStep,
-} from '../../deliver-lead/scripts/leaf.mts';
+import { type ProjectConfig, type StepResult, leafStep } from '../../deliver-lead/scripts/leaf.mts';
 import type { tokenSource as makeSource } from './app-token.mts';
 import type { Origin } from './event-dir.mts';
 import { type Emit, reasonCode } from './events.mts';
@@ -67,7 +63,14 @@ import { type Tier, readLayers } from './resolve-model.mts';
 import type { Pick, sessionModels } from './session-models.mts';
 import { type StageEvent, stageAfter, stageOf } from './stage.mts';
 import type { StopSignal } from './stop-signal.mts';
-import { type BaseState, type Gate, type Item, type Pull, type Tracker, loadTracker } from './tracker.mts';
+import {
+  type BaseState,
+  type Gate,
+  type Item,
+  type Pull,
+  type Tracker,
+  loadTracker,
+} from './tracker.mts';
 import {
   type Triage,
   type TriageCase,
@@ -2045,7 +2048,10 @@ export async function runRepository(context: RepositoryContext): Promise<Reposit
     }
     // not merged: the worktree may hold work that is not pushed
     if (reason)
-      log(`#${item.id} worktree kept: ${path.join(path.dirname(root), `${path.basename(root)}-wt-${item.id}`)}`, 'warn');
+      log(
+        `#${item.id} worktree kept: ${path.join(path.dirname(root), `${path.basename(root)}-wt-${item.id}`)}`,
+        'warn',
+      );
     appendFileSync(
       path.join(runDir, 'results.jsonl'),
       `${JSON.stringify({

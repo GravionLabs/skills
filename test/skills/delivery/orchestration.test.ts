@@ -31,3 +31,20 @@ describe('deliver references/orchestration.md', () => {
     expect(template).toContain('start_agent');
   });
 });
+
+describe('references/orchestration.md ## Leaf driver (#1194)', () => {
+  const section = reference.split('\n## Leaf driver\n')[1]?.split('\n## ')[0] ?? '';
+
+  it('explains the driver loop, its five verbs, what it never does and the config key', () => {
+    expect(section).not.toBe('');
+    for (const verb of ['start-worker', 'wait-any', 'read-result', 'answer-worker', 'ask-owner'])
+      expect(section).toContain(`\`${verb}\``);
+    expect(section).toContain('action = leafStep({tracker, events, issue, run, result})');
+    expect(section).toMatch(
+      /never decides, retries, skips or reorders an action and never calls a gate/,
+    );
+    expect(section).toContain('`deliver.leafFlow: "step"`');
+    expect(section).toContain('The default is `"legacy"`');
+    expect(section).toContain('What stays in the loop around the driver');
+  });
+});

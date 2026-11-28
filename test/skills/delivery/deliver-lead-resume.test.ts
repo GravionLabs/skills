@@ -524,22 +524,21 @@ describe('a new lead resumes an issue from its agent:* label', () => {
     expect(out.stages).toEqual([null]);
   });
 
-  it('a task a gate word ended in agent:approved: the same run resumes and merges once', async () => {
+  it('a task a gate word ended is set aside: the same run resumes it to the person, never merges', async () => {
     const run = uuid7();
     const first = await leads([{ tracker: { mergeRefused: 'base branch was modified' } }], run);
     expect(first.report).toMatchObject({ outcome: 'ended', gate: 'merge-approved' });
     expect(first.merges).toEqual([]);
-    // the label the gate left; the verdict of the run is bound to the head
+    // set aside as the loop sets it aside (#1194): the label says handover, one deliver.aside
+    expect(first.stages.at(-1)).toBe('handover');
+    expect(ofType(first.events, 'deliver.aside')).toHaveLength(1);
+    // a person set agent:approved again; the run that set the issue aside keeps it with the person
     const out = await leads(
       [{ stopAfter: 0, labels: ['agent:approved'] }, { labels: ['agent:approved'] }],
       run,
     );
-    expect(out.report).toMatchObject({ outcome: 'merged' });
-    expect(startsOf(out.perPhase[1]!)).toEqual([]);
-    expect(named(out.events, 'step.started', 'review-2')).toMatchObject([
-      { deliver: { resumed: 'run' } },
-    ]);
-    expect(out.merges).toHaveLength(1);
+    expect(out.perPhase[1]).toMatchObject([{ do: 'end', report: { gate: 'merge-approved' } }]);
+    expect(out.merges).toEqual([]);
     profile.expectRun(out.events);
   });
 });

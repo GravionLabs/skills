@@ -372,7 +372,7 @@ const result = await runRepository({
     feature: opt.feature,
     issues: opt.issues,
     base: BASE,
-    leafFlow: LEAF_FLOW,
+    leafFlow: LEAF_FLOW as 'legacy' | 'step',
   },
   tracker,
   token: { source: tokenSource, fixed: FIXED_TOKEN, name: TOKEN_SOURCE },

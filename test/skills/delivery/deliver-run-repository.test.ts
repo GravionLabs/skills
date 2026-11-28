@@ -173,7 +173,10 @@ async function inMode(mode: Mode, scenario: Scenario, options: Parameters<typeof
   mkdirSync(path.dirname(config), { recursive: true });
   if (mode === 'step') writeFileSync(config, JSON.stringify({ deliver: { leafFlow: 'step' } }));
   try {
-    return await loop(scenario, { ...options, args: ['--base', 'release/next', ...(options.args ?? [])] });
+    return await loop(scenario, {
+      ...options,
+      args: ['--base', 'release/next', ...(options.args ?? [])],
+    });
   } finally {
     rmSync(config, { force: true });
   }
@@ -187,14 +190,18 @@ const persisted = (out: Outcome, id: number) => ({
   counts: Object.fromEntries(
     LIMIT_KINDS.map((kind) => [
       kind,
-      limits({ events: out.events as RunEvent[], issue: id, kind, repo: 'fake/repo' }).evidence.count,
+      limits({ events: out.events as RunEvent[], issue: id, kind, repo: 'fake/repo' }).evidence
+        .count,
     ]),
   ),
 });
 
 const approvedMark = (id: number) => ({
   [String(100 + id)]: [
-    { login: FAKE_LOGIN, body: markBody({ verdict: 'approve', findings: [], unmet: [] }, 'abc123', 'low') },
+    {
+      login: FAKE_LOGIN,
+      body: markBody({ verdict: 'approve', findings: [], unmet: [] }, 'abc123', 'low'),
+    },
   ],
 });
 
@@ -241,13 +248,18 @@ describe('deliver.leafFlow step (#1194)', () => {
     expect(out.status).toBe(130);
     expect(persisted(out, id).stage).toBe('review');
     // the tracker shows the label the loop wrote
-    writeFileSync(path.join(out.dir, 'scenario.json'), JSON.stringify(pbi(id, {}, ['agent:review'])));
+    writeFileSync(
+      path.join(out.dir, 'scenario.json'),
+      JSON.stringify(pbi(id, {}, ['agent:review'])),
+    );
     const run = path.basename(out.eventsFile, '.jsonl');
     const report = await lead(out.dir, id, { run, events: path.dirname(out.eventsFile) });
     expect(report).toMatchObject({ outcome: 'merged' });
-    expect(lines<{ call: string; pull: number }>(path.join(out.dir, 'calls.jsonl')).filter(
-      (c) => c.call === 'merge' && c.pull === 100 + id,
-    )).toHaveLength(1);
+    expect(
+      lines<{ call: string; pull: number }>(path.join(out.dir, 'calls.jsonl')).filter(
+        (c) => c.call === 'merge' && c.pull === 100 + id,
+      ),
+    ).toHaveLength(1);
     profile.expectRun(lines(out.eventsFile) as never);
   });
 

@@ -63,7 +63,12 @@ export type ProcessHostOptions = {
 };
 
 /** What a worker of this host was, for the results of the run. */
-export type Session = { handle: string; role: WorkerStart['role']; model: string; exit: number | null };
+export type Session = {
+  handle: string;
+  role: WorkerStart['role'];
+  model: string;
+  exit: number | null;
+};
 
 type Worker = Session & {
   child?: ChildProcess;
@@ -139,7 +144,15 @@ export function processHost(options: ProcessHostOptions) {
     }
     tryGit(root, 'fetch', '--quiet', 'origin', start.branch);
     tryGit(root, 'worktree', 'remove', '--force', dir);
-    git(root, 'worktree', 'add', '--quiet', '--detach', dir, start.head ?? `origin/${start.branch}`);
+    git(
+      root,
+      'worktree',
+      'add',
+      '--quiet',
+      '--detach',
+      dir,
+      start.head ?? `origin/${start.branch}`,
+    );
     return dir;
   }
 
@@ -284,7 +297,8 @@ export function processHost(options: ProcessHostOptions) {
 
     /** Ends every worker that still runs (after the end of the flow or on a stop) and waits for them. */
     async stop(): Promise<void> {
-      for (const worker of workers.values()) if (!worker.closed && worker.child) killTree(worker.child);
+      for (const worker of workers.values())
+        if (!worker.closed && worker.child) killTree(worker.child);
       await Promise.all([...workers.values()].map((worker) => worker.ended));
     },
   };
