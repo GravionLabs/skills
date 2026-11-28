@@ -9,6 +9,7 @@ import type {
   Item,
   Leaf,
   ObjectiveReader,
+  PublishState,
   Pull,
   Subject,
   Tracker,
@@ -94,6 +95,10 @@ export type Scenario = {
   mergedBefore?: number[];
   /** Items whose pull request is merged by someone else while their session runs. */
   mergedDuring?: number[];
+  /** The publish state of the default branch (default none). */
+  publish?: PublishState;
+  /** An open release pull request exists before the run. */
+  openReleasePull?: boolean;
   /** The milestone has a Feature (default true). */
   retroFeature?: boolean;
   /** The parent Feature by item id. */
@@ -471,6 +476,22 @@ export function create({ selection, repo: named }: TrackerContext): Tracker {
       })),
     releaseCommits: () => scenario.releaseCommits ?? 1,
     foreignPulls: (): Pull[] => scenario.foreignPulls ?? [],
+    publishState: (): PublishState => scenario.publish ?? { state: 'none' },
+    releasePull: (): Pull | undefined =>
+      scenario.openReleasePull
+        ? {
+            id: 900,
+            title: 'release: release/next',
+            url: 'https://example.test/pull/900',
+            branch: 'release/next',
+          }
+        : undefined,
+    retroComment(marker: string): string | undefined {
+      const file = path.join(dir, 'retro.json');
+      if (!existsSync(file)) return undefined;
+      const comments: Record<string, string> = JSON.parse(readFileSync(file, 'utf8'));
+      return Object.keys(comments).find((url) => comments[url]?.startsWith(marker));
+    },
     ensureReleasePull(): Pull {
       record({ call: 'releasePull', repo });
       if (scenario.releaseOnPull?.includes(repo))
