@@ -385,6 +385,17 @@
     "shouldNotTrigger": ["Add a UI style guide to this project", "Summarize the open pull requests"]
   },
   {
+    "skill": "deliver-lead",
+    "shouldTrigger": [
+      "/deliver-lead 42",
+      "Lead the delivery of PBI #42: start an implementer and a reviewer worker and merge once the gates pass"
+    ],
+    "shouldNotTrigger": [
+      "Implement PBI #42 yourself in this worktree and open its pull request",
+      "Create a PBI issue for the retry logic and link it to its Feature"
+    ]
+  },
+  {
     "skill": "host-poimen",
     "shouldTrigger": [
       "Check the poimen host adapter: start, wait for and read one worker",
