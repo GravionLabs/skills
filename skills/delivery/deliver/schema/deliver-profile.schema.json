@@ -164,7 +164,7 @@
         "repo": { "$ref": "#/$defs/repo" },
         "issue": { "$ref": "#/$defs/issue" },
         "role": { "enum": ["implementer", "reviewer"] },
-        "step": { "type": "string", "pattern": "^(implement|review-[1-9][0-9]*)$" },
+        "step": { "type": "string", "pattern": "^(implement|fix-[1-9][0-9]*|review-[1-9][0-9]*)$" },
         "handle": { "type": "string", "minLength": 1 }
       }
     },
