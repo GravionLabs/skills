@@ -396,6 +396,39 @@
     ]
   },
   {
+    "skill": "host-poimen",
+    "shouldTrigger": [
+      "Check the poimen host adapter: start, wait for and read one worker",
+      "The workflow says start-worker and wait-any; we are in poimen, which MCP tools are these?"
+    ],
+    "shouldNotTrigger": [
+      "Add pagination to the users endpoint and its tests",
+      "Check the Orca host adapter"
+    ]
+  },
+  {
+    "skill": "host-orca",
+    "shouldTrigger": [
+      "Check the Orca host adapter: start one worker and read its worker_done",
+      "The workflow says start-worker; this is an Orca coordinator session, which CLI command is that?"
+    ],
+    "shouldNotTrigger": [
+      "Set up the GNOME screen reader",
+      "Fix the flaky date parsing test in this Python package"
+    ]
+  },
+  {
+    "skill": "host-claude-code",
+    "shouldTrigger": [
+      "Check the Claude Code host adapter with one background agent",
+      "The workflow says start-worker and wait-any; this is plain Claude Code without poimen or Orca"
+    ],
+    "shouldNotTrigger": [
+      "Add a hook to my Claude Code settings",
+      "Bump the TypeScript version of this package and fix the type errors"
+    ]
+  },
+  {
     "skill": "secret-scan",
     "shouldTrigger": [
       "Add gitleaks to this repository and scan for committed secrets",

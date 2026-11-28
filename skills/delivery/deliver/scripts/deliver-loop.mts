@@ -8,6 +8,7 @@ import { appSettings, tokenSource as makeSource, tokenSources } from './app-toke
 import { cloneCheckouts } from './checkout.mts';
 import { eventsDirectory, pruneRuns, runOrigin } from './event-dir.mts';
 import { type Emit, openEvents, uuid7 } from './events.mts';
+import { appMint } from './gates/app-token.mts';
 import { mergeBase } from './gates/merge-base.mts';
 import { type Report, finishReport, programStatus } from './program-status.mts';
 import { HARNESSES } from './harness.mts';
@@ -354,7 +355,9 @@ const options: Omit<RepositoryOptions, 'base' | 'milestone' | 'feature' | 'issue
   harnessOverride: HARNESS_OVERRIDE,
 };
 if (opt.objective !== undefined) process.exit(await objectiveRun(opt.objective));
-const tokenSource = app ? makeSource(app, tracker.repo, SESSION_MINUTES * 60_000) : undefined;
+const tokenSource = app
+  ? makeSource(app, tracker.repo, SESSION_MINUTES * 60_000, appMint)
+  : undefined;
 const result = await runRepository({
   root,
   options: {
@@ -390,7 +393,7 @@ async function objectiveRun(ref: string): Promise<number> {
   const mergeLocks = new MergeLocks();
   // the attention cases of every unit go to deliver-triage, each once in the run; a CI job is re-run once
   const triage = triageRun();
-  const sources = app ? tokenSources(app, SESSION_MINUTES * 60_000) : undefined;
+  const sources = app ? tokenSources(app, SESSION_MINUTES * 60_000, appMint) : undefined;
   const reposDir = process.env.DELIVER_REPOS_DIR;
   const checkouts = cloneCheckouts({
     // the clones and the worktrees beside them stay below the git directory of the repository of the run

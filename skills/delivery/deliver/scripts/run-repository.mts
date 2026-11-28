@@ -20,6 +20,14 @@ import { createInterface } from 'node:readline';
 import type { tokenSource as makeSource } from './app-token.mts';
 import type { Origin } from './event-dir.mts';
 import { type Emit, reasonCode } from './events.mts';
+import {
+  BASE_REPAIRS,
+  FIX_ROUNDS,
+  type LimitKind,
+  type RunEvent,
+  limits,
+  readRunEvents,
+} from './gates/limits.mts';
 import { CLOSED, mergeApproved } from './gates/merge-approved.mts';
 import { mergedMeanwhile } from './gates/merged-meanwhile.mts';
 import { verifyVerdict } from './gates/verify-verdict.mts';
@@ -28,10 +36,12 @@ import { type BlockedReason, type Report, finishReport } from './program-status.
 import { HANDS_OFF, guardCheck, readChangedFiles, riskOf } from './gates/guard.mts';
 import { cargoTomlKeys } from './cargo-toml.mts';
 import { directoryPackagesPropsKeys } from './directory-packages-props.mts';
+import { releaseGate, retroMarker } from './gates/release-gate.mts';
 import { setStageGate } from './gates/stage.mts';
 import { goModKeys } from './go-mod.mts';
 import { pyprojectTomlKeys } from './pyproject-toml.mts';
 import { pnpmWorkspaceKeys } from './pnpm-workspace.mts';
+import { inPickOrder } from './gates/next-issue.mts';
 import type { Harness } from './harness.mts';
 import { MergeLocks, Slots } from './parallel.mts';
 import { killTree, launch, promptPath } from './process.mts';
@@ -150,9 +160,6 @@ const RETRO_DENY = [
   'gh pr merge',
   'gh pr close',
 ];
-// A fix round per `changes` verdict, at most this many per issue and run; the next `changes` sets the issue aside.
-const FIX_ROUNDS = 2;
-
 const MORE_PULLS = 'more than one open pull request';
 /** Two open pull requests of one item: a person closes the stale one, the loop merges neither. */
 function morePulls(pull: Pull | undefined): string | undefined {
@@ -244,9 +251,6 @@ type Task = {
 // Harness failures (exit ≠ 0, no pull request, no timeout kill): wait 5, 15, 60 minutes, the third in a row ends the run.
 const HARNESS_WAITS_MINUTES = [5, 15, 60];
 const HARNESS_FAILED = 'harness failed';
-
-// A review without a valid verdict gets one more session, then the issue is set aside.
-const REVIEW_ATTEMPTS = 2;
 
 type Review = { round: number; verdict: Verdict['verdict'] | 'failed' };
 type Reviewed = { verdict: Verdict; file: string; head: string } | { reason: string };
@@ -415,6 +419,26 @@ export async function runRepository(context: RepositoryContext): Promise<Reposit
   }
 
   let emit: Emit = () => {};
+  // the events this run emitted: the limits gate reads them besides the run file, which may be missing (no events
+  // directory) or miss a line (a failed write never stops a delivery)
+  const journal: RunEvent[] = [];
+  let limitSource: { dir: string | undefined; run: string } | undefined;
+  /** The limits gate (gates/limits.mts) over the events of this run: whether one more counted session may start. */
+  const allowed = (item: Item, kind: LimitKind) => {
+    const gate = (events: RunEvent[]) =>
+      limits({ events, issue: item.id, kind, repo: tracker.repo });
+    const own = gate(journal);
+    const written = limitSource?.dir && readRunEvents(limitSource.dir, limitSource.run);
+    // the stricter one: a count that misses an event never allows an extra session
+    return !written || own.result !== 'pass' ? own : gate(written);
+  };
+  /** The event of a counted session, written before the session starts: the limits gate counts it. */
+  const counted = (item: Item, kind: LimitKind, name: string, text: string, n?: number) =>
+    emit('step.started', {
+      task: `issue-${item.id}`,
+      step: { name, ...(n !== undefined && { n }), text },
+      deliver: { counted: kind },
+    });
   // every role session (implementer, review, repair, retro) takes a slot; the events report the running ones
   let reportedSessions = 0;
   const onSessions = (running: number) => {
@@ -748,8 +772,7 @@ export async function runRepository(context: RepositoryContext): Promise<Reposit
 
   let harnessFailures = 0;
   let harnessDead: { count: number; exit: number | null } | undefined;
-  // a session timeout gets one more session per PBI and run, the second sets the PBI aside
-  const timeouts = new Map<number, number>();
+  // a session timeout gets one more session per PBI and run (limits gate, `timeout`), the second sets the PBI aside
 
   /** Starts sessions for the item until one ends normally. Returns a reason when the item is to be set aside. */
   async function runSession(
@@ -768,10 +791,10 @@ export async function runRepository(context: RepositoryContext): Promise<Reposit
       sessions.push(session);
       if (signal.stopped) return { session };
       if (session.timedOut) {
-        const count = (timeouts.get(item.id) ?? 0) + 1;
-        timeouts.set(item.id, count);
-        if (count >= 2) return { session, reason: 'session timeout' };
+        const gate = allowed(item, 'timeout');
+        if (gate.result !== 'pass') return { session, reason: 'session timeout' };
         log(`#${item.id} session timeout (${SESSION_MINUTES} min), one more session`, 'warn');
+        counted(item, 'timeout', 'session-retry', 'one more session after a session timeout');
         continue;
       }
       if (session.exit === 0) {
@@ -807,7 +830,8 @@ export async function runRepository(context: RepositoryContext): Promise<Reposit
     const worktree = path.join(path.dirname(root), `${path.basename(root)}-wt-${item.id}-review`);
     const drop = () => attempt('git', ['worktree', 'remove', '--force', worktree], root);
     let problem = 'no valid verdict';
-    for (let tries = 1; tries <= REVIEW_ATTEMPTS; tries++) {
+    // a missing or invalid verdict gets another attempt while the limits gate (`review`) allows one
+    for (let tries = 1; ; tries++) {
       const file = path.join(runDir, `${item.id}.review-${round}-${tries}.json`);
       try {
         const { head } = tracker.compareRefs(pull);
@@ -848,13 +872,21 @@ export async function runRepository(context: RepositoryContext): Promise<Reposit
         drop();
       }
       if (signal.stopped) return { reason: 'stopped' };
-      if (tries < REVIEW_ATTEMPTS) log(`#${item.id} review: ${problem}, one retry`, 'warn');
+      if (allowed(item, 'review').result !== 'pass') break;
+      log(`#${item.id} review: ${problem}, one retry`, 'warn');
+      counted(
+        item,
+        'review',
+        `retry-review-${round}`,
+        `review round ${round}: ${problem}, one retry`,
+        round,
+      );
     }
     return { reason: `review failed: ${problem}` };
   }
 
-  // a handed-over pull request with a conflict gets one repair session per run, never a merge by the loop
-  const conflictTried = new Set<number>();
+  // a handed-over pull request with a conflict gets one repair session per run (limits gate, `conflict`), never a
+  // merge by the loop
   /**
    * Returns nothing when the gate of the pull request is no conflict (or it was tried in this run), else one line:
    * `conflict repaired` or `conflict not repaired: <why>` after one session (`/deliver <nr>` merges the base in).
@@ -865,7 +897,7 @@ export async function runRepository(context: RepositoryContext): Promise<Reposit
     worktree: string,
     sessions: Session[],
   ): Promise<string | undefined> {
-    if (conflictTried.has(item.id) || signal.stopped) return undefined;
+    if (signal.stopped || allowed(item, 'conflict').result !== 'pass') return undefined;
     const read = (): Gate | undefined => {
       try {
         return tracker.gate(pull);
@@ -875,8 +907,8 @@ export async function runRepository(context: RepositoryContext): Promise<Reposit
       }
     };
     if (read()?.state !== 'conflict') return undefined;
-    conflictTried.add(item.id);
     log(`#${item.id} ${pull.url} has a conflict, one repair session`, 'warn');
+    counted(item, 'conflict', 'conflict-repair', `${pull.url} has a conflict, one repair session`);
     mark(item, 'session-started');
     const ran = await runSession(item, worktree, sessions);
     if (signal.stopped) return undefined;
@@ -917,9 +949,7 @@ export async function runRepository(context: RepositoryContext): Promise<Reposit
       if (session.timedOut) return { failed: 'session timeout' };
       if (session.exit !== 0) return { failed: `session failed (exit ${session.exit})` };
       const url = existsSync(file) ? JSON.parse(readFileSync(file, 'utf8'))?.url : undefined;
-      // as the script writes it: the name without the version of a released milestone
-      const marker = `<!-- retro: ${milestone.replace(/ \(\d+\.\d+\.\d+\)$/, '')} -->`;
-      if (typeof url !== 'string' || !tracker.isRetroComment(url, marker))
+      if (typeof url !== 'string' || !tracker.isRetroComment(url, retroMarker(milestone)))
         return { failed: 'no retro comment' };
       return { url };
     } catch (error) {
@@ -1061,7 +1091,6 @@ export async function runRepository(context: RepositoryContext): Promise<Reposit
       if (signal.stopped) return { reason: 'stopped', pull: earlier };
     }
     const reviews: Review[] = [];
-    let fixes = 0;
     let reviewFile: string | undefined;
     let repaired = false;
     let announced = false;
@@ -1164,13 +1193,15 @@ export async function runRepository(context: RepositoryContext): Promise<Reposit
         mark(item, `verdict-${reviewed.verdict.verdict}`);
         note(item, reviewNote(round, reviewed.verdict, reviewed.head, pull.url));
         if (reviewed.verdict.verdict === 'changes') {
-          if (fixes >= FIX_ROUNDS) {
+          const gate = allowed(item, 'fix');
+          if (gate.result !== 'pass') {
             // the findings are text of an agent: it never ends the reason, whose ending decides about a hand-over
-            reason = `needs-decision: review still asks for changes after ${FIX_ROUNDS} fix rounds (${findingsLine(reviewed.verdict)})`;
+            reason = `${gate.reason} (${findingsLine(reviewed.verdict)})`;
             settle();
             break;
           }
-          fixes += 1;
+          const fix = Number(gate.evidence.count) + 1;
+          counted(item, 'fix', `fix-${fix}`, `fix round ${fix} of ${FIX_ROUNDS}`, fix);
           reviewFile = reviewed.file;
           continue;
         }
@@ -1416,6 +1447,7 @@ export async function runRepository(context: RepositoryContext): Promise<Reposit
   out.toFile(path.join(path.dirname(runDir), 'loop.log'));
   // the run id of the events is a UUIDv7 (agent-events contract); the run folder keeps `runId`
   const { run: eventRun, dir: eventDir, origin } = events.open();
+  limitSource = { dir: eventDir, run: eventRun };
   // OSC 7501 to the controlling terminal (ADR 0007): the events stay the source for displays
   const report = context.status;
   const statusTitle = titleOf(context.options);
@@ -1423,6 +1455,7 @@ export async function runRepository(context: RepositoryContext): Promise<Reposit
   const sessionsLine = () => `${slots.active} of ${slots.limit} sessions running`;
   emit = (type, body, tone) => {
     events.emit(type, body, tone);
+    journal.push({ ...body, type });
     if (type === 'run.started') {
       report({ state: 'working', title: statusTitle });
     } else if (type === 'attention' && body?.needsYou) {
@@ -1679,7 +1712,6 @@ export async function runRepository(context: RepositoryContext): Promise<Reposit
 
   // The base branch is checked before every issue: a red base would set every pull request aside.
   // A red one is rerun once, then a Bug is filed and delivered first. At most BASE_REPAIRS repairs per run.
-  const BASE_REPAIRS = 2;
   let repairs = 0;
   let repairBug: Item | undefined;
   let baseBlocked = '';
@@ -1871,8 +1903,7 @@ export async function runRepository(context: RepositoryContext): Promise<Reposit
           }
         }
         waiting = [];
-        for (const item of candidates) {
-          const reason = tracker.waitReason(item);
+        for (const { item, reason } of inPickOrder(candidates, (i) => tracker.waitReason(i))) {
           if (reason) waiting.push(`#${item.id} ${reason}`);
           else if (starts.length < room) starts.push(item);
         }
@@ -1968,60 +1999,72 @@ export async function runRepository(context: RepositoryContext): Promise<Reposit
           `milestone ${milestone} is not released: the triage took ${[...dropped].map((nr) => `#${nr}`).join(', ')} out of the run`,
           'warn',
         );
-      } else if (tracker.items().length === 0) {
-        // a pull request into the base that is not of this milestone would be lost with the release branch: a person decides
-        try {
-          for (const pull of tracker.foreignPulls()) {
+      } else {
+        const { evidence } = releaseGate({ tracker, milestone: milestone as string });
+        const { unread } = evidence;
+        if (unread.open) throw new Error(unread.open);
+        // an item that is open by now: no release; the publish state and a ready pull request hold nothing back here
+        if (evidence.open?.length === 0) {
+          // a pull request into the base that is not of this milestone would be lost with the release branch: a person decides
+          if (unread.pulls)
+            log(`open pull requests into ${BASE} not read: ${unread.pulls}`, 'warn');
+          for (const pull of evidence.pulls ?? []) {
             needsYou.push(
               `${pull.url} is open into ${BASE} and not in ${milestone}: merge, close or retarget it first`,
             );
           }
-        } catch (error) {
-          log(`open pull requests into ${BASE} not read: ${firstLine(error)}`, 'warn');
-        }
-        let release: Pull | undefined;
-        if (RETRO.enabled) {
-          try {
-            // without a Feature the retro comments on the release pull request: that one has to exist first
-            if (!tracker.hasRetroFeature()) release = tracker.ensureReleasePull();
-            retroResult = await retro(milestone as string, release);
-            if (retroResult.failed) retroFailed(retroResult.failed);
-            else if (retroResult.url) log(`retro: ${retroResult.url}`, 'info');
-          } catch (error) {
-            retroFailed(firstLine(error));
+          let release: Pull | undefined;
+          if (RETRO.enabled) {
+            try {
+              // once per release: the tracker says whether the retro comment exists
+              if (unread.retroDone) retroFailed(`retro comment not read: ${unread.retroDone}`);
+              else if (evidence.retroDone) {
+                retroResult = { url: evidence.retro };
+                log(`retro: already posted, ${evidence.retro}`, 'info');
+              } else {
+                // without a Feature the retro comments on the release pull request: that one has to exist first
+                if (!tracker.hasRetroFeature()) release = tracker.ensureReleasePull();
+                retroResult = await retro(milestone as string, release);
+                if (retroResult.failed) retroFailed(retroResult.failed);
+                else if (retroResult.url) log(`retro: ${retroResult.url}`, 'info');
+              }
+            } catch (error) {
+              retroFailed(firstLine(error));
+            }
+            await seeStop();
           }
-          await seeStop();
-        }
-        // a stop request during the retro ends the run: the next run opens the release pull request
-        if (signal.stopped && !release) throw new Error('stopped');
-        release ??= tracker.ensureReleasePull();
-        if (retroResult.url) {
-          try {
-            tracker.linkRetro(release, retroResult.url);
-          } catch (error) {
-            retroFailed(`release pull request body not updated: ${firstLine(error)}`);
+          // a stop request during the retro ends the run: the next run opens the release pull request
+          if (signal.stopped && !release) throw new Error('stopped');
+          release ??= tracker.ensureReleasePull();
+          if (retroResult.url) {
+            try {
+              tracker.linkRetro(release, retroResult.url);
+            } catch (error) {
+              retroFailed(`release pull request body not updated: ${firstLine(error)}`);
+            }
           }
-        }
-        releaseUrl = release.url;
-        log(`release pull request: ${release.url} (never merged by the loop)`, 'info');
-        emit('step.finished', {
-          task: 'release',
-          step: { name: 'release-pr', text: 'release pull request' },
-          links: [{ rel: 'pull-request', url: release.url, title: release.title }],
-        });
-        for (const test of tracker.releaseTests()) {
-          needsYou.push(`#${test.id} ${test.title}`);
-          emit(
-            'attention',
-            {
-              id: `release-test-${test.id}`,
-              reason: 'deliver.release-test',
-              text: `#${test.id} release test is open: a person tests the release candidate`,
-              needsYou: true,
-              links: [{ rel: 'issue', url: test.url }],
-            },
-            'warning',
-          );
+          releaseUrl = release.url;
+          log(`release pull request: ${release.url} (never merged by the loop)`, 'info');
+          emit('step.finished', {
+            task: 'release',
+            step: { name: 'release-pr', text: 'release pull request' },
+            links: [{ rel: 'pull-request', url: release.url, title: release.title }],
+          });
+          if (unread.releaseTests) throw new Error(unread.releaseTests);
+          for (const test of evidence.releaseTests ?? []) {
+            needsYou.push(`#${test.id} ${test.title}`);
+            emit(
+              'attention',
+              {
+                id: `release-test-${test.id}`,
+                reason: 'deliver.release-test',
+                text: `#${test.id} release test is open: a person tests the release candidate`,
+                needsYou: true,
+                links: [{ rel: 'issue', url: test.url }],
+              },
+              'warning',
+            );
+          }
         }
       }
     } catch (error) {
