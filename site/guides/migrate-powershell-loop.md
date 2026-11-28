@@ -33,7 +33,7 @@ Flags use two dashes and lower case.
 - **Preflight.** `Test-DeliverPreflight.ps1` and its fixes are gone. The loop checks what it needs itself: `gh`, the base branch (a missing `release/next` is cut), the required checks, the author of each issue and the token source (`--dry-run` shows them).
 - **Control session, `--inline`, `--unattended`, `deliver.loopThreshold`.** `/deliver <nr>` delivers one issue and never merges; the loop is `deliver-loop`.
 - **Release review, RC test gate and `refine`, `stop`, `-LogPane`, the herdr workspace.** The release pull request is opened without a release review. Run `code-review` on it if you want one.
-- **`deliver.roles`, `deliver.parallel`, `deliver.sessionTimeoutMinutes`, `deliver.loopThreshold`.** Ignored with one warning line. The loop reads `base`, `tracker`, `harness` and `protectedPaths`.
+- **`deliver.roles`, `deliver.sessionTimeoutMinutes`, `deliver.loopThreshold`.** Ignored with one warning line. The loop reads `base`, `tracker`, `harness`, `parallel` and `protectedPaths`.
 
 ## What is new
 

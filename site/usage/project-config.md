@@ -14,6 +14,7 @@ The `deliver` loop reads these keys of `deliver`, all optional; the command-line
 - `tracker`: the tracker, `scripts/tracker/<name>.mts` in the `deliver` skill, default `github`.
 - `harness`: the agent CLI, `claude` (default) or `copilot`. A name only: a command from the repository would let a change decide what the loop runs.
 - `handoverMinutes`: how long the loop waits for handed-over pull requests to be merged when nothing else can start (default 120; `0` ends the run at once with exit 3). `--handover-minutes` wins.
+- `parallel`: how many role sessions (implementer, review, repair) the loop runs at once, each issue in its own worktree (default 2). The ready issues are read again whenever one is merged, set aside or handed over, so an issue starts once its blocker is merged. Merges stay one at a time per base branch; a pull request that conflicts after another merge gets one repair session and is reviewed again. `1` works one issue after the other. `--parallel` wins.
 - `mergeRisk`: the highest risk level of the implementer result the loop merges, `low`, `medium` (default) or `high`. An approved pull request above it is handed to you; a missing level counts as `medium`. `--merge-risk` wins; another value ends the loop with exit 2.
 - `review`: the review session of the loop. `model` (`--review-model` wins), `harness` `claude` or `copilot` (`--review-harness` wins), `effort` (the reasoning effort of that harness). Default: the implementer's harness and the model of the role `review` ([models](#models)). Unknown keys are ignored with a warning.
 - `retro`: the retro session after a milestone. `enabled` (default `true`; `--no-retro` turns it off), `model` (default the model of the role `retro`, [models](#models)). It runs on the review harness. Unknown keys are ignored with a warning.
@@ -23,7 +24,7 @@ The `deliver` loop reads these keys of `deliver`, all optional; the command-line
 { "deliver": { "base": "main", "protectedPaths": [".github/", ".agents/", "package.json"] } }
 ```
 
-Other keys of `deliver` (`roles`, `loopThreshold`, `parallel`, `sessionTimeoutMinutes`) are ignored with one warning line; the session length is the flag `--session-minutes`. Coming from the PowerShell loop: [migrating](../guides/migrate-powershell-loop.md).
+Other keys of `deliver` (`roles`, `loopThreshold`, `sessionTimeoutMinutes`) are ignored with one warning line; the session length is the flag `--session-minutes`. Coming from the PowerShell loop: [migrating](../guides/migrate-powershell-loop.md).
 
 ## Models
 

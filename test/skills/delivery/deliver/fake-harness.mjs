@@ -1,12 +1,22 @@
 // The agent CLI of the tests of the deliver loop (DELIVER_HARNESS): `node fake-harness.mjs <dir> <prompt>`.
 // It records the session in <dir>/sessions.jsonl, "opens" the pull request by writing <dir>/pr-<id> (unless the
 // scenario says noPull) and exits with the code the scenario names for this session.
+// Every session line has its pid and start time (`at`); <dir>/ends.jsonl gets `{ pid, at }` when it exits.
 import { appendFileSync, existsSync, readFileSync, writeFileSync } from 'node:fs';
 import path from 'node:path';
 
 const [dir, prompt] = process.argv.slice(2);
 const [, command, id] = /^\/(deliver|deliver-review) (\d+)/.exec(prompt) ?? [];
 const scenario = JSON.parse(readFileSync(path.join(dir, 'scenario.json'), 'utf8'));
+const at = Date.now();
+process.on('exit', () =>
+  appendFileSync(
+    path.join(dir, 'ends.jsonl'),
+    `${JSON.stringify({ pid: process.pid, at: Date.now() })}\n`,
+  ),
+);
+// scenario.sessionMs: every implementer and review session works this long before it answers
+const working = () => new Promise((done) => setTimeout(done, scenario.sessionMs ?? 0));
 if (command === 'deliver-review') {
   // a review session is recorded in reviews.jsonl; scenario.verdicts (by review index, default approve):
   // 'approve', 'changes', 'invalid', 'none' (no file) or 'fail' (exit 1 without a file)
@@ -18,10 +28,13 @@ if (command === 'deliver-review') {
       id: Number(id),
       prompt,
       cwd: process.cwd(),
+      pid: process.pid,
+      at,
       hasResultFileVariable: 'DELIVER_RESULT_FILE' in process.env,
       hasStyleguide: existsSync('docs/STYLEGUIDE.md'),
     })}\n`,
   );
+  await working();
   const verdict = scenario.verdicts?.[nr] ?? 'approve';
   if (verdict === 'fail') process.exit(1);
   const finding = { severity: 'blocking', file: 'src/a.ts', summary: scenario.summary ?? 'broken' };
@@ -74,6 +87,8 @@ appendFileSync(
     id: Number(id),
     prompt,
     cwd: process.cwd(),
+    pid: process.pid,
+    at,
     run: process.env.DELIVER_RUN ?? null,
     ghToken: process.env.GH_TOKEN ?? null,
     hasSessionTokenVariable: 'DELIVER_SESSION_TOKEN' in process.env,
@@ -86,6 +101,7 @@ if (own.hangs ?? scenario.hangs) {
   console.log('working');
   setInterval(() => {}, 1000);
 } else {
+  await working();
   // the implementer result of the scenario (risk by issue id), written where the loop says
   const level = scenario.risks?.[id];
   if (level && process.env.DELIVER_RESULT_FILE && !(scenario.riskOnce && index > 0))

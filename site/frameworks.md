@@ -81,7 +81,7 @@ Reviewed at commit `abeeaf9` (2026-11-19), MIT licensed. Since our first adaptat
   as a planning decision.
 - New skills (#947): `github-triage` for issues filed by others, `glossary` with
   `grill-me --docs`, `handoff`, `prototype`, `wizard`, `architecture-survey`.
-- A parallel ready frontier in `deliver-loop` (#948, from `implement-spec` and the claim by
+- A parallel ready frontier in `deliver-loop` (#948, built as `deliver.parallel` in #1121; from `implement-spec` and the claim by
   assignee of `wayfinder`) and `planner chart`, a decision map for foggy Objectives and Epics
   (#949, from `wayfinder`).
 

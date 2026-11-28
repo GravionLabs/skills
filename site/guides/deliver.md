@@ -100,12 +100,13 @@ Optional, under `deliver` in `.agents/config.json` ([project config](../usage/pr
 | `review`          | `{ "model", "harness", "effort" }` of the review session        |
 | `retro`           | `{ "enabled", "model" }` of the retro session after a milestone |
 | `handoverMinutes` | `120`: how long the loop waits for handed-over pull requests    |
+| `parallel`        | `2`: role sessions at once (`--parallel`); merges one at a time |
 | `mergeRisk`       | `medium`: an approved pull request above it is handed over      |
 | `protectedPaths`  | `.github/`, `.agents/`, `.claude/` and the package manifests    |
 
 The top-level key [`models`](../usage/project-config.md#models) maps roles to models for `scripts/resolve-model.mts`; the loop picks the model of every session with it (the implementer by the `Tier:` line of the issue).
 
-Other keys (`roles`, `loopThreshold`, `parallel`, `sessionTimeoutMinutes`) are ignored with one warning line. `DELIVER_MIN_<X>` variables are read as `DELIVER_<X>` for one more release, with a warning.
+Other keys (`roles`, `loopThreshold`, `sessionTimeoutMinutes`) are ignored with one warning line. `DELIVER_MIN_<X>` variables are read as `DELIVER_<X>` for one more release, with a warning.
 
 ## What the loop refuses
 

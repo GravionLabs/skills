@@ -1,8 +1,9 @@
 // The work of one repository in a deliver run: a fresh agent session per issue, a review session for its pull
-// request, merge, then the next issue. The state is read from the tracker before every issue. The run only remembers
-// what it set aside. `deliver-loop.mts` parses the arguments and calls `runRepository` once.
+// request, merge. Up to `parallel` issues are worked at once, merges one at a time; the state is read from the tracker
+// whenever an issue ends. The run only remembers what it set aside. `deliver-loop.mts` parses the arguments and calls `runRepository` once.
 // Tracker: tracker.mts. Progress events: events.mts. Review settings and verdict: review.mts. Issue stage: stage.mts.
 // Model of each session: session-models.mts. Comments on the issue: handover.mts. Stop request: stop-signal.mts.
+// Parallel sessions and the merge lock: parallel.mts.
 import { execFileSync } from 'node:child_process';
 import {
   appendFileSync,
@@ -27,6 +28,7 @@ import { goModKeys } from './go-mod.mts';
 import { pyprojectTomlKeys } from './pyproject-toml.mts';
 import { pnpmWorkspaceKeys } from './pnpm-workspace.mts';
 import type { Harness } from './harness.mts';
+import { MergeLocks, Slots } from './parallel.mts';
 import { killTree, launch, promptPath } from './process.mts';
 import { progressLine } from './progress-bar.mts';
 import { MANIFESTS, exceptedManifest, protectedHits } from './protected-paths.mts';
@@ -278,6 +280,8 @@ export type RepositoryOptions = {
   model?: string;
   /** At most this many issues, 0: no limit. */
   max: number;
+  /** At most this many role sessions at once (`deliver.parallel`, `--parallel`); 1 works one issue after the other. */
+  parallel: number;
   sessionMinutes: number;
   mergeMinutes: number;
   handoverMinutes: number;
@@ -310,6 +314,8 @@ export type RepositoryContext = {
   status: (report: Report) => void;
   signal: StopSignal;
   out: Output;
+  /** One merge at a time per repository and base branch; repositories of one run share them. Default: of this run. */
+  mergeLocks?: MergeLocks;
 };
 export type RepositoryResult = {
   /** 0 done, 2 blocked, 3 waiting for a handed-over pull request (or refused), 5 harness failed, 130 stopped; 1 error, 64 usage. */
@@ -337,6 +343,7 @@ export async function runRepository(context: RepositoryContext): Promise<Reposit
     allowNoRequiredChecks,
     model: MODEL_FLAG,
     max: MAX,
+    parallel: PARALLEL,
     sessionMinutes: SESSION_MINUTES,
     mergeMinutes: MERGE_MINUTES,
     handoverMinutes: HANDOVER_MINUTES,
@@ -541,6 +548,14 @@ export async function runRepository(context: RepositoryContext): Promise<Reposit
   }
 
   let emit: Emit = () => {};
+  // every role session (implementer, review, repair, retro) takes a slot; the events report the running ones
+  let reportedSessions = 0;
+  const slots = new Slots(PARALLEL, (running) => {
+    if (running === reportedSessions) return;
+    reportedSessions = running;
+    emit('deliver.sessions', { deliver: { repo: tracker.repo, running, limit: PARALLEL } });
+  });
+  const mergeLock = (context.mergeLocks ?? new MergeLocks()).of(tracker.repo, BASE);
 
   /** Prints the readable part of one stream record and keeps the numbers of the session. */
   function render(line: string, session: Session): void {
@@ -730,6 +745,33 @@ export async function runRepository(context: RepositoryContext): Promise<Reposit
       writeFileSync(issueFile, `# ${item.title}\n\n${item.url}\n\n${item.body}\n`);
       prompt += ` --issue-file ${promptPath(issueFile)}`;
     }
+    // waits for a free slot: at most PARALLEL sessions run at once, the slot is freed when the process ended
+    const free = await slots.acquire();
+    try {
+      // stopped while it waited: no session starts
+      if (signal.stopped)
+        return {
+          exit: null,
+          turns: 0,
+          costUsd: 0,
+          peakContext: 0,
+          model: task.model,
+          tier: task.tier,
+        };
+      return await launchSession(label, prompt, cwd, file, task);
+    } finally {
+      free();
+    }
+  }
+
+  /** One process of the harness, from its start to its end. */
+  async function launchSession(
+    label: string,
+    prompt: string,
+    cwd: string,
+    file: string,
+    task: Task,
+  ): Promise<Session> {
     const { model, effort, deny } = task;
     const argv = HARNESS_OVERRIDE
       ? [...HARNESS_OVERRIDE, prompt]
@@ -1004,50 +1046,64 @@ export async function runRepository(context: RepositoryContext): Promise<Reposit
   }
 
   /**
-   * Waits for the gate and merges the reviewed commit. Returns nothing when merged, else the reason. `held`: why a
-   * pull request that passes the gate is handed over instead.
+   * Waits for the gate and merges the reviewed commit. Returns nothing when merged, else the reason; `conflict` when
+   * the gate says so (another merge into the base can cause it). `held`: why a pull request that passes the gate is
+   * handed over instead. The gate is read and the merge made under the merge lock of the base branch: one merge at a
+   * time, and the next one reads its gate after the base moved.
    */
-  async function merge(pull: Pull, reviewed: string, held?: string): Promise<string | undefined> {
+  async function merge(
+    pull: Pull,
+    reviewed: string,
+    held?: string,
+  ): Promise<{ reason?: string; conflict?: true }> {
     const start = Date.now();
     let problem = '';
     while (!signal.stopped) {
-      let gate: Gate;
-      try {
-        gate = tracker.gate(pull);
-      } catch (error) {
-        // a tracker call that fails once (network, rate limit) is not a verdict on the pull request
-        problem = `tracker error: ${firstLine(error)}`;
-        gate = { state: 'pending', reported: false };
-      }
-      if (gate.state === 'merged') return undefined;
-      if (gate.state === 'closed') return CLOSED;
-      if (gate.state === 'conflict') return gate.detail;
-      if (gate.state === 'red') return `red: ${gate.detail}`;
-      // checks register a moment after the pull request opens: nothing reported is not green yet
-      if (gate.state === 'ready' && (gate.reported || Date.now() - start > 90_000)) {
-        await seeStop();
-        if (signal.stopped) break;
-        // only the approved commit is merged: what was pushed after the review was seen by nobody
-        if (gate.head !== reviewed) return `pushed after the review${HANDS_OFF}`;
-        // the files of the commit that is merged, not of the one the session left: a later push is checked too.
-        // The merge names gate.head, so a push after this read is refused by the tracker.
-        const handsOff = await guard(pull, gate.head);
-        if (handsOff) return handsOff;
-        if (held) return held;
-        // the read of the files blocks too: a stop request that came in during it must be seen before the merge
-        await seeStop();
-        if (signal.stopped) break;
-        try {
-          tracker.merge(pull, gate.head);
+      const done = await mergeLock.run(
+        async (): Promise<{ reason?: string; conflict?: true } | undefined> => {
+          let gate: Gate;
+          try {
+            gate = tracker.gate(pull);
+          } catch (error) {
+            // a tracker call that fails once (network, rate limit) is not a verdict on the pull request
+            problem = `tracker error: ${firstLine(error)}`;
+            gate = { state: 'pending', reported: false };
+          }
+          if (gate.state === 'merged') return {};
+          if (gate.state === 'closed') return { reason: CLOSED };
+          if (gate.state === 'conflict') return { reason: gate.detail, conflict: true };
+          if (gate.state === 'red') return { reason: `red: ${gate.detail}` };
+          // checks register a moment after the pull request opens: nothing reported is not green yet
+          if (gate.state === 'ready' && (gate.reported || Date.now() - start > 90_000)) {
+            await seeStop();
+            if (signal.stopped) return undefined;
+            // only the approved commit is merged: what was pushed after the review was seen by nobody
+            if (gate.head !== reviewed) return { reason: `pushed after the review${HANDS_OFF}` };
+            // the files of the commit that is merged, not of the one the session left: a later push is checked too.
+            // The merge names gate.head, so a push after this read is refused by the tracker.
+            const handsOff = await guard(pull, gate.head);
+            if (handsOff) return { reason: handsOff };
+            if (held) return { reason: held };
+            // the read of the files blocks too: a stop request that came in during it must be seen before the merge
+            await seeStop();
+            if (signal.stopped) return undefined;
+            try {
+              tracker.merge(pull, gate.head);
+              return {};
+            } catch (error) {
+              problem = `merge refused: ${(error as Error).message}`;
+            }
+          }
           return undefined;
-        } catch (error) {
-          problem = `merge refused: ${(error as Error).message}`;
-        }
-      }
-      if (Date.now() - start > MERGE_MINUTES * 60_000) return problem || 'checks did not finish';
+        },
+      );
+      if (done) return done;
+      if (signal.stopped) break;
+      if (Date.now() - start > MERGE_MINUTES * 60_000)
+        return { reason: problem || 'checks did not finish' };
       for (let second = 0; second < 30 && !signal.stopped; second++) await sleep(1);
     }
-    return 'stopped';
+    return { reason: 'stopped' };
   }
 
   function cleanup(item: Item, pull: Pull): void {
@@ -1232,13 +1288,32 @@ export async function runRepository(context: RepositoryContext): Promise<Reposit
         head = reviewed.head;
       }
       log(`#${item.id} approved, waits for checks`, 'info');
-      reason = await merge(pull, head, riskHold(item.id));
+      const gated = await merge(pull, head, riskHold(item.id));
+      reason = gated.reason;
       // a person closed it or has to look at it: no repair session
       if (!reason || reason === 'stopped' || reason === CLOSED || reason.endsWith(HANDS_OFF)) break;
       log(`#${item.id} ${reason}${repaired ? '' : ', one repair session'}`, 'warn');
       if (repaired) break;
       repaired = true;
       emit('step.finished', { task, step: { name: 'repair', text: reason } }, 'warning');
+      if (!gated.conflict) continue;
+      // a conflict, also one that another merge into the base caused: the repair session merges the base in
+      const repair = await repairConflict(item, pull, worktree, sessions);
+      noteRisk(item.id, riskOf(resultFile(item)));
+      if (signal.stopped) {
+        reason = 'stopped';
+        break;
+      }
+      // no conflict any more by now: the same commit goes to the merge gate again
+      if (!repair) next = { step: 'merge', head };
+      else if (repair === 'conflict repaired') {
+        // a new head: it is reviewed before it is merged
+        log(`#${item.id} ${repair}`, 'info');
+        next = { step: 'review' };
+      } else {
+        reason = repair;
+        break;
+      }
     }
     if (pull && !reason) {
       // merged: the worktree and the branches can go
@@ -1441,7 +1516,7 @@ export async function runRepository(context: RepositoryContext): Promise<Reposit
     console.log(`models: ${MODEL_LINE}`);
     if (milestone)
       console.log(`retro: ${RETRO.enabled ? `after the last merge, model ${RETRO.model}` : 'off'}`);
-    console.log(`tracker: ${tracker.name}, base: ${BASE}`);
+    console.log(`tracker: ${tracker.name}, base: ${BASE}, parallel: ${PARALLEL}`);
     console.log(`required checks: ${required.join(', ') || 'none'}`);
     console.log(`session token: ${TOKEN_SOURCE ?? 'none, the session uses your login'}`);
     console.log(`protected paths: ${PROTECTED.join(' ')}`);
@@ -1456,6 +1531,7 @@ export async function runRepository(context: RepositoryContext): Promise<Reposit
   const report = context.status;
   const statusTitle = titleOf(context.options);
   let blockedShown = false;
+  const sessionsLine = () => `${slots.active} of ${PARALLEL} sessions running`;
   emit = (type, body, tone) => {
     events.emit(type, body, tone);
     if (type === 'run.started') {
@@ -1481,7 +1557,10 @@ export async function runRepository(context: RepositoryContext): Promise<Reposit
       });
     } else if (type === 'task.started' && blockedShown) {
       blockedShown = false;
-      report({ state: 'working', title: statusTitle });
+      report({ state: 'working', title: statusTitle, msg: sessionsLine() });
+    } else if (type === 'deliver.sessions' && !blockedShown) {
+      // the number of running sessions; a blocked report stays until the next task starts
+      report({ state: 'working', title: statusTitle, msg: sessionsLine() });
     } else if (type === 'run.finished') {
       report(finishReport(body, statusTitle, needsYou.length));
     }
@@ -1494,6 +1573,7 @@ export async function runRepository(context: RepositoryContext): Promise<Reposit
     `events: run ${eventRun}${eventDir ? ` in ${eventDir}` : ', not written: no directory'}`,
     'dim',
   );
+  log(`parallel: up to ${PARALLEL} sessions at once, one merge at a time`, 'dim');
   if (cutNote) log(cutNote, 'info');
   if (!TOKEN_SOURCE) {
     log(
@@ -1642,101 +1722,141 @@ export async function runRepository(context: RepositoryContext): Promise<Reposit
     return repairBug;
   }
 
+  /** What follows the work of an item: it is merged, stopped, handed over or set aside. */
+  async function settle(item: Item, { reason, pull }: { reason?: string; pull?: Pull }) {
+    if (!reason) {
+      merged.push(
+        `#${item.id} ${pull?.url}${risks.has(item.id) ? ` (risk ${risks.get(item.id)})` : ''}`,
+      );
+      log(`#${item.id} merged: ${pull?.url}`, 'ok');
+      mark(item, 'merged');
+      if (risks.get(item.id) === 'high') tell(item, pull, 'high risk: merged', false);
+      emit(
+        'task.finished',
+        { task: `issue-${item.id}`, outcome: 'succeeded', text: 'merged' },
+        'success',
+      );
+      emitMerged(item.id, pull?.url);
+      emit('progress', { done: merged.length, total, label: 'PBIs' });
+      // its dependents become ready once the tracker closed it
+      await untilClosed(item.id);
+      return;
+    }
+    if (reason === 'stopped') {
+      log(`#${item.id} stopped: not merged${pull ? `, ${pull.url}` : ''}`, 'warn');
+      emit('task.finished', { task: `issue-${item.id}`, outcome: 'cancelled', text: 'stopped' });
+    } else {
+      const planned = reason.endsWith(HANDS_OFF);
+      const why = planned ? reason.slice(0, -HANDS_OFF.length) : reason;
+      (planned ? handedOver : aside).set(item.id, `${why}${pull ? `, ${pull.url}` : ''}`);
+      if (planned && pull) handedPulls.set(item.id, { item, pull });
+      mark(item, planned ? 'handed-over' : 'set-aside');
+      tell(item, pull, why, planned);
+      log(
+        planned
+          ? `#${item.id} handed over: ${why}, merge it yourself`
+          : `#${item.id} set aside: ${reason}`,
+        planned ? 'warn' : 'bad',
+      );
+      emit(
+        'task.finished',
+        { task: `issue-${item.id}`, outcome: 'skipped', text: reason },
+        'warning',
+      );
+      emitSetAside(planned ? 'handover' : 'aside', item.id, pull?.url, why);
+      // after the task: an attention of a finished task would close with it
+      emit(
+        'attention',
+        {
+          id: `aside-${item.id}`,
+          reason: 'deliver.set-aside',
+          text: `#${item.id} set aside: ${reason}`,
+          needsYou: true,
+          links: [{ rel: pull ? 'pull-request' : 'issue', url: pull?.url ?? item.url }],
+        },
+        'warning',
+      );
+    }
+    emit('progress', { done: merged.length, total, label: 'PBIs' });
+  }
+
+  // The frontier: up to PARALLEL items are worked at once, each in its own worktree. It is read again whenever one
+  // of them ends (merged, set aside, handed over): an item becomes ready when its blocker is merged and closed.
+  const running = new Map<number, Promise<void>>();
+  /** The items started in this run (--max counts them). */
+  let started = 0;
   try {
-    for (let count = 0; !signal.stopped && (MAX === 0 || count < MAX); count++) {
+    for (let first = true; !signal.stopped && !harnessDead; first = false) {
       // an issue closes a moment after its merge: do not pick it again
       const open = tracker
         .items()
         .filter((item) => !merged.some((line) => line.startsWith(`#${item.id} `)));
-      if (count === 0) {
+      if (first) {
         total = open.length;
         emit('progress', { done: 0, total, label: 'PBIs' });
       }
-      waiting = [];
-      let next: Item | undefined = await checkBase();
-      if (baseBlocked) break;
-      if (next) {
-        // the Bug of a red base goes first, as a normal iteration (it may not be in the selection)
-        const repair = next;
-        next = open.find((item) => item.id === repair.id) ?? repair;
+      const maxed = MAX > 0 && started >= MAX;
+      // the Bug of a red base runs alone: nothing else starts, and the base is read again after it
+      const repairing = repairBug !== undefined && running.has(repairBug.id);
+      // how many items start now: the free places, within --max
+      const room =
+        maxed || repairing
+          ? 0
+          : Math.min(PARALLEL - running.size, MAX > 0 ? MAX - started : PARALLEL);
+      let starts: Item[] = [];
+      let candidates = open.filter(
+        (item) => !running.has(item.id) && !aside.has(item.id) && !handedOver.has(item.id),
+      );
+      if (room > 0) {
+        const bug = await checkBase();
+        if (baseBlocked) break;
+        if (bug) {
+          // the Bug of a red base goes first (it may not be in the selection); the others wait for it
+          starts = [open.find((item) => item.id === bug.id) ?? bug];
+          candidates = [];
+        }
       }
-      for (const item of next ? [] : open) {
-        if (aside.has(item.id) || handedOver.has(item.id)) continue;
+      waiting = [];
+      for (const item of candidates) {
         const reason = tracker.waitReason(item);
         if (reason) waiting.push(`#${item.id} ${reason}`);
-        else if (!next) next = item;
+        else if (starts.length < room) starts.push(item);
       }
-      if (!next) {
-        // only handed-over pull requests are left (and what they block): wait for a person to merge them
-        if (!(await awaitHandovers())) break;
-        count--;
+      for (const item of starts) {
+        log(`#${item.id} start: ${item.title} (${open.length} open)`, 'info');
+        // x: the issues finished, set aside or running so far, plus this one; the log file is read at a fixed width
+        const begun = merged.length + aside.size + handedOver.size + running.size + 1;
+        log(
+          progressLine(begun, total, process.stdout.isTTY ? (process.stdout.columns ?? 80) : 80),
+          'info',
+        );
+        emit('task.started', { task: `issue-${item.id}`, subject: tracker.itemSubject(item) });
+        started += 1;
+        // a failing tracker or git call sets the issue aside, it does not end the run
+        const work = deliver(item)
+          .catch((error): { reason?: string; pull?: Pull } => ({
+            reason: `error: ${firstLine(error)}`,
+          }))
+          .then((result) => settle(item, result))
+          .finally(() => running.delete(item.id));
+        running.set(item.id, work);
+      }
+      if (running.size === 0) {
+        // nothing runs and nothing can start: only handed-over pull requests are left (and what they block)
+        if (maxed || !(await awaitHandovers())) break;
         continue;
       }
-      log(`#${next.id} start: ${next.title} (${open.length} open)`, 'info');
-      // x: the issues finished or set aside so far, plus this one; the log file is read at a fixed width
-      const begun = merged.length + aside.size + handedOver.size + 1;
-      log(
-        progressLine(begun, total, process.stdout.isTTY ? (process.stdout.columns ?? 80) : 80),
-        'info',
-      );
-      emit('task.started', { task: `issue-${next.id}`, subject: tracker.itemSubject(next) });
-      // a failing tracker or git call sets the issue aside, it does not end the run
-      const { reason, pull } = await deliver(next).catch(
-        (error): { reason?: string; pull?: Pull } => ({ reason: `error: ${firstLine(error)}` }),
-      );
-      if (!reason) {
-        merged.push(
-          `#${next.id} ${pull?.url}${risks.has(next.id) ? ` (risk ${risks.get(next.id)})` : ''}`,
-        );
-        log(`#${next.id} merged: ${pull?.url}`, 'ok');
-        mark(next, 'merged');
-        if (risks.get(next.id) === 'high') tell(next, pull, 'high risk: merged', false);
-        emit(
-          'task.finished',
-          { task: `issue-${next.id}`, outcome: 'succeeded', text: 'merged' },
-          'success',
-        );
-        emitMerged(next.id, pull?.url);
-        await untilClosed(next.id);
-      } else if (reason === 'stopped') {
-        log(`#${next.id} stopped: not merged${pull ? `, ${pull.url}` : ''}`, 'warn');
-        emit('task.finished', { task: `issue-${next.id}`, outcome: 'cancelled', text: 'stopped' });
-      } else {
-        const planned = reason.endsWith(HANDS_OFF);
-        const why = planned ? reason.slice(0, -HANDS_OFF.length) : reason;
-        (planned ? handedOver : aside).set(next.id, `${why}${pull ? `, ${pull.url}` : ''}`);
-        if (planned && pull) handedPulls.set(next.id, { item: next, pull });
-        mark(next, planned ? 'handed-over' : 'set-aside');
-        tell(next, pull, why, planned);
-        log(
-          planned
-            ? `#${next.id} handed over: ${why}, merge it yourself`
-            : `#${next.id} set aside: ${reason}`,
-          planned ? 'warn' : 'bad',
-        );
-        emit(
-          'task.finished',
-          { task: `issue-${next.id}`, outcome: 'skipped', text: reason },
-          'warning',
-        );
-        emitSetAside(planned ? 'handover' : 'aside', next.id, pull?.url, why);
-        // after the task: an attention of a finished task would close with it
-        emit(
-          'attention',
-          {
-            id: `aside-${next.id}`,
-            reason: 'deliver.set-aside',
-            text: `#${next.id} set aside: ${reason}`,
-            needsYou: true,
-            links: [{ rel: pull ? 'pull-request' : 'issue', url: pull?.url ?? next.url }],
-          },
-          'warning',
-        );
-      }
-      emit('progress', { done: merged.length, total, label: 'PBIs' });
-      if (harnessDead) break;
+      // the frontier is read again when an item ends
+      await Promise.race(running.values());
     }
+    // a stop, a dead harness or a red base starts nothing more: the running items end first
+    await Promise.all(running.values());
   } catch (error) {
+    // the sessions of the other items end with the run; their items stay resumable by their labels
+    if (running.size) {
+      signal.request();
+      await Promise.allSettled(running.values());
+    }
     emit('run.finished', { outcome: 'failed', text: firstLine(error).slice(0, 300) }, 'danger');
     log(`run failed: ${firstLine(error)}`, 'bad');
     return ended(1);

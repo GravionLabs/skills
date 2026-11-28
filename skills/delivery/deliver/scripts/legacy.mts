@@ -9,6 +9,7 @@ export const CONFIG_KEYS = [
   'protectedPaths',
   'handoverMinutes',
   'mergeRisk',
+  'parallel',
   'review',
   'retro',
 ];

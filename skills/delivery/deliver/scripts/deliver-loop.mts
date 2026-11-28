@@ -42,6 +42,7 @@ const parsed = (() => {
         tracker: { type: 'string' },
         harness: { type: 'string' },
         max: { type: 'string', default: '0' },
+        parallel: { type: 'string' },
         model: { type: 'string' },
         'review-model': { type: 'string' },
         'review-harness': { type: 'string' },
@@ -59,7 +60,7 @@ const parsed = (() => {
     // an unknown option or a missing value: one line, no stack trace
     const message = (error as Error).message.split('\n')[0];
     console.error(
-      `deliver-loop: ${message}. Options: --milestone, --feature, --issues, --objective, --base, --tracker, --harness, --max, --model, --review-model, --review-harness, --session-minutes, --merge-minutes, --handover-minutes, --merge-risk, --dry-run, --allow-no-required-checks, --trust-authors, --no-retro.`,
+      `deliver-loop: ${message}. Options: --milestone, --feature, --issues, --objective, --base, --tracker, --harness, --max, --parallel, --model, --review-model, --review-harness, --session-minutes, --merge-minutes, --handover-minutes, --merge-risk, --dry-run, --allow-no-required-checks, --trust-authors, --no-retro.`,
     );
     process.exit(1);
   }
@@ -119,6 +120,7 @@ const config: {
     protectedPaths?: string[];
     handoverMinutes?: number;
     mergeRisk?: unknown;
+    parallel?: unknown;
     review?: unknown;
     retro?: unknown;
   };
@@ -141,6 +143,10 @@ if (!RISK_LEVELS.includes(MERGE_RISK))
     `--merge-risk (deliver.mergeRisk) is one of ${RISK_LEVELS.join(', ')}, not "${MERGE_RISK}"`,
     2,
   );
+// How many role sessions run at once: the flag, then the config, else 2. 1 works one issue after the other.
+const PARALLEL = Number(opt.parallel ?? config.deliver?.parallel ?? 2);
+if (!Number.isInteger(PARALLEL) || PARALLEL < 1)
+  fail('--parallel (deliver.parallel) needs a whole number from 1', 64);
 for (const warning of legacyWarnings) log(warning, 'warn');
 const configWarning = unknownConfigKeys(config.deliver);
 if (configWarning) log(configWarning, 'warn');
@@ -302,6 +308,7 @@ const result = await runRepository({
     allowNoRequiredChecks: opt['allow-no-required-checks'],
     model: opt.model,
     max: MAX,
+    parallel: PARALLEL,
     sessionMinutes: SESSION_MINUTES,
     mergeMinutes: MERGE_MINUTES,
     handoverMinutes: HANDOVER_MINUTES,

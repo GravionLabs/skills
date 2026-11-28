@@ -125,7 +125,8 @@ describe('deliver loop', () => {
     expect(out.sessions[0]?.prompt).toMatch(
       /^\/deliver 11 --base main --issue-file \S+11\.issue\.md$/,
     );
-    expect(out.events.map((e) => e.type)).toEqual([
+    // the running sessions are counted in deliver.sessions events of their own (parallel cases)
+    expect(out.events.map((e) => e.type).filter((type) => type !== 'deliver.sessions')).toEqual([
       'run.started',
       'progress',
       'task.started',

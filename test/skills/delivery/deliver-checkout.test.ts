@@ -183,6 +183,7 @@ describe('a run whose root is a cached clone', () => {
         dryRun: false,
         allowNoRequiredChecks: false,
         max: 0,
+        parallel: 1,
         sessionMinutes: 1,
         mergeMinutes: 1,
         handoverMinutes: 0,
