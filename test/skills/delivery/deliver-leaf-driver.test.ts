@@ -137,7 +137,11 @@ describe('the child-process host', () => {
   });
   afterAll(() => rmSync(dir, { recursive: true, force: true }));
 
-  /** A host whose session is `node -e <script>`; the prompt is passed as its argument. */
+  /**
+   * A host whose session is `node -e <script>`; the prompt is passed as its argument. One second of waiting lasts
+   * 1 ms (`tickMs`): a wait that expects the session to end gets the stage timeout of the leaf (5.4 s here), since a
+   * node process takes longer than a few dozen ms to start on a loaded runner.
+   */
   const hostOf = (script: string, sessionMs = 10_000) =>
     processHost({
       root,
@@ -167,7 +171,7 @@ describe('the child-process host', () => {
     );
     const started = await host.startWorker(start('issue-5-implement'));
     expect(started).toEqual({ handle: 'issue-5-implement.1', name: 'issue-5-implement' });
-    expect(await host.waitAny([started.handle!], 60)).toEqual({
+    expect(await host.waitAny([started.handle!], STAGE_TIMEOUT_S)).toEqual({
       handle: started.handle,
       state: 'done',
     });
@@ -184,7 +188,9 @@ describe('the child-process host', () => {
   it('reports error for a session without a result line, timeout for one that runs on', async () => {
     const quiet = hostOf("console.log('done, no result')");
     const ended = await quiet.startWorker(start('issue-5-fix-1'));
-    expect(await quiet.waitAny([ended.handle!], 60)).toMatchObject({ state: 'error' });
+    expect(await quiet.waitAny([ended.handle!], STAGE_TIMEOUT_S)).toMatchObject({
+      state: 'error',
+    });
     expect(quiet.readResult(ended.handle!)).toEqual({ handle: ended.handle, report: '' });
     const long = hostOf('setInterval(() => {}, 1000)');
     const running = await long.startWorker(start('issue-5-review-1'));
