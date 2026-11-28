@@ -1,4 +1,4 @@
-// deliver: up to `deliver.parallel` role sessions at once (default 2), each issue in its own worktree, merges one at a
+// deliver: up to `deliver.parallel` role sessions at once (default 1), each issue in its own worktree, merges one at a
 // time per base branch (#1121). The limits themselves: parallel.mts.
 import { mkdirSync, rmSync, writeFileSync } from 'node:fs';
 import path from 'node:path';
@@ -56,7 +56,7 @@ describe('Slots and MergeLocks', () => {
   it('shares the slots of an Objective: each view counts its own holders within the shared limit', async () => {
     const shared = new Slots(2);
     const heard: number[] = [];
-    const [app, lib] = [shared.within((active) => heard.push(active)), shared.within()];
+    const [app, lib] = [shared.within(3, (active) => heard.push(active)), shared.within(3)];
     expect(app.limit).toBe(2);
     const freeApp = await app.acquire();
     const freeLib = await lib.acquire();
@@ -73,6 +73,23 @@ describe('Slots and MergeLocks', () => {
     freeApp();
     expect([shared.active, app.active, lib.active]).toEqual([0, 0, 0]);
     expect(heard).toEqual([1, 2, 1, 0]);
+  });
+
+  it('keeps a view within its own limit and leaves the other shared slots free', async () => {
+    const shared = new Slots(2);
+    const [app, lib] = [shared.within(1), shared.within(1)];
+    const freeApp = await app.acquire();
+    let second = false;
+    const waiting = app.acquire().then((free) => {
+      second = true;
+      return free;
+    });
+    const freeLib = await lib.acquire();
+    expect([app.limit, shared.active, second]).toEqual([1, 2, false]);
+    freeApp();
+    (await waiting)();
+    freeLib();
+    expect([shared.active, app.active, lib.active]).toEqual([0, 0, 0]);
   });
 
   it('keeps one lock per repository and base branch', async () => {
@@ -100,11 +117,30 @@ describe('Slots and MergeLocks', () => {
 });
 
 describe('deliver loop: parallel sessions', () => {
-  it('runs two independent issues at once by default and merges both one after the other', async () => {
+  it('runs one session at a time without config', async () => {
     const out = await loop(
-      { items: [item(41), item(42)], sessionMs: 400 },
+      { items: [item(31), item(32)], sessionMs: 150 },
       { parallel: 'default' },
     );
+    expect(out.status).toBe(0);
+    expect(peak(out.spans)).toBe(1);
+    expect(out.log).toContain('parallel: up to 1 sessions at once');
+  });
+
+  it('keeps two sessions with deliver.parallel 2', async () => {
+    config({ parallel: 2, maxSessions: 1 });
+    const out = await loop(
+      { items: [item(33), item(34)], sessionMs: 400 },
+      { parallel: 'default' },
+    );
+    expect(out.status).toBe(0);
+    // a run of one repository ignores maxSessions
+    expect(peak(out.spans)).toBe(2);
+    expect(out.stderr).not.toContain('deliver.maxSessions');
+  });
+
+  it('runs two independent issues at once with parallel 2 and merges both one after the other', async () => {
+    const out = await loop({ items: [item(41), item(42)], sessionMs: 400 }, { parallel: 2 });
     expect(out.status).toBe(0);
     const [a] = implementers(out.spans, 41);
     const [b] = implementers(out.spans, 42);
@@ -194,6 +230,26 @@ describe('deliver loop: parallel sessions', () => {
     const out = await loop({ items: [item(95)] }, { parallel: 0 });
     expect(out.status).toBe(64);
     expect(out.stderr).toContain('--parallel (deliver.parallel) needs a whole number from 1');
+  });
+
+  it('refuses --max-sessions below 1 for an Objective run', async () => {
+    const out = await loop(
+      { items: [item(96)] },
+      { args: ['--objective', 'fake/repo#1', '--dry-run', '--max-sessions', '0'] },
+    );
+    expect(out.status).toBe(64);
+    expect(out.stderr).toContain(
+      '--max-sessions (deliver.maxSessions) needs a whole number from 1',
+    );
+  });
+
+  it('ignores --max-sessions in a run of one repository', async () => {
+    const out = await loop(
+      { items: [item(97), item(98)], sessionMs: 400 },
+      { parallel: 2, args: ['--max-sessions', '1'] },
+    );
+    expect(out.status).toBe(0);
+    expect(peak(out.spans)).toBe(2);
   });
 });
 

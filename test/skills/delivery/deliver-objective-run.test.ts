@@ -83,12 +83,12 @@ describe('deliver-loop --objective', () => {
   });
   const run = (
     scenario: Scenario,
-    extra: { parallel?: number; env?: Record<string, string> } = {},
+    extra: { parallel?: number; args?: string[]; env?: Record<string, string> } = {},
   ) =>
     loop(
       { sessionMs: 0, ...scenario },
       {
-        args: ['--objective', 'x/app#1', '--no-retro'],
+        args: ['--objective', 'x/app#1', '--no-retro', ...(extra.args ?? [])],
         parallel: extra.parallel ?? 2,
         env: { DELIVER_REPOS_DIR: reposDir, ...extra.env },
       },
@@ -107,6 +107,26 @@ describe('deliver-loop --objective', () => {
     expect(out.stdout).toContain('done (2):');
     // a repository without a Feature has nothing to do
     expect(out.stdout).toMatch(/x\/cli \(no unit\)/);
+  });
+
+  it('never runs more than maxSessions across repositories nor more than parallel in one', async () => {
+    const out = await run(
+      {
+        ...objective({
+          'x/app': [{ work: [14, 15] }],
+          'x/lib': [{ work: [27, 28] }],
+          'x/cli': [{ work: [34, 35] }],
+        }),
+        sessionMs: 300,
+      },
+      { parallel: 1, args: ['--max-sessions', '2'] },
+    );
+    expect(out.status, out.stdout + out.stderr).toBe(0);
+    const peak = (spans: Span[]) =>
+      Math.max(0, ...spans.map((s) => spans.filter((other) => overlap(s, other)).length));
+    expect(peak(out.spans)).toBe(2);
+    for (const tens of [1, 2, 3])
+      expect(peak(out.spans.filter((s) => Math.floor(s.id / 10) === tens))).toBe(1);
   });
 
   it('starts a repository with an unreleased upstream milestone after the release, never before', async () => {

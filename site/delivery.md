@@ -42,7 +42,7 @@ Details: [what the loop refuses](guides/deliver.md#what-the-loop-refuses), [publ
 
 ## Role sessions
 
-The loop starts `/deliver` (implement), `/deliver-review` (review) and, with `--milestone`, `/retro --post`, each in a session of its own with the model of its role ([`models`](usage/project-config.md#models)). `deliver-triage`, a session for one attention event, is planned ([ADR 0011](https://github.com/GravionLabs/skills/blob/main/docs/adr/0011-objective-runs-in-three-layers-loop-code-deliver-triage-poimen-as-host.md)) and not built yet, and so is `deliver-loop --objective`.
+The loop starts `/deliver` (implement), `/deliver-review` (review) and, with `--milestone`, `/retro --post`, each in a session of its own with the model of its role ([`models`](usage/project-config.md#models)). `/deliver-triage --case <file> --result <file>` judges one attention event within fixed actions ([ADR 0011](https://github.com/GravionLabs/skills/blob/main/docs/adr/0011-objective-runs-in-three-layers-loop-code-deliver-triage-poimen-as-host.md)); the loop does not start it yet, and `deliver-loop --objective` does not run an Objective yet.
 
 Settings: `deliver.base`, `deliver.tracker`, `deliver.harness`, `deliver.handoverMinutes`, `deliver.mergeRisk`, `deliver.review`, `deliver.protectedPaths` ([project config](usage/project-config.md#deliver)). The tracker contract is `scripts/tracker.mts` in the skill, GitHub is `scripts/tracker/github.mts`; the agent CLIs are in `scripts/harness.mts`.
 
@@ -56,4 +56,4 @@ The loop writes [agent-events](https://github.com/GravionLabs/agent-events) to `
 
 ## Parallel runs
 
-Run one loop per repository. Within it, up to `deliver.parallel` sessions (default 2, `--parallel`) work the ready issues at once, each in its own worktree; merges stay one at a time ([project config](usage/project-config.md)). Every session uses its own worktree, so a hand-started `/deliver <nr>` on another issue in the same repository does not collide with the loop.
+Run one loop per repository. It works the ready issues one after the other; `deliver.parallel` (default 1, `--parallel`) is the limit of sessions per repository (per base branch), each issue in its own worktree, and merges stay one at a time. `deliver.maxSessions` (default 3, `--max-sessions`) caps the sessions of an Objective run across all its repositories ([project config](usage/project-config.md)). Every session uses its own worktree, so a hand-started `/deliver <nr>` on another issue in the same repository does not collide with the loop.

@@ -280,7 +280,7 @@ export type RepositoryOptions = {
   model?: string;
   /** At most this many issues, 0: no limit. */
   max: number;
-  /** At most this many role sessions at once (`deliver.parallel`, `--parallel`); 1 works one issue after the other. */
+  /** At most this many role sessions at once in this repository (`deliver.parallel`, `--parallel`); 1 works one issue after the other. */
   parallel: number;
   sessionMinutes: number;
   mergeMinutes: number;
@@ -316,7 +316,7 @@ export type RepositoryContext = {
   out: Output;
   /** One merge at a time per repository and base branch; repositories of one run share them. Default: of this run. */
   mergeLocks?: MergeLocks;
-  /** The role sessions of a run over several repositories (an Objective): its limit wins over `parallel`. */
+  /** The role sessions of a run over several repositories (an Objective, `maxSessions`): this one also stays within `parallel`. */
   slots?: Slots;
 };
 export type RepositoryResult = {
@@ -557,8 +557,10 @@ export async function runRepository(context: RepositoryContext): Promise<Reposit
     reportedSessions = running;
     emit('deliver.sessions', { deliver: { repo: tracker.repo, running, limit: slots.limit } });
   };
-  // an Objective run shares its slots across the repositories: this one counts its own sessions
-  const slots = context.slots ? context.slots.within(onSessions) : new Slots(PARALLEL, onSessions);
+  // an Objective run shares its slots across the repositories: this one holds at most PARALLEL of them
+  const slots = context.slots
+    ? context.slots.within(PARALLEL, onSessions)
+    : new Slots(PARALLEL, onSessions);
   const mergeLock = (context.mergeLocks ?? new MergeLocks()).of(tracker.repo, BASE);
 
   /** Prints the readable part of one stream record and keeps the numbers of the session. */
@@ -1578,7 +1580,7 @@ export async function runRepository(context: RepositoryContext): Promise<Reposit
     'dim',
   );
   log(
-    `parallel: up to ${slots.limit} sessions at once${context.slots ? ' across the repositories of the run' : ''}, one merge at a time`,
+    `parallel: up to ${slots.limit} sessions at once${context.slots ? ' in this repository' : ''}, one merge at a time`,
     'dim',
   );
   if (cutNote) log(cutNote, 'info');

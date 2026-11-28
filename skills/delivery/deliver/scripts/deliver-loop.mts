@@ -50,6 +50,7 @@ const parsed = (() => {
         harness: { type: 'string' },
         max: { type: 'string', default: '0' },
         parallel: { type: 'string' },
+        'max-sessions': { type: 'string' },
         model: { type: 'string' },
         'review-model': { type: 'string' },
         'review-harness': { type: 'string' },
@@ -67,7 +68,7 @@ const parsed = (() => {
     // an unknown option or a missing value: one line, no stack trace
     const message = (error as Error).message.split('\n')[0];
     console.error(
-      `deliver-loop: ${message}. Options: --milestone, --feature, --issues, --objective, --base, --tracker, --harness, --max, --parallel, --model, --review-model, --review-harness, --session-minutes, --merge-minutes, --handover-minutes, --merge-risk, --dry-run, --allow-no-required-checks, --trust-authors, --no-retro.`,
+      `deliver-loop: ${message}. Options: --milestone, --feature, --issues, --objective, --base, --tracker, --harness, --max, --parallel, --max-sessions, --model, --review-model, --review-harness, --session-minutes, --merge-minutes, --handover-minutes, --merge-risk, --dry-run, --allow-no-required-checks, --trust-authors, --no-retro.`,
     );
     process.exit(1);
   }
@@ -125,6 +126,7 @@ const config: {
     handoverMinutes?: number;
     mergeRisk?: unknown;
     parallel?: unknown;
+    maxSessions?: unknown;
     review?: unknown;
     retro?: unknown;
   };
@@ -147,10 +149,16 @@ if (!RISK_LEVELS.includes(MERGE_RISK))
     `--merge-risk (deliver.mergeRisk) is one of ${RISK_LEVELS.join(', ')}, not "${MERGE_RISK}"`,
     2,
   );
-// How many role sessions run at once: the flag, then the config, else 2. 1 works one issue after the other.
-const PARALLEL = Number(opt.parallel ?? config.deliver?.parallel ?? 2);
+// How many role sessions run at once per repository (and base branch): the flag, then the config, else 1, which
+// works one issue after the other.
+const PARALLEL = Number(opt.parallel ?? config.deliver?.parallel ?? 1);
 if (!Number.isInteger(PARALLEL) || PARALLEL < 1)
   fail('--parallel (deliver.parallel) needs a whole number from 1', 64);
+// The cap of an Objective run across its repositories: the flag, then the config, else 3. A run of one repository
+// ignores it, also an invalid value.
+const MAX_SESSIONS = Number(opt['max-sessions'] ?? config.deliver?.maxSessions ?? 3);
+if (opt.objective !== undefined && (!Number.isInteger(MAX_SESSIONS) || MAX_SESSIONS < 1))
+  fail('--max-sessions (deliver.maxSessions) needs a whole number from 1', 64);
 for (const warning of legacyWarnings) log(warning, 'warn');
 const configWarning = unknownConfigKeys(config.deliver);
 if (configWarning) log(configWarning, 'warn');
@@ -352,7 +360,7 @@ process.exit(result.exitCode);
 
 /**
  * The run of an Objective: one frontier over its repositories (objective-run.mts), each in a clone of its own below the
- * run folder, all sessions within the limit of `--parallel`. The base of every repository is `--base`, else
+ * run folder, each within `--parallel` sessions and all of them within `--max-sessions`. The base of every repository is `--base`, else
  * `release/next`; a unit's lines name its repository.
  */
 async function objectiveRun(ref: string): Promise<number> {
@@ -360,7 +368,7 @@ async function objectiveRun(ref: string): Promise<number> {
   output.toFile(path.join(commonDir, 'deliver', 'loop.log'));
   signal.watch(path.join(runDir, 'stop'));
   const base = opt.base ?? 'release/next';
-  const slots = new Slots(PARALLEL);
+  const slots = new Slots(MAX_SESSIONS);
   const mergeLocks = new MergeLocks();
   const sources = new Map<string, ReturnType<typeof makeSource>>();
   const sourceOf = (repo: string) => {
@@ -380,7 +388,7 @@ async function objectiveRun(ref: string): Promise<number> {
   });
   const title = `objective ${ref}`;
   log(
-    `run ${runId}: ${title}, base ${base}, up to ${PARALLEL} sessions across its repositories`,
+    `run ${runId}: ${title}, base ${base}, up to ${PARALLEL} sessions per repository, ${MAX_SESSIONS} across them`,
     'dim',
   );
   report({ state: 'working', title });
