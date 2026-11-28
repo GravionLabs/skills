@@ -16,6 +16,12 @@ export type WorkerScript = {
   state?: StepResult['state'];
   /** Blocked first: the lead's answer to its question; after `sent` the worker finishes as `state` says. */
   blocked?: 'sent' | 'owner';
+  /** Blocked: its question (default `which option?`). */
+  question?: string;
+  /** Implementer: writes no result file. */
+  noResult?: boolean;
+  /** Blocked: it asks again after every answer, each time after this many seconds. */
+  asksAgainAfter?: number;
   /** Implementer: no pull request is opened. */
   noPull?: boolean;
   /** Implementer: the risk level of its result file (default `low`). */
@@ -79,15 +85,18 @@ export async function runLead(
       const handle = action.handles[0]!;
       const worker = workers.get(handle)!;
       if (worker.blocked) {
-        result = { handle, state: 'blocked', question: 'which option?' };
+        if (worker.script.asksAgainAfter) onWait?.(worker.script.asksAgainAfter);
+        result = { handle, state: 'blocked', question: worker.script.question ?? 'which option?' };
         continue;
       }
       const state = worker.script.state ?? 'done';
+      // a worker that does not finish lets the whole wait pass
+      if (state === 'timeout') onWait?.(action.timeout);
       if (state === 'done') work(worker.start, worker.script, fakeDir, issue, starts.implementer);
       result = { handle, state };
     } else if (action.question !== undefined) {
       const worker = workers.get(action.handle)!;
-      worker.blocked = false;
+      worker.blocked = worker.script.asksAgainAfter !== undefined;
       result = { handle: action.handle, answer: worker.script.blocked, question: action.question };
     } else {
       const report = path.join(fakeDir, `${action.handle}.report.md`);
@@ -110,6 +119,7 @@ function work(
     // a later implementer pushes to the pull request
     if (implementers > 1)
       writeFileSync(path.join(fakeDir, `head-${100 + issue}`), `fade0${implementers}`);
+    if (script.noResult) return;
     const file = worker.env.DELIVER_RESULT_FILE!;
     mkdirSync(path.dirname(file), { recursive: true });
     writeFileSync(file, JSON.stringify({ risk: { level: script.risk ?? 'low' } }));

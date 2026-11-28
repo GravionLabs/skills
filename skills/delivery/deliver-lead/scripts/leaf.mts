@@ -47,6 +47,11 @@ import type { Item, Pull, Tracker } from '../../deliver/scripts/tracker.mts';
 
 /** How long one wait for a worker lasts, in seconds: the session timeout of the loop (90 minutes). */
 export const STAGE_TIMEOUT_S = 90 * 60;
+/**
+ * The session budget of one worker, from its `deliver.worker` event: a `timeout` or a question waits again within it,
+ * then the issue is handed over (the loop's session timeout). A start that gets no usable answer within it ends.
+ */
+export const SESSION_BUDGET_S = STAGE_TIMEOUT_S;
 /** How long a gate may answer `retry` before the flow ends: the merge wait of the loop (`--merge-minutes` 30). */
 export const RETRY_LIMIT_S = 30 * 60;
 /** The back-off of one wait after `retry`: half the time waited so far, within these bounds. */
@@ -179,6 +184,22 @@ const WORKER_STEP = /^(implement|fix-\d+|review-\d+)$/;
 const HANDOVER_GATES = new Set(['guard', 'merge-approved', 'limits']);
 
 type Body = Record<string, unknown>;
+type HandoverOptions = {
+  word?: string;
+  /** A person merges the pull request (`deliver.handover`); decided by the gate, never by worker text. */
+  planned?: boolean;
+  /** Events that follow the hand-over event. */
+  before?: () => void;
+};
+
+/** Worker text in a reason: one line, no code span or marker, quoted, at most 300 characters. */
+const quoted = (text: string): string => {
+  const line = text
+    .replace(/[\u0000-\u001f\u007f-\u009f`<>]+/g, ' ')
+    .replace(/\s+/g, ' ')
+    .trim();
+  return JSON.stringify(line.length > 300 ? `${line.slice(0, 300)}…` : line);
+};
 const fieldsOf = (event: RunEvent | undefined, key: string): Body =>
   (event?.[key] && typeof event[key] === 'object' ? event[key] : {}) as Body;
 const stepName = (event: RunEvent): string => String(fieldsOf(event, 'step').name ?? '');
@@ -408,9 +429,12 @@ export async function leafStep(input: LeafInput): Promise<Action> {
   };
 
   /** The hand-over of the loop: `deliver.handover` (a person merges) or `deliver.aside`, label, comment, end. */
-  const handOver = (reason: string, gate?: string, word = 'owner'): Action => {
-    const planned = reason.endsWith(HANDS_OFF);
-    const why = planned ? reason.slice(0, -HANDS_OFF.length) : reason;
+  const handOver = (
+    reason: string,
+    gate?: string,
+    { word = 'owner', planned = false, before }: HandoverOptions = {},
+  ): Action => {
+    const why = planned && reason.endsWith(HANDS_OFF) ? reason.slice(0, -HANDS_OFF.length) : reason;
     const code = reasonCode(why);
     emit(
       planned ? 'deliver.handover' : 'deliver.aside',
@@ -429,8 +453,15 @@ export async function leafStep(input: LeafInput): Promise<Action> {
       },
       'warning',
     );
-    return completeHandover(all.at(-1)!);
+    const event = all.at(-1)!;
+    // written after the hand-over event: a lead that dies in between still completes the hand-over on resume
+    before?.();
+    return completeHandover(event);
   };
+
+  /** Seconds since an event was written, by the clock of the run. */
+  const elapsed = (event: RunEvent): number =>
+    Math.max(0, (now() - (Date.parse(String(event.ts ?? '')) || now())) / 1000);
 
   /** `retry`: a wait with back-off, then the same gate again; past `RETRY_LIMIT_S` without progress the task ends. */
   const waitOrEnd = (name: string, gate: GateResult): Action => {
@@ -451,8 +482,11 @@ export async function leafStep(input: LeafInput): Promise<Action> {
   const decide = (name: string, gate: GateResult): Action | undefined => {
     if (gate.result === 'pass') return undefined;
     if (gate.result === 'retry') return waitOrEnd(name, gate);
+    // a person merges only by the word of guard or merge-approved: their reason ends with HANDS_OFF
     if (gate.result === 'owner' && HANDOVER_GATES.has(name))
-      return handOver(gate.reason, name, gate.result);
+      return handOver(gate.reason, name, {
+        planned: name !== 'limits' && gate.reason.endsWith(HANDS_OFF),
+      });
     return end(`${name}: ${gate.reason}`, { gate: name, word: gate.result });
   };
 
@@ -475,6 +509,8 @@ export async function leafStep(input: LeafInput): Promise<Action> {
     const attempt = (Number(d.attempt) || 1) + 1;
     const name = stepName(started);
     const deliver: Body = { ...d, counted: kind, attempt };
+    // the result of the worker before is not the risk of this one
+    if (d.role === 'implementer') rmSync(resultFile, { force: true });
     if (d.role === 'reviewer') {
       // a new file: the verdict of the attempt before is never read as this one
       deliver.verdictFile = path.join(
@@ -604,32 +640,45 @@ export async function leafStep(input: LeafInput): Promise<Action> {
       }
       if (!result?.handle && result?.error)
         return end(`the ${role} did not start: ${result.error}`);
+      // a handle that is no answer to this start: a repeated call returns the start again, within the budget
+      if (result?.handle !== undefined && elapsed(current) >= SESSION_BUDGET_S)
+        return end(
+          `the ${role} did not start: no handle for ${workerName(issue, current)} within ${SESSION_BUDGET_S / 60} min`,
+        );
       return startAction(issue, current);
     }
     const handle = String(fieldsOf(worker, 'deliver').handle);
     const answer = result?.handle === handle ? result : undefined;
+    // the session budget: a timeout or a question waits again within it; the worker may still push, so no second
+    // worker starts on its branch
+    const left = SESSION_BUDGET_S - elapsed(worker);
+    const wait = (): Action =>
+      left > 0
+        ? { do: 'wait-any', handles: [handle], timeout: Math.max(60, Math.ceil(left)) }
+        : handOver('session timeout', undefined, { word: 'timeout' });
     if (answer?.answer === 'owner')
       return handOver(
-        `needs-decision: the ${role} asks what only the owner answers: ${answer.question ?? 'no question given'}`,
+        `needs-decision: the ${role} asks what only the owner answers: ${quoted(answer.question ?? 'no question given')}`,
       );
-    if (answer?.answer) return { do: 'wait-any', handles: [handle], timeout: STAGE_TIMEOUT_S };
+    if (answer?.answer) return wait();
     if (answer?.report === undefined) {
       if (answer?.state === 'done') return { do: 'read-result', handle };
       if (answer?.state === 'blocked')
-        return { do: 'read-result', handle, question: answer.question ?? 'no question given' };
-      if (answer?.state === 'timeout' || answer?.state === 'error' || answer?.state === 'gone') {
+        return left > 0
+          ? { do: 'read-result', handle, question: answer.question ?? 'no question given' }
+          : wait();
+      if (answer?.state === 'timeout') return wait();
+      if (answer?.state === 'error' || answer?.state === 'gone') {
         const limit = gates.limits({ events: all, issue, kind: 'timeout', repo });
         if (limit.result === 'pass')
           return again(current, 'timeout', `one more session after ${answer.state}`);
         if (limit.result !== 'owner') return decide('limits', limit)!;
         return handOver(
-          answer.state === 'timeout'
-            ? limit.reason
-            : `session failed: the ${role} ended without a result (${answer.state})`,
+          `session failed: the ${role} ended without a result (${answer.state})`,
           'limits',
         );
       }
-      return { do: 'wait-any', handles: [handle], timeout: STAGE_TIMEOUT_S };
+      return wait();
     }
     if (!answer.report.trim()) return end(`the ${role} left no report: the work is not done`);
     // the report is a claim: what counts is the pull request and the verdict file the gates read
@@ -653,13 +702,17 @@ export async function leafStep(input: LeafInput): Promise<Action> {
         const limit = gates.limits({ events: all, issue, kind: 'review', repo });
         if (limit.result === 'pass')
           return again(current, 'review', `review round ${round}: ${checked.reason}, one retry`);
-        emit(
-          'step.finished',
-          { task, step: { ...fieldsOf(current, 'step'), text: `review round ${round}: failed` } },
-          'warning',
-        );
-        if (limit.result !== 'owner') return decide('limits', limit)!;
-        return handOver(`review failed: ${checked.reason}`, 'limits');
+        const failed = () =>
+          emit(
+            'step.finished',
+            { task, step: { ...fieldsOf(current, 'step'), text: `review round ${round}: failed` } },
+            'warning',
+          );
+        if (limit.result !== 'owner') {
+          failed();
+          return decide('limits', limit)!;
+        }
+        return handOver(`review failed: ${checked.reason}`, 'limits', { before: failed });
       }
       text = `review round ${round}: ${verdict}`;
     }
@@ -738,6 +791,8 @@ export async function leafStep(input: LeafInput): Promise<Action> {
       if (stop) return stop;
       const n = Number(limit.evidence.count) + 1;
       const d = fieldsOf(started, 'deliver');
+      // the risk of an earlier round never reaches guard or merge: without a new result the guard hands over
+      rmSync(resultFile, { force: true });
       emit('step.started', {
         task,
         step: { name: `fix-${n}`, n, text: `fix round ${n} of ${Number(limit.evidence.limit)}` },
