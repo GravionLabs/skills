@@ -68,6 +68,8 @@ export type Session = {
   role: WorkerStart['role'];
   model: string;
   exit: number | null;
+  /** Ended by the host at the session timeout. */
+  timedOut?: boolean;
 };
 
 type Worker = Session & {
@@ -168,7 +170,13 @@ export function processHost(options: ProcessHostOptions) {
     wake: WAKE,
     /** The workers started so far. */
     sessions: (): Session[] =>
-      [...workers.values()].map(({ handle, role, model, exit }) => ({ handle, role, model, exit })),
+      [...workers.values()].map(({ handle, role, model, exit, timedOut }) => ({
+        handle,
+        role,
+        model,
+        exit,
+        ...(timedOut && { timedOut }),
+      })),
 
     /** `start-worker`: a handle, or `error` with the reason (no worktree, no command, a stop). */
     async startWorker(start: WorkerStart): Promise<VerbResult> {
@@ -198,17 +206,27 @@ export function processHost(options: ProcessHostOptions) {
       Object.assign(env, start.env);
       const handle = handleOf(start.name);
       const log = path.join(runDir, `${handle}.jsonl`);
-      const out = createWriteStream(log);
       const worker = { handle, role: start.role, model: start.model, exit: null, log } as Worker;
       worker.closed = false;
-      worker.ended = new Promise<void>((done) => {
-        const child = launch(options.command({ role: start.role, prompt, model: start.model }), {
+      let child: ChildProcess;
+      try {
+        child = launch(options.command({ role: start.role, prompt, model: start.model }), {
           cwd,
           stdio: ['ignore', 'pipe', 'inherit'],
           env,
         });
+      } catch (error) {
+        // no process: the slot is free again, the start is refused
+        free();
+        return { error: `the harness did not start: ${firstLine(error)}` };
+      }
+      const out = createWriteStream(log);
+      worker.ended = new Promise<void>((done) => {
         worker.child = child;
-        const timer = setTimeout(() => killTree(child), options.sessionMs);
+        const timer = setTimeout(() => {
+          worker.timedOut = true;
+          killTree(child);
+        }, options.sessionMs);
         const unlist = options.enlist(() => killTree(child));
         // a session that printed its result and stays alive (a pending wakeup) is ended after the grace
         let grace: ReturnType<typeof setTimeout> | undefined;

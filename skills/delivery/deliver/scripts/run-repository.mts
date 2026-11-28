@@ -1974,9 +1974,39 @@ export async function runRepository(context: RepositoryContext): Promise<Reposit
           now: leafClock,
         });
       });
+    // The harness failures of the loop (exit ≠ 0 without a result line, no timeout): the loop around the driver waits
+    // 5, 15, 60 minutes before the step script sees the failure, and the third in a row ends the run. The driver
+    // gets the outcome unchanged.
+    const verbs = {
+      ...host,
+      waitAny: async (handles: string[], timeout: number) => {
+        const result = await host.waitAny(handles, timeout);
+        const session = host.sessions().find((s) => s.handle === result.handle);
+        if (!session || signal.stopped) return result;
+        if (result.state === 'done') harnessFailures = 0;
+        else if (result.state === 'error' && session.exit !== 0 && !session.timedOut) {
+          harnessFailures += 1;
+          if (harnessFailures >= HARNESS_WAITS_MINUTES.length) {
+            harnessDead = { count: harnessFailures, exit: session.exit };
+            return result;
+          }
+          const minutes = HARNESS_WAITS_MINUTES[harnessFailures - 1]!;
+          log(
+            `#${item.id} harness failed (exit ${session.exit}, ${harnessFailures} in a row): waits ${minutes} min, then the step script goes on`,
+            'warn',
+          );
+          for (let half = 0; half < minutes * 2 && !signal.stopped; half++) await sleep(30);
+        }
+        return result;
+      },
+    };
     let outcome: Awaited<ReturnType<typeof driveLeaf>> | { error: string };
     try {
-      outcome = await driveLeaf({ step, host, stopped: () => signal.stopped });
+      outcome = await driveLeaf({
+        step,
+        host: verbs,
+        stopped: () => signal.stopped || harnessDead !== undefined,
+      });
     } catch (error) {
       outcome = signal.stopped ? { stopped: true } : { error: firstLine(error) };
     } finally {
@@ -1991,7 +2021,13 @@ export async function runRepository(context: RepositoryContext): Promise<Reposit
       // the line of the issue names no pull request
     }
     let reason: string | undefined;
-    if ('stopped' in outcome) {
+    if ('stopped' in outcome && !signal.stopped && harnessDead) {
+      // the run ends: the item keeps its stage, the next run resumes it
+      reason = HARNESS_FAILED;
+      aside.set(item.id, `${reason}${pull ? `, ${pull.url}` : ''}`);
+      log(`#${item.id} set aside: ${reason}`, 'bad');
+      emit('task.finished', { task, outcome: 'skipped', text: reason }, 'warning');
+    } else if ('stopped' in outcome) {
       reason = 'stopped';
       log(`#${item.id} stopped: not merged${pull ? `, ${pull.url}` : ''}`, 'warn');
       emit('task.finished', { task, outcome: 'cancelled', text: 'stopped' });

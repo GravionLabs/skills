@@ -66,7 +66,7 @@ export type Scenario = {
   hangs?: boolean;
   /** The sessions that never end: `<id>` (implementer) or `review:<id>`. */
   hangsOn?: string[];
-  plan?: { exit?: number; noPull?: boolean; hangs?: boolean }[];
+  plan?: { exit?: number; noPull?: boolean; hangs?: boolean; silent?: boolean }[];
   closeAfterCalls?: number;
   releaseTests?: number[];
   releaseCommits?: number;

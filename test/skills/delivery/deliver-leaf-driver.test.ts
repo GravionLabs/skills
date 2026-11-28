@@ -209,6 +209,32 @@ describe('the child-process host', () => {
     expect(host.wake).toBe('block');
   });
 
+  it('frees the slot and refuses the start when the harness cannot be launched', async () => {
+    let held = 0;
+    const host = processHost({
+      root,
+      runDir: path.join(dir, 'run'),
+      command: () => [],
+      env: async () => ({ ...process.env }),
+      acquire: async () => {
+        held += 1;
+        return () => {
+          held -= 1;
+        };
+      },
+      stopped: () => false,
+      enlist: () => () => {},
+      sessionMs: 10_000,
+      graceMs: 50,
+      tickMs: 1,
+    });
+    const out = await host.startWorker(start('issue-5-implement'));
+    expect(out.error).toMatch(/^the harness did not start: /);
+    expect(out.handle).toBeUndefined();
+    expect(held).toBe(0);
+    expect(host.sessions()).toEqual([]);
+  });
+
   it('returns an error instead of a handle when the brief names no command', async () => {
     const host = hostOf('');
     expect(await host.startWorker({ ...start('issue-5-implement'), brief: 'nothing' })).toEqual({

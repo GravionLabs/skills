@@ -228,6 +228,8 @@ describe('leafStep on the pass path', () => {
       'stage',
       'mergeBase',
       'mergedMeanwhile',
+      // the paths of the open pull request before the reviewer checks it out (#1194)
+      'guard',
       'stage',
       // the file of the round when the report comes in, then bound to the head of the pull request
       'verifyVerdict',
@@ -397,6 +399,8 @@ describe('leafStep off the pass path', () => {
     );
     expect(out.merges).toEqual([]);
     expect(out.stages.at(-1)).toBe('handover');
+    // before the reviewer: a protected path is never checked out by a session (#1194)
+    expect(starts(out.actions).map((a) => a.role)).toEqual(['implementer']);
     expect(out.comments).toHaveLength(1);
     expect(out.comments[0]).toMatchObject({
       id: 12,

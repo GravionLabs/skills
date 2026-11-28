@@ -62,7 +62,7 @@ Start deliver-loop without --model and --review-model unless you mean to overrid
 
 ## Leaf driver
 
-With `deliver.leafFlow: "step"` in `.agents/config.json` the loop delivers each PBI or Bug through the step script of [deliver-lead](../../deliver-lead/SKILL.md) (`leafStep`, imported in-process) instead of its own flow. The default is `"legacy"`; another value ends the run with exit 64 (`usage`) before a session starts. An Objective run keeps `"legacy"`.
+With `deliver.leafFlow: "step"` in `.agents/config.json` the loop delivers each PBI or Bug through the step script of [deliver-lead](../../deliver-lead/SKILL.md) (`leafStep`, imported in-process) instead of its own flow. The default is `"legacy"`; another value ends the run with exit 64 (`usage`) before a session starts, and so do `--model`, `--review-model` and `--merge-risk` with `"step"`: the step script takes the models from the config layers and its gates read `deliver.mergeRisk` at the merge base. An Objective run keeps `"legacy"`.
 
 The driver (`scripts/leaf-driver.mts`) only asks for the next action and executes it:
 
@@ -87,4 +87,4 @@ The five verbs map to child processes in `scripts/process-host.mts` (wake kind `
 - `read-result`: a report file with the result line, the exit code and the log path.
 - `answer-worker`: `refused`; `ask-owner`: `deferred`.
 
-What stays in the loop around the driver: the frontier (`next-issue`), the stop request (the sessions end, the task finishes `cancelled`), `deliver.parallel` and the slots, the rate-limit waits, the base check, the progress output, `results.jsonl`, the summary and the wait for handed-over pull requests. Steps of the repository run one at a time under its merge lock, so the run file has one writer at a time and merges stay one at a time. An item in an `agent:*` stage starts with `--resume`, so a leaf left by a lead or by an earlier run goes on from its label.
+What stays in the loop around the driver: the frontier (`next-issue`), the stop request (the sessions end, the task finishes `cancelled`), `deliver.parallel` and the slots, the rate-limit waits, the harness failures (a session that exits non-zero without a result line: a wait of 5, then 15 minutes before its outcome reaches the step script, the third in a row ends the run with exit 5), the base check, the progress output, `results.jsonl`, the summary and the wait for handed-over pull requests. Steps of the repository run one at a time under its merge lock, so the run file has one writer at a time and merges stay one at a time. An item in an `agent:*` stage starts with `--resume`, so a leaf left by a lead or by an earlier run goes on from its label.

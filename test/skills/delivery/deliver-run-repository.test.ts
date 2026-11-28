@@ -222,6 +222,22 @@ describe('deliver.leafFlow step (#1194)', () => {
     ],
     ['a session without a pull request', 206, (id) => pbi(id, { noPull: true })],
     [
+      'a pull request that changes a protected path',
+      213,
+      (id) => pbi(id, { files: ['.github/workflows/ci.yml'] }),
+    ],
+    [
+      'an earlier pull request that changes a protected path',
+      214,
+      (id) => pbi(id, { earlierPull: true, files: ['.github/workflows/ci.yml'] }),
+    ],
+    [
+      'two open pull requests of an earlier run',
+      215,
+      (id) => pbi(id, { earlierPull: true, twoPulls: [id] }),
+    ],
+    ['a session that asks for a decision', 216, (id) => pbi(id, { needsDecision: true })],
+    [
       'a resume from agent:approved',
       207,
       (id) => pbi(id, { earlierPull: true, pullComments: approvedMark(id) }, ['agent:approved']),
@@ -235,6 +251,45 @@ describe('deliver.leafFlow step (#1194)', () => {
       legacy.results.map((r) => [r.issue, r.outcome, r.reason]),
     );
     profile.expectRun(step.events as never);
+  });
+
+  it('never checks out a protected path: no review session in either mode', async () => {
+    const make = () => pbi(217, { files: ['.github/workflows/ci.yml'] });
+    for (const mode of MODES) expect((await inMode(mode, make())).reviews).toEqual([]);
+    const earlier = await inMode('step', pbi(218, { earlierPull: true, twoPulls: [218] }));
+    expect(earlier.sessions).toEqual([]);
+  });
+
+  it('ends the run with exit 5 at the third harness failure in a row, as legacy does', async () => {
+    const silent = { exit: 1, noPull: true, silent: true };
+    const issue = (id: number) => ({
+      number: id,
+      title: `[PBI] feat: parity ${id}`,
+      labels: ['pbi'],
+    });
+    const make = (): Scenario => ({
+      ...pbi(219, { plan: [silent, silent, silent, silent] }),
+      items: [219, 220].map((id) => ({ id, title: `[PBI] feat: parity ${id}` })),
+      repositories: { 'fake/repo': { issues: [issue(219), issue(220)] } },
+    });
+    const legacy = await inMode('legacy', make());
+    const step = await inMode('step', make());
+    expect(legacy.status).toBe(5);
+    expect(step.status).toBe(5);
+    // three failed sessions, then nothing more starts
+    expect(step.sessions).toHaveLength(3);
+    expect(step.stdout).toContain('harness failed (exit 1, 1 in a row): waits 5 min');
+  });
+
+  it.each([
+    ['--merge-risk', 'high'],
+    ['--model', 'opus'],
+    ['--review-model', 'opus'],
+  ])('refuses %s with deliver.leafFlow step before any session (exit 64)', async (flag, value) => {
+    const out = await inMode('step', pbi(222), { args: [flag, value] });
+    expect(out.status).toBe(64);
+    expect(out.stderr).toContain(`${flag} is not read with deliver.leafFlow step`);
+    expect(out.sessions).toEqual([]);
   });
 
   it('a leaf the step loop left in review is finished by deliver-lead, merged once', async () => {

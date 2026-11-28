@@ -129,7 +129,8 @@ appendFileSync(
     mintingVariables: Object.keys(process.env).filter((name) => /^DELIVER_(MIN_)?APP_/.test(name)),
   })}\n`,
 );
-// per session (by index): { exit, noPull, hangs } overrides the scenario-wide fields for that session
+// per session (by index): { exit, noPull, hangs, silent } overrides the scenario-wide fields for that session;
+// `silent` prints no `result:` line (a harness that failed before its work)
 const own = scenario.plan?.[index] ?? {};
 if (scenario.hangsOn?.includes(id)) await hang();
 if (own.hangs ?? scenario.hangs) {
@@ -154,7 +155,7 @@ if (own.hangs ?? scenario.hangs) {
     console.log(JSON.stringify({ type: 'result', is_error: false, result: `done\n${final}` }));
     setTimeout(() => {}, 60_000);
   } else {
-    console.log(final);
+    if (!own.silent) console.log(final);
     process.exit(own.exit ?? scenario.exits?.[index] ?? 0);
   }
 }
