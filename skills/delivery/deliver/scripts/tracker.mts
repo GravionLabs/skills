@@ -129,6 +129,10 @@ export interface Tracker extends ObjectiveReader {
   setStage(item: Item, stage: Stage | undefined): void;
   /** Creates the missing `agent:*` labels and returns their names. */
   syncStageLabels(): string[];
+  /** Removes the label from the item (a hold label such as `needs-decision`); never an `agent:*` label: that throws. */
+  removeLabel(item: Item, label: string): void;
+  /** Re-runs one CI job by its numeric id. `env` is the environment of the session token. */
+  rerunJob(job: number, env: Record<string, string>): void;
   /** Comments `body` on the item unless a comment of the login of the loop already starts with `marker`. */
   commentOnce(item: Item, marker: string, body: string): void;
   /** Marks on the pull request the verdict the loop accepted for the commit `head` (`markBody`), with the risk level. */

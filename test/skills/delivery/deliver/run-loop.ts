@@ -80,6 +80,8 @@ export type Scenario = {
   sessionMs?: number;
   /** Repositories of an Objective run whose release pull request releases its milestone at once. */
   releaseOnPull?: string[];
+  /** The result of a `deliver-triage` session by case kind (default needs-owner): an object, `invalid`, `none` or `fail`. */
+  triage?: Record<string, unknown>;
 };
 /** A session of the fake harness: its process and when it started and ended (ms since the epoch). */
 export type Span = { id: number; pid: number; at: number; end: number; review: boolean };
@@ -106,6 +108,8 @@ export type Outcome = {
     hasSessionTokenVariable: boolean;
   }[];
   retros: { prompt: string; releasePulls: number }[];
+  /** The triage sessions with their case. */
+  triages: { prompt: string; case: Record<string, unknown>; pid: number; at: number }[];
   reviews: {
     id: number;
     prompt: string;
@@ -252,6 +256,7 @@ export function loop(
         sessions: lines(path.join(dir, 'sessions.jsonl')),
         reviews: lines(path.join(dir, 'reviews.jsonl')),
         retros: lines(path.join(dir, 'retros.jsonl')),
+        triages: lines(path.join(dir, 'triages.jsonl')),
         spans: spansOf(dir),
         results: results
           ? lines<Result | { issue?: undefined }>(results).filter(

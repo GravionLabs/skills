@@ -150,7 +150,7 @@ The launcher finds the installed `deliver` skill (project first, then your home)
 
 ## Triage and learning
 
-An issue that waits for you (hand-over, set-aside with a question, a blocked run) comes to you: the skill `deliver-triage` judges one such case in a role session, but the loop does not start it yet ([three layers](../delivery/model.md#three-orchestration-layers)). After a milestone the [retro](learn-from-runs.md#after-a-milestone) turns the run into draft PBIs and [lessons](learn-from-runs.md#lessons); later runs read the approved lessons.
+An issue that waits for you (hand-over, set-aside with a question, a blocked run) comes to you: in an `--objective` run the loop starts `deliver-triage` once per case in a role session and applies its result: it answers a fact-check question, takes an issue out of the run, re-runs a failed CI job once, or hands you a prepared decision or drafted follow-up under "needs you" ([three layers](../delivery/model.md#three-orchestration-layers)). A plain `--milestone` run does not triage. After a milestone the [retro](learn-from-runs.md#after-a-milestone) turns the run into draft PBIs and [lessons](learn-from-runs.md#lessons); later runs read the approved lessons.
 
 ## Resume and feedback
 

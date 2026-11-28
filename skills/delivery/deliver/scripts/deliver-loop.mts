@@ -16,6 +16,7 @@ import { parseObjective, planObjective } from './objective.mts';
 import { objectiveFolders, objectiveStatus, objectiveStream } from './objective-report.mts';
 import { type Unit, runObjective, unitName } from './objective-run.mts';
 import { MergeLocks, Slots } from './parallel.mts';
+import { triageRun } from './triage.mts';
 import { RISK_LEVELS, type ReviewSettings, retroSettings, reviewSettings } from './review.mts';
 import { type HarnessName, readLayers } from './resolve-model.mts';
 import {
@@ -379,6 +380,8 @@ async function objectiveRun(ref: string): Promise<number> {
   const base = opt.base ?? 'release/next';
   const slots = new Slots(MAX_SESSIONS);
   const mergeLocks = new MergeLocks();
+  // the attention cases of every unit go to deliver-triage, each once in the run; a CI job is re-run once
+  const triage = triageRun();
   const sources = new Map<string, ReturnType<typeof makeSource>>();
   const sourceOf = (repo: string) => {
     if (!app) return undefined;
@@ -430,6 +433,7 @@ async function objectiveRun(ref: string): Promise<number> {
         ...options,
         base,
         ...(unit.milestone ? { milestone: unit.milestone } : { feature: String(unit.feature) }),
+        triage,
       },
       tracker: unitTracker,
       token: { source: sourceOf(unit.repo), fixed: FIXED_TOKEN, name: TOKEN_SOURCE },
