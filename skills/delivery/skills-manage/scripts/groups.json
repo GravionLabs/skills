@@ -1,6 +1,7 @@
 {
   "delivery": [
     "deliver",
+    "deliver-lead",
     "deliver-review",
     "deliver-triage",
     "grill-me",
