@@ -2136,6 +2136,16 @@ export async function runRepository(context: RepositoryContext): Promise<Reposit
           'warn',
         );
       } else if (tracker.items().length === 0) {
+        // a pull request into the base that is not of this milestone would be lost with the release branch: a person decides
+        try {
+          for (const pull of tracker.foreignPulls()) {
+            needsYou.push(
+              `${pull.url} is open into ${BASE} and not in ${milestone}: merge, close or retarget it first`,
+            );
+          }
+        } catch (error) {
+          log(`open pull requests into ${BASE} not read: ${firstLine(error)}`, 'warn');
+        }
         let release: Pull | undefined;
         if (RETRO.enabled) {
           try {

@@ -848,6 +848,24 @@ export function create({
       return Number(gh('api', `repos/${repo}/compare/${target}...${base}`, '-q', '.ahead_by'));
     },
 
+    foreignPulls(): Pull[] {
+      if (!selection.milestone) return [];
+      // every issue of the milestone, closed ones too: a pull request of a delivered issue is no foreign one
+      const members = new Set(
+        list<Issue>(`repos/${repo}/issues?milestone=${milestone().number}&state=all&per_page=100`)
+          .filter((issue) => !issue.pull_request)
+          .map((issue) => issue.number),
+      );
+      const named = (p: PullRecord) =>
+        [...members].some(
+          (id) => new RegExp(`^[a-z]+/${id}-`).test(p.head.ref) || closesIssue(p.body, id),
+        );
+      return list<PullRecord>(`repos/${repo}/pulls?state=open&base=${base}&per_page=100`)
+        .filter((p) => !named(p))
+        .sort((a, b) => a.number - b.number)
+        .map((p) => ({ id: p.number, title: p.title, url: p.html_url, branch: p.head.ref }));
+    },
+
     ensureReleasePull(): Pull {
       const target = this.defaultBranch();
       const owner = repo.split('/')[0];

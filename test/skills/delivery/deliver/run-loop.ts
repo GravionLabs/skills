@@ -65,6 +65,7 @@ export type Scenario = {
   closeAfterCalls?: number;
   releaseTests?: number[];
   releaseCommits?: number;
+  foreignPulls?: { id: number; title: string; url: string; branch: string }[];
   base?: string[];
   mergedBefore?: number[];
   mergedDuring?: number[];
