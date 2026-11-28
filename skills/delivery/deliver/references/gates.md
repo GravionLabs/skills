@@ -22,5 +22,6 @@ A run counts as `fail` when it prints no JSON object, an unknown word, or a word
 
 ## Scripts
 
-| Script | Arguments | Checks |
-| :----- | :-------- | :----- |
+| Script      | Arguments                                                                             | Checks                                                                                                                                                                                                                                                                                                            |
+| :---------- | :------------------------------------------------------------------------------------ | :---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `guard.mts` | `<pr> [--head <sha>] [--risk <level> \| --result-file <file>] [--merge-risk <level>]` | `owner` when the pull request changes a protected path (`deliver.protectedPaths`; a manifest that changes only its dependencies is no hit), its changed files cannot be read, or its risk (missing: medium) is above `--merge-risk` (`deliver.mergeRisk`, default medium); the loop calls `guardCheck` in-process |
