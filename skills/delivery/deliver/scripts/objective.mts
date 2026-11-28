@@ -209,6 +209,36 @@ export function readObjective(ref: string, reader: ObjectiveReader): Objective {
   };
 }
 
+/**
+ * The open PBIs and Bugs below the Epic or Objective `ref` in the order the loop starts them: by the start order of
+ * their repositories, then by number. Those of `deferred` Features are no work; `held` names the first `Requires:` line
+ * of the Objective or the Feature that is not met.
+ */
+export function objectiveLeaves(
+  ref: string,
+  reader: ObjectiveReader,
+): { issue: TrackedIssue; held?: string }[] {
+  const read = readObjective(ref, reader);
+  const order = startOrder(read).map((repo) => repo.toLowerCase());
+  const rank = (issue: TrackedIssue) => order.indexOf(issue.repo.toLowerCase());
+  const found = new Map<string, { issue: TrackedIssue; held?: string }>();
+  for (const feature of read.features) {
+    if (feature.work.length === 0) continue;
+    let held: string | undefined;
+    for (const requirement of [...read.requires, ...feature.requires]) {
+      const state = requirementState(requirement, reader);
+      if (state.state === 'met') continue;
+      held = state.reason;
+      break;
+    }
+    for (const issue of feature.work)
+      found.set(`${issue.repo.toLowerCase()}#${issue.number}`, { issue, ...(held && { held }) });
+  }
+  return [...found.values()].sort(
+    (a, b) => rank(a.issue) - rank(b.issue) || a.issue.number - b.issue.number,
+  );
+}
+
 /** The wait reason of an issue from its native `blocked-by` links (the loop's `waitReason` and the plan share it). */
 export function blockReason(
   blocked: IssueRef,
@@ -254,18 +284,28 @@ export function startOrder(objective: Objective): string[] {
   return order.map((key) => repos.get(key) as string);
 }
 
+export type PlanLeaf = { repo: string; number: number; ready: boolean; reasons: string[] };
+export type PlanFeature = { repo: string; number: number } & (
+  | { deferred: true }
+  | { deferred: false; milestone?: string; closed: boolean; leaves: PlanLeaf[] }
+);
+export type ObjectivePlan = {
+  objective: string;
+  /** The `Requires:` lines of the Objective: how many it declares and the reasons of those not met. */
+  requires: { declared: number; waiting: string[] };
+  /** In start order. */
+  repositories: { repo: string; features: PlanFeature[] }[];
+  /** The open Features without an open PBI or Bug, as `<owner>/<repo>#<nr>`. */
+  gaps: string[];
+};
+
 /**
- * The plan of an Objective for `--objective --dry-run`: its repositories in start order and, per Feature, `deferred`
- * or the Feature's milestone with its open PBIs and Bugs. Each of those shows `ready` or every reason that holds it: a
- * hold label, an Objective or Feature `Requires:` not met, a `blocked-by` link. A Feature with no open PBI or Bug is a
- * gap. Reads only; nothing starts.
+ * The plan of an Objective: its repositories in start order and, per Feature, `deferred` or the Feature's milestone
+ * with its open PBIs and Bugs (`leaves`). Each leaf is `ready` or names every reason that holds it: a hold label, an
+ * Objective or Feature `Requires:` not met, a `blocked-by` link. A Feature with no open PBI or Bug is a gap. Reads
+ * only; nothing starts.
  */
-export function planObjective(
-  ref: string,
-  reader: ObjectiveReader,
-  /** The name of the token source of a repository's sessions and checkout. */
-  tokenOf: (repo: string) => string,
-): string[] {
+export function objectivePlan(ref: string, reader: ObjectiveReader): ObjectivePlan {
   const read = readObjective(ref, reader);
   const waiting = (reqs: Requirement[]): string[] =>
     reqs.flatMap((req) => {
@@ -273,14 +313,52 @@ export function planObjective(
       return state.state === 'waiting' ? [state.reason] : [];
     });
   const shared = waiting(read.requires);
-  const order = startOrder(read);
+  const gaps: string[] = [];
+  const planFeature = (feature: Feature): PlanFeature => {
+    const { repo, number, milestone } = feature;
+    if (feature.deferred) return { repo, number, deferred: true };
+    const closed = feature.state === 'closed';
+    if (!closed && feature.work.length === 0) gaps.push(`${repo}#${number}`);
+    const featureWaits = waiting(feature.requires);
+    const leaves = feature.work.map((item): PlanLeaf => {
+      const itemRef = { repo: item.repo, number: item.number };
+      const hold = item.labels.find((label) => HOLD_LABELS.includes(label));
+      const blocked = blockReason(itemRef, reader.blockers(itemRef), reader);
+      const reasons = [hold, ...shared, ...featureWaits, blocked].filter(
+        (reason): reason is string => reason !== undefined,
+      );
+      return { ...itemRef, ready: reasons.length === 0, reasons };
+    });
+    return { repo, number, deferred: false, ...(milestone && { milestone }), closed, leaves };
+  };
+  const repositories = startOrder(read).map((repo) => ({
+    repo,
+    features: read.features
+      .filter((f) => f.repo.toLowerCase() === repo.toLowerCase())
+      .map(planFeature),
+  }));
+  return {
+    objective: ref,
+    requires: { declared: read.requires.length, waiting: shared },
+    repositories,
+    gaps,
+  };
+}
+
+/** `objectivePlan` as the lines of `--objective --dry-run`. */
+export function planObjective(
+  ref: string,
+  reader: ObjectiveReader,
+  /** The name of the token source of a repository's sessions and checkout. */
+  tokenOf: (repo: string) => string,
+): string[] {
+  const { requires, repositories, gaps } = objectivePlan(ref, reader);
   const lines = [
-    `Objective ${ref} starts in: ${order.join(', ') || 'no repository'}`,
-    `  requires: ${read.requires.length === 0 ? 'none' : shared.join(', ') || 'met'}`,
+    `Objective ${ref} starts in: ${repositories.map((r) => r.repo).join(', ') || 'no repository'}`,
+    `  requires: ${requires.declared === 0 ? 'none' : requires.waiting.join(', ') || 'met'}`,
   ];
-  for (const repo of order) {
+  for (const { repo, features } of repositories) {
     lines.push(repo, `  session token: ${tokenOf(repo)}`);
-    const features = read.features.filter((f) => f.repo.toLowerCase() === repo.toLowerCase());
     if (features.length === 0) lines.push('  no Feature');
     for (const feature of features) {
       const name = `${feature.repo}#${feature.number}`;
@@ -288,21 +366,12 @@ export function planObjective(
         lines.push(`  feature ${name} deferred`);
         continue;
       }
-      const closed = feature.state === 'closed';
       lines.push(
-        `  feature ${name}${feature.milestone ? ` ${feature.milestone}` : ''}${closed ? ' closed' : ''}`,
+        `  feature ${name}${feature.milestone ? ` ${feature.milestone}` : ''}${feature.closed ? ' closed' : ''}`,
       );
-      if (!closed && feature.work.length === 0) lines.push('    gap: no open PBI or Bug');
-      const featureWaits = waiting(feature.requires);
-      for (const item of feature.work) {
-        const itemRef = { repo: item.repo, number: item.number };
-        const hold = item.labels.find((label) => HOLD_LABELS.includes(label));
-        const blocked = blockReason(itemRef, reader.blockers(itemRef), reader);
-        const reasons = [hold, ...shared, ...featureWaits, blocked].filter(
-          (reason): reason is string => reason !== undefined,
-        );
-        lines.push(`    ${item.repo}#${item.number} ${reasons.join(', ') || 'ready'}`);
-      }
+      if (gaps.includes(name)) lines.push('    gap: no open PBI or Bug');
+      for (const leaf of feature.leaves)
+        lines.push(`    ${leaf.repo}#${leaf.number} ${leaf.reasons.join(', ') || 'ready'}`);
     }
   }
   return lines;

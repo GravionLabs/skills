@@ -20,7 +20,12 @@ export type Item = {
   labels: string[];
   body: string;
   feature?: number;
+  /** The repository of a leaf of an Objective or Epic tree (`leaves()`); default: the tracker's. */
+  repo?: string;
 };
+
+/** A work item of `leaves()`. `held`: why its tree holds it back (a `Requires:` line that is not met). */
+export type Leaf = Item & { held?: string };
 
 /** `others`: the URLs of further open pull requests of the same item (`pullOf` only); the loop merges none of them. */
 export type Pull = { id: number; title: string; url: string; branch: string; others?: string[] };
@@ -43,6 +48,12 @@ export type BaseState = {
   state: 'green' | 'pending' | 'red';
   failed: { name: string; url: string }[];
 };
+
+/**
+ * The publish job of the latest release run of the default branch; `none`: no such run found. `url`: the job that
+ * failed or runs (a run whose publish job has not started yet: the run).
+ */
+export type PublishState = { state: 'none' | 'ok' | 'running' | 'failed'; url?: string };
 
 /**
  * Exactly one of `milestone`, `feature` and `issues` is set. `feature`: the number of a Feature. `skipDeferred`: the
@@ -119,6 +130,12 @@ export interface Tracker extends ObjectiveReader {
    * also list the Bug of a red base this run got from `reportBaseRed`, while it is open.
    */
   items(): Item[];
+  /**
+   * The open PBIs and Bugs below `ref` in delivery order, whatever the selection. A milestone title or a Feature
+   * number: as `items()` of that selection. An Epic or Objective number: the sub-issue tree (`objectiveLeaves`).
+   * `undefined`: `ref` names no milestone, Feature, Epic or Objective of this repository.
+   */
+  leaves(ref: string): Leaf[] | undefined;
   itemSubject(item: Item): Subject;
   /**
    * The parent Feature of the item in this repository, whose scope and criteria the review reads; `undefined`
@@ -182,12 +199,20 @@ export interface Tracker extends ObjectiveReader {
    * a person merges, closes or retargets them. Nothing outside a milestone selection.
    */
   foreignPulls(): Pull[];
+  publishState(): PublishState;
+  /** The open release pull request from the base branch into the default branch, `undefined` without one. */
+  releasePull(): Pull | undefined;
   /** The open release pull request from the base branch into the default branch; opens it when missing. Never merges it. */
   ensureReleasePull(): Pull;
   /** An item of the milestone (open or closed) has a Feature of this repository as parent: the retro comments there. */
   hasRetroFeature(): boolean;
   /** `url` is a comment of this repository whose body starts with `marker`. The URL comes from a session. */
   isRetroComment(url: string, marker: string): boolean;
+  /**
+   * The URL of the newest comment of the milestone's time that starts with `marker`, written by an author with write
+   * access or by an app; `undefined` without one.
+   */
+  retroComment(marker: string): string | undefined;
   /** Puts the line `Retro: <url>` into the body of the release pull request, replacing an earlier one. */
   linkRetro(pull: Pull, url: string): void;
   /** The environment that makes a session act with `token` instead of the login of the user. */

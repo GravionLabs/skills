@@ -28,8 +28,9 @@ const item = (id: number, blockedBy?: number[]) => ({
 });
 const overlap = (a: Span, b: Span) => a.at < b.end && b.at < a.end;
 /** The most sessions that ran at the same moment. */
+// counted at each start: two sessions that overlap a third one may still have run one after the other
 const peak = (spans: Span[]) =>
-  Math.max(0, ...spans.map((s) => spans.filter((other) => overlap(s, other)).length));
+  Math.max(0, ...spans.map((s) => spans.filter((o) => o.at <= s.at && s.at < o.end).length));
 const implementers = (spans: Span[], id: number) => spans.filter((s) => s.id === id && !s.review);
 
 describe('Slots and MergeLocks', () => {
