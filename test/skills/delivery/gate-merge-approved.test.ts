@@ -233,7 +233,9 @@ describe('merge-approved CLI', () => {
   let fakeDir: string;
   let verdictFile: string;
   const tracker = path.resolve(__dirname, 'deliver/tracker');
-  const approve = JSON.stringify({ verdict: 'approve', findings: [], unmet: [] });
+  const approval = (head?: string) =>
+    JSON.stringify({ verdict: 'approve', findings: [], unmet: [], ...(head && { head }) });
+  const approve = approval(SHA);
 
   beforeAll(() => {
     const dir = mkdtempSync(path.join(tmpdir(), 'gate-merge-approved-'));
@@ -290,7 +292,13 @@ describe('merge-approved CLI', () => {
       },
     });
   };
-  const withVerdict = (...args: string[]) => [...args, '--verdict', verdictFile];
+  /** The arguments with the verdict file and, unless they name a risk source, `--risk low`. */
+  const withVerdict = (...args: string[]) => [
+    ...args,
+    '--verdict',
+    verdictFile,
+    ...(args.includes('--risk') || args.includes('--result-file') ? [] : ['--risk', 'low']),
+  ];
 
   it('merges <sha> into the base of the pull request with its title', async () => {
     await expect(run(withVerdict('7', SHA))).resolves.toEqual({
@@ -325,8 +333,51 @@ describe('merge-approved CLI', () => {
     expect(merges()).toEqual([]);
   });
 
+  it.each([
+    ['of another commit', approval('def456'), 'the verdict is of def456, not of abc123'],
+    ['without a head', approval(), 'the verdict file names no head'],
+  ])('merges nothing with an approval %s', async (_name, verdict, why) => {
+    await expect(run(withVerdict('7', SHA), { verdict })).resolves.toMatchObject({
+      result: 'owner',
+      reason: `no approving verdict (${why}), merge it yourself`,
+    });
+    expect(merges()).toEqual([]);
+  });
+
+  it('merges nothing without a risk level: no flag, a missing or a level-less result file', async () => {
+    const file = path.join(fakeDir, 'result.json');
+    rmSync(file, { force: true });
+    const cases = [
+      ['7', SHA, '--verdict', verdictFile],
+      ['7', SHA, '--verdict', verdictFile, '--result-file', file],
+    ];
+    for (const args of cases)
+      await expect(run(args)).resolves.toMatchObject({
+        result: 'owner',
+        reason: 'no risk level (--risk, or risk.level of --result-file), merge it yourself',
+      });
+    writeFileSync(file, JSON.stringify({ risk: {} }));
+    await expect(run(cases[1] as string[])).resolves.toMatchObject({ result: 'owner' });
+    expect(merges()).toEqual([]);
+    writeFileSync(file, JSON.stringify({ risk: { level: 'low' } }));
+    await expect(run(cases[1] as string[])).resolves.toMatchObject({ result: 'pass' });
+  });
+
+  it('has no --merge-risk: the limit of the base config holds', async () => {
+    await expect(
+      run(withVerdict('7', SHA, '--risk', 'high', '--merge-risk', 'high'), {
+        deliver: { mergeRisk: 'low' },
+      }),
+    ).resolves.toMatchObject({ result: 'usage' });
+    await expect(
+      run(withVerdict('7', SHA, '--risk', 'medium'), { deliver: { mergeRisk: 'low' } }),
+    ).resolves.toMatchObject({ result: 'owner', reason: 'risk medium, merge it yourself' });
+    expect(merges()).toEqual([]);
+  });
+
   it('merges nothing when the pull request is not at <sha>', async () => {
-    await expect(run(withVerdict('7', 'def456'))).resolves.toMatchObject({
+    const verdict = approval('def456');
+    await expect(run(withVerdict('7', 'def456'), { verdict })).resolves.toMatchObject({
       result: 'owner',
       reason: 'pushed after the review, merge it yourself',
       evidence: { prHead: SHA },

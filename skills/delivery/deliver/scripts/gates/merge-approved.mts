@@ -2,8 +2,8 @@
 // reviewed commit `<sha>` is merged, and only with an approving verdict and a passing guard; anything unknown fails
 // closed. The script holds no lock and does not wait: an executor calls it under its merge lock of the base branch,
 // backs off on `retry` and decides when checks that never report count as reported. The CLI wraps `mergeApproved`:
-//   node scripts/gates/merge-approved.mts <pr> <sha> --verdict <file> [--risk <level> | --result-file <file>]
-//     [--merge-risk <level>] [--tracker <name>] [--unreported-ok]
+//   node scripts/gates/merge-approved.mts <pr> <sha> --verdict <file> (--risk <level> | --result-file <file>)
+//     [--tracker <name>] [--unreported-ok]
 import { readFileSync, realpathSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { parseArgs } from 'node:util';
@@ -25,7 +25,10 @@ export type MergeApprovedInput = {
   pull: Pull;
   /** The reviewed commit: the only one that is merged. */
   sha: string;
-  /** The verdict check of the review of `sha` (`verifyVerdict`); missing or not `pass`: never merged. */
+  /**
+   * The verdict check (`verifyVerdict`); merged only when it is `pass` with `evidence.head` equal to `sha`. The function
+   * cannot see which commit was reviewed: the caller binds the verdict to `sha` (the CLI by the `head` of the file).
+   */
   verdict: GateResult | undefined;
   /** The guard of the commit `head` (`guardCheck` or the guard CLI); called only for `sha`, right before the merge. */
   guard: (head: string) => GateResult | Promise<GateResult>;
@@ -40,8 +43,10 @@ export type MergeApprovedInput = {
 };
 
 /**
- * One merge attempt. `pass`: merged now or already. `retry`: checks pending or not reported (`evidence.reported`),
- * a failing tracker read (`evidence.error`). `owner`: no approving verdict of `sha`, a head other than `sha`, a
+ * One merge attempt. `pass`: `sha` merged now, or the pull request was already merged (by anyone; the gate does not
+ * say at which commit). `retry`: checks pending or not reported (`evidence.reported`),
+ * a failing tracker read (`evidence.error`). `owner`: a verdict that is not `pass` or whose `evidence.head` is not
+ * `sha`, a head other than `sha`, a
  * guard that does not pass. `fail`: closed, conflict (`evidence.conflict`), red, merge refused (`evidence.refused`).
  */
 export async function mergeApproved(input: MergeApprovedInput): Promise<GateResult> {
@@ -117,7 +122,7 @@ export async function mergeApproved(input: MergeApprovedInput): Promise<GateResu
 }
 
 const USAGE =
-  'usage: merge-approved <pr> <sha> --verdict <file> [--risk <level> | --result-file <file>] [--merge-risk <level>] [--tracker <name>] [--unreported-ok]';
+  'usage: merge-approved <pr> <sha> --verdict <file> (--risk <level> | --result-file <file>) [--tracker <name>] [--unreported-ok]';
 
 const readIfThere = (file: string): string | undefined => {
   try {
@@ -128,11 +133,21 @@ const readIfThere = (file: string): string | undefined => {
   }
 };
 
+/** The `head` the verdict file names: the commit the review session was detached at. */
+const verdictHead = (content: string): unknown => {
+  try {
+    return (JSON.parse(content) as { head?: unknown } | null)?.head;
+  } catch {
+    return undefined;
+  }
+};
+
 /**
- * The CLI. Nothing comes from the checkout: the base branch (required checks, merge method) and the title are read
- * from the pull request, protected paths, `mergeRisk` and the tracker check from the config at its merge base (the
- * guard CLI), the risk and the verdict from the flags. The verdict file carries no commit: `<sha>` names the one
- * that was reviewed, and only that commit is merged.
+ * The CLI. Settings never come from the checkout: the base branch (required checks, merge method) and the title are
+ * read from the pull request; protected paths, `mergeRisk` and the tracker check from the config at its merge base
+ * (the guard CLI, no flag can raise `mergeRisk`). The risk level comes from `--risk` or `risk.level` of
+ * `--result-file`; without one nothing is merged. The verdict file must name `head` equal to `<sha>`: an approval of
+ * another commit is no approval of this one.
  */
 export async function mergeApprovedCli(args: string[]): Promise<GateResult> {
   const { values, positionals } = parseArgs({
@@ -142,7 +157,6 @@ export async function mergeApprovedCli(args: string[]): Promise<GateResult> {
       verdict: { type: 'string' },
       risk: { type: 'string' },
       'result-file': { type: 'string' },
-      'merge-risk': { type: 'string' },
       tracker: { type: 'string' },
       'unreported-ok': { type: 'boolean' },
     },
@@ -152,32 +166,44 @@ export async function mergeApprovedCli(args: string[]): Promise<GateResult> {
   if (!/^[0-9a-f]{6,64}$/.test(sha)) throw new UsageError(`<sha> is a commit id, not "${sha}"`);
   if (!values.verdict) throw new UsageError(`--verdict <file> is required; ${USAGE}`);
   const trackerName = values.tracker ?? 'github';
-  const forward = (flag: 'risk' | 'result-file' | 'merge-risk') =>
-    values[flag] === undefined ? [] : [`--${flag}`, values[flag] as string];
-  const guardArgv = [
-    pr,
-    '--head',
-    sha,
-    '--tracker',
-    trackerName,
-    ...forward('risk'),
-    ...forward('result-file'),
-    ...forward('merge-risk'),
-  ];
-  // wrong guard flags are usage now, not after the checks turned green
-  guardArgs(guardArgv);
-
-  const verdict = verifyVerdict({
-    content: readIfThere(values.verdict),
-    reviewedHead: sha,
-    prHead: sha,
+  const id = Number(pr);
+  const owner = (reason: string, evidence: Record<string, unknown> = {}): GateResult => ({
+    result: 'owner',
+    reason: `${reason}${HANDS_OFF}`,
+    evidence: { pr: id, sha, ...evidence },
   });
+  // wrong guard flags are usage now, not after the checks turned green
+  const { risk } = guardArgs([
+    pr,
+    ...(values.risk === undefined ? [] : ['--risk', values.risk]),
+    ...(values['result-file'] === undefined ? [] : ['--result-file', values['result-file']]),
+  ]);
+  // a skipped step fails closed (ADR 0012): an unknown risk is not medium here
+  if (risk === undefined)
+    return owner('no risk level (--risk, or risk.level of --result-file)', {
+      resultFile: values['result-file'] ?? null,
+    });
+  // the level read now is the one judged: the result file is not read again
+  const guardArgv = [pr, '--head', sha, '--tracker', trackerName, '--risk', risk];
+
+  const content = readIfThere(values.verdict);
+  const verdict = verifyVerdict({ content, reviewedHead: sha, prHead: sha });
   // the verdict object itself is not printed
-  const verdictResult: GateResult = {
+  let verdictResult: GateResult = {
     result: verdict.result,
     reason: verdict.reason,
     evidence: verdict.evidence,
   };
+  const named = content === undefined ? undefined : verdictHead(content);
+  if (verdictResult.result === 'pass' && named !== sha)
+    verdictResult = {
+      result: 'fail',
+      reason:
+        typeof named === 'string'
+          ? `the verdict is of ${named}, not of ${sha}`
+          : 'the verdict file names no head',
+      evidence: { verdictHead: typeof named === 'string' ? named : null },
+    };
 
   const root = checkoutRoot();
   trackerDirOutside(root);
@@ -192,9 +218,9 @@ export async function mergeApprovedCli(args: string[]): Promise<GateResult> {
     ));
     tracker = await loadTracker(trackerName, { ...context, base });
   } catch (error) {
-    return { result: 'fail', reason: `tracker: ${firstLine(error)}`, evidence: { pr: Number(pr) } };
+    return { result: 'fail', reason: `tracker: ${firstLine(error)}`, evidence: { pr: id } };
   }
-  if (pull.id !== Number(pr))
+  if (pull.id !== id)
     return { result: 'fail', reason: `tracker: read #${pull.id} for #${pr}`, evidence: {} };
 
   const result = await mergeApproved({
