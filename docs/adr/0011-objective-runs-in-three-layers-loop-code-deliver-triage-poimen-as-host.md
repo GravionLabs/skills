@@ -2,7 +2,7 @@
 
 - Status: Proposed
 - Date: 2026-11-27
-- Issues: #1081, #1041
+- Issues: #1081, #1041, #1114
 - Builds on: [ADR 0009](0009-deliver-loop-runs-role-sessions-and-keeps-the-stage-in-labels.md)
 
 ## Context
@@ -28,7 +28,7 @@ An Objective run has three layers. No orchestrator agent stays open for the run.
 **Judgment.** The loop starts `deliver-triage` on an attention event: `blocked`, `deliver.handover`, `deliver.aside` with `needs-decision`, or `deliver.milestone.done`. One session handles one case. The allowed actions are this list and nothing else:
 
 1. Answer a `needs-decision` that is a fact check, with the evidence.
-2. Defer an issue to the next milestone.
+2. Take an issue out of the current run, with the reason. The issue stays open and no milestone changes: under ADR 0010 a PBI or a Bug has no planned milestone.
 3. Draft a follow-up issue. It drafts only; the owner files it.
 4. Re-run a failed CI job once.
 
@@ -58,7 +58,7 @@ In every other case it prepares the decision for the owner, with the reasons and
 - The loop works from a terminal or CI as it does in poimen. `poimen-lead` stays a skill for interactive sessions; the loop does not use it.
 - Harder: a judgment that needs a view across cases, such as the rubric audit or observations about the whole run, has no place in a session that sees one case. It needs its own role session or a planned issue.
 - Harder: the allowed actions are a fixed list; a new one needs a change of the skill, and the cases outside the list wait for the owner.
-- `deliver-triage` is not built yet. It is planned as a PBI of #1041, including how "defer to the next milestone" applies under ADR 0010, where only Features have a planned milestone.
+- `deliver-triage` is not built yet. It is planned as a PBI of #1041.
 
 ## Alternatives
 

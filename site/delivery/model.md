@@ -71,7 +71,7 @@ flowchart TB
 **Built today.** The loop works one repository (`--milestone`, `--feature` or `--issues`). Two parts of ADR 0011 are planned in [skills#1041](https://github.com/GravionLabs/skills/issues/1041) and do not exist yet:
 
 - `deliver-loop --objective`, one command that keeps the order across repositories and waits for releases. Until then you, or a lead agent, start the loop of a repository once what it requires is released ([Objective runs in poimen](https://gravionlabs.github.io/poimen/guide/objective-runs)).
-- The skill `deliver-triage`, a session the loop starts for one attention event (`blocked`, `deliver.handover`, `deliver.aside` with `needs-decision`, `deliver.milestone.done`). It may only answer a `needs-decision` that is a fact check, defer an issue to the next milestone, draft a follow-up issue or re-run a failed CI job once; else it prepares the decision for you. Until then those events come to you.
+- The skill `deliver-triage`, a session the loop starts for one attention event (`blocked`, `deliver.handover`, `deliver.aside` with `needs-decision`, `deliver.milestone.done`). It may only answer a `needs-decision` that is a fact check, take an issue out of the current run with the reason (the issue stays open, no milestone changes), draft a follow-up issue or re-run a failed CI job once; else it prepares the decision for you. Until then those events come to you.
 
 What stays with the owner in every layer: the merge of a release pull request, a change on a protected path, a change of risk `high`, and a decision between options.
 
