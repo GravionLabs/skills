@@ -53,6 +53,28 @@ describe('Slots and MergeLocks', () => {
     expect(() => new Slots(0)).toThrow();
   });
 
+  it('shares the slots of an Objective: each view counts its own holders within the shared limit', async () => {
+    const shared = new Slots(2);
+    const heard: number[] = [];
+    const [app, lib] = [shared.within((active) => heard.push(active)), shared.within()];
+    expect(app.limit).toBe(2);
+    const freeApp = await app.acquire();
+    const freeLib = await lib.acquire();
+    expect([shared.active, app.active, lib.active]).toEqual([2, 1, 1]);
+    let third = false;
+    const waiting = app.acquire().then((free) => {
+      third = true;
+      return free;
+    });
+    await Promise.resolve();
+    expect(third).toBe(false);
+    freeLib();
+    (await waiting)();
+    freeApp();
+    expect([shared.active, app.active, lib.active]).toEqual([0, 0, 0]);
+    expect(heard).toEqual([1, 2, 1, 0]);
+  });
+
   it('keeps one lock per repository and base branch', async () => {
     const locks = new MergeLocks();
     expect(locks.of('o/r', 'main')).toBe(locks.of('o/r', 'main'));

@@ -1,10 +1,11 @@
 #!/usr/bin/env node
 // deliver loop: the command line. It parses the flags, reads the project config, loads the tracker and the token
 // source and runs the repository once (run-repository.mts, which holds the loop itself), then exits with its code.
-import { readFileSync, realpathSync } from 'node:fs';
+import { mkdirSync, readFileSync, realpathSync } from 'node:fs';
 import path from 'node:path';
 import { parseArgs } from 'node:util';
 import { appSettings, tokenSource as makeSource } from './app-token.mts';
+import { cloneCheckouts } from './checkout.mts';
 import { eventsDirectory, pruneRuns, runOrigin } from './event-dir.mts';
 import { type Emit, openEvents, uuid7 } from './events.mts';
 import { type Report, finishReport, programStatus } from './program-status.mts';
@@ -12,10 +13,14 @@ import { HARNESSES } from './harness.mts';
 import { adoptLegacyEnv, unknownConfigKeys } from './legacy.mts';
 import { protectedList } from './protected-paths.mts';
 import { parseObjective, planObjective } from './objective.mts';
+import { type Unit, runObjective, unitName } from './objective-run.mts';
+import { MergeLocks, Slots } from './parallel.mts';
 import { RISK_LEVELS, type ReviewSettings, retroSettings, reviewSettings } from './review.mts';
 import { type HarnessName, readLayers } from './resolve-model.mts';
 import {
   type EventSink,
+  type Output,
+  type RepositoryOptions,
   attempt,
   createOutput,
   firstLine,
@@ -27,6 +32,8 @@ import { sessionModels } from './session-models.mts';
 import { StopSignal } from './stop-signal.mts';
 import { loadTracker } from './tracker.mts';
 
+// A waiting unit of an Objective run reads its requirements again after this many seconds.
+const OBJECTIVE_POLL_SECONDS = 60;
 // before anything reads the environment; the warnings are printed once the log exists
 const legacyWarnings = adoptLegacyEnv();
 
@@ -88,9 +95,6 @@ if (opt.objective !== undefined) {
   } catch (error) {
     fail((error as Error).message, 64);
   }
-  // the run of an Objective is not built yet (ADR 0011, #1041): only its plan
-  if (!opt['dry-run'])
-    fail('--objective runs are not built yet: use --objective <owner>/<repo>#<nr> --dry-run', 64);
 }
 if (opt.feature !== undefined && !/^[1-9]\d*$/.test(opt.feature))
   fail('--feature needs the number of an issue', 64);
@@ -229,6 +233,10 @@ if (HARNESS_OVERRIDE?.some((part) => path.isAbsolute(part) && inside(part))) {
 if (process.env.DELIVER_TRACKER_DIR && inside(process.env.DELIVER_TRACKER_DIR)) {
   fail('DELIVER_TRACKER_DIR must not be inside the repository', 64);
 }
+// Tests only: the directory an Objective run clones `<owner>/<repo>.git` from instead of GitHub.
+if (process.env.DELIVER_REPOS_DIR && inside(process.env.DELIVER_REPOS_DIR)) {
+  fail('DELIVER_REPOS_DIR must not be inside the repository', 64);
+}
 // A pull request that changes one of these is never merged by the loop: a person looks at it first
 // (the matching rules: protected-paths.mts, which `planner` uses too).
 const PROTECTED: string[] = protectedList(config.deliver?.protectedPaths);
@@ -252,7 +260,8 @@ const report = (() => {
   return (status: Report) => (send ??= programStatus())(status);
 })();
 // the run id of the events is a UUIDv7 (agent-events contract); the run folder keeps `runId`. A dry run opens none.
-const events: EventSink & { isOpen(): boolean } = (() => {
+// An Objective run has one sink per unit (one events run each, until the report of the Objective, #1041 p8).
+const makeEvents = (): EventSink & { isOpen(): boolean } => {
   let write: Emit | undefined;
   return {
     open() {
@@ -266,8 +275,24 @@ const events: EventSink & { isOpen(): boolean } = (() => {
     emit: (type, body, tone) => write?.(type, body, tone),
     isOpen: () => write !== undefined,
   };
-})();
-const tracker = await loadTracker(opt.tracker ?? config.deliver?.tracker ?? 'github', {
+};
+const events = makeEvents();
+const trackerName = opt.tracker ?? config.deliver?.tracker ?? 'github';
+const trackerContext = {
+  trustAuthors: opt['trust-authors'],
+  stopFile: path.join(runDir, 'stop'),
+  onStop: signal.request,
+  onExhausted: (error: Error) => {
+    const body = { outcome: 'failed', text: firstLine(error).slice(0, 300) };
+    events.emit('run.finished', body, 'danger');
+    if (events.isOpen() || opt.objective) report(finishReport(body, titleOf(opt), 0));
+    log(`run failed: rate limit, ${firstLine(error)}`, 'bad');
+    process.exit(1);
+  },
+  log: (text: string) => log(text, 'warn'),
+};
+const tracker = await loadTracker(trackerName, {
+  ...trackerContext,
   cwd: root,
   base: BASE,
   selection: {
@@ -275,19 +300,8 @@ const tracker = await loadTracker(opt.tracker ?? config.deliver?.tracker ?? 'git
     feature: opt.feature,
     issues: opt.issues?.split(',').map((nr) => nr.trim()),
   },
-  trustAuthors: opt['trust-authors'],
-  stopFile: path.join(runDir, 'stop'),
-  onStop: signal.request,
-  onExhausted: (error) => {
-    const body = { outcome: 'failed', text: firstLine(error).slice(0, 300) };
-    events.emit('run.finished', body, 'danger');
-    if (events.isOpen()) report(finishReport(body, titleOf(opt), 0));
-    log(`run failed: rate limit, ${firstLine(error)}`, 'bad');
-    process.exit(1);
-  },
-  log: (text) => log(text, 'warn'),
 }).catch((error) => fail(`tracker: ${firstLine(error)}`, 64));
-if (opt.objective !== undefined) {
+if (opt.objective !== undefined && opt['dry-run']) {
   // the plan reads only: the Objective's repositories in start order, with the wait reason of every item
   try {
     for (const line of planObjective(opt.objective, tracker)) console.log(line);
@@ -296,30 +310,34 @@ if (opt.objective !== undefined) {
   }
   process.exit(0);
 }
+const options: Omit<RepositoryOptions, 'base' | 'milestone' | 'feature' | 'issues'> = {
+  dryRun: opt['dry-run'],
+  allowNoRequiredChecks: opt['allow-no-required-checks'],
+  model: opt.model,
+  max: MAX,
+  parallel: PARALLEL,
+  sessionMinutes: SESSION_MINUTES,
+  mergeMinutes: MERGE_MINUTES,
+  handoverMinutes: HANDOVER_MINUTES,
+  mergeRisk: MERGE_RISK,
+  harnessName,
+  harness,
+  review: REVIEW,
+  models: MODELS,
+  retro: RETRO,
+  protectedPaths: PROTECTED,
+  harnessOverride: HARNESS_OVERRIDE,
+};
+if (opt.objective !== undefined) process.exit(await objectiveRun(opt.objective));
 const tokenSource = app ? makeSource(app, tracker.repo, SESSION_MINUTES * 60_000) : undefined;
 const result = await runRepository({
   root,
   options: {
+    ...options,
     milestone: opt.milestone,
     feature: opt.feature,
     issues: opt.issues,
     base: BASE,
-    dryRun: opt['dry-run'],
-    allowNoRequiredChecks: opt['allow-no-required-checks'],
-    model: opt.model,
-    max: MAX,
-    parallel: PARALLEL,
-    sessionMinutes: SESSION_MINUTES,
-    mergeMinutes: MERGE_MINUTES,
-    handoverMinutes: HANDOVER_MINUTES,
-    mergeRisk: MERGE_RISK,
-    harnessName,
-    harness,
-    review: REVIEW,
-    models: MODELS,
-    retro: RETRO,
-    protectedPaths: PROTECTED,
-    harnessOverride: HARNESS_OVERRIDE,
   },
   tracker,
   token: { source: tokenSource, fixed: FIXED_TOKEN, name: TOKEN_SOURCE },
@@ -331,3 +349,113 @@ const result = await runRepository({
   out: output,
 });
 process.exit(result.exitCode);
+
+/**
+ * The run of an Objective: one frontier over its repositories (objective-run.mts), each in a clone of its own below the
+ * run folder, all sessions within the limit of `--parallel`. The base of every repository is `--base`, else
+ * `release/next`; a unit's lines name its repository.
+ */
+async function objectiveRun(ref: string): Promise<number> {
+  mkdirSync(runDir, { recursive: true });
+  output.toFile(path.join(commonDir, 'deliver', 'loop.log'));
+  signal.watch(path.join(runDir, 'stop'));
+  const base = opt.base ?? 'release/next';
+  const slots = new Slots(PARALLEL);
+  const mergeLocks = new MergeLocks();
+  const sources = new Map<string, ReturnType<typeof makeSource>>();
+  const sourceOf = (repo: string) => {
+    if (!app) return undefined;
+    let source = sources.get(repo);
+    if (!source) sources.set(repo, (source = makeSource(app, repo, SESSION_MINUTES * 60_000)));
+    return source;
+  };
+  const reposDir = process.env.DELIVER_REPOS_DIR;
+  const checkouts = cloneCheckouts({
+    runRoot: runDir,
+    token: async (repo) => {
+      const source = sourceOf(repo);
+      return source ? (await source.current()).token : FIXED_TOKEN;
+    },
+    ...(reposDir && { url: (repo: string) => path.join(reposDir, `${repo}.git`) }),
+  });
+  const title = `objective ${ref}`;
+  log(
+    `run ${runId}: ${title}, base ${base}, up to ${PARALLEL} sessions across its repositories`,
+    'dim',
+  );
+  report({ state: 'working', title });
+  const runUnit = async (unit: Unit, unitRoot: string) => {
+    const slug = unitName(unit).replace(/[^A-Za-z0-9._-]+/g, '-');
+    const unitTracker = await loadTracker(trackerName, {
+      ...trackerContext,
+      cwd: unitRoot,
+      repo: unit.repo,
+      base,
+      selection: {
+        ...(unit.milestone ? { milestone: unit.milestone } : { feature: String(unit.feature) }),
+        skipDeferred: true,
+      },
+    });
+    const tag = `[${unit.repo}]`;
+    const out: Output = {
+      say: (line, tone) => output.say(`${tag} ${line}`, tone),
+      log: (line, tone) => output.log(`${tag} ${line}`, tone),
+      // the lines of every unit go to the log of the run
+      toFile: () => {},
+    };
+    return runRepository({
+      root: unitRoot,
+      options: {
+        ...options,
+        base,
+        ...(unit.milestone ? { milestone: unit.milestone } : { feature: String(unit.feature) }),
+      },
+      tracker: unitTracker,
+      token: { source: sourceOf(unit.repo), fixed: FIXED_TOKEN, name: TOKEN_SOURCE },
+      runId: `${runId}-${slug}`,
+      // a run folder of its own beside the one of the Objective: `results.jsonl`, verdicts, the stop file
+      runDir: path.join(commonDir, 'deliver', `${runId}-${slug}`),
+      events: makeEvents(),
+      // the end of one unit is not the end of the run
+      status: (status) => {
+        if (status.state === 'working' || status.state === 'blocked') report({ ...status, title });
+      },
+      signal,
+      out,
+      mergeLocks,
+      slots,
+    });
+  };
+  const tick = Number(process.env.DELIVER_TICK_MS ?? 1000);
+  try {
+    const result = await runObjective({
+      ref,
+      reader: tracker,
+      checkouts,
+      runUnit,
+      pollSeconds: OBJECTIVE_POLL_SECONDS,
+      idlePolls: Math.ceil((HANDOVER_MINUTES * 60) / OBJECTIVE_POLL_SECONDS),
+      sleep: async (seconds) => {
+        for (let second = 0; second < seconds && !signal.stopped; second++)
+          await new Promise((done) => setTimeout(done, tick));
+      },
+      signal,
+      say: output.say,
+      log,
+    });
+    report(
+      result.exitCode === 130
+        ? { state: 'idle', title }
+        : result.exitCode === 0
+          ? { state: 'done', title }
+          : result.exitCode === 5
+            ? { state: 'error', title }
+            : { state: 'done', tone: 'warning', title, msg: `needs you ${result.needsYou.length}` },
+    );
+    return result.exitCode;
+  } catch (error) {
+    log(`objective: ${firstLine(error)}`, 'bad');
+    report({ state: 'error', title });
+    return 1;
+  }
+}

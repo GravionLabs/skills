@@ -26,6 +26,8 @@ export type FakeIssue = Partial<Omit<TrackedIssue, 'repo' | 'url'>> & {
   subIssues?: (number | string)[];
   /** Native `blocked-by` links: numbers of the same repository or `owner/repo#n`. */
   blockedBy?: (number | string)[];
+  /** Not an item of a unit before the item of this number is closed: an issue added during the run. */
+  addedAfter?: number;
 };
 
 export type Scenario = {
@@ -87,11 +89,17 @@ export type Scenario = {
   features?: Record<number, { title: string; body: string }>;
   /** Items that have a second open pull request once their first one exists. */
   twoPulls?: number[];
+  /** Repositories whose release pull request is merged and tagged at once: its milestone closes (`released.jsonl`). */
+  releaseOnPull?: string[];
 };
 
-export function create({ selection }: TrackerContext): Tracker {
+export function create({ selection, repo: named }: TrackerContext): Tracker {
   const dir = String(process.env.FAKE_DIR);
-  writeFileSync(path.join(dir, 'selection.json'), JSON.stringify(selection));
+  // a unit of an Objective run names its repository: its items come from `repositories`
+  const repo = named ?? 'fake/repo';
+  if (named)
+    appendFileSync(path.join(dir, 'units.jsonl'), `${JSON.stringify({ repo, selection })}\n`);
+  else writeFileSync(path.join(dir, 'selection.json'), JSON.stringify(selection));
   // like the GitHub tracker: the Bug of a red base is one of the items from its filing until it is merged
   let baseBug: Item | undefined;
   const scenario: Scenario = JSON.parse(readFileSync(path.join(dir, 'scenario.json'), 'utf8'));
@@ -106,6 +114,13 @@ export function create({ selection }: TrackerContext): Tracker {
   const itemOf = (pull: Pull) => pull.id - 100;
 
   const repository = (name: string) => scenario.repositories?.[name];
+  const readLines = (file: string): Record<string, unknown>[] =>
+    existsSync(file)
+      ? readFileSync(file, 'utf8')
+          .split('\n')
+          .filter(Boolean)
+          .map((line) => JSON.parse(line))
+      : [];
   const refOf = (repo: string, value: number | string) =>
     typeof value === 'number' ? { repo, number: value } : parseObjective(value);
   const tracked = (repo: string, issue: FakeIssue): TrackedIssue => {
@@ -142,7 +157,15 @@ export function create({ selection }: TrackerContext): Tracker {
         (value) => reader.issue(refOf(ref.repo, value)) ?? [],
       );
     },
-    milestones: (repo) => repository(repo)?.milestones ?? [],
+    milestones: (name) =>
+      (repository(name)?.milestones ?? []).map((m) => ({
+        ...m,
+        closed:
+          m.closed ||
+          readLines(path.join(dir, 'released.jsonl')).some(
+            (r) => r.repo === name && r.milestone === m.title,
+          ),
+      })),
     hasTag: (repo, tag) => repository(repo)?.tags?.includes(tag) ?? false,
     blockers(ref) {
       const issue = repository(ref.repo)?.issues?.find((i) => i.number === ref.number);
@@ -153,18 +176,51 @@ export function create({ selection }: TrackerContext): Tracker {
     },
   };
 
+  const isWork = (issue: FakeIssue) =>
+    (issue.state ?? 'open') === 'open' &&
+    (issue.labels ?? []).some((label) => label === 'pbi' || label === 'bug');
+  /** The open PBIs and Bugs of the unit: in its milestone or below its Feature (or the open Features of its milestone). */
+  const unitIssues = (): FakeIssue[] => {
+    const issues = repository(repo)?.issues ?? [];
+    const below = (feature: FakeIssue) =>
+      (feature.subIssues ?? []).flatMap((value) =>
+        typeof value === 'number' ? issues.filter((i) => i.number === value) : [],
+      );
+    const features = selection.feature
+      ? issues.filter((i) => i.number === Number(selection.feature))
+      : issues.filter(
+          (i) =>
+            i.milestone === selection.milestone &&
+            i.title.startsWith('[Feature]') &&
+            (i.state ?? 'open') === 'open' &&
+            !(selection.skipDeferred && i.labels?.includes('deferred')),
+        );
+    const direct = selection.feature
+      ? []
+      : issues.filter((i) => i.milestone === selection.milestone);
+    const found = new Map<number, FakeIssue>();
+    for (const issue of [...direct, ...features.flatMap(below)])
+      if (isWork(issue) && (issue.addedAfter === undefined || closed.has(issue.addedAfter)))
+        found.set(issue.number, issue);
+    return [...found.values()].sort((a, b) => a.number - b.number);
+  };
+  const listed = (): Scenario['items'] =>
+    named
+      ? unitIssues().map((i) => ({ id: i.number, title: i.title, body: i.body }))
+      : scenario.items;
+
   return {
     name: 'fake',
-    repo: 'fake/repo',
+    repo,
     ...reader,
-    subject: (): Subject => ({ kind: 'fake.repository', id: 'fake/repo', title: 'fake/repo' }),
+    subject: (): Subject => ({ kind: 'fake.repository', id: repo, title: repo }),
     items: (): Item[] => {
       for (const id of merged) {
         const calls = (listedCalls.get(id) ?? 0) + 1;
         listedCalls.set(id, calls);
         if (calls > (scenario.closeAfterCalls ?? 0)) closed.add(id);
       }
-      return scenario.items
+      return listed()
         .filter((item) => !closed.has(item.id))
         .map((item) => ({
           id: item.id,
@@ -334,7 +390,12 @@ export function create({ selection }: TrackerContext): Tracker {
       })),
     releaseCommits: () => scenario.releaseCommits ?? 1,
     ensureReleasePull(): Pull {
-      record({ call: 'releasePull' });
+      record({ call: 'releasePull', repo });
+      if (scenario.releaseOnPull?.includes(repo))
+        appendFileSync(
+          path.join(dir, 'released.jsonl'),
+          `${JSON.stringify({ repo, milestone: selection.milestone })}\n`,
+        );
       return {
         id: 900,
         title: 'release: release/next',

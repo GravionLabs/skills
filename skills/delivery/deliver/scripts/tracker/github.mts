@@ -3,7 +3,7 @@ import { execFileSync } from 'node:child_process';
 import { existsSync } from 'node:fs';
 import { LABEL_PREFIX, labelOf } from '../stage.mts';
 import { type ReviewMark, type Verdict, markBody, parseMark } from '../review.mts';
-import { HOLD_LABELS, blockReason } from '../objective.mts';
+import { DEFERRED, HOLD_LABELS, blockReason } from '../objective.mts';
 import { syncLabels } from '../sync-labels.mts';
 import type {
   BaseState,
@@ -235,6 +235,7 @@ const pause = (ms: number): void => {
 
 export function create({
   cwd,
+  repo: named,
   base,
   selection,
   trustAuthors,
@@ -302,7 +303,7 @@ export function create({
   const api = <T,>(route: string): T => JSON.parse(gh('api', route));
   const list = <T,>(route: string): T[] =>
     (JSON.parse(gh('api', route, '--paginate', '--slurp')) as T[][]).flat();
-  const repo = gh('repo', 'view', '--json', 'nameWithOwner', '-q', '.nameWithOwner');
+  const repo = named ?? gh('repo', 'view', '--json', 'nameWithOwner', '-q', '.nameWithOwner');
 
   let milestoneCache: Milestone | undefined;
   const milestone = (): Milestone => {
@@ -348,7 +349,9 @@ export function create({
         `repos/${repo}/issues?milestone=${milestone().number}&state=open&per_page=100`,
       );
       for (const issue of open.filter(isWork)) add(issue);
-      for (const feature of open.filter((i) => !i.pull_request && isFeature(i)))
+      const deferred = (i: Issue) =>
+        !!selection.skipDeferred && i.labels.some((l) => l.name.toLowerCase() === DEFERRED);
+      for (const feature of open.filter((i) => !i.pull_request && isFeature(i) && !deferred(i)))
         for (const issue of workBelow(feature.number)) add(issue, feature.number);
     }
     return [...found.values()].sort((a, b) => a.id - b.id);

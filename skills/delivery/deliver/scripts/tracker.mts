@@ -44,12 +44,22 @@ export type BaseState = {
   failed: { name: string; url: string }[];
 };
 
-/** Exactly one is set. `feature`: the number of a Feature. */
-export type Selection = { milestone?: string; feature?: string; issues?: string[] };
+/**
+ * Exactly one of `milestone`, `feature` and `issues` is set. `feature`: the number of a Feature. `skipDeferred`: the
+ * items below a Feature labeled `deferred` are no work (the milestone of an Objective run).
+ */
+export type Selection = {
+  milestone?: string;
+  feature?: string;
+  issues?: string[];
+  skipDeferred?: boolean;
+};
 
 export type TrackerContext = {
   /** The checkout the loop runs in. */
   cwd: string;
+  /** `owner/name` of the repository (an Objective run names each one); default: the repository of `cwd`. */
+  repo?: string;
   /** The branch the pull requests go into. */
   base: string;
   selection: Selection;

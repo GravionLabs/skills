@@ -316,6 +316,8 @@ export type RepositoryContext = {
   out: Output;
   /** One merge at a time per repository and base branch; repositories of one run share them. Default: of this run. */
   mergeLocks?: MergeLocks;
+  /** The role sessions of a run over several repositories (an Objective): its limit wins over `parallel`. */
+  slots?: Slots;
 };
 export type RepositoryResult = {
   /** 0 done, 2 blocked, 3 waiting for a handed-over pull request (or refused), 5 harness failed, 130 stopped; 1 error, 64 usage. */
@@ -550,11 +552,13 @@ export async function runRepository(context: RepositoryContext): Promise<Reposit
   let emit: Emit = () => {};
   // every role session (implementer, review, repair, retro) takes a slot; the events report the running ones
   let reportedSessions = 0;
-  const slots = new Slots(PARALLEL, (running) => {
+  const onSessions = (running: number) => {
     if (running === reportedSessions) return;
     reportedSessions = running;
-    emit('deliver.sessions', { deliver: { repo: tracker.repo, running, limit: PARALLEL } });
-  });
+    emit('deliver.sessions', { deliver: { repo: tracker.repo, running, limit: slots.limit } });
+  };
+  // an Objective run shares its slots across the repositories: this one counts its own sessions
+  const slots = context.slots ? context.slots.within(onSessions) : new Slots(PARALLEL, onSessions);
   const mergeLock = (context.mergeLocks ?? new MergeLocks()).of(tracker.repo, BASE);
 
   /** Prints the readable part of one stream record and keeps the numbers of the session. */
@@ -1531,7 +1535,7 @@ export async function runRepository(context: RepositoryContext): Promise<Reposit
   const report = context.status;
   const statusTitle = titleOf(context.options);
   let blockedShown = false;
-  const sessionsLine = () => `${slots.active} of ${PARALLEL} sessions running`;
+  const sessionsLine = () => `${slots.active} of ${slots.limit} sessions running`;
   emit = (type, body, tone) => {
     events.emit(type, body, tone);
     if (type === 'run.started') {
@@ -1573,7 +1577,10 @@ export async function runRepository(context: RepositoryContext): Promise<Reposit
     `events: run ${eventRun}${eventDir ? ` in ${eventDir}` : ', not written: no directory'}`,
     'dim',
   );
-  log(`parallel: up to ${PARALLEL} sessions at once, one merge at a time`, 'dim');
+  log(
+    `parallel: up to ${slots.limit} sessions at once${context.slots ? ' across the repositories of the run' : ''}, one merge at a time`,
+    'dim',
+  );
   if (cutNote) log(cutNote, 'info');
   if (!TOKEN_SOURCE) {
     log(
@@ -1780,86 +1787,114 @@ export async function runRepository(context: RepositoryContext): Promise<Reposit
     emit('progress', { done: merged.length, total, label: 'PBIs' });
   }
 
-  // The frontier: up to PARALLEL items are worked at once, each in its own worktree. It is read again whenever one
+  // The frontier: up to `slots.limit` items are worked at once, each in its own worktree. It is read again whenever one
   // of them ends (merged, set aside, handed over): an item becomes ready when its blocker is merged and closed.
   const running = new Map<number, Promise<void>>();
   /** The items started in this run (--max counts them). */
   let started = 0;
-  try {
-    for (let first = true; !signal.stopped && !harnessDead; first = false) {
-      // an issue closes a moment after its merge: do not pick it again
-      const open = tracker
-        .items()
-        .filter((item) => !merged.some((line) => line.startsWith(`#${item.id} `)));
-      if (first) {
-        total = open.length;
-        emit('progress', { done: 0, total, label: 'PBIs' });
-      }
-      const maxed = MAX > 0 && started >= MAX;
-      // the Bug of a red base runs alone: nothing else starts, and the base is read again after it
-      const repairing = repairBug !== undefined && running.has(repairBug.id);
-      // how many items start now: the free places, within --max
-      const room =
-        maxed || repairing
-          ? 0
-          : Math.min(PARALLEL - running.size, MAX > 0 ? MAX - started : PARALLEL);
-      let starts: Item[] = [];
-      let candidates = open.filter(
-        (item) => !running.has(item.id) && !aside.has(item.id) && !handedOver.has(item.id),
-      );
-      if (room > 0) {
-        const bug = await checkBase();
-        if (baseBlocked) break;
-        if (bug) {
-          // the Bug of a red base goes first (it may not be in the selection); the others wait for it
-          starts = [open.find((item) => item.id === bug.id) ?? bug];
-          candidates = [];
+  /** The open items no frontier of this run has seen: added to the milestone after its last read. */
+  const grown = (): Item[] => {
+    const known = (id: number) =>
+      merged.some((line) => line.startsWith(`#${id} `)) ||
+      aside.has(id) ||
+      handedOver.has(id) ||
+      waiting.some((line) => line.startsWith(`#${id} `));
+    return tracker.items().filter((item) => !known(item.id));
+  };
+  // A milestone can grow during the run: before its release gate it is read again, and new items are worked first.
+  for (let first = true; ; first = false) {
+    try {
+      for (; !signal.stopped && !harnessDead; first = false) {
+        // an issue closes a moment after its merge: do not pick it again
+        const open = tracker
+          .items()
+          .filter((item) => !merged.some((line) => line.startsWith(`#${item.id} `)));
+        if (first) {
+          total = open.length;
+          emit('progress', { done: 0, total, label: 'PBIs' });
         }
-      }
-      waiting = [];
-      for (const item of candidates) {
-        const reason = tracker.waitReason(item);
-        if (reason) waiting.push(`#${item.id} ${reason}`);
-        else if (starts.length < room) starts.push(item);
-      }
-      for (const item of starts) {
-        log(`#${item.id} start: ${item.title} (${open.length} open)`, 'info');
-        // x: the issues finished, set aside or running so far, plus this one; the log file is read at a fixed width
-        const begun = merged.length + aside.size + handedOver.size + running.size + 1;
-        log(
-          progressLine(begun, total, process.stdout.isTTY ? (process.stdout.columns ?? 80) : 80),
-          'info',
+        const maxed = MAX > 0 && started >= MAX;
+        // the Bug of a red base runs alone: nothing else starts, and the base is read again after it
+        const repairing = repairBug !== undefined && running.has(repairBug.id);
+        // how many items start now: the free places, within --max
+        const room =
+          maxed || repairing
+            ? 0
+            : Math.min(slots.limit - running.size, MAX > 0 ? MAX - started : slots.limit);
+        let starts: Item[] = [];
+        let candidates = open.filter(
+          (item) => !running.has(item.id) && !aside.has(item.id) && !handedOver.has(item.id),
         );
-        emit('task.started', { task: `issue-${item.id}`, subject: tracker.itemSubject(item) });
-        started += 1;
-        // a failing tracker or git call sets the issue aside, it does not end the run
-        const work = deliver(item)
-          .catch((error): { reason?: string; pull?: Pull } => ({
-            reason: `error: ${firstLine(error)}`,
-          }))
-          .then((result) => settle(item, result))
-          .finally(() => running.delete(item.id));
-        running.set(item.id, work);
+        if (room > 0) {
+          const bug = await checkBase();
+          if (baseBlocked) break;
+          if (bug) {
+            // the Bug of a red base goes first (it may not be in the selection); the others wait for it
+            starts = [open.find((item) => item.id === bug.id) ?? bug];
+            candidates = [];
+          }
+        }
+        waiting = [];
+        for (const item of candidates) {
+          const reason = tracker.waitReason(item);
+          if (reason) waiting.push(`#${item.id} ${reason}`);
+          else if (starts.length < room) starts.push(item);
+        }
+        for (const item of starts) {
+          log(`#${item.id} start: ${item.title} (${open.length} open)`, 'info');
+          // x: the issues finished, set aside or running so far, plus this one; the log file is read at a fixed width
+          const begun = merged.length + aside.size + handedOver.size + running.size + 1;
+          log(
+            progressLine(begun, total, process.stdout.isTTY ? (process.stdout.columns ?? 80) : 80),
+            'info',
+          );
+          emit('task.started', { task: `issue-${item.id}`, subject: tracker.itemSubject(item) });
+          started += 1;
+          // a failing tracker or git call sets the issue aside, it does not end the run
+          const work = deliver(item)
+            .catch((error): { reason?: string; pull?: Pull } => ({
+              reason: `error: ${firstLine(error)}`,
+            }))
+            .then((result) => settle(item, result))
+            .finally(() => running.delete(item.id));
+          running.set(item.id, work);
+        }
+        if (running.size === 0) {
+          // nothing runs and nothing can start: only handed-over pull requests are left (and what they block)
+          if (maxed || !(await awaitHandovers())) break;
+          continue;
+        }
+        // the frontier is read again when an item ends
+        await Promise.race(running.values());
       }
-      if (running.size === 0) {
-        // nothing runs and nothing can start: only handed-over pull requests are left (and what they block)
-        if (maxed || !(await awaitHandovers())) break;
-        continue;
+      // a stop, a dead harness or a red base starts nothing more: the running items end first
+      await Promise.all(running.values());
+    } catch (error) {
+      // the sessions of the other items end with the run; their items stay resumable by their labels
+      if (running.size) {
+        signal.request();
+        await Promise.allSettled(running.values());
       }
-      // the frontier is read again when an item ends
-      await Promise.race(running.values());
+      emit('run.finished', { outcome: 'failed', text: firstLine(error).slice(0, 300) }, 'danger');
+      log(`run failed: ${firstLine(error)}`, 'bad');
+      return ended(1);
     }
-    // a stop, a dead harness or a red base starts nothing more: the running items end first
-    await Promise.all(running.values());
-  } catch (error) {
-    // the sessions of the other items end with the run; their items stay resumable by their labels
-    if (running.size) {
-      signal.request();
-      await Promise.allSettled(running.values());
+    if (!milestone || signal.stopped || harnessDead || baseBlocked || (MAX > 0 && started >= MAX))
+      break;
+    let added: Item[] = [];
+    try {
+      added = grown();
+    } catch (error) {
+      // the gate below reads the milestone again and reports a failure
+      log(`milestone ${milestone} not read again: ${firstLine(error)}`, 'warn');
     }
-    emit('run.finished', { outcome: 'failed', text: firstLine(error).slice(0, 300) }, 'danger');
-    log(`run failed: ${firstLine(error)}`, 'bad');
-    return ended(1);
+    if (added.length === 0) break;
+    total += added.length;
+    emit('progress', { done: merged.length, total, label: 'PBIs' });
+    log(
+      `milestone ${milestone} grew during the run: ${added.map((item) => `#${item.id}`).join(', ')} before its release gate`,
+      'info',
+    );
   }
 
   // Before the run ends: a pull request handed over earlier may conflict with the base by now. One repair session
