@@ -1,6 +1,6 @@
 # Host verbs
 
-A workflow skill (the planned deliver-lead, [GravionLabs/skills#1142](https://github.com/GravionLabs/skills/issues/1142)) runs on a host and names every host action in one of the five verbs below, never in a host's tool names (ADR 0012). An adapter skill per host maps the verbs. The workflow skill and the adapters share this contract.
+A workflow skill ([deliver-lead](../../deliver-lead/SKILL.md)) runs on a host and names every host action in one of the five verbs below, never in a host's tool names (ADR 0012). An adapter skill per host maps the verbs. The workflow skill and the adapters share this contract.
 
 ## Verbs
 
