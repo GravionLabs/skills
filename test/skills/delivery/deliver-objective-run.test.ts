@@ -122,8 +122,9 @@ describe('deliver-loop --objective', () => {
       { parallel: 1, args: ['--max-sessions', '2'] },
     );
     expect(out.status, out.stdout + out.stderr).toBe(0);
+    // the sessions running at the start of each one: the highest number at the same moment
     const peak = (spans: Span[]) =>
-      Math.max(0, ...spans.map((s) => spans.filter((other) => overlap(s, other)).length));
+      Math.max(0, ...spans.map((s) => spans.filter((o) => o.at <= s.at && s.at < o.end).length));
     expect(peak(out.spans)).toBe(2);
     for (const tens of [1, 2, 3])
       expect(peak(out.spans.filter((s) => Math.floor(s.id / 10) === tens))).toBe(1);
